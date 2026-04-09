@@ -9,8 +9,24 @@ const pool = require('./db');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'vetracon@gmail.com';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
+if (!process.env.DATABASE_URL) {
+  throw new Error('Variabile ambiente mancante: DATABASE_URL');
+}
+
+if (!process.env.ADMIN_EMAIL) {
+  throw new Error('Variabile ambiente mancante: ADMIN_EMAIL');
+}
+
+if (!process.env.ADMIN_PASSWORD) {
+  throw new Error('Variabile ambiente mancante: ADMIN_PASSWORD');
+}
+
+if (!process.env.BASE_URL) {
+  console.warn('Attenzione: BASE_URL non impostata. Verrà usato il fallback locale.');
+}
 
 app.use(cors());
 app.use(express.json());
