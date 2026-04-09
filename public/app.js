@@ -191,6 +191,8 @@ function initAdminPage() {
   const loginResult = qs('#adminLoginResult');
   const findBtn = qs('#findCodeBtn');
   const findResult = qs('#findCodeResult');
+  const scanStatsBox = qs('#scanStatsBox');
+  const scanStatsResult = qs('#scanStatsResult');
 
   if (!loginBox || !panel || !loginBtn || !loginResult || !findBtn || !findResult) return;
 
@@ -201,20 +203,59 @@ function initAdminPage() {
     };
   }
 
+  function renderScans(data) {
+    if (!scanStatsBox || !scanStatsResult) return;
+
+    scanStatsBox.style.display = 'block';
+
+    const scans = data.scans || [];
+    const total = data.total || 0;
+
+    if (!scans.length) {
+      scanStatsResult.innerHTML = `
+        <div class="info-box">
+          <strong>Scansioni totali:</strong> ${total}<br>
+          Nessuna scansione registrata per questo codice.
+        </div>
+      `;
+      return;
+    }
+
+    const items = scans.map(scan => `
+      <div class="list-item">
+        <strong>Data:</strong> ${escapeHtml(scan.scanned_at || '-')}<br>
+        <strong>IP:</strong> ${escapeHtml(scan.ip_address || '-')}<br>
+        <strong>Device:</strong> ${escapeHtml(scan.user_agent || '-')}
+      </div>
+    `).join('');
+
+    scanStatsResult.innerHTML = `
+      <div class="success-box">
+        <strong>Scansioni totali:</strong> ${total}
+      </div>
+      <div class="list">
+        ${items}
+      </div>
+    `;
+  }
+
   loginBtn.addEventListener('click', async () => {
     const { email, password } = getCreds();
 
     if (!email || !password) {
-      setBox(loginResult, 'error', 'Inserisci email e password admin.');
+      setBox(loginResult, 'error', 'Inserisci email e password amministratore.');
       return;
     }
 
     try {
-      const testCode = qs('#admin_test_code').value.trim().toUpperCase() || 'TEST-CODE';
-      const data = await postJSON('/api/admin/find-code', { email, password, code: testCode });
+      const data = await postJSON('/api/admin/find-code', {
+        email,
+        password,
+        code: 'TEST-CODE'
+      });
 
       if (data.success || (data.success === false && data.message === 'Codice non trovato')) {
-        setBox(loginResult, 'success', 'Accesso admin accettato.');
+        setBox(loginResult, 'success', 'Accesso autorizzato.');
         loginBox.style.display = 'none';
         panel.style.display = 'block';
         return;
@@ -231,9 +272,12 @@ function initAdminPage() {
     const code = qs('#search_code').value.trim().toUpperCase();
 
     if (!email || !password || !code) {
-      setBox(findResult, 'error', 'Inserisci codice, email e password.');
+      setBox(findResult, 'error', 'Inserisci email, password e codice.');
       return;
     }
+
+    if (scanStatsBox) scanStatsBox.style.display = 'none';
+    if (scanStatsResult) scanStatsResult.innerHTML = '';
 
     try {
       const data = await postJSON('/api/admin/find-code', { email, password, code });
@@ -258,10 +302,41 @@ function initAdminPage() {
             <div class="list-item"><strong>QR URL:</strong> ${item.qr_url ? `<a href="${escapeHtml(item.qr_url)}" target="_blank">Apri pagina</a>` : '-'}</div>
           </div>
           <div class="actions">
+            <button class="btn btn-secondary" id="loadStatsBtn" type="button">Carica scansioni</button>
             <button class="btn btn-danger" id="reactivateBtn" type="button">Riattiva codice</button>
           </div>
         `
       );
+
+      const loadStatsBtn = qs('#loadStatsBtn');
+      if (loadStatsBtn) {
+        loadStatsBtn.addEventListener('click', async () => {
+          loadStatsBtn.disabled = true;
+          loadStatsBtn.textContent = 'Caricamento...';
+
+          try {
+            const stats = await postJSON('/api/admin/scan-stats', { email, password, code });
+
+            if (!stats.success) {
+              if (scanStatsBox) scanStatsBox.style.display = 'block';
+              if (scanStatsResult) {
+                scanStatsResult.innerHTML = `<div class="error-box">${escapeHtml(stats.message || 'Errore nel caricamento statistiche.')}</div>`;
+              }
+              return;
+            }
+
+            renderScans(stats);
+          } catch (err) {
+            if (scanStatsBox) scanStatsBox.style.display = 'block';
+            if (scanStatsResult) {
+              scanStatsResult.innerHTML = `<div class="error-box">Errore di comunicazione con il server.</div>`;
+            }
+          } finally {
+            loadStatsBtn.disabled = false;
+            loadStatsBtn.textContent = 'Carica scansioni';
+          }
+        });
+      }
 
       const reactivateBtn = qs('#reactivateBtn');
       if (reactivateBtn) {
@@ -285,6 +360,9 @@ function initAdminPage() {
                 I dati precedenti sono stati rimossi.
               `
             );
+
+            if (scanStatsBox) scanStatsBox.style.display = 'none';
+            if (scanStatsResult) scanStatsResult.innerHTML = '';
           } catch (err) {
             setBox(findResult, 'error', 'Errore di comunicazione con il server.');
           }

@@ -196,37 +196,23 @@ app.get('/contact/:code', async (req, res) => {
     }
 
     const row = result.rows[0];
+
+    const forwarded = req.headers['x-forwarded-for'];
+    const ipAddress = Array.isArray(forwarded)
+      ? forwarded[0]
+      : (forwarded ? String(forwarded).split(',')[0].trim() : req.socket.remoteAddress);
+
+    await pool.query(
+      'INSERT INTO qr_scans (code, user_agent, ip_address) VALUES ($1, $2, $3)',
+      [code, req.headers['user-agent'] || null, ipAddress || null]
+    );
+
     const cleanPhone = (row.phone || '').replace(/\D/g, '');
     const waText = encodeURIComponent(
       `Segnalazione urgente per il veicolo ${row.vehicle_model || ''} targa ${row.plate || ''}`
     );
-    const waLink = `https://wa.me/${cleanPhone}?text=${waText}`;
-
-    res.send(`
-      <!doctype html>
-      <html lang="it">
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Contatto veicolo</title>
-        <style>
-          body { font-family: Arial, sans-serif; background: #f5f5f7; padding: 30px; text-align: center; }
-          .card { max-width: 560px; margin: auto; background: white; padding: 24px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,.08); }
-          .btn { display: inline-block; padding: 14px 20px; background: #0071e3; color: #fff; text-decoration: none; border-radius: 12px; margin-top: 20px; }
-          .muted { color: #666; }
-        </style>
-      </head>
-      <body>
-        <div class="card">
-          <h1>Segnalazione veicolo</h1>
-          <p><strong>Modello:</strong> ${row.vehicle_model || '-'}</p>
-          <p><strong>Targa:</strong> ${row.plate || '-'}</p>
-          <p class="muted">Usa questo contatto solo per segnalazioni urgenti relative al veicolo.</p>
-          <a class="btn" href="${waLink}">Contatta via WhatsApp</a>
-        </div>
-      </body>
-      </html>
-    `);
+    const redirectUrl = `/contact.html?phone=${encodeURIComponent(cleanPhone)}&plate=${encodeURIComponent(row.plate || '')}&vehicle=${encodeURIComponent(row.vehicle_model || '')}`;
+    res.redirect(redirectUrl);
   } catch (err) {
     console.error('contact error:', err);
     res.status(500).send('Errore interno');
@@ -253,6 +239,41 @@ app.post('/api/admin/find-code', async (req, res) => {
     res.json({ success: true, data: result.rows[0] });
   } catch (err) {
     console.error('admin find error:', err);
+    res.status(500).json({ success: false, message: 'Errore interno' });
+  }
+});
+
+app.post('/api/admin/scan-stats', async (req, res) => {
+  try {
+    const { email, password, code } = req.body;
+
+    if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
+      return res.status(401).json({ success: false, message: 'Non autorizzato' });
+    }
+
+    const scans = await pool.query(
+      `SELECT id, code, scanned_at, user_agent, ip_address
+       FROM qr_scans
+       WHERE code = $1
+       ORDER BY scanned_at DESC
+       LIMIT 100`,
+      [code]
+    );
+
+    const totals = await pool.query(
+      `SELECT COUNT(*)::int AS total
+       FROM qr_scans
+       WHERE code = $1`,
+      [code]
+    );
+
+    res.json({
+      success: true,
+      total: totals.rows[0].total,
+      scans: scans.rows
+    });
+  } catch (err) {
+    console.error('scan stats error:', err);
     res.status(500).json({ success: false, message: 'Errore interno' });
   }
 });
@@ -301,7 +322,19 @@ async function initDb() {
         reactivated_at TIMESTAMP
       );
     `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS qr_scans (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(50) NOT NULL,
+        scanned_at TIMESTAMP DEFAULT NOW(),
+        user_agent TEXT,
+        ip_address TEXT
+      );
+    `);
+
     console.log('Tabella sticker_codes pronta');
+    console.log('Tabella qr_scans pronta');
   } catch (err) {
     console.error('Errore init DB:', err);
     throw err;
