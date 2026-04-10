@@ -10,6 +10,32 @@ const pool = require('./db');
 
 const app = express();
 
+
+function generatePublicId() {
+  return require('crypto')
+    .randomBytes(6)
+    .toString('base64url')
+    .replace(/[-_]/g, '')
+    .slice(0, 10)
+    .toUpperCase();
+}
+
+async function getUniquePublicId(pool) {
+  let publicId;
+  let exists = true;
+
+  while (exists) {
+    publicId = generatePublicId();
+    const check = await pool.query(
+      'SELECT 1 FROM sticker_codes WHERE public_id = $1 LIMIT 1',
+      [publicId]
+    );
+    exists = check.rows.length > 0;
+  }
+
+  return publicId;
+}
+
 async function lookupIpArea(ip) {
   try {
     if (!ip) return { city: null, region: null, country: null };
@@ -507,41 +533,155 @@ app.post('/api/activate-code', async (req, res) => {
   try {
     const { code, brand, plate, vehicle_model, color, phone } = req.body;
 
+    if (!code || !plate || !vehicle_model || !phone) {
+      return res.status(400).json({ success: false, error: 'Dati mancanti per l’attivazione.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+    const cleanPlate = String(plate).trim().toUpperCase();
+    const cleanPhone = String(phone).trim().replace(/\s+/g, '');
+
     const existing = await pool.query(
-      'SELECT * FROM sticker_codes WHERE code = $1',
-      [code]
+      'SELECT * FROM sticker_codes WHERE code = $1 LIMIT 1',
+      [cleanCode]
     );
 
     if (existing.rows.length === 0) {
-      return res.json({ success: false, message: 'Codice non valido' });
+      return res.status(404).json({ success: false, error: 'Codice non valido.' });
     }
 
     const row = existing.rows[0];
 
     if (row.status === 'used') {
-      return res.json({ success: false, message: 'Codice già utilizzato' });
+      return res.status(400).json({ success: false, error: 'Codice già utilizzato.' });
     }
 
-    const qrUrl = `${BASE_URL}/contact/${encodeURIComponent(code)}`;
+    let publicId = row.public_id;
+    if (!publicId || !String(publicId).trim()) {
+      publicId = await getUniquePublicId(pool);
+    }
+
+    const baseUrl = process.env.PUBLIC_BASE_URL || 'http://localhost:3000';
+    const qrUrl = `${baseUrl.replace(/\/$/, '')}/contact/u/${encodeURIComponent(publicId)}`;
 
     await pool.query(
       `UPDATE sticker_codes
-       SET status = $1,
-           plate = $2,
-           vehicle_model = $3,
-           phone = $4,
-           qr_url = $5,
+       SET status = 'used',
+           brand = $2,
+           plate = $3,
+           vehicle_model = $4,
+           color = $5,
+           phone = $6,
+           qr_url = $7,
+           public_id = $8,
            activated_at = NOW()
-       WHERE code = $6`,
-      ['used', plate, vehicle_model, phone, qrUrl, code]
+       WHERE code = $1`,
+      [cleanCode, brand || null, cleanPlate, vehicle_model || null, color || null, cleanPhone, qrUrl, publicId]
     );
 
-    res.json({ success: true, qr_url: qrUrl });
+    return res.json({ success: true, qr_url: qrUrl, public_id: publicId });
   } catch (err) {
     console.error('activate-code error:', err);
-    res.status(500).json({ success: false, error: 'Errore attivazione codice' });
+    return res.status(500).json({ success: false, error: 'Errore attivazione codice.' });
   }
 });
+
+
+app.get('/api/public-contact/:public_id', async (req, res) => {
+  try {
+    const publicId = String(req.params.public_id || '').trim().toUpperCase();
+
+    const result = await pool.query(
+      `SELECT public_id, code, plate, brand, vehicle_model, color, phone, status
+       FROM sticker_codes
+       WHERE public_id = $1
+       LIMIT 1`,
+      [publicId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, error: 'Contatto non trovato.' });
+    }
+
+    const row = result.rows[0];
+
+    if (String(row.status || '') === 'disabled') {
+      return res.status(410).json({ success: false, error: 'Adesivo non attivo.' });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        public_id: row.public_id,
+        code: row.code,
+        plate: row.plate,
+        brand: row.brand,
+        vehicle_model: row.vehicle_model,
+        color: row.color,
+        phone: row.phone
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore recupero dati contatto.' });
+  }
+});
+
+
+app.get('/contact/u/:public_id', async (req, res) => {
+  try {
+    const publicId = String(req.params.public_id || '').trim().toUpperCase();
+
+    const result = await pool.query(
+      'SELECT * FROM sticker_codes WHERE public_id = $1 LIMIT 1',
+      [publicId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).send('Codice pubblico non trovato.');
+    }
+
+    const row = result.rows[0];
+
+    if (String(row.status || '') === 'disabled') {
+      return res.status(410).send('Adesivo non attivo.');
+    }
+
+    const forwardedFor = req.headers['x-forwarded-for'];
+    const ip =
+      (Array.isArray(forwardedFor) ? forwardedFor[0] : (forwardedFor || '').split(',')[0].trim()) ||
+      req.headers['x-real-ip'] ||
+      req.socket?.remoteAddress ||
+      null;
+
+    const userAgent = req.headers['user-agent'] || null;
+    const area = await lookupIpArea(ip);
+
+    await pool.query(
+      `INSERT INTO contact_page_views
+       (code, plate, brand, vehicle_model, color, ip_address, ip_city, ip_region, ip_country, user_agent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [
+        row.code || null,
+        row.plate || null,
+        row.brand || null,
+        row.vehicle_model || null,
+        row.color || null,
+        ip,
+        area.city,
+        area.region,
+        area.country,
+        userAgent
+      ]
+    );
+
+    return res.redirect(302, `/contact.html?public_id=${encodeURIComponent(publicId)}`);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send('Errore di comunicazione con il server.');
+  }
+});
+
 
 app.get('/contact/:code', async (req, res) => {
   try {

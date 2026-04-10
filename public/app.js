@@ -275,6 +275,7 @@ function initHomePage() {
         `
           <div><strong>Codice generato con successo.</strong></div>
           <div class="code-badge">${escapeHtml(code)}</div>
+          ${data.public_id ? `<div class="muted" style="margin-top:8px;"><strong>ID pubblico:</strong> ${escapeHtml(data.public_id)}</div>` : ''}
           <div class="actions">
             <a class="btn btn-primary" href="/activate.html?code=${encodeURIComponent(code)}">Attiva adesso</a>
             <button class="btn btn-secondary" id="copyCodeBtn" type="button">Copia codice</button>
