@@ -169,74 +169,6 @@ app.post('/api/check-code', async (req, res) => {
 
 
 
-app.post('/api/owner-dashboard', async (req, res) => {
-  try {
-    const { code, plate } = req.body;
-
-    if (!code || !plate) {
-      return res.status(400).json({ success: false, error: 'Codice e targa sono obbligatori.' });
-    }
-
-    const cleanCode = String(code).trim().toUpperCase();
-    const cleanPlate = String(plate).trim().toUpperCase().replace(/\s+/g, '');
-
-    const result = await pool.query(
-      'SELECT * FROM sticker_codes WHERE code = $1 LIMIT 1',
-      [cleanCode]
-    );
-
-    if (!result.rows.length) {
-      return res.status(404).json({ success: false, error: 'Codice non trovato.' });
-    }
-
-    const row = result.rows[0];
-    const dbPlate = String(row.plate || '').trim().toUpperCase().replace(/\s+/g, '');
-
-    if (dbPlate !== cleanPlate) {
-      return res.status(401).json({ success: false, error: 'Targa non corrispondente al codice.' });
-    }
-
-    let viewsCount = 0;
-    let messagesCount = 0;
-    let locationsCount = 0;
-    let lastActivity = null;
-
-    try {
-      const scans = await pool.query(
-        'SELECT COUNT(*)::int AS total, MAX(scanned_at) AS last_scan FROM qr_scans WHERE code = $1',
-        [cleanCode]
-      );
-      if (scans.rows.length) {
-        viewsCount = scans.rows[0].total || 0;
-        lastActivity = scans.rows[0].last_scan || null;
-      }
-    } catch (e) {}
-
-    return res.json({
-      success: true,
-      data: {
-        code: row.code,
-        status: row.status,
-        brand: row.brand,
-        vehicle_model: row.vehicle_model,
-        color: row.color,
-        plate: row.plate,
-        qr_url: row.qr_url,
-        activated_at: row.activated_at,
-        viewsCount,
-        messagesCount,
-        locationsCount,
-        lastActivity,
-        events: [
-          lastActivity ? { type: 'Visualizzazione pagina', at: lastActivity } : null
-        ].filter(Boolean)
-      }
-    });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ success: false, error: 'Errore di comunicazione con il server.' });
-  }
-});
 
 
 app.post('/api/log-contact-view', async (req, res) => {
@@ -324,6 +256,132 @@ app.post('/api/log-contact-message', async (req, res) => {
   } catch (err) {
     console.error('log-contact-message error:', err);
     return res.status(500).json({ success: false, error: 'Errore logging messaggio.' });
+  }
+});
+
+
+
+app.post('/api/owner-dashboard', async (req, res) => {
+  try {
+    const { code, plate } = req.body;
+
+    if (!code || !plate) {
+      return res.status(400).json({ success: false, error: 'Codice e targa sono obbligatori.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+    const cleanPlate = String(plate).trim().toUpperCase().replace(/\s+/g, '');
+
+    const result = await pool.query(
+      'SELECT * FROM sticker_codes WHERE code = $1 LIMIT 1',
+      [cleanCode]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, error: 'Codice non trovato.' });
+    }
+
+    const row = result.rows[0];
+    const dbPlate = String(row.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    if (dbPlate !== cleanPlate) {
+      return res.status(401).json({ success: false, error: 'Targa non corrispondente al codice.' });
+    }
+
+    let viewsCount = 0;
+    let messagesCount = 0;
+    let locationsCount = 0;
+    let lastActivity = null;
+    let events = [];
+
+    try {
+      const views = await pool.query(
+        `SELECT COUNT(*)::int AS total, MAX(viewed_at) AS last_view
+         FROM contact_page_views
+         WHERE code = $1`,
+        [cleanCode]
+      );
+      if (views.rows.length) {
+        viewsCount = views.rows[0].total || 0;
+        lastActivity = views.rows[0].last_view || null;
+      }
+    } catch (e) {}
+
+    try {
+      const messages = await pool.query(
+        `SELECT COUNT(*)::int AS total, MAX(created_at) AS last_message
+         FROM contact_message_logs
+         WHERE code = $1`,
+        [cleanCode]
+      );
+      if (messages.rows.length) {
+        messagesCount = messages.rows[0].total || 0;
+        if (!lastActivity || (messages.rows[0].last_message && messages.rows[0].last_message > lastActivity)) {
+          lastActivity = messages.rows[0].last_message || lastActivity;
+        }
+      }
+    } catch (e) {}
+
+    try {
+      const locations = await pool.query(
+        `SELECT COUNT(*)::int AS total
+         FROM contact_message_logs
+         WHERE code = $1 AND location_shared = TRUE`,
+        [cleanCode]
+      );
+      if (locations.rows.length) {
+        locationsCount = locations.rows[0].total || 0;
+      }
+    } catch (e) {}
+
+    try {
+      const recentEvents = await pool.query(
+        `(SELECT
+            'Visualizzazione pagina' AS type,
+            viewed_at AS at,
+            COALESCE(ip_city, '') AS ip_city,
+            COALESCE(ip_region, '') AS ip_region,
+            FALSE AS location_shared
+           FROM contact_page_views
+           WHERE code = $1)
+         UNION ALL
+         (SELECT
+            COALESCE(reason, 'Invio avviato') AS type,
+            created_at AS at,
+            COALESCE(ip_city, '') AS ip_city,
+            COALESCE(ip_region, '') AS ip_region,
+            COALESCE(location_shared, FALSE) AS location_shared
+           FROM contact_message_logs
+           WHERE code = $1)
+         ORDER BY at DESC
+         LIMIT 12`,
+        [cleanCode]
+      );
+      events = recentEvents.rows || [];
+    } catch (e) {}
+
+    return res.json({
+      success: true,
+      data: {
+        code: row.code,
+        status: row.status,
+        brand: row.brand,
+        vehicle_model: row.vehicle_model,
+        color: row.color,
+        plate: row.plate,
+        qr_url: row.qr_url,
+        public_id: row.public_id,
+        activated_at: row.activated_at,
+        viewsCount,
+        messagesCount,
+        locationsCount,
+        lastActivity,
+        events
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore di comunicazione con il server.' });
   }
 });
 
@@ -464,74 +522,6 @@ app.post('/api/owner-login', async (req, res) => {
   }
 });
 
-app.post('/api/owner-dashboard', async (req, res) => {
-  try {
-    const { code, plate } = req.body;
-
-    if (!code || !plate) {
-      return res.status(400).json({ success: false, error: 'Codice e targa sono obbligatori.' });
-    }
-
-    const cleanCode = String(code).trim().toUpperCase();
-    const cleanPlate = String(plate).trim().toUpperCase().replace(/\s+/g, '');
-
-    const result = await pool.query(
-      'SELECT * FROM sticker_codes WHERE code = $1 LIMIT 1',
-      [cleanCode]
-    );
-
-    if (!result.rows.length) {
-      return res.status(404).json({ success: false, error: 'Codice non trovato.' });
-    }
-
-    const row = result.rows[0];
-    const dbPlate = String(row.plate || '').trim().toUpperCase().replace(/\s+/g, '');
-
-    if (dbPlate !== cleanPlate) {
-      return res.status(401).json({ success: false, error: 'Targa non corrispondente al codice.' });
-    }
-
-    let viewsCount = 0;
-    let messagesCount = 0;
-    let locationsCount = 0;
-    let lastActivity = null;
-
-    try {
-      const scans = await pool.query(
-        'SELECT COUNT(*)::int AS total, MAX(scanned_at) AS last_scan FROM qr_scans WHERE code = $1',
-        [cleanCode]
-      );
-      if (scans.rows.length) {
-        viewsCount = scans.rows[0].total || 0;
-        lastActivity = scans.rows[0].last_scan || null;
-      }
-    } catch (e) {}
-
-    return res.json({
-      success: true,
-      data: {
-        code: row.code,
-        status: row.status,
-        brand: row.brand,
-        vehicle_model: row.vehicle_model,
-        color: row.color,
-        plate: row.plate,
-        qr_url: row.qr_url,
-        activated_at: row.activated_at,
-        viewsCount,
-        messagesCount,
-        locationsCount,
-        lastActivity,
-        events: [
-          lastActivity ? { type: 'Visualizzazione pagina', at: lastActivity } : null
-        ].filter(Boolean)
-      }
-    });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ success: false, error: 'Errore di comunicazione con il server.' });
-  }
-});
 
 app.post('/api/owner-disable', async (req, res) => {
   try {
