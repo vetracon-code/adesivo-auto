@@ -238,6 +238,96 @@ app.post('/api/owner-dashboard', async (req, res) => {
   }
 });
 
+
+app.post('/api/log-contact-view', async (req, res) => {
+  try {
+    const { code, plate, brand, vehicle_model, color } = req.body || {};
+
+    const forwardedFor = req.headers['x-forwarded-for'];
+    const ip =
+      (Array.isArray(forwardedFor) ? forwardedFor[0] : (forwardedFor || '').split(',')[0].trim()) ||
+      req.headers['x-real-ip'] ||
+      req.socket?.remoteAddress ||
+      null;
+
+    const userAgent = req.headers['user-agent'] || null;
+    const area = await lookupIpArea(ip);
+
+    await pool.query(
+      `INSERT INTO contact_page_views
+       (code, plate, brand, vehicle_model, color, ip_address, ip_city, ip_region, ip_country, user_agent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [
+        code || null,
+        plate || null,
+        brand || null,
+        vehicle_model || null,
+        color || null,
+        ip,
+        area.city,
+        area.region,
+        area.country,
+        userAgent
+      ]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('log-contact-view error:', err);
+    return res.status(500).json({ success: false, error: 'Errore logging visualizzazione.' });
+  }
+});
+
+app.post('/api/log-contact-message', async (req, res) => {
+  try {
+    const {
+      code, plate, brand, vehicle_model, color,
+      reason, message_text, location_shared,
+      latitude, longitude, maps_url
+    } = req.body || {};
+
+    const forwardedFor = req.headers['x-forwarded-for'];
+    const ip =
+      (Array.isArray(forwardedFor) ? forwardedFor[0] : (forwardedFor || '').split(',')[0].trim()) ||
+      req.headers['x-real-ip'] ||
+      req.socket?.remoteAddress ||
+      null;
+
+    const userAgent = req.headers['user-agent'] || null;
+    const area = await lookupIpArea(ip);
+
+    await pool.query(
+      `INSERT INTO contact_message_logs
+       (code, plate, brand, vehicle_model, color, reason, message_text, location_shared, latitude, longitude, maps_url, ip_address, ip_city, ip_region, ip_country, user_agent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+      [
+        code || null,
+        plate || null,
+        brand || null,
+        vehicle_model || null,
+        color || null,
+        reason || null,
+        message_text || null,
+        !!location_shared,
+        latitude || null,
+        longitude || null,
+        maps_url || null,
+        ip,
+        area.city,
+        area.region,
+        area.country,
+        userAgent
+      ]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('log-contact-message error:', err);
+    return res.status(500).json({ success: false, error: 'Errore logging messaggio.' });
+  }
+});
+
+
 app.post('/api/owner-disable', async (req, res) => {
   try {
     const { code, plate } = req.body;
