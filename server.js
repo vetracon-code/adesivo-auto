@@ -88,6 +88,325 @@ app.post('/api/check-code', async (req, res) => {
   }
 });
 
+
+
+app.post('/api/owner-dashboard', async (req, res) => {
+  try {
+    const { code, plate } = req.body;
+
+    if (!code || !plate) {
+      return res.status(400).json({ success: false, error: 'Codice e targa sono obbligatori.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+    const cleanPlate = String(plate).trim().toUpperCase().replace(/\s+/g, '');
+
+    const result = await pool.query(
+      'SELECT * FROM sticker_codes WHERE code = $1 LIMIT 1',
+      [cleanCode]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, error: 'Codice non trovato.' });
+    }
+
+    const row = result.rows[0];
+    const dbPlate = String(row.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    if (dbPlate !== cleanPlate) {
+      return res.status(401).json({ success: false, error: 'Targa non corrispondente al codice.' });
+    }
+
+    let viewsCount = 0;
+    let messagesCount = 0;
+    let locationsCount = 0;
+    let lastActivity = null;
+
+    try {
+      const scans = await pool.query(
+        'SELECT COUNT(*)::int AS total, MAX(scanned_at) AS last_scan FROM qr_scans WHERE code = $1',
+        [cleanCode]
+      );
+      if (scans.rows.length) {
+        viewsCount = scans.rows[0].total || 0;
+        lastActivity = scans.rows[0].last_scan || null;
+      }
+    } catch (e) {}
+
+    return res.json({
+      success: true,
+      data: {
+        code: row.code,
+        status: row.status,
+        brand: row.brand,
+        vehicle_model: row.vehicle_model,
+        color: row.color,
+        plate: row.plate,
+        qr_url: row.qr_url,
+        activated_at: row.activated_at,
+        viewsCount,
+        messagesCount,
+        locationsCount,
+        lastActivity,
+        events: [
+          lastActivity ? { type: 'Visualizzazione pagina', at: lastActivity } : null
+        ].filter(Boolean)
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore di comunicazione con il server.' });
+  }
+});
+
+app.post('/api/owner-disable', async (req, res) => {
+  try {
+    const { code, plate } = req.body;
+
+    if (!code || !plate) {
+      return res.status(400).json({ success: false, error: 'Codice e targa sono obbligatori.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+    const cleanPlate = String(plate).trim().toUpperCase().replace(/\s+/g, '');
+
+    const result = await pool.query(
+      'SELECT * FROM sticker_codes WHERE code = $1 LIMIT 1',
+      [cleanCode]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, error: 'Codice non trovato.' });
+    }
+
+    const row = result.rows[0];
+    const dbPlate = String(row.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    if (dbPlate !== cleanPlate) {
+      return res.status(401).json({ success: false, error: 'Targa non corrispondente al codice.' });
+    }
+
+    await pool.query(
+      `UPDATE sticker_codes
+       SET status = 'disabled',
+           qr_url = NULL
+       WHERE code = $1`,
+      [cleanCode]
+    );
+
+    return res.json({ success: true, message: 'Adesivo disattivato correttamente.' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore di comunicazione con il server.' });
+  }
+});
+
+
+app.post('/api/owner-login', async (req, res) => {
+  try {
+    const { code, plate } = req.body;
+
+    if (!code || !plate) {
+      return res.status(400).json({ success: false, error: 'Codice e targa sono obbligatori.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+    const cleanPlate = String(plate).trim().toUpperCase().replace(/\s+/g, '');
+
+    const result = await pool.query(
+      'SELECT * FROM sticker_codes WHERE code = $1 LIMIT 1',
+      [cleanCode]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, error: 'Codice non trovato.' });
+    }
+
+    const row = result.rows[0];
+    const dbPlate = String(row.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    if (dbPlate !== cleanPlate) {
+      return res.status(401).json({ success: false, error: 'Targa non corrispondente al codice.' });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        code: row.code,
+        status: row.status,
+        brand: row.brand,
+        vehicle_model: row.vehicle_model,
+        color: row.color,
+        plate: row.plate,
+        qr_url: row.qr_url,
+        activated_at: row.activated_at
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore di comunicazione con il server.' });
+  }
+});
+
+
+app.post('/api/owner-login', async (req, res) => {
+  try {
+    const { code, plate } = req.body;
+
+    if (!code || !plate) {
+      return res.status(400).json({ success: false, error: 'Codice e targa sono obbligatori.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+    const cleanPlate = String(plate).trim().toUpperCase().replace(/\s+/g, '');
+
+    const result = await pool.query(
+      'SELECT * FROM sticker_codes WHERE code = $1 LIMIT 1',
+      [cleanCode]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, error: 'Codice non trovato.' });
+    }
+
+    const row = result.rows[0];
+    const dbPlate = String(row.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    if (dbPlate !== cleanPlate) {
+      return res.status(401).json({ success: false, error: 'Targa non corrispondente al codice.' });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        code: row.code,
+        status: row.status,
+        brand: row.brand,
+        vehicle_model: row.vehicle_model,
+        color: row.color,
+        plate: row.plate,
+        qr_url: row.qr_url,
+        activated_at: row.activated_at
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore di comunicazione con il server.' });
+  }
+});
+
+app.post('/api/owner-dashboard', async (req, res) => {
+  try {
+    const { code, plate } = req.body;
+
+    if (!code || !plate) {
+      return res.status(400).json({ success: false, error: 'Codice e targa sono obbligatori.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+    const cleanPlate = String(plate).trim().toUpperCase().replace(/\s+/g, '');
+
+    const result = await pool.query(
+      'SELECT * FROM sticker_codes WHERE code = $1 LIMIT 1',
+      [cleanCode]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, error: 'Codice non trovato.' });
+    }
+
+    const row = result.rows[0];
+    const dbPlate = String(row.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    if (dbPlate !== cleanPlate) {
+      return res.status(401).json({ success: false, error: 'Targa non corrispondente al codice.' });
+    }
+
+    let viewsCount = 0;
+    let messagesCount = 0;
+    let locationsCount = 0;
+    let lastActivity = null;
+
+    try {
+      const scans = await pool.query(
+        'SELECT COUNT(*)::int AS total, MAX(scanned_at) AS last_scan FROM qr_scans WHERE code = $1',
+        [cleanCode]
+      );
+      if (scans.rows.length) {
+        viewsCount = scans.rows[0].total || 0;
+        lastActivity = scans.rows[0].last_scan || null;
+      }
+    } catch (e) {}
+
+    return res.json({
+      success: true,
+      data: {
+        code: row.code,
+        status: row.status,
+        brand: row.brand,
+        vehicle_model: row.vehicle_model,
+        color: row.color,
+        plate: row.plate,
+        qr_url: row.qr_url,
+        activated_at: row.activated_at,
+        viewsCount,
+        messagesCount,
+        locationsCount,
+        lastActivity,
+        events: [
+          lastActivity ? { type: 'Visualizzazione pagina', at: lastActivity } : null
+        ].filter(Boolean)
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore di comunicazione con il server.' });
+  }
+});
+
+app.post('/api/owner-disable', async (req, res) => {
+  try {
+    const { code, plate } = req.body;
+
+    if (!code || !plate) {
+      return res.status(400).json({ success: false, error: 'Codice e targa sono obbligatori.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+    const cleanPlate = String(plate).trim().toUpperCase().replace(/\s+/g, '');
+
+    const result = await pool.query(
+      'SELECT * FROM sticker_codes WHERE code = $1 LIMIT 1',
+      [cleanCode]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, error: 'Codice non trovato.' });
+    }
+
+    const row = result.rows[0];
+    const dbPlate = String(row.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    if (dbPlate !== cleanPlate) {
+      return res.status(401).json({ success: false, error: 'Targa non corrispondente al codice.' });
+    }
+
+    await pool.query(
+      `UPDATE sticker_codes
+       SET status = 'disabled',
+           qr_url = NULL
+       WHERE code = $1`,
+      [cleanCode]
+    );
+
+    return res.json({ success: true, message: 'Adesivo disattivato correttamente.' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore di comunicazione con il server.' });
+  }
+});
+
+
 app.get('/api/code/:code', async (req, res) => {
   try {
     const { code } = req.params;
@@ -211,7 +530,7 @@ app.get('/contact/:code', async (req, res) => {
     const waText = encodeURIComponent(
       `Segnalazione urgente per il veicolo ${row.vehicle_model || ''} targa ${row.plate || ''}`
     );
-    const redirectUrl = `/contact.html?phone=${encodeURIComponent(cleanPhone)}&plate=${encodeURIComponent(row.plate || '')}&vehicle=${encodeURIComponent(row.vehicle_model || '')}`;
+    const redirectUrl = `/contact.html?phone=${encodeURIComponent(cleanPhone)}&plate=${encodeURIComponent(row.plate || '')}&brand=${encodeURIComponent(row.brand || '')}&vehicle=${encodeURIComponent(row.vehicle_model || '')}&color=${encodeURIComponent(row.color || '')}`;
     res.redirect(redirectUrl);
   } catch (err) {
     console.error('contact error:', err);
