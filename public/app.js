@@ -411,23 +411,56 @@ async function loadSticker(code, result) {
 
     result.className = '';
     result.innerHTML = `
-      <div class="sticker-sheet">
-        <div class="sticker">
-          <div>
-            <h1>Segnalazione veicolo</h1>
-            <p>Scansiona il QR per contattare rapidamente il proprietario in caso di urgenza.</p>
-            <div class="plate">Targa ${escapeHtml(item.plate)}</div>
-            <p>${escapeHtml(item.vehicle_model)}</p>
-            <div class="footer-note">Usare solo per segnalazioni urgenti relative al veicolo.</div>
-          </div>
-          <div class="qr-wrap">
-            <img src="${qrImageUrl}" alt="QR Code adesivo">
+      <div class="official-sticker-page">
+        <div class="official-sticker-wrap">
+          <div class="official-sticker-badge">
+            <div class="official-qr-panel">
+              <div class="official-qr-slot">
+                <img src="${qrImageUrl}" alt="QR Code adesivo" class="official-qr-image">
+              </div>
+            </div>
+
+            <div class="official-divider"></div>
+
+            <div class="official-center-copy">
+              <div class="official-line official-line-top">
+                <span></span><em></em><span></span>
+              </div>
+
+              <div class="official-title">
+                <div>CONTATTO</div>
+                <div>VEICOLO</div>
+              </div>
+
+              <div class="official-line official-line-bottom">
+                <span></span><em></em><span></span>
+              </div>
+            </div>
+
+            <div class="official-call-side">
+              <div class="official-call-ring">
+                <div class="official-call-ring-accent official-call-ring-accent-top"></div>
+                <div class="official-call-ring-accent official-call-ring-accent-bottom"></div>
+                <div class="official-call-core">
+                  <div class="official-call-phone">✆</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-      <div class="actions no-print center">
-        <button class="btn btn-dark" onclick="window.print()">Stampa adesivo</button>
-        <a class="btn btn-secondary" href="${escapeHtml(item.qr_url)}" target="_blank">Apri pagina contatto</a>
+
+        <div class="official-sticker-meta no-print">
+          <div class="success-box">
+            <strong>Targa:</strong> ${escapeHtml(item.plate)}<br>
+            <strong>Veicolo:</strong> ${escapeHtml(item.vehicle_model)}<br>
+            <strong>Codice:</strong> ${escapeHtml(item.code)}
+          </div>
+        </div>
+
+        <div class="actions no-print center">
+          <button class="btn btn-dark" onclick="window.print()">Stampa adesivo</button>
+          <a class="btn btn-secondary" href="${escapeHtml(item.qr_url)}" target="_blank">Apri pagina contatto</a>
+        </div>
       </div>
     `;
   } catch (err) {
