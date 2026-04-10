@@ -144,7 +144,7 @@ app.get('/api/qrcode/:code', async (req, res) => {
 
 app.post('/api/activate-code', async (req, res) => {
   try {
-    const { code, plate, vehicle_model, phone } = req.body;
+    const { code, brand, plate, vehicle_model, color, phone } = req.body;
 
     const existing = await pool.query(
       'SELECT * FROM sticker_codes WHERE code = $1',
@@ -288,11 +288,7 @@ app.post('/api/admin/reactivate-code', async (req, res) => {
 
     await pool.query(
       `UPDATE sticker_codes
-       SET status = 'reactivated',
-           plate = NULL,
-           vehicle_model = NULL,
-           phone = NULL,
-           qr_url = NULL,
+       SET status = 'reactivated', brand = NULL, plate = NULL, vehicle_model = NULL, color = NULL, phone = NULL, qr_url = NULL,
            activated_at = NULL,
            reactivated_at = NOW()
        WHERE code = $1`,
@@ -333,6 +329,8 @@ async function initDb() {
       );
     `);
 
+    await pool.query("ALTER TABLE sticker_codes ADD COLUMN IF NOT EXISTS brand TEXT");
+    await pool.query("ALTER TABLE sticker_codes ADD COLUMN IF NOT EXISTS color TEXT");
     console.log('Tabella sticker_codes pronta');
     console.log('Tabella qr_scans pronta');
   } catch (err) {
