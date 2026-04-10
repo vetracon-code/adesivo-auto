@@ -411,40 +411,12 @@ async function loadSticker(code, result) {
 
     result.className = '';
     result.innerHTML = `
-      <div class="official-sticker-page">
-        <div class="official-sticker-wrap">
-          <div class="official-sticker-badge">
-            <div class="official-qr-panel">
-              <div class="official-qr-slot">
-                <img src="${qrImageUrl}" alt="QR Code adesivo" class="official-qr-image">
-              </div>
-            </div>
-
-            <div class="official-divider"></div>
-
-            <div class="official-center-copy">
-              <div class="official-line official-line-top">
-                <span></span><em></em><span></span>
-              </div>
-
-              <div class="official-title">
-                <div>CONTATTO</div>
-                <div>VEICOLO</div>
-              </div>
-
-              <div class="official-line official-line-bottom">
-                <span></span><em></em><span></span>
-              </div>
-            </div>
-
-            <div class="official-call-side">
-              <div class="official-call-ring">
-                <div class="official-call-ring-accent official-call-ring-accent-top"></div>
-                <div class="official-call-ring-accent official-call-ring-accent-bottom"></div>
-                <div class="official-call-core">
-                  <div class="official-call-phone">✆</div>
-                </div>
-              </div>
+      <div class="official-master-page">
+        <div class="official-master-wrap">
+          <div class="official-master-badge">
+            <img src="/master-badge-ufficiale.png" alt="Frame ufficiale adesivo" class="official-master-image">
+            <div class="official-master-qr-slot">
+              <img src="${qrImageUrl}" alt="QR Code adesivo" class="official-master-qr">
             </div>
           </div>
         </div>
