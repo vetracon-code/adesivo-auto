@@ -27,28 +27,17 @@ function escapeHtml(value) {
 }
 
 
-
-
-
-
-
-
-
-
 function initOwnerLoginPage() {
-  const btn = document.getElementById('ownerLoginBtn');
-  const resultBox = document.getElementById('ownerLoginResult');
-  const codeInput = document.getElementById('ownerCode');
-  const plateInput = document.getElementById('ownerPlate');
-
-  if (!btn || !resultBox || !codeInput || !plateInput) return;
+  const btn = qs('#ownerLoginBtn');
+  const resultBox = qs('#ownerLoginResult');
+  if (!btn || !resultBox) return;
 
   btn.addEventListener('click', async () => {
-    const code = (codeInput.value || '').trim().toUpperCase();
-    const plate = (plateInput.value || '').trim().toUpperCase().replace(/\s+/g, '');
+    const code = (qs('#ownerCode')?.value || '').trim().toUpperCase();
+    const plate = (qs('#ownerPlate')?.value || '').trim().toUpperCase().replace(/\s+/g, '');
 
     if (!code || !plate) {
-      resultBox.innerHTML = '<div class="owner-result error">Inserisci codice adesivo e targa veicolo.</div>';
+      setBox(resultBox, 'error', 'Inserisci codice adesivo e targa veicolo.');
       return;
     }
 
@@ -62,51 +51,32 @@ function initOwnerLoginPage() {
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        resultBox.innerHTML = `<div class="owner-result error">${data.error || 'Accesso non consentito.'}</div>`;
+        setBox(resultBox, 'error', data.error || 'Accesso non consentito.');
         return;
       }
 
-      const item = data.data || {};
-      const vehicle = [item.brand, item.vehicle_model].filter(Boolean).join(' ');
-      const uiStatusMap = {
-        used: 'Attivo',
-        disabled: 'Disattivato',
-        reactivated: 'Riattivato',
-        available: 'Non attivato'
-      };
-
+      const item = data.data;
+      resultBox.className = 'result-box';
       resultBox.innerHTML = `
-        <div class="owner-result">
-          <h3>Accesso verificato</h3>
-          <div class="owner-grid">
-            <div class="owner-stat">
-              <div class="label">Veicolo</div>
-              <div class="value">${vehicle || '-'}</div>
-            </div>
-            <div class="owner-stat">
-              <div class="label">Targa</div>
-              <div class="value">${item.plate || '-'}</div>
-            </div>
-            <div class="owner-stat">
-              <div class="label">Stato</div>
-              <div class="value">${uiStatusMap[item.status] || item.status || '-'}</div>
-            </div>
-            <div class="owner-stat">
-              <div class="label">Codice</div>
-              <div class="value">${item.code || '-'}</div>
-            </div>
-          </div>
-          <div class="owner-actions">
-            <a class="owner-link primary" href="/owner-dashboard.html?code=${encodeURIComponent(item.code || '')}&plate=${encodeURIComponent(item.plate || '')}">Controllo adesivo</a>
-            <a class="owner-link secondary" href="/sticker.html?code=${encodeURIComponent(item.code || '')}" target="_blank">Ristampa</a>
+        <div class="success-box">
+          <strong>Accesso verificato</strong><br><br>
+          <strong>Veicolo:</strong> ${escapeHtml([item.brand, item.vehicle_model].filter(Boolean).join(' '))}<br>
+          <strong>Targa:</strong> ${escapeHtml(item.plate || '')}<br>
+          <strong>Stato:</strong> ${escapeHtml(item.status || '')}<br>
+          <strong>Codice:</strong> ${escapeHtml(item.code || '')}<br><br>
+          <div class="actions">
+            <a class="btn btn-secondary" href="/sticker.html?code=${encodeURIComponent(item.code)}" target="_blank">Apri adesivo</a>
+            <a class="btn btn-dark" href="${escapeHtml(item.qr_url || '#')}" target="_blank">Apri pagina contatto</a>
           </div>
         </div>
       `;
     } catch (err) {
-      resultBox.innerHTML = '<div class="owner-result error">Errore di comunicazione con il server.</div>';
+      setBox(resultBox, 'error', 'Errore di comunicazione con il server.');
     }
   });
 }
+
+
 
 function initOwnerDashboardPage() {
   const vehicleEl = document.getElementById('dashVehicle');
@@ -167,33 +137,24 @@ function initOwnerDashboardPage() {
       lastEl.textContent = item.lastActivity ? new Date(item.lastActivity).toLocaleString('it-IT') : '-';
 
       reprintBtn.href = `/sticker.html?code=${encodeURIComponent(item.code || code)}`;
-      document.getElementById('dashControlBtn').href = `/owner-dashboard.html?code=${encodeURIComponent(item.code || code)}&plate=${encodeURIComponent(item.plate || plate)}`;
 
       if (eventsEl) {
         const events = item.events || [];
         if (!events.length) {
           eventsEl.innerHTML = '<div class="log-item muted">Nessun evento registrato.</div>';
         } else {
-          eventsEl.innerHTML = events.map(ev => {
-            const area = [ev.ip_city, ev.ip_region].filter(Boolean).join(', ');
-            return `
-              <div class="log-item">
-                <strong>${ev.type || 'Evento'}</strong><br>
-                ${ev.at ? new Date(ev.at).toLocaleString('it-IT') : '-'}<br>
-                <span class="muted">Area indicativa di accesso: ${area || 'Non disponibile'}</span>
-                ${ev.location_shared ? '<br><span class="muted">Posizione condivisa: Sì</span>' : ''}
-              </div>
-            `;
-          }).join('');
+          eventsEl.innerHTML = events.map(ev => `
+            <div class="log-item">
+              <strong>${ev.type || 'Evento'}</strong><br>
+              ${ev.at ? new Date(ev.at).toLocaleString('it-IT') : '-'}
+            </div>
+          `).join('');
         }
       }
 
       if ((item.status || '') === 'disabled') {
         disableBtn.disabled = true;
         disableBtn.textContent = 'Adesivo disattivato';
-      } else {
-        disableBtn.disabled = false;
-        disableBtn.textContent = 'Disattiva adesivo';
       }
     } catch (err) {
       resultBox.innerHTML = '<div class="result error">Errore di comunicazione con il server.</div>';

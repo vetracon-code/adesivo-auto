@@ -26,230 +26,11 @@ function escapeHtml(value) {
     .replaceAll("'", '&#039;');
 }
 
-
-
-
-
-
-
-
-
-
-function initOwnerLoginPage() {
-  const btn = document.getElementById('ownerLoginBtn');
-  const resultBox = document.getElementById('ownerLoginResult');
-  const codeInput = document.getElementById('ownerCode');
-  const plateInput = document.getElementById('ownerPlate');
-
-  if (!btn || !resultBox || !codeInput || !plateInput) return;
-
-  btn.addEventListener('click', async () => {
-    const code = (codeInput.value || '').trim().toUpperCase();
-    const plate = (plateInput.value || '').trim().toUpperCase().replace(/\s+/g, '');
-
-    if (!code || !plate) {
-      resultBox.innerHTML = '<div class="owner-result error">Inserisci codice adesivo e targa veicolo.</div>';
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/owner-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, plate })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        resultBox.innerHTML = `<div class="owner-result error">${data.error || 'Accesso non consentito.'}</div>`;
-        return;
-      }
-
-      const item = data.data || {};
-      const vehicle = [item.brand, item.vehicle_model].filter(Boolean).join(' ');
-      const uiStatusMap = {
-        used: 'Attivo',
-        disabled: 'Disattivato',
-        reactivated: 'Riattivato',
-        available: 'Non attivato'
-      };
-
-      resultBox.innerHTML = `
-        <div class="owner-result">
-          <h3>Accesso verificato</h3>
-          <div class="owner-grid">
-            <div class="owner-stat">
-              <div class="label">Veicolo</div>
-              <div class="value">${vehicle || '-'}</div>
-            </div>
-            <div class="owner-stat">
-              <div class="label">Targa</div>
-              <div class="value">${item.plate || '-'}</div>
-            </div>
-            <div class="owner-stat">
-              <div class="label">Stato</div>
-              <div class="value">${uiStatusMap[item.status] || item.status || '-'}</div>
-            </div>
-            <div class="owner-stat">
-              <div class="label">Codice</div>
-              <div class="value">${item.code || '-'}</div>
-            </div>
-          </div>
-          <div class="owner-actions">
-            <a class="owner-link primary" href="/owner-dashboard.html?code=${encodeURIComponent(item.code || '')}&plate=${encodeURIComponent(item.plate || '')}">Controllo adesivo</a>
-            <a class="owner-link secondary" href="/sticker.html?code=${encodeURIComponent(item.code || '')}" target="_blank">Ristampa</a>
-          </div>
-        </div>
-      `;
-    } catch (err) {
-      resultBox.innerHTML = '<div class="owner-result error">Errore di comunicazione con il server.</div>';
-    }
-  });
-}
-
-function initOwnerDashboardPage() {
-  const vehicleEl = document.getElementById('dashVehicle');
-  const plateEl = document.getElementById('dashPlate');
-  const statusEl = document.getElementById('dashStatus');
-  const codeEl = document.getElementById('dashCode');
-  const viewsEl = document.getElementById('viewsCount');
-  const messagesEl = document.getElementById('messagesCount');
-  const locationsEl = document.getElementById('locationsCount');
-  const lastEl = document.getElementById('lastActivity');
-  const eventsEl = document.getElementById('eventList');
-  const reprintBtn = document.getElementById('dashReprintBtn');
-  const disableBtn = document.getElementById('dashDisableBtn');
-  const disableArea = document.getElementById('dashDisableArea');
-  const resultBox = document.getElementById('dashboardResult');
-
-  if (!vehicleEl || !plateEl || !statusEl || !codeEl) return;
-
-  const params = new URLSearchParams(window.location.search);
-  const code = (params.get('code') || '').trim().toUpperCase();
-  const plate = (params.get('plate') || '').trim().toUpperCase().replace(/\s+/g, '');
-
-  if (!code || !plate) {
-    resultBox.innerHTML = '<div class="result error">Codice o targa mancanti.</div>';
-    return;
-  }
-
-  const uiStatusMap = {
-    used: 'Attivo',
-    disabled: 'Disattivato',
-    reactivated: 'Riattivato',
-    available: 'Non attivato'
-  };
-
-  async function loadDashboard() {
-    try {
-      const response = await fetch('/api/owner-dashboard', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, plate })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        resultBox.innerHTML = `<div class="result error">${data.error || 'Errore caricamento dashboard.'}</div>`;
-        return;
-      }
-
-      const item = data.data || {};
-      vehicleEl.textContent = [item.brand, item.vehicle_model].filter(Boolean).join(' ') || '-';
-      plateEl.textContent = item.plate || '-';
-      statusEl.textContent = uiStatusMap[item.status] || item.status || '-';
-      codeEl.textContent = item.code || '-';
-      viewsEl.textContent = item.viewsCount ?? 0;
-      messagesEl.textContent = item.messagesCount ?? 0;
-      locationsEl.textContent = item.locationsCount ?? 0;
-      lastEl.textContent = item.lastActivity ? new Date(item.lastActivity).toLocaleString('it-IT') : '-';
-
-      reprintBtn.href = `/sticker.html?code=${encodeURIComponent(item.code || code)}`;
-      document.getElementById('dashControlBtn').href = `/owner-dashboard.html?code=${encodeURIComponent(item.code || code)}&plate=${encodeURIComponent(item.plate || plate)}`;
-
-      if (eventsEl) {
-        const events = item.events || [];
-        if (!events.length) {
-          eventsEl.innerHTML = '<div class="log-item muted">Nessun evento registrato.</div>';
-        } else {
-          eventsEl.innerHTML = events.map(ev => {
-            const area = [ev.ip_city, ev.ip_region].filter(Boolean).join(', ');
-            return `
-              <div class="log-item">
-                <strong>${ev.type || 'Evento'}</strong><br>
-                ${ev.at ? new Date(ev.at).toLocaleString('it-IT') : '-'}<br>
-                <span class="muted">Area indicativa di accesso: ${area || 'Non disponibile'}</span>
-                ${ev.location_shared ? '<br><span class="muted">Posizione condivisa: Sì</span>' : ''}
-              </div>
-            `;
-          }).join('');
-        }
-      }
-
-      if ((item.status || '') === 'disabled') {
-        disableBtn.disabled = true;
-        disableBtn.textContent = 'Adesivo disattivato';
-      } else {
-        disableBtn.disabled = false;
-        disableBtn.textContent = 'Disattiva adesivo';
-      }
-    } catch (err) {
-      resultBox.innerHTML = '<div class="result error">Errore di comunicazione con il server.</div>';
-    }
-  }
-
-  disableBtn.addEventListener('click', () => {
-    disableArea.innerHTML = `
-      <div class="confirm-box">
-        Confermando, l’adesivo non sarà più operativo e la pagina di contatto non sarà più raggiungibile.<br><br>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button class="btn btn-danger" id="confirmDisableBtn" type="button">Conferma disattivazione</button>
-          <button class="btn btn-secondary" id="cancelDisableBtn" type="button">Annulla</button>
-        </div>
-      </div>
-    `;
-
-    document.getElementById('cancelDisableBtn').addEventListener('click', () => {
-      disableArea.innerHTML = '';
-    });
-
-    document.getElementById('confirmDisableBtn').addEventListener('click', async () => {
-      try {
-        const response = await fetch('/api/owner-disable', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code, plate })
-        });
-
-        const data = await response.json();
-
-        if (!response.ok || !data.success) {
-          resultBox.innerHTML = `<div class="result error">${data.error || 'Disattivazione non riuscita.'}</div>`;
-          return;
-        }
-
-        disableArea.innerHTML = '';
-        resultBox.innerHTML = `<div class="result ok">${data.message || 'Adesivo disattivato correttamente.'}</div>`;
-        await loadDashboard();
-      } catch (err) {
-        resultBox.innerHTML = '<div class="result error">Errore di comunicazione con il server.</div>';
-      }
-    });
-  });
-
-  loadDashboard();
-}
-
-
 document.addEventListener('DOMContentLoaded', () => {
   initHomePage();
   initActivatePage();
   initAdminPage();
   initStickerPage();
-  initOwnerLoginPage();
-  initOwnerDashboardPage();
 });
 
 function initHomePage() {
@@ -630,28 +411,23 @@ async function loadSticker(code, result) {
 
     result.className = '';
     result.innerHTML = `
-      <div class="official-master-page">
-        <div class="official-master-wrap">
-          <div class="official-master-badge">
-            <img src="/master-badge-ufficiale.png" alt="Frame ufficiale adesivo" class="official-master-image">
-            <div class="official-master-qr-slot">
-              <img src="${qrImageUrl}" alt="QR Code adesivo" class="official-master-qr">
-            </div>
+      <div class="sticker-sheet">
+        <div class="sticker">
+          <div>
+            <h1>Segnalazione veicolo</h1>
+            <p>Scansiona il QR per contattare rapidamente il proprietario in caso di urgenza.</p>
+            <div class="plate">Targa ${escapeHtml(item.plate)}</div>
+            <p>${escapeHtml(item.vehicle_model)}</p>
+            <div class="footer-note">Usare solo per segnalazioni urgenti relative al veicolo.</div>
+          </div>
+          <div class="qr-wrap">
+            <img src="${qrImageUrl}" alt="QR Code adesivo">
           </div>
         </div>
-
-        <div class="official-sticker-meta no-print">
-          <div class="success-box">
-            <strong>Targa:</strong> ${escapeHtml(item.plate)}<br>
-            <strong>Veicolo:</strong> ${escapeHtml(item.vehicle_model)}<br>
-            <strong>Codice:</strong> ${escapeHtml(item.code)}
-          </div>
-        </div>
-
-        <div class="actions no-print center">
-          <button class="btn btn-dark" onclick="window.print()">Stampa adesivo</button>
-          <a class="btn btn-secondary" href="${escapeHtml(item.qr_url)}" target="_blank">Apri pagina contatto</a>
-        </div>
+      </div>
+      <div class="actions no-print center">
+        <button class="btn btn-dark" onclick="window.print()">Stampa adesivo</button>
+        <a class="btn btn-secondary" href="${escapeHtml(item.qr_url)}" target="_blank">Apri pagina contatto</a>
       </div>
     `;
   } catch (err) {

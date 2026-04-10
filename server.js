@@ -7,7 +7,49 @@ const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 const pool = require('./db');
 
+
 const app = express();
+
+async function lookupIpArea(ip) {
+  try {
+    if (!ip) return { city: null, region: null, country: null };
+
+    let cleanIp = String(ip).trim();
+
+    if (cleanIp.startsWith('::ffff:')) {
+      cleanIp = cleanIp.replace('::ffff:', '');
+    }
+
+    if (cleanIp === '::1' || cleanIp == '127.0.0.1') {
+      return { city: 'Locale', region: 'Sviluppo', country: 'IT' };
+    }
+
+    const token = process.env.IPINFO_TOKEN;
+    const url = token
+      ? `https://ipinfo.io/${encodeURIComponent(cleanIp)}/json?token=${encodeURIComponent(token)}`
+      : `https://ipinfo.io/${encodeURIComponent(cleanIp)}/json`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    });
+
+    if (!response.ok) {
+      return { city: null, region: null, country: null };
+    }
+
+    const data = await response.json();
+
+    return {
+      city: data.city || null,
+      region: data.region || null,
+      country: data.country || null
+    };
+  } catch (err) {
+    return { city: null, region: null, country: null };
+  }
+}
+
 const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;

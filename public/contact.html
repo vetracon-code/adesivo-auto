@@ -338,7 +338,7 @@
       .cp-vehicle-divider{ display:none; }
       .cp-vehicle-plate{ justify-self:start; }
       .cp-form{ padding:18px; }
-      .cp-primary-block{ padding:14px; }
+      .cp-primary-block{ padding:26px 20px 26px; left:0; width:100%; }
     }
   </style>
 </head>
@@ -421,6 +421,8 @@
     const brand = params.get('brand') || '';
     const model = params.get('vehicle') || '';
     const color = (params.get('color') || '').toLowerCase();
+    const rawColor = params.get('color') || '';
+    const code = params.get('code') || '';
 
     const vehicleName = [brand, model].filter(Boolean).join(' ').trim() || model || brand || 'Veicolo';
     document.getElementById('vehicleName').innerText = vehicleName;
@@ -449,6 +451,21 @@
     } else {
       colorLine.textContent = '';
     }
+
+    fetch('/api/log-contact-view', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code,
+        plate,
+        brand,
+        vehicle_model: model,
+        color: rawColor
+      })
+    })
+    .then(r => r.json().then(data => ({ ok: r.ok, status: r.status, data })))
+    .then(res => console.log('log-contact-view:', res))
+    .catch(err => console.error('log-contact-view error:', err));
 
     const msgField = document.getElementById('msg');
     const charCount = document.getElementById('charCount');
@@ -494,12 +511,9 @@
       const reason = reasonField.value;
       const msg = msgField.value.trim();
 
-      let text = `Segnalazione per ${vehicleName} (${plate})
-`;
-      if (reason) text += `Motivo: ${reason}
-`;
-      if (msg) text += `Dettagli: ${msg}
-`;
+      let text = `Segnalazione per ${vehicleName} (${plate})\n`;
+      if (reason) text += `Motivo: ${reason}\n`;
+      if (msg) text += `Dettagli: ${msg}\n`;
       if (extraLocation) text += extraLocation;
 
       return text.trim();
@@ -511,15 +525,41 @@
 
     function go() {
       const shareLocation = document.getElementById('shareLocation')?.checked;
+      const reason = reasonField.value;
+      const baseMessage = buildMessage();
+
+      async function logAndOpen(finalMessage, locationData = {}) {
+        try {
+          await fetch('/api/log-contact-message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              code,
+              plate,
+              brand,
+              vehicle_model: model,
+              color: rawColor,
+              reason,
+              message_text: finalMessage,
+              location_shared: !!locationData.location_shared,
+              latitude: locationData.latitude || null,
+              longitude: locationData.longitude || null,
+              maps_url: locationData.maps_url || null
+            })
+          });
+        } catch (e) {}
+
+        openWhatsApp(finalMessage);
+      }
 
       if (!shareLocation) {
-        openWhatsApp(buildMessage());
+        logAndOpen(baseMessage);
         return;
       }
 
       if (!navigator.geolocation) {
         alert('Geolocalizzazione non supportata dal dispositivo. La segnalazione verrà inviata senza posizione.');
-        openWhatsApp(buildMessage());
+        logAndOpen(baseMessage);
         return;
       }
 
@@ -527,17 +567,23 @@
         (position) => {
           const lat = position.coords.latitude.toFixed(6);
           const lng = position.coords.longitude.toFixed(6);
+          const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
           const extraLocation =
-            `Posizione: ${lat}, ${lng}
-` +
-            `Mappa: https://maps.google.com/?q=${lat},${lng}
-`;
+            `Posizione: ${lat}, ${lng}\n` +
+            `Mappa: ${mapsUrl}\n`;
 
-          openWhatsApp(buildMessage(extraLocation));
+          const finalMessage = buildMessage(extraLocation);
+
+          logAndOpen(finalMessage, {
+            location_shared: true,
+            latitude: lat,
+            longitude: lng,
+            maps_url: mapsUrl
+          });
         },
         () => {
           alert('Posizione non disponibile o permesso negato. La segnalazione verrà inviata senza coordinate.');
-          openWhatsApp(buildMessage());
+          logAndOpen(baseMessage);
         },
         {
           enableHighAccuracy: true,
