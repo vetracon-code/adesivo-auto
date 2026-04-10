@@ -675,7 +675,7 @@ app.get('/contact/u/:public_id', async (req, res) => {
       ]
     );
 
-    return res.redirect(302, `/contact.html?public_id=${encodeURIComponent(publicId)}`);
+    return res.sendFile(require('path').join(__dirname, 'public', 'contact.html'));
   } catch (err) {
     console.error(err);
     return res.status(500).send('Errore di comunicazione con il server.');
