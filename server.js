@@ -37,6 +37,9 @@ async function getUniquePublicId(pool) {
 }
 
 async function lookupIpArea(ip) {
+  let controller;
+  let timeoutId;
+
   try {
     if (!ip) return { city: null, region: null, country: null };
 
@@ -46,7 +49,7 @@ async function lookupIpArea(ip) {
       cleanIp = cleanIp.replace('::ffff:', '');
     }
 
-    if (cleanIp === '::1' || cleanIp == '127.0.0.1') {
+    if (cleanIp === '::1' || cleanIp === '127.0.0.1') {
       return { city: 'Locale', region: 'Sviluppo', country: 'IT' };
     }
 
@@ -55,10 +58,16 @@ async function lookupIpArea(ip) {
       ? `https://ipinfo.io/${encodeURIComponent(cleanIp)}/json?token=${encodeURIComponent(token)}`
       : `https://ipinfo.io/${encodeURIComponent(cleanIp)}/json`;
 
+    controller = new AbortController();
+    timeoutId = setTimeout(() => controller.abort(), 1200);
+
     const response = await fetch(url, {
       method: 'GET',
-      headers: { 'Accept': 'application/json' }
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       return { city: null, region: null, country: null };
@@ -73,6 +82,8 @@ async function lookupIpArea(ip) {
     };
   } catch (err) {
     return { city: null, region: null, country: null };
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }
 
