@@ -14,7 +14,7 @@ const app = express();
 const ADMIN_COOKIE_NAME = 'admin_session';
 
 function getAdminUser() {
-  return process.env.ADMIN_USER || process.env.ADMIN_USERNAME || '';
+  return process.env.ADMIN_USER || process.env.ADMIN_USERNAME || process.env.ADMIN_EMAIL || '';
 }
 
 function getAdminPass() {
