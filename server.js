@@ -1090,6 +1090,81 @@ app.get('/api/public-contact/:public_id', async (req, res) => {
 });
 
 
+
+app.get('/renew/u/:public_id', async (req, res) => {
+  try {
+    const publicId = String(req.params.public_id || '').trim().toUpperCase();
+
+    const result = await pool.query(
+      'SELECT public_id FROM sticker_codes WHERE public_id = $1 LIMIT 1',
+      [publicId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).send('Riferimento non trovato.');
+    }
+
+    return res.sendFile(require('path').join(__dirname, 'public', 'renew.html'));
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send('Errore di comunicazione con il server.');
+  }
+});
+
+app.get('/feedback/u/:public_id', async (req, res) => {
+  try {
+    const publicId = String(req.params.public_id || '').trim().toUpperCase();
+
+    const result = await pool.query(
+      'SELECT public_id FROM sticker_codes WHERE public_id = $1 LIMIT 1',
+      [publicId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).send('Riferimento non trovato.');
+    }
+
+    return res.sendFile(require('path').join(__dirname, 'public', 'feedback.html'));
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send('Errore di comunicazione con il server.');
+  }
+});
+
+app.post('/api/public-feedback', async (req, res) => {
+  try {
+    const { public_id, reason, notes } = req.body || {};
+    const publicId = String(public_id || '').trim().toUpperCase();
+
+    if (!publicId) {
+      return res.status(400).json({ success: false, error: 'Public ID mancante.' });
+    }
+
+    const found = await pool.query(
+      'SELECT code, public_id FROM sticker_codes WHERE public_id = $1 LIMIT 1',
+      [publicId]
+    );
+
+    if (!found.rows.length) {
+      return res.status(404).json({ success: false, error: 'Riferimento non trovato.' });
+    }
+
+    const row = found.rows[0];
+
+    await pool.query(
+      `INSERT INTO renewal_feedback (code, public_id, reason, notes)
+       VALUES ($1,$2,$3,$4)`,
+      [row.code, row.public_id, reason || null, notes || null]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore salvataggio feedback.' });
+  }
+});
+
+
 app.get('/contact/u/:public_id', async (req, res) => {
   try {
     const publicId = String(req.params.public_id || '').trim().toUpperCase();

@@ -170,7 +170,7 @@
               <th>Targa</th>
               <th>Veicolo</th>
               <th>Stato</th>
-              <th>Piano</th>
+              <th>Sottoscrizione</th>
               <th>Scadenza</th>
               <th>Inviato a</th>
               <th>QR URL</th>
@@ -263,6 +263,32 @@
         : (v || '-');
     }
 
+    function expiryLabel(item){
+      if(item.plan_type === 'always') return '<span class="muted">Sempre attivo</span>';
+      if(!item.expires_at) return '<span class="muted">-</span>';
+      const d = Number(item.days_left);
+      if (Number.isNaN(d)) return fmtDate(item.expires_at);
+      if (d < 0) return `<span class="danger"><strong>Scaduto da ${Math.abs(d)} gg</strong></span><br><span class="muted">${fmtDate(item.expires_at)}</span>`;
+      if (d <= 15) return `<span class="warn"><strong>Scade tra ${d} gg</strong></span><br><span class="muted">${fmtDate(item.expires_at)}</span>`;
+      return `<span class="ok"><strong>${d} gg residui</strong></span><br><span class="muted">${fmtDate(item.expires_at)}</span>`;
+    }
+
+    function buildRenewLink(item){
+      return `${window.location.origin}/renew/u/${encodeURIComponent(item.public_id || '')}`;
+    }
+
+    function buildFeedbackLink(item){
+      return `${window.location.origin}/feedback/u/${encodeURIComponent(item.public_id || '')}`;
+    }
+
+    function buildRenewText(item){
+      return `Ciao, ti ricordo che il servizio associato al tuo QR veicolo risulta in scadenza o già scaduto. Per mantenerlo attivo ed evitare interruzioni, puoi proseguire direttamente da qui:\n\n${buildRenewLink(item)}\n\nSe vuoi, posso anche aiutarti io direttamente.`;
+    }
+
+    function buildFeedbackText(item){
+      return `Ciao, ho visto che il servizio associato al tuo QR veicolo non è stato ancora rinnovato. Se non desideri proseguire, mi sarebbe molto utile capire il motivo tramite un breve form anonimo:\n\n${buildFeedbackLink(item)}\n\nIl tuo riscontro ci aiuta a migliorare il servizio.`;
+    }
+
     function statusBadge(v){
       const label = v === 'used' ? 'Attivo'
         : v === 'disabled' ? 'Disattivato'
@@ -309,13 +335,15 @@
             <td>${item.plate || '-'}</td>
             <td>${vehicle}</td>
             <td>${statusBadge(item.status)}</td>
-            <td>${planLabel(item.plan_type)}</td>
-            <td>${fmtDate(item.expires_at)}</td>
+            <td>${item.subscription_label || planLabel(item.plan_type)}</td>
+            <td>${expiryLabel(item)}</td>
             <td>${item.invite_sent_to ? `${item.invite_sent_to}<br><span class="muted">${item.invite_channel || '-'} · ${fmtDate(item.invite_sent_at)}</span>` : '-'}</td>
             <td class="mono ${qrWarn ? 'warn' : ''}">${item.qr_url || '-'}</td>
             <td>
               <div class="actions">
                 ${item.status === 'new' ? `<button class="mini" onclick="openInvite('${item.code}')">Invia</button>` : ''}
+                ${item.phone ? `<button class="mini" onclick="sendRenewWhatsApp('${item.code}')">Invia rinnovo</button>` : ''}
+                ${item.phone ? `<button class="mini" onclick="sendFeedbackWhatsApp('${item.code}')">Chiedi feedback</button>` : ''}
                 <button class="mini" onclick="printSticker('${item.code}')">Stampa</button>
                 <button class="mini" onclick="openEdit('${item.code}')">Modifica</button>
                 <button class="mini" onclick="fixQrUrl('${item.code}')">Correggi URL</button>
@@ -390,6 +418,24 @@
       const data = await res.json();
       alert(data.success ? 'Codice eliminato.' : (data.error || 'Errore eliminazione.'));
       if(data.success) loadAdmin(searchEl.value.trim());
+    }
+
+
+
+    window.sendRenewWhatsApp = function(code){
+      const item = adminItems.find(x => x.code === code);
+      if(!item || !item.phone) return;
+      const phone = String(item.phone).replace(/\s+/g,'').replace(/^\+/, '');
+      const url = `https://wa.me/${encodeURIComponent(phone)}?text=${encodeURIComponent(buildRenewText(item))}`;
+      window.open(url, '_blank');
+    }
+
+    window.sendFeedbackWhatsApp = function(code){
+      const item = adminItems.find(x => x.code === code);
+      if(!item || !item.phone) return;
+      const phone = String(item.phone).replace(/\s+/g,'').replace(/^\+/, '');
+      const url = `https://wa.me/${encodeURIComponent(phone)}?text=${encodeURIComponent(buildFeedbackText(item))}`;
+      window.open(url, '_blank');
     }
 
 
