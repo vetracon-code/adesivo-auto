@@ -262,7 +262,8 @@ function initHomePage() {
     btn.textContent = 'Generazione in corso...';
 
     try {
-      const data = await postJSON('/api/create-code', {});
+      const selectedPlan = document.getElementById('planType')?.value || 'always';
+      const data = await postJSON('/api/create-code', { plan_type: selectedPlan });
       if (!data.success) {
         setBox(result, 'error', 'Errore nella generazione del codice.');
         return;
@@ -276,6 +277,12 @@ function initHomePage() {
           <div><strong>Codice generato con successo.</strong></div>
           <div class="code-badge">${escapeHtml(code)}</div>
           ${data.public_id ? `<div class="muted" style="margin-top:8px;"><strong>ID pubblico:</strong> ${escapeHtml(data.public_id)}</div>` : ''}
+          ${data.plan_type ? `<div class="muted" style="margin-top:8px;"><strong>Validità:</strong> ${escapeHtml(
+            data.plan_type === 'always' ? 'Sempre valido' :
+            data.plan_type === '1week' ? '1 settimana' :
+            data.plan_type === '1month' ? '1 mese' : '6 mesi'
+          )}</div>` : ''}
+          ${data.expires_at ? `<div class="muted" style="margin-top:6px;"><strong>Scadenza:</strong> ${new Date(data.expires_at).toLocaleString('it-IT')}</div>` : ''}
           <div class="actions">
             <a class="btn btn-primary" href="/activate.html?code=${encodeURIComponent(code)}">Attiva adesso</a>
             <button class="btn btn-secondary" id="copyCodeBtn" type="button">Copia codice</button>

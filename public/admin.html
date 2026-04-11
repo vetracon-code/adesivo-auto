@@ -5,72 +5,551 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Dashboard Admin</title>
   <link rel="stylesheet" href="/style.css">
-  <link rel="icon" href="/favicon.ico" sizes="any">
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="/favicon-180.png">
-  <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png">
-  <link rel="icon" type="image/png" sizes="512x512" href="/favicon-512.png">
+  <style>
+    :root{
+      --accent:#2c74ff;
+      --accent2:#5aa0ff;
+      --bg1:#050b14;
+      --bg2:#0a1320;
+      --panel:#0b1523;
+      --line:rgba(255,255,255,.10);
+      --text:#f7fbff;
+      --muted:#b6c2d4;
+      --soft:rgba(255,255,255,.04);
+      --warn:#ffd27d;
+      --danger:#ffb0b0;
+      --ok:#9de2a7;
+    }
+    *{box-sizing:border-box}
+    html,body{
+      margin:0;padding:0;min-height:100%;
+      font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Arial,sans-serif;
+      background:
+        radial-gradient(circle at 18% 0%, rgba(33,78,166,.22), transparent 28%),
+        linear-gradient(180deg,var(--bg1) 0%,#07101b 48%,var(--bg2) 100%);
+      color:var(--text)
+    }
+    .wrap{width:min(1450px,calc(100% - 24px));margin:0 auto;padding:28px 0 34px}
+    .panel{
+      border-radius:30px;overflow:hidden;
+      background:
+        radial-gradient(circle at 70% 8%, rgba(45,110,240,.12), transparent 24%),
+        linear-gradient(180deg, rgba(11,21,35,.99) 0%, rgba(8,16,27,.995) 100%);
+      border:1px solid rgba(255,255,255,.08);
+      box-shadow:0 24px 56px rgba(0,0,0,.38)
+    }
+    .head{padding:28px 26px 20px}
+    .title{
+      margin:0;line-height:.94;letter-spacing:-.06em;font-weight:900;
+      font-size:clamp(2.2rem,5.2vw,3.8rem);text-transform:uppercase
+    }
+    .title span{display:block;margin-top:6px;color:var(--accent2)}
+    .sub{margin:14px 0 0;color:var(--muted);max-width:850px;line-height:1.55}
+    .kpis{
+      padding:0 26px 20px;
+      display:grid;
+      grid-template-columns:repeat(6,1fr);
+      gap:12px
+    }
+    .kpi{
+      border-radius:20px;
+      background:linear-gradient(180deg, rgba(255,255,255,.03) 0%, rgba(255,255,255,.015) 100%);
+      border:1px solid var(--line);
+      padding:16px
+    }
+    .kpi .label{color:#9fb1c8;font-size:.82rem;text-transform:uppercase;letter-spacing:.04em}
+    .kpi .value{margin-top:8px;font-size:1.45rem;font-weight:900;color:#fff}
+    .toolbar{
+      padding:0 26px 20px;
+      display:flex;gap:12px;flex-wrap:wrap;align-items:center
+    }
+    .search,.select,.input{
+      min-height:48px;border-radius:14px;border:1px solid var(--line);
+      background:var(--soft);color:#fff;padding:0 14px
+    }
+    .search{min-width:340px}
+    .btn{
+      min-height:48px;padding:0 16px;border-radius:14px;border:0;cursor:pointer;
+      color:#fff;font-weight:800
+    }
+    .btn-primary{background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 100%)}
+    .btn-secondary{background:rgba(255,255,255,.06);border:1px solid var(--line)}
+    .btn-warn{background:rgba(255,210,125,.10);border:1px solid rgba(255,210,125,.25);color:#ffe3a9}
+    .table-wrap{padding:0 26px 26px;overflow:auto}
+    table{
+      width:100%;border-collapse:collapse;background:rgba(255,255,255,.02);
+      border:1px solid var(--line);border-radius:18px;overflow:hidden
+    }
+    th,td{
+      padding:12px 10px;text-align:left;border-bottom:1px solid rgba(255,255,255,.06);
+      vertical-align:top;font-size:.92rem
+    }
+    th{color:#dce7f7;background:rgba(255,255,255,.04);position:sticky;top:0}
+    td{color:#d1dbea}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.84rem}
+    .status{
+      display:inline-flex;align-items:center;justify-content:center;
+      min-height:28px;padding:0 10px;border-radius:999px;font-size:.78rem;font-weight:800
+    }
+    .status.used{background:rgba(157,226,167,.12);color:var(--ok);border:1px solid rgba(157,226,167,.20)}
+    .status.new{background:rgba(90,160,255,.12);color:#b6d4ff;border:1px solid rgba(90,160,255,.20)}
+    .status.disabled{background:rgba(255,176,176,.12);color:var(--danger);border:1px solid rgba(255,176,176,.20)}
+    .status.reactivated{background:rgba(255,210,125,.10);color:#ffe3a9;border:1px solid rgba(255,210,125,.20)}
+    .actions{display:flex;gap:8px;flex-wrap:wrap}
+    .mini{
+      min-height:34px;padding:0 10px;border-radius:10px;border:1px solid var(--line);
+      background:rgba(255,255,255,.05);color:#fff;cursor:pointer;font-size:.82rem
+    }
+    .warn{color:var(--warn)}
+    .danger{color:var(--danger)}
+    .muted{color:var(--muted)}
+    .modal{
+      position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;
+      align-items:center;justify-content:center;padding:20px
+    }
+    .modal-card{
+      width:min(760px,100%);background:#0d1727;border:1px solid var(--line);
+      border-radius:22px;padding:20px
+    }
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .full{grid-column:1 / -1}
+    .helper{padding:0 26px 20px;color:var(--muted);font-size:.9rem}
+    @media (max-width:1200px){.kpis{grid-template-columns:repeat(3,1fr)}}
+    @media (max-width:900px){
+      .grid{grid-template-columns:1fr}
+      .search{min-width:unset;width:100%}
+      .kpis{grid-template-columns:repeat(2,1fr)}
+    }
+    @media (max-width:640px){.kpis{grid-template-columns:1fr}}
+  </style>
 </head>
 <body>
-  <div class="container">
-    <div class="topbar">
-      <div class="brand">
-        Dashboard Admin
-        <small>Gestione codici, attivazioni e scansioni</small>
+  <div class="wrap">
+    <div class="panel">
+      <div class="head">
+        <h1 class="title">DASHBOARD<span>AMMINISTRATORE</span></h1>
+        <p class="sub">Vista globale di tutti i codici emessi. Qui puoi cercare, correggere i link, modificare i record, disattivare o riattivare gli adesivi.</p>
       </div>
-      <div class="nav-links">
-        <a href="/">Home</a>
-        <a href="/activate.html">Attivazione</a>
-        <a href="/admin.html">Dashboard</a>
+
+      <div class="kpis">
+        <div class="kpi"><div class="label">Attivi</div><div class="value" id="kpiActive">-</div></div>
+        <div class="kpi"><div class="label">Nuovi</div><div class="value" id="kpiNew">-</div></div>
+        <div class="kpi"><div class="label">Disattivati</div><div class="value" id="kpiDisabled">-</div></div>
+        <div class="kpi"><div class="label">Link da correggere</div><div class="value" id="kpiLocalhost">-</div></div>
+        <div class="kpi"><div class="label">Visualizzazioni</div><div class="value" id="kpiViews">-</div></div>
+        <div class="kpi"><div class="label">Invii avviati</div><div class="value" id="kpiMessages">-</div></div>
       </div>
-    </div>
 
-    <section class="hero">
-      <h1>Controllo completo del sistema</h1>
-      <p>
-        Accedi, cerca un codice, verifica lo stato, controlla le scansioni registrate
-        e riattiva il codice se necessario.
-      </p>
-    </section>
+      <div class="toolbar">
+        <input id="adminSearch" class="search" type="text" placeholder="Cerca per codice, public_id o targa">
+        <button id="adminSearchBtn" class="btn btn-primary" type="button">Cerca</button>
+        <button id="adminReloadBtn" class="btn btn-secondary" type="button">Ricarica</button>
+      </div>
 
-    <div class="grid">
-      <section class="card" id="adminLoginBox">
-        <h2>Accesso amministratore</h2>
+      <div class="toolbar" style="padding-top:0;">
+        <select id="adminPlanType" class="select">
+          <option value="always">Sempre valido</option>
+          <option value="1week">Valido 1 settimana</option>
+          <option value="1month">Valido 1 mese</option>
+          <option value="6months">Valido 6 mesi</option>
+        </select>
+        <button id="adminCreateCodeBtn" class="btn btn-primary" type="button">Genera nuovo codice</button>
+      </div>
 
-        <div class="field">
-          <label class="label" for="admin_email">Email amministratore</label>
-          <input class="input" id="admin_email" type="email" placeholder="Email admin">
-        </div>
+      <div id="adminCreateResult" class="helper"></div>
 
-        <div class="field">
-          <label class="label" for="admin_password">Password amministratore</label>
-          <input class="input" id="admin_password" type="password" placeholder="Password">
-        </div>
+      <div class="helper">Suggerimento: i record con QR URL contenente <span class="warn">localhost</span> vanno corretti prima dell’uso pubblico.</div>
 
-        <button id="adminLoginBtn" class="btn btn-primary btn-full" type="button">Accedi</button>
-        <div id="adminLoginResult"></div>
-      </section>
-
-      <section class="card" id="adminPanel" style="display:none;">
-        <h2>Ricerca codice</h2>
-
-        <div class="field">
-          <label class="label" for="search_code">Codice da cercare</label>
-          <input class="input" id="search_code" type="text" placeholder="Es. AMC-XXXXXXXX">
-        </div>
-
-        <button id="findCodeBtn" class="btn btn-secondary btn-full" type="button">Cerca codice</button>
-
-        <div id="findCodeResult"></div>
-
-        <div id="scanStatsBox" style="display:none; margin-top:20px;">
-          <h3>Statistiche scansioni</h3>
-          <div id="scanStatsResult"></div>
-        </div>
-      </section>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Codice</th>
+              <th>Public ID</th>
+              <th>Targa</th>
+              <th>Veicolo</th>
+              <th>Stato</th>
+              <th>Piano</th>
+              <th>Scadenza</th>
+              <th>Inviato a</th>
+              <th>QR URL</th>
+              <th>Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="adminTableBody">
+            <tr><td colspan="10" class="muted">Caricamento in corso...</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
-  <script src="/app.js"></script>
+
+  <div id="inviteModal" class="modal">
+    <div class="modal-card">
+      <h2 style="margin-top:0;">Invia invito</h2>
+      <div class="grid">
+        <input id="inviteCode" class="input" disabled>
+        <input id="inviteSentTo" class="input" placeholder="Inviato a">
+        <select id="inviteChannel" class="select">
+          <option value="whatsapp">WhatsApp</option>
+          <option value="email">Email</option>
+        </select>
+        <input id="inviteTarget" class="input" placeholder="Numero WhatsApp o Email">
+        <select id="inviteVariant" class="select">
+          <option value="short">Invito breve</option>
+          <option value="full">Invito completo</option>
+        </select>
+        <input id="inviteLink" class="input full" disabled>
+        <textarea id="invitePreview" class="input full" style="min-height:180px;padding:12px;" placeholder="Anteprima messaggio"></textarea>
+      </div>
+      <div class="actions" style="margin-top:16px;">
+        <button id="openInviteSendBtn" class="btn btn-primary" type="button">Apri invio</button>
+        <button id="closeInviteBtn" class="btn btn-secondary" type="button">Chiudi</button>
+      </div>
+      <div id="inviteResult" class="muted" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <div id="editModal" class="modal">
+    <div class="modal-card">
+      <h2 style="margin-top:0;">Modifica record</h2>
+      <div class="grid">
+        <input id="editCode" class="input" disabled>
+        <input id="editPublicId" class="input" disabled>
+        <input id="editBrand" class="input" placeholder="Marca">
+        <input id="editModel" class="input" placeholder="Modello">
+        <input id="editPlate" class="input" placeholder="Targa">
+        <input id="editColor" class="input" placeholder="Colore">
+        <input id="editPhone" class="input full" placeholder="Telefono">
+        <select id="editPlanType" class="select">
+          <option value="always">Sempre valido</option>
+          <option value="1week">1 settimana</option>
+          <option value="1month">1 mese</option>
+          <option value="6months">6 mesi</option>
+        </select>
+        <input id="editExpiresAt" class="input" type="datetime-local">
+      </div>
+      <div class="actions" style="margin-top:16px;">
+        <button id="saveEditBtn" class="btn btn-primary" type="button">Salva modifiche</button>
+        <button id="closeEditBtn" class="btn btn-secondary" type="button">Chiudi</button>
+      </div>
+      <div id="editResult" class="muted" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <script>
+    const bodyEl = document.getElementById('adminTableBody');
+    const searchEl = document.getElementById('adminSearch');
+    const modal = document.getElementById('editModal');
+    const inviteModal = document.getElementById('inviteModal');
+    const editResult = document.getElementById('editResult');
+    const inviteResult = document.getElementById('inviteResult');
+    let adminItems = [];
+
+    function fmtDate(v){
+      if(!v) return '-';
+      try { return new Date(v).toLocaleString('it-IT'); } catch { return v; }
+    }
+
+    function planLabel(v){
+      return v === 'always' ? 'Sempre valido'
+        : v === '1week' ? '1 settimana'
+        : v === '1month' ? '1 mese'
+        : v === '6months' ? '6 mesi'
+        : (v || '-');
+    }
+
+    function statusBadge(v){
+      const label = v === 'used' ? 'Attivo'
+        : v === 'disabled' ? 'Disattivato'
+        : v === 'new' ? 'Nuovo'
+        : v === 'reactivated' ? 'Riattivato'
+        : (v || '-');
+      return `<span class="status ${v || ''}">${label}</span>`;
+    }
+
+    function setSummary(summary){
+      document.getElementById('kpiActive').textContent = summary.active_count ?? 0;
+      document.getElementById('kpiNew').textContent = summary.new_count ?? 0;
+      document.getElementById('kpiDisabled').textContent = summary.disabled_count ?? 0;
+      document.getElementById('kpiLocalhost').textContent = summary.localhost_count ?? 0;
+      document.getElementById('kpiViews').textContent = summary.total_views ?? 0;
+      document.getElementById('kpiMessages').textContent = summary.total_messages ?? 0;
+    }
+
+    async function loadAdmin(q=''){
+      bodyEl.innerHTML = '<tr><td colspan="9" class="muted">Caricamento in corso...</td></tr>';
+      const url = q ? `/api/admin/list-stickers?q=${encodeURIComponent(q)}` : '/api/admin/list-stickers';
+      const res = await fetch(url);
+      const data = await res.json();
+      if(!res.ok || !data.success){
+        bodyEl.innerHTML = '<tr><td colspan="10" class="danger">Errore caricamento.</td></tr>';
+        return;
+      }
+
+      adminItems = data.items || [];
+      setSummary(data.summary || {});
+
+      if(!adminItems.length){
+        bodyEl.innerHTML = '<tr><td colspan="10" class="muted">Nessun record trovato.</td></tr>';
+        return;
+      }
+
+      bodyEl.innerHTML = adminItems.map(item => {
+        const vehicle = [item.brand, item.vehicle_model].filter(Boolean).join(' ') || '-';
+        const qrWarn = item.qr_url && item.qr_url.includes('localhost');
+        return `
+          <tr>
+            <td class="mono">${item.code || '-'}</td>
+            <td class="mono">${item.public_id || '-'}</td>
+            <td>${item.plate || '-'}</td>
+            <td>${vehicle}</td>
+            <td>${statusBadge(item.status)}</td>
+            <td>${planLabel(item.plan_type)}</td>
+            <td>${fmtDate(item.expires_at)}</td>
+            <td>${item.invite_sent_to ? `${item.invite_sent_to}<br><span class="muted">${item.invite_channel || '-'} · ${fmtDate(item.invite_sent_at)}</span>` : '-'}</td>
+            <td class="mono ${qrWarn ? 'warn' : ''}">${item.qr_url || '-'}</td>
+            <td>
+              <div class="actions">
+                ${item.status === 'new' ? `<button class="mini" onclick="openInvite('${item.code}')">Invia</button>` : ''}
+                <button class="mini" onclick="printSticker('${item.code}')">Stampa</button>
+                <button class="mini" onclick="openEdit('${item.code}')">Modifica</button>
+                <button class="mini" onclick="fixQrUrl('${item.code}')">Correggi URL</button>
+                <button class="mini" onclick="setStatus('${item.code}','disabled')">Disattiva</button>
+                <button class="mini" onclick="setStatus('${item.code}','used')">Riattiva</button>
+                <button class="mini" onclick="deleteSticker('${item.code}')">Elimina</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+
+    function buildInviteLink(item){
+      return `${window.location.origin}/activate.html?code=${encodeURIComponent(item.code || '')}`;
+    }
+
+    function buildInviteText(item, channel, variant){
+      const link = buildInviteLink(item);
+      if(channel === 'whatsapp' && variant === 'short'){
+        return `Ti invio un codice già pronto per attivare il tuo adesivo QR veicolo. In pochi minuti puoi renderlo operativo e ricevere segnalazioni rapide in caso di urto, intralcio o necessità reale.\n\nAttivalo da qui: ${link}`;
+      }
+      if(channel === 'whatsapp' && variant === 'full'){
+        return `Ti invio il tuo codice personale per attivare il sistema QR dedicato al veicolo.\n\nCome funziona:\n1. apri il link\n2. inserisci i dati richiesti del veicolo\n3. completa l’attivazione\n4. il codice sarà subito pronto per essere utilizzato\n\nVantaggi principali:\n- permette un contatto rapido in caso di urto, intralcio o urgenza\n- evita di esporre pubblicamente il numero di telefono\n- rende più semplice farsi contattare quando serve davvero\n\nNel servizio è incluso anche il monitoraggio degli accessi, con la possibilità di verificare visualizzazioni, invii avviati e area indicativa di accesso.\n\nLink attivazione: ${link}`;
+      }
+      if(channel === 'email' && variant === 'short'){
+        return `Ti invio il tuo codice già pronto per essere attivato. In pochi minuti puoi rendere operativo il sistema e permettere a chi trova il veicolo di contattarti rapidamente in caso di necessità.\n\nLink attivazione: ${link}`;
+      }
+      return `Ti invio il codice personale per attivare il sistema QR dedicato al veicolo.\n\nProcedura di attivazione:\n1. apri il link riportato sotto\n2. inserisci i dati richiesti del veicolo\n3. completa l’attivazione\n4. il sistema sarà subito operativo\n\nUna volta attivo, il QR consente a chi trova il veicolo di inviarti rapidamente una segnalazione in caso di urto, intralcio, emergenza o altra necessità reale, senza esporre direttamente il tuo numero in modo pubblico.\n\nIl servizio include anche il monitoraggio delle interazioni, con visualizzazione degli accessi, degli invii avviati e dell’area indicativa di accesso.\n\nLink attivazione: ${link}`;
+    }
+
+    function refreshInvitePreview(){
+      const code = document.getElementById('inviteCode').value;
+      const item = adminItems.find(x => x.code === code);
+      if(!item) return;
+      const channel = document.getElementById('inviteChannel').value;
+      const variant = document.getElementById('inviteVariant').value;
+      document.getElementById('inviteLink').value = buildInviteLink(item);
+      document.getElementById('invitePreview').value = buildInviteText(item, channel, variant);
+    }
+
+    window.openInvite = function(code){
+      const item = adminItems.find(x => x.code === code);
+      if(!item) return;
+      document.getElementById('inviteCode').value = item.code || '';
+      document.getElementById('inviteSentTo').value = item.invite_sent_to || '';
+      document.getElementById('inviteChannel').value = item.invite_channel || 'whatsapp';
+      document.getElementById('inviteTarget').value = item.invite_target || '';
+      document.getElementById('inviteVariant').value = item.invite_variant || 'short';
+      inviteResult.textContent = '';
+      refreshInvitePreview();
+      inviteModal.style.display = 'flex';
+    }
+
+
+
+    window.printSticker = function(code){
+      window.open(`/sticker.html?code=${encodeURIComponent(code)}`, '_blank');
+    }
+
+    window.deleteSticker = async function(code){
+      const ok = confirm(`Confermi l'eliminazione definitiva del codice ${code}?`);
+      if(!ok) return;
+
+      const res = await fetch('/api/admin/delete-sticker', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code })
+      });
+
+      const data = await res.json();
+      alert(data.success ? 'Codice eliminato.' : (data.error || 'Errore eliminazione.'));
+      if(data.success) loadAdmin(searchEl.value.trim());
+    }
+
+
+    window.openEdit = function(code){
+      const item = adminItems.find(x => x.code === code);
+      if(!item) return;
+      document.getElementById('editCode').value = item.code || '';
+      document.getElementById('editPublicId').value = item.public_id || '';
+      document.getElementById('editBrand').value = item.brand || '';
+      document.getElementById('editModel').value = item.vehicle_model || '';
+      document.getElementById('editPlate').value = item.plate || '';
+      document.getElementById('editColor').value = item.color || '';
+      document.getElementById('editPhone').value = item.phone || '';
+      document.getElementById('editPlanType').value = item.plan_type || 'always';
+      document.getElementById('editExpiresAt').value = item.expires_at ? new Date(item.expires_at).toISOString().slice(0,16) : '';
+      editResult.textContent = '';
+      modal.style.display = 'flex';
+    }
+
+    window.fixQrUrl = async function(code){
+      const res = await fetch('/api/admin/fix-qr-url', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code })
+      });
+      const data = await res.json();
+      alert(data.success ? 'URL corretto.' : (data.error || 'Errore correzione URL.'));
+      loadAdmin(searchEl.value.trim());
+    }
+
+    window.setStatus = async function(code, status){
+      const res = await fetch('/api/admin/set-status', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code, status })
+      });
+      const data = await res.json();
+      alert(data.success ? 'Stato aggiornato.' : (data.error || 'Errore stato.'));
+      loadAdmin(searchEl.value.trim());
+    }
+
+    document.getElementById('saveEditBtn').addEventListener('click', async () => {
+      const payload = {
+        code: document.getElementById('editCode').value,
+        brand: document.getElementById('editBrand').value,
+        plate: document.getElementById('editPlate').value,
+        vehicle_model: document.getElementById('editModel').value,
+        color: document.getElementById('editColor').value,
+        phone: document.getElementById('editPhone').value,
+        plan_type: document.getElementById('editPlanType').value,
+        expires_at: document.getElementById('editExpiresAt').value || null
+      };
+
+      const res = await fetch('/api/admin/update-sticker', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      editResult.textContent = data.success ? 'Modifiche salvate.' : (data.error || 'Errore salvataggio.');
+      if(data.success) loadAdmin(searchEl.value.trim());
+    });
+
+    document.getElementById('closeEditBtn').addEventListener('click', () => {
+      modal.style.display = 'none';
+    });
+
+    document.getElementById('closeInviteBtn').addEventListener('click', () => {
+      inviteModal.style.display = 'none';
+    });
+
+    document.getElementById('inviteChannel').addEventListener('change', refreshInvitePreview);
+    document.getElementById('inviteVariant').addEventListener('change', refreshInvitePreview);
+
+    document.getElementById('openInviteSendBtn').addEventListener('click', async () => {
+      const code = document.getElementById('inviteCode').value;
+      const sentTo = document.getElementById('inviteSentTo').value.trim();
+      const channel = document.getElementById('inviteChannel').value;
+      const target = document.getElementById('inviteTarget').value.trim();
+      const variant = document.getElementById('inviteVariant').value;
+      const preview = document.getElementById('invitePreview').value;
+
+      if(!target){
+        inviteResult.textContent = 'Inserisci numero WhatsApp o email.';
+        return;
+      }
+
+      const saveRes = await fetch('/api/admin/save-invite', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          code,
+          invite_sent_to: sentTo,
+          invite_channel: channel,
+          invite_target: target,
+          invite_variant: variant
+        })
+      });
+      const saveData = await saveRes.json();
+
+      if(!saveRes.ok || !saveData.success){
+        inviteResult.textContent = saveData.error || 'Errore salvataggio invito.';
+        return;
+      }
+
+      if(channel === 'whatsapp'){
+        const cleanTarget = target.replace(/\s+/g,'');
+        window.open(`https://wa.me/${cleanTarget}?text=${encodeURIComponent(preview)}`, '_blank');
+      } else {
+        const subject = variant === 'short' ? 'Prova il tuo codice QR veicolo' : 'Istruzioni per attivare il tuo adesivo QR veicolo';
+        window.location.href = `mailto:${encodeURIComponent(target)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(preview)}`;
+      }
+
+      inviteResult.textContent = 'Invito registrato correttamente.';
+      await loadAdmin(searchEl.value.trim());
+    });
+
+    document.getElementById('adminSearchBtn').addEventListener('click', () => loadAdmin(searchEl.value.trim()));
+    document.getElementById('adminReloadBtn').addEventListener('click', () => loadAdmin(searchEl.value.trim()));
+
+    document.getElementById('adminCreateCodeBtn').addEventListener('click', async () => {
+      const planType = document.getElementById('adminPlanType').value || 'always';
+      const resultEl = document.getElementById('adminCreateResult');
+      resultEl.textContent = 'Generazione in corso...';
+
+      try {
+        const res = await fetch('/api/create-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ plan_type: planType })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          resultEl.textContent = data.error || 'Errore nella generazione del codice.';
+          return;
+        }
+
+        const planLabel = planType === 'always' ? 'Sempre valido'
+          : planType === '1week' ? '1 settimana'
+          : planType === '1month' ? '1 mese'
+          : '6 mesi';
+
+        resultEl.innerHTML = `
+          <strong>Nuovo codice generato:</strong>
+          <span class="mono">${data.code}</span>
+          &nbsp; | &nbsp;
+          <strong>Public ID:</strong>
+          <span class="mono">${data.public_id || '-'}</span>
+          &nbsp; | &nbsp;
+          <strong>Validità:</strong>
+          ${planLabel}
+          ${data.expires_at ? `&nbsp; | &nbsp; <strong>Scadenza:</strong> ${new Date(data.expires_at).toLocaleString('it-IT')}` : ''}
+        `;
+
+        await loadAdmin(searchEl.value.trim());
+      } catch (err) {
+        resultEl.textContent = 'Errore di comunicazione con il server.';
+      }
+    });
+
+    loadAdmin();
+  </script>
 </body>
 </html>

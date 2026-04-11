@@ -11,6 +11,11 @@ const pool = require('./db');
 const app = express();
 
 
+function generateCode() {
+  const crypto = require('crypto');
+  return 'AMC-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+}
+
 function generatePublicId() {
   return require('crypto')
     .randomBytes(6)
@@ -123,17 +128,37 @@ app.get('/health', (req, res) => {
 
 app.post('/api/create-code', async (req, res) => {
   try {
-    const code = 'AMC-' + uuidv4().slice(0, 8).toUpperCase();
+    const { plan_type } = req.body || {};
+    const allowedPlans = ['always', '1week', '1month', '6months'];
+    const selectedPlan = allowedPlans.includes(plan_type) ? plan_type : 'always';
+
+    const code = generateCode();
+    const publicId = await getUniquePublicId(pool);
+
+    let expiresAt = null;
+    if (selectedPlan === '1week') {
+      expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    } else if (selectedPlan === '1month') {
+      expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    } else if (selectedPlan === '6months') {
+      expiresAt = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000);
+    }
 
     await pool.query(
-      'INSERT INTO sticker_codes (code, status) VALUES ($1, $2)',
-      [code, 'new']
+      'INSERT INTO sticker_codes (code, public_id, status, plan_type, expires_at) VALUES ($1, $2, $3, $4, $5)',
+      [code, publicId, 'new', selectedPlan, expiresAt]
     );
 
-    res.json({ success: true, code });
+    return res.json({
+      success: true,
+      code,
+      public_id: publicId,
+      plan_type: selectedPlan,
+      expires_at: expiresAt
+    });
   } catch (err) {
-    console.error('create-code error:', err);
-    res.status(500).json({ success: false, error: 'Errore creazione codice' });
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore nella generazione del codice.' });
   }
 });
 
@@ -382,6 +407,243 @@ app.post('/api/owner-dashboard', async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ success: false, error: 'Errore di comunicazione con il server.' });
+  }
+});
+
+
+
+app.get('/api/admin/list-stickers', async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim().toUpperCase();
+
+    let result;
+    if (q) {
+      result = await pool.query(
+        `SELECT
+           code, public_id, plate, brand, vehicle_model, color, phone,
+           status, qr_url, plan_type, expires_at, activated_at,
+           invite_sent_to, invite_channel, invite_target, invite_variant, invite_sent_at
+         FROM sticker_codes
+         WHERE UPPER(COALESCE(code,'')) LIKE $1
+            OR UPPER(COALESCE(public_id,'')) LIKE $1
+            OR UPPER(REPLACE(COALESCE(plate,''), ' ', '')) LIKE REPLACE($1, ' ', '')
+         ORDER BY activated_at DESC NULLS LAST, code DESC`,
+        [`%${q}%`]
+      );
+    } else {
+      result = await pool.query(
+        `SELECT
+           code, public_id, plate, brand, vehicle_model, color, phone,
+           status, qr_url, plan_type, expires_at, activated_at,
+           invite_sent_to, invite_channel, invite_target, invite_variant, invite_sent_at
+         FROM sticker_codes
+         ORDER BY activated_at DESC NULLS LAST, code DESC
+         LIMIT 300`
+      );
+    }
+
+    const kpi = await pool.query(`
+      SELECT
+        (SELECT COUNT(*)::int FROM sticker_codes WHERE status = 'used') AS active_count,
+        (SELECT COUNT(*)::int FROM sticker_codes WHERE status = 'new') AS new_count,
+        (SELECT COUNT(*)::int FROM sticker_codes WHERE status = 'disabled') AS disabled_count,
+        (SELECT COUNT(*)::int FROM sticker_codes WHERE qr_url LIKE '%localhost%') AS localhost_count,
+        (SELECT COUNT(*)::int FROM contact_page_views) AS total_views,
+        (SELECT COUNT(*)::int FROM contact_message_logs) AS total_messages
+    `);
+
+    return res.json({
+      success: true,
+      items: result.rows,
+      summary: kpi.rows[0] || {
+        active_count: 0,
+        new_count: 0,
+        disabled_count: 0,
+        localhost_count: 0,
+        total_views: 0,
+        total_messages: 0
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore caricamento codici admin.' });
+  }
+});
+
+app.post('/api/admin/update-sticker', async (req, res) => {
+  try {
+    const {
+      code, brand, plate, vehicle_model, color, phone,
+      plan_type, expires_at
+    } = req.body || {};
+
+    if (!code) {
+      return res.status(400).json({ success: false, error: 'Codice obbligatorio.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+
+    await pool.query(
+      `UPDATE sticker_codes
+       SET brand = $2,
+           plate = $3,
+           vehicle_model = $4,
+           color = $5,
+           phone = $6,
+           plan_type = $7,
+           expires_at = $8
+       WHERE code = $1`,
+      [
+        cleanCode,
+        brand || null,
+        plate || null,
+        vehicle_model || null,
+        color || null,
+        phone || null,
+        plan_type || null,
+        expires_at || null
+      ]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore aggiornamento record.' });
+  }
+});
+
+
+app.post('/api/admin/delete-sticker', async (req, res) => {
+  try {
+    const { code } = req.body || {};
+
+    if (!code) {
+      return res.status(400).json({ success: false, error: 'Codice obbligatorio.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+
+    const found = await pool.query(
+      'SELECT code, status FROM sticker_codes WHERE code = $1 LIMIT 1',
+      [cleanCode]
+    );
+
+    if (!found.rows.length) {
+      return res.status(404).json({ success: false, error: 'Codice non trovato.' });
+    }
+
+    await pool.query('DELETE FROM sticker_codes WHERE code = $1', [cleanCode]);
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore eliminazione codice.' });
+  }
+});
+
+
+app.post('/api/admin/set-status', async (req, res) => {
+  try {
+    const { code, status } = req.body || {};
+
+    if (!code || !status) {
+      return res.status(400).json({ success: false, error: 'Codice e stato obbligatori.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+    const allowed = ['new', 'used', 'disabled', 'reactivated'];
+
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ success: false, error: 'Stato non valido.' });
+    }
+
+    await pool.query(
+      `UPDATE sticker_codes
+       SET status = $2
+       WHERE code = $1`,
+      [cleanCode, status]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore cambio stato.' });
+  }
+});
+
+
+app.post('/api/admin/save-invite', async (req, res) => {
+  try {
+    const { code, invite_sent_to, invite_channel, invite_target, invite_variant } = req.body || {};
+
+    if (!code) {
+      return res.status(400).json({ success: false, error: 'Codice obbligatorio.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+
+    await pool.query(
+      `UPDATE sticker_codes
+       SET invite_sent_to = $2,
+           invite_channel = $3,
+           invite_target = $4,
+           invite_variant = $5,
+           invite_sent_at = NOW()
+       WHERE code = $1`,
+      [
+        cleanCode,
+        invite_sent_to || null,
+        invite_channel || null,
+        invite_target || null,
+        invite_variant || null
+      ]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore salvataggio invito.' });
+  }
+});
+
+
+app.post('/api/admin/fix-qr-url', async (req, res) => {
+  try {
+    const { code } = req.body || {};
+    if (!code) {
+      return res.status(400).json({ success: false, error: 'Codice obbligatorio.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+    const baseUrl = process.env.PUBLIC_BASE_URL || 'https://adesivo-auto.onrender.com';
+
+    const found = await pool.query(
+      'SELECT code, public_id FROM sticker_codes WHERE code = $1 LIMIT 1',
+      [cleanCode]
+    );
+
+    if (!found.rows.length) {
+      return res.status(404).json({ success: false, error: 'Codice non trovato.' });
+    }
+
+    const row = found.rows[0];
+    if (!row.public_id) {
+      return res.status(400).json({ success: false, error: 'Public ID mancante.' });
+    }
+
+    const qrUrl = `${baseUrl.replace(/\/$/, '')}/contact/u/${encodeURIComponent(row.public_id)}`;
+
+    await pool.query(
+      `UPDATE sticker_codes
+       SET qr_url = $2
+       WHERE code = $1`,
+      [cleanCode, qrUrl]
+    );
+
+    return res.json({ success: true, qr_url: qrUrl });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore correzione URL.' });
   }
 });
 
@@ -736,6 +998,10 @@ app.get('/contact/u/:public_id', async (req, res) => {
 
     if (String(row.status || '') === 'disabled') {
       return res.status(410).send('Adesivo non attivo.');
+    }
+
+    if (row.plan_type && row.plan_type !== 'always' && row.expires_at && new Date(row.expires_at) < new Date()) {
+      return res.redirect(302, '/renew.html');
     }
 
     const forwardedFor = req.headers['x-forwarded-for'];
