@@ -1141,7 +1141,10 @@ app.post('/api/public-feedback', async (req, res) => {
     }
 
     const found = await pool.query(
-      'SELECT code, public_id FROM sticker_codes WHERE public_id = $1 LIMIT 1',
+      `SELECT code, public_id, expires_at, feedback_bonus_used
+       FROM sticker_codes
+       WHERE public_id = $1
+       LIMIT 1`,
       [publicId]
     );
 
@@ -1150,14 +1153,32 @@ app.post('/api/public-feedback', async (req, res) => {
     }
 
     const row = found.rows[0];
+    let bonusApplied = false;
+
+    if (!row.feedback_bonus_used) {
+      await pool.query(
+        `UPDATE sticker_codes
+         SET expires_at = CASE
+           WHEN expires_at IS NULL OR expires_at < NOW() THEN NOW() + INTERVAL '1 month'
+           ELSE expires_at + INTERVAL '1 month'
+         END,
+         feedback_bonus_used = TRUE
+         WHERE public_id = $1`,
+        [publicId]
+      );
+      bonusApplied = true;
+    }
 
     await pool.query(
-      `INSERT INTO renewal_feedback (code, public_id, reason, notes)
-       VALUES ($1,$2,$3,$4)`,
-      [row.code, row.public_id, reason || null, notes || null]
+      `INSERT INTO renewal_feedback (code, public_id, reason, notes, bonus_applied)
+       VALUES ($1,$2,$3,$4,$5)`,
+      [row.code, row.public_id, reason || null, notes || null, bonusApplied]
     );
 
-    return res.json({ success: true });
+    return res.json({
+      success: true,
+      bonus_applied: bonusApplied
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ success: false, error: 'Errore salvataggio feedback.' });
