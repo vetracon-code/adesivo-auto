@@ -144,6 +144,7 @@
         <input id="adminSearch" class="search" type="text" placeholder="Cerca per codice, public_id o targa">
         <button id="adminSearchBtn" class="btn btn-primary" type="button">Cerca</button>
         <button id="adminReloadBtn" class="btn btn-secondary" type="button">Ricarica</button>
+        <button id="adminLogoutBtn" class="btn btn-secondary" type="button">Logout</button>
       </div>
 
       <div class="toolbar" style="padding-top:0;">
@@ -204,7 +205,9 @@
         <textarea id="invitePreview" class="input full" style="min-height:180px;padding:12px;" placeholder="Anteprima messaggio"></textarea>
       </div>
       <div class="actions" style="margin-top:16px;">
-        <button id="openInviteSendBtn" class="btn btn-primary" type="button">Apri invio</button>
+        <button id="openInviteSendBtn" class="btn btn-primary" type="button">Apri WhatsApp o Mail</button>
+        <button id="copyInviteTextBtn" class="btn btn-secondary" type="button">Copia testo invito</button>
+        <button id="copyInviteLinkBtn" class="btn btn-secondary" type="button">Copia link attivazione</button>
         <button id="closeInviteBtn" class="btn btn-secondary" type="button">Chiudi</button>
       </div>
       <div id="inviteResult" class="muted" style="margin-top:12px;"></div>
@@ -458,6 +461,26 @@
       inviteModal.style.display = 'none';
     });
 
+    document.getElementById('copyInviteTextBtn').addEventListener('click', async () => {
+      try {
+        const text = document.getElementById('invitePreview').value || '';
+        await navigator.clipboard.writeText(text);
+        inviteResult.textContent = 'Testo invito copiato negli appunti.';
+      } catch (err) {
+        inviteResult.textContent = 'Impossibile copiare il testo.';
+      }
+    });
+
+    document.getElementById('copyInviteLinkBtn').addEventListener('click', async () => {
+      try {
+        const link = document.getElementById('inviteLink').value || '';
+        await navigator.clipboard.writeText(link);
+        inviteResult.textContent = 'Link di attivazione copiato negli appunti.';
+      } catch (err) {
+        inviteResult.textContent = 'Impossibile copiare il link.';
+      }
+    });
+
     document.getElementById('inviteChannel').addEventListener('change', refreshInvitePreview);
     document.getElementById('inviteVariant').addEventListener('change', refreshInvitePreview);
 
@@ -493,11 +516,13 @@
       }
 
       if(channel === 'whatsapp'){
-        const cleanTarget = target.replace(/\s+/g,'');
-        window.open(`https://wa.me/${cleanTarget}?text=${encodeURIComponent(preview)}`, '_blank');
+        const cleanTarget = target.replace(/\s+/g,'').replace(/^\+/, '');
+        const waUrl = `https://wa.me/${encodeURIComponent(cleanTarget)}?text=${encodeURIComponent(preview)}`;
+        window.open(waUrl, '_blank');
       } else {
         const subject = variant === 'short' ? 'Prova il tuo codice QR veicolo' : 'Istruzioni per attivare il tuo adesivo QR veicolo';
-        window.location.href = `mailto:${encodeURIComponent(target)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(preview)}`;
+        const mailUrl = `mailto:${encodeURIComponent(target)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(preview)}`;
+        window.location.href = mailUrl;
       }
 
       inviteResult.textContent = 'Invito registrato correttamente.';
@@ -506,6 +531,10 @@
 
     document.getElementById('adminSearchBtn').addEventListener('click', () => loadAdmin(searchEl.value.trim()));
     document.getElementById('adminReloadBtn').addEventListener('click', () => loadAdmin(searchEl.value.trim()));
+    document.getElementById('adminLogoutBtn').addEventListener('click', async () => {
+      await fetch('/api/admin-logout', { method: 'POST' });
+      window.location.href = '/admin-login.html';
+    });
 
     document.getElementById('adminCreateCodeBtn').addEventListener('click', async () => {
       const planType = document.getElementById('adminPlanType').value || 'always';

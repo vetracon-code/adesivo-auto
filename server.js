@@ -8,7 +8,63 @@ const QRCode = require('qrcode');
 const pool = require('./db');
 
 
+
 const app = express();
+
+const ADMIN_COOKIE_NAME = 'admin_session';
+
+function getAdminUser() {
+  return process.env.ADMIN_USER || process.env.ADMIN_USERNAME || '';
+}
+
+function getAdminPass() {
+  return process.env.ADMIN_PASS || process.env.ADMIN_PASSWORD || '';
+}
+
+function getAdminSecret() {
+  return process.env.ADMIN_SESSION_SECRET || process.env.SESSION_SECRET || 'change-this-admin-secret';
+}
+
+function parseCookies(req) {
+  const header = req.headers.cookie || '';
+  const out = {};
+  header.split(';').forEach(part => {
+    const i = part.indexOf('=');
+    if (i > -1) {
+      const k = part.slice(0, i).trim();
+      const v = part.slice(i + 1).trim();
+      out[k] = decodeURIComponent(v);
+    }
+  });
+  return out;
+}
+
+function signAdminSession(value) {
+  const crypto = require('crypto');
+  const sig = crypto.createHmac('sha256', getAdminSecret()).update(value).digest('hex');
+  return `${value}.${sig}`;
+}
+
+function verifyAdminSession(token) {
+  const crypto = require('crypto');
+  if (!token || !token.includes('.')) return false;
+  const idx = token.lastIndexOf('.');
+  const value = token.slice(0, idx);
+  const sig = token.slice(idx + 1);
+  const expected = crypto.createHmac('sha256', getAdminSecret()).update(value).digest('hex');
+  return sig === expected && value === 'admin-authenticated';
+}
+
+function requireAdmin(req, res, next) {
+  const cookies = parseCookies(req);
+  const token = cookies[ADMIN_COOKIE_NAME];
+  if (!verifyAdminSession(token)) {
+    return res.status(401).json({ success: false, error: 'Non autorizzato.' });
+  }
+  next();
+}
+
+
 
 
 function generateCode() {
@@ -116,6 +172,59 @@ if (!process.env.BASE_URL) {
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.post('/api/admin-login', (req, res) => {
+  try {
+    const { username, password } = req.body || {};
+    const adminUser = getAdminUser();
+    const adminPass = getAdminPass();
+
+    if (!adminUser || !adminPass) {
+      return res.status(500).json({ success: false, error: 'Credenziali admin non configurate.' });
+    }
+
+    if (String(username || '') !== adminUser || String(password || '') !== adminPass) {
+      return res.status(401).json({ success: false, error: 'Credenziali non valide.' });
+    }
+
+    const token = signAdminSession('admin-authenticated');
+    const isProd = (process.env.PUBLIC_BASE_URL || '').startsWith('https://');
+    res.setHeader(
+      'Set-Cookie',
+      `${ADMIN_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${isProd ? '; Secure' : ''}`
+    );
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore login admin.' });
+  }
+});
+
+app.post('/api/admin-logout', (req, res) => {
+  const isProd = (process.env.PUBLIC_BASE_URL || '').startsWith('https://');
+  res.setHeader(
+    'Set-Cookie',
+    `${ADMIN_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${isProd ? '; Secure' : ''}`
+  );
+  return res.json({ success: true });
+});
+
+app.get('/api/admin-auth-check', (req, res) => {
+  const cookies = parseCookies(req);
+  const token = cookies[ADMIN_COOKIE_NAME];
+  return res.json({ success: true, authenticated: verifyAdminSession(token) });
+});
+
+app.get('/admin.html', (req, res, next) => {
+  const cookies = parseCookies(req);
+  const token = cookies[ADMIN_COOKIE_NAME];
+  if (!verifyAdminSession(token)) {
+    return res.redirect(302, '/admin-login.html');
+  }
+  next();
+});
+
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
@@ -412,7 +521,7 @@ app.post('/api/owner-dashboard', async (req, res) => {
 
 
 
-app.get('/api/admin/list-stickers', async (req, res) => {
+app.get('/api/admin/list-stickers', requireAdmin, async (req, res) => {
   try {
     const q = String(req.query.q || '').trim().toUpperCase();
 
@@ -470,7 +579,7 @@ app.get('/api/admin/list-stickers', async (req, res) => {
   }
 });
 
-app.post('/api/admin/update-sticker', async (req, res) => {
+app.post('/api/admin/update-sticker', requireAdmin, async (req, res) => {
   try {
     const {
       code, brand, plate, vehicle_model, color, phone,
@@ -513,7 +622,7 @@ app.post('/api/admin/update-sticker', async (req, res) => {
 });
 
 
-app.post('/api/admin/delete-sticker', async (req, res) => {
+app.post('/api/admin/delete-sticker', requireAdmin, async (req, res) => {
   try {
     const { code } = req.body || {};
 
@@ -542,7 +651,7 @@ app.post('/api/admin/delete-sticker', async (req, res) => {
 });
 
 
-app.post('/api/admin/set-status', async (req, res) => {
+app.post('/api/admin/set-status', requireAdmin, async (req, res) => {
   try {
     const { code, status } = req.body || {};
 
@@ -572,7 +681,7 @@ app.post('/api/admin/set-status', async (req, res) => {
 });
 
 
-app.post('/api/admin/save-invite', async (req, res) => {
+app.post('/api/admin/save-invite', requireAdmin, async (req, res) => {
   try {
     const { code, invite_sent_to, invite_channel, invite_target, invite_variant } = req.body || {};
 
@@ -607,7 +716,7 @@ app.post('/api/admin/save-invite', async (req, res) => {
 });
 
 
-app.post('/api/admin/fix-qr-url', async (req, res) => {
+app.post('/api/admin/fix-qr-url', requireAdmin, async (req, res) => {
   try {
     const { code } = req.body || {};
     if (!code) {

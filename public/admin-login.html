@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Login Admin</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    :root{
+      --accent:#2c74ff; --accent2:#5aa0ff; --bg1:#050b14; --bg2:#0a1320;
+      --line:rgba(255,255,255,.10); --text:#f7fbff; --muted:#b6c2d4;
+    }
+    *{box-sizing:border-box}
+    html,body{
+      margin:0;padding:0;min-height:100%;
+      font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Arial,sans-serif;
+      background:
+        radial-gradient(circle at 18% 0%, rgba(33,78,166,.22), transparent 28%),
+        linear-gradient(180deg,var(--bg1) 0%,#07101b 48%,var(--bg2) 100%);
+      color:var(--text)
+    }
+    .wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+    .card{
+      width:min(460px,100%);
+      border-radius:28px;
+      background:linear-gradient(180deg, rgba(11,21,35,.99) 0%, rgba(8,16,27,.995) 100%);
+      border:1px solid rgba(255,255,255,.08);
+      box-shadow:0 24px 56px rgba(0,0,0,.38);
+      padding:28px 22px;
+    }
+    h1{margin:0;line-height:.95;letter-spacing:-.05em;font-weight:900;font-size:2.2rem;text-transform:uppercase}
+    h1 span{display:block;margin-top:6px;color:var(--accent2)}
+    .sub{margin:14px 0 20px;color:var(--muted);line-height:1.55}
+    .input{
+      width:100%;min-height:50px;border-radius:14px;border:1px solid var(--line);
+      background:rgba(255,255,255,.04);color:#fff;padding:0 14px;margin-bottom:12px
+    }
+    .btn{
+      width:100%;min-height:50px;border-radius:14px;border:0;cursor:pointer;
+      color:#fff;font-weight:900;background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 100%)
+    }
+    .result{margin-top:14px;color:#ffd5d5;min-height:20px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>LOGIN<span>ADMIN</span></h1>
+      <div class="sub">Accesso riservato alla gestione dei codici, delle modifiche e del monitoraggio.</div>
+      <input id="adminUser" class="input" placeholder="Username">
+      <input id="adminPass" class="input" type="password" placeholder="Password">
+      <button id="adminLoginBtn" class="btn" type="button">Accedi</button>
+      <div id="adminLoginResult" class="result"></div>
+    </div>
+  </div>
+
+  <script>
+    async function init() {
+      try {
+        const check = await fetch('/api/admin-auth-check');
+        const data = await check.json();
+        if (data.authenticated) {
+          window.location.href = '/admin.html';
+          return;
+        }
+      } catch (e) {}
+    }
+
+    document.getElementById('adminLoginBtn').addEventListener('click', async () => {
+      const username = document.getElementById('adminUser').value.trim();
+      const password = document.getElementById('adminPass').value;
+      const result = document.getElementById('adminLoginResult');
+      result.textContent = 'Verifica in corso...';
+
+      try {
+        const res = await fetch('/api/admin-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          result.textContent = data.error || 'Accesso non riuscito.';
+          return;
+        }
+        window.location.href = '/admin.html';
+      } catch (err) {
+        result.textContent = 'Errore di comunicazione con il server.';
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>
