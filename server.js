@@ -67,6 +67,11 @@ function requireAdmin(req, res, next) {
 
 
 
+function generateOwnerAccessToken() {
+  const crypto = require('crypto');
+  return crypto.randomBytes(18).toString('base64').replace(/[^A-Za-z0-9]/g, '').slice(0, 24);
+}
+
 function generateCode() {
   const crypto = require('crypto');
   return 'AMC-' + crypto.randomBytes(4).toString('hex').toUpperCase();
@@ -243,6 +248,7 @@ app.post('/api/create-code', async (req, res) => {
 
     const code = generateCode();
     const publicId = await getUniquePublicId(pool);
+    const ownerAccessToken = generateOwnerAccessToken();
 
     let expiresAt = null;
     if (selectedPlan === '1week') {
@@ -253,15 +259,19 @@ app.post('/api/create-code', async (req, res) => {
       expiresAt = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000);
     }
 
+    const baseUrl = (process.env.PUBLIC_BASE_URL || 'https://adesivo-auto.onrender.com').replace(/\/$/, '');
+    const qrUrl = `${baseUrl}/contact/u/${encodeURIComponent(publicId)}`;
+
     await pool.query(
-      'INSERT INTO sticker_codes (code, public_id, status, plan_type, expires_at) VALUES ($1, $2, $3, $4, $5)',
-      [code, publicId, 'new', selectedPlan, expiresAt]
+      'INSERT INTO sticker_codes (code, public_id, status, plan_type, expires_at, owner_access_token, qr_url) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [code, publicId, 'new', selectedPlan, expiresAt, ownerAccessToken, qrUrl]
     );
 
     return res.json({
       success: true,
       code,
       public_id: publicId,
+      owner_access_token: ownerAccessToken,
       plan_type: selectedPlan,
       expires_at: expiresAt
     });
@@ -618,6 +628,70 @@ app.post('/api/admin/update-sticker', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ success: false, error: 'Errore aggiornamento record.' });
+  }
+});
+
+
+
+app.get('/api/admin/collected-data', requireAdmin, async (req, res) => {
+  try {
+    const totals = await pool.query(`
+      SELECT
+        (SELECT COUNT(*)::int FROM contact_page_views) AS total_views,
+        (SELECT COUNT(*)::int FROM contact_message_logs) AS total_messages,
+        (SELECT COUNT(*)::int FROM renewal_feedback) AS total_feedback,
+        (SELECT COUNT(*)::int FROM sticker_codes WHERE status = 'used') AS active_codes
+    `);
+
+    const rows = await pool.query(`
+      SELECT
+        s.code,
+        s.public_id,
+        s.plate,
+        s.status,
+        s.plan_type,
+        s.expires_at,
+        COALESCE(v.views_count, 0) AS views_count,
+        COALESCE(m.messages_count, 0) AS messages_count,
+        COALESCE(f.feedback_count, 0) AS feedback_count,
+        GREATEST(
+          COALESCE(v.last_view, '1970-01-01'::timestamp),
+          COALESCE(m.last_message, '1970-01-01'::timestamp),
+          COALESCE(f.last_feedback, '1970-01-01'::timestamp)
+        ) AS last_activity
+      FROM sticker_codes s
+      LEFT JOIN (
+        SELECT code, COUNT(*)::int AS views_count, MAX(viewed_at) AS last_view
+        FROM contact_page_views
+        GROUP BY code
+      ) v ON v.code = s.code
+      LEFT JOIN (
+        SELECT code, COUNT(*)::int AS messages_count, MAX(created_at) AS last_message
+        FROM contact_message_logs
+        GROUP BY code
+      ) m ON m.code = s.code
+      LEFT JOIN (
+        SELECT code, COUNT(*)::int AS feedback_count, MAX(created_at) AS last_feedback
+        FROM renewal_feedback
+        GROUP BY code
+      ) f ON f.code = s.code
+      ORDER BY last_activity DESC NULLS LAST, s.code DESC
+      LIMIT 200
+    `);
+
+    return res.json({
+      success: true,
+      summary: totals.rows[0] || {
+        total_views: 0,
+        total_messages: 0,
+        total_feedback: 0,
+        active_codes: 0
+      },
+      items: rows.rows || []
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore caricamento dati raccolti.' });
   }
 });
 
@@ -1023,7 +1097,7 @@ app.post('/api/activate-code', async (req, res) => {
       publicId = await getUniquePublicId(pool);
     }
 
-    const baseUrl = process.env.PUBLIC_BASE_URL || 'http://localhost:3000';
+    const baseUrl = process.env.PUBLIC_BASE_URL || 'https://adesivo-auto.onrender.com';
     const qrUrl = `${baseUrl.replace(/\/$/, '')}/contact/u/${encodeURIComponent(publicId)}`;
 
     await pool.query(
@@ -1089,6 +1163,32 @@ app.get('/api/public-contact/:public_id', async (req, res) => {
   }
 });
 
+
+
+
+app.get('/owner-access/:token', async (req, res) => {
+  try {
+    const token = String(req.params.token || '').trim();
+
+    const result = await pool.query(
+      `SELECT code, plate
+       FROM sticker_codes
+       WHERE owner_access_token = $1
+       LIMIT 1`,
+      [token]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).send('Accesso non valido.');
+    }
+
+    const row = result.rows[0];
+    return res.redirect(302, `/owner-simple.html?code=${encodeURIComponent(row.code)}&plate=${encodeURIComponent(row.plate || '')}`);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send('Errore di comunicazione con il server.');
+  }
+});
 
 
 app.get('/renew/u/:public_id', async (req, res) => {
