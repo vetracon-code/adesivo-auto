@@ -188,6 +188,41 @@
   </div>
 
 
+
+  <div id="deliverWebAppModal" class="modal">
+    <div class="modal-card" style="width:min(760px,100%);">
+      <h2 style="margin-top:0;">Consegna Web App proprietario</h2>
+      <div class="muted" style="margin-bottom:12px;line-height:1.5;">
+        Questo link apre direttamente la Web App del proprietario riferita al codice selezionato.
+      </div>
+      <div style="display:grid;gap:12px;">
+        <div>
+          <div class="muted" style="margin-bottom:6px;">Codice</div>
+          <div id="deliverWebAppCode" class="mono">-</div>
+        </div>
+        <div>
+          <div class="muted" style="margin-bottom:6px;">Veicolo / Targa</div>
+          <div id="deliverWebAppVehicle">-</div>
+        </div>
+        <div>
+          <div class="muted" style="margin-bottom:6px;">Link Web App</div>
+          <div id="deliverWebAppLink" class="mono" style="word-break:break-all;">-</div>
+        </div>
+      </div>
+
+      <div class="actions" style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
+        <button id="deliverOpenBtn" class="btn btn-primary" type="button">Apri Web App</button>
+        <button id="deliverCopyBtn" class="btn btn-secondary" type="button">Copia link</button>
+        <button id="deliverWhatsappBtn" class="btn btn-secondary" type="button">Invia via WhatsApp</button>
+        <button id="deliverEmailBtn" class="btn btn-secondary" type="button">Invia via email</button>
+        <button id="deliverInstallGuideBtn" class="btn btn-secondary" type="button">Invia istruzioni salvataggio</button>
+        <button id="deliverCloseBtn" class="btn btn-secondary" type="button">Chiudi</button>
+      </div>
+
+      <div id="deliverWebAppResult" class="muted" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
   <div id="inviteModal" class="modal">
     <div class="modal-card">
       <h2 style="margin-top:0;">Invia invito</h2>
@@ -249,9 +284,11 @@
     const modal = document.getElementById('editModal');
     const inviteModal = document.getElementById('inviteModal');
     const collectedModal = document.getElementById('collectedModal');
+    const deliverWebAppModal = document.getElementById('deliverWebAppModal');
     const editResult = document.getElementById('editResult');
     const inviteResult = document.getElementById('inviteResult');
     let adminItems = [];
+    let deliverWebAppState = null;
 
     function fmtDate(v){
       if(!v) return '-';
@@ -352,6 +389,7 @@
             <td>
               <div class="actions">
                 ${item.status === 'new' ? `<button class="mini" onclick="openInvite('${item.code}')">Invia</button>` : ''}
+                ${item.status === 'used' ? `<button class="mini" onclick="openDeliverWebApp('${item.code}')">Consegna Web App</button>` : ''}
                 ${item.owner_access_token ? `<button class="mini" onclick="copyOwnerAccessLink('${item.code}')">Accesso diretto</button>` : ''}
                 ${item.phone ? `<button class="mini" onclick="sendRenewWhatsApp('${item.code}')">Invia rinnovo</button>` : ''}
                 ${item.phone ? `<button class="mini" onclick="sendFeedbackWhatsApp('${item.code}')">Chiedi feedback</button>` : ''}
@@ -448,6 +486,32 @@
       } catch (e) {
         alert(link);
       }
+    }
+
+
+
+    function buildOwnerWebAppLink(item){
+      return `${window.location.origin}/owner-simple.html?code=${encodeURIComponent(item.code || '')}&plate=${encodeURIComponent(item.plate || '')}`;
+    }
+
+    window.openDeliverWebApp = function(code){
+      const item = adminItems.find(x => x.code === code);
+      if (!item) return;
+
+      if (!item.plate) {
+        alert('Questo record non ha ancora una targa associata. La Web App proprietario richiede codice e targa.');
+        return;
+      }
+
+      deliverWebAppState = item;
+      const vehicle = [item.brand, item.vehicle_model].filter(Boolean).join(' ') || 'Veicolo registrato';
+      const link = buildOwnerWebAppLink(item);
+
+      document.getElementById('deliverWebAppCode').textContent = item.code || '-';
+      document.getElementById('deliverWebAppVehicle').textContent = `${vehicle} — ${item.plate || '-'}`;
+      document.getElementById('deliverWebAppLink').textContent = link;
+      document.getElementById('deliverWebAppResult').textContent = '';
+      deliverWebAppModal.style.display = 'flex';
     }
 
 
@@ -650,6 +714,54 @@
     document.getElementById('closeCollectedBtn').addEventListener('click', () => {
       collectedModal.style.display = 'none';
     });
+
+    document.getElementById('deliverCloseBtn').addEventListener('click', () => {
+      deliverWebAppModal.style.display = 'none';
+    });
+
+    document.getElementById('deliverOpenBtn').addEventListener('click', () => {
+      if (!deliverWebAppState) return;
+      window.open(buildOwnerWebAppLink(deliverWebAppState), '_blank');
+    });
+
+    document.getElementById('deliverCopyBtn').addEventListener('click', async () => {
+      if (!deliverWebAppState) return;
+      const link = buildOwnerWebAppLink(deliverWebAppState);
+      const resultEl = document.getElementById('deliverWebAppResult');
+      try {
+        await navigator.clipboard.writeText(link);
+        resultEl.textContent = 'Link Web App copiato.';
+      } catch (e) {
+        resultEl.textContent = link;
+      }
+    });
+
+    document.getElementById('deliverWhatsappBtn').addEventListener('click', () => {
+      if (!deliverWebAppState) return;
+      const link = buildOwnerWebAppLink(deliverWebAppState);
+      const vehicle = [deliverWebAppState.brand, deliverWebAppState.vehicle_model].filter(Boolean).join(' ') || 'veicolo';
+      const text = `La tua Web App personale è pronta.\n\nDa qui puoi controllare se il tuo QR è attivo, vedere aperture, messaggi ricevuti e scadenza del servizio.\n\n${vehicle} — ${deliverWebAppState.plate || ''}\n${link}`;
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    });
+
+    document.getElementById('deliverEmailBtn').addEventListener('click', () => {
+      if (!deliverWebAppState) return;
+      const link = buildOwnerWebAppLink(deliverWebAppState);
+      const vehicle = [deliverWebAppState.brand, deliverWebAppState.vehicle_model].filter(Boolean).join(' ') || 'veicolo';
+      const subject = 'La tua Web App personale è pronta';
+      const body = `La tua Web App personale è pronta.\n\nDa qui puoi controllare se il tuo QR è attivo, vedere aperture, messaggi ricevuti e scadenza del servizio.\n\n${vehicle} — ${deliverWebAppState.plate || ''}\n${link}`;
+      window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    });
+
+    document.getElementById('deliverInstallGuideBtn').addEventListener('click', () => {
+      if (!deliverWebAppState) return;
+      const link = buildOwnerWebAppLink(deliverWebAppState);
+      const vehicle = [deliverWebAppState.brand, deliverWebAppState.vehicle_model].filter(Boolean).join(' ') || 'veicolo';
+      const plate = deliverWebAppState.plate || '';
+      const text = `La tua Web App personale è pronta.\n\n${vehicle} — ${plate}\n${link}\n\nPer salvarla sul telefono:\n\nIPHONE / IPAD\n1. Apri il link in Safari\n2. Tocca Condividi\n3. Scegli Aggiungi a Home\n4. Riaprila dalla Home\n5. Poi attiva le notifiche dall'interno della Web App\n\nANDROID\n1. Apri il link nel browser\n2. Usa Salva sul dispositivo / Installa app quando disponibile\n3. Poi attiva le notifiche dall'interno della Web App\n\nSe hai dubbi, contattami e ti guiderò io.`;
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    });
+
     document.getElementById('adminLogoutBtn').addEventListener('click', async () => {
       await fetch('/api/admin-logout', { method: 'POST' });
       window.location.href = '/admin-login.html';
