@@ -230,6 +230,59 @@ app.get('/admin.html', (req, res, next) => {
 });
 
 
+
+app.get('/manifest/owner', async (req, res) => {
+  try {
+    const code = String(req.query.code || '').trim().toUpperCase();
+    const plate = String(req.query.plate || '').trim();
+
+    let appName = plate || 'Contatto Veicolo';
+    let startUrl = '/owner-login.html';
+
+    if (code) {
+      const result = await pool.query(
+        `SELECT code, plate
+         FROM sticker_codes
+         WHERE code = $1
+         LIMIT 1`,
+        [code]
+      );
+
+      if (result.rows.length) {
+        const row = result.rows[0];
+        appName = String(plate || row.plate || 'Contatto Veicolo').trim();
+        startUrl = `/owner-simple.html?code=${encodeURIComponent(row.code || code)}&plate=${encodeURIComponent(appName)}`;
+      } else if (plate) {
+        startUrl = `/owner-simple.html?code=${encodeURIComponent(code)}&plate=${encodeURIComponent(plate)}`;
+      }
+    }
+
+    const manifest = {
+      id: startUrl,
+      name: appName,
+      short_name: appName,
+      description: `Web App personale del veicolo ${appName}`,
+      start_url: startUrl,
+      scope: '/',
+      display: 'standalone',
+      background_color: '#07101d',
+      theme_color: '#07101d',
+      icons: [
+        { src: '/icons/android-chrome-192x192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/icons/android-chrome-512x512.png', sizes: '512x512', type: 'image/png' },
+        { src: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }
+      ]
+    };
+
+    res.setHeader('Content-Type', 'application/manifest+json');
+    return res.send(JSON.stringify(manifest, null, 2));
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore generazione manifest.' });
+  }
+});
+
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
