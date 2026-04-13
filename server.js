@@ -515,6 +515,8 @@ app.post('/api/owner-dashboard', async (req, res) => {
         plate: row.plate,
         qr_url: row.qr_url,
         public_id: row.public_id,
+        plan_type: row.plan_type,
+        expires_at: row.expires_at,
         activated_at: row.activated_at,
         viewsCount,
         messagesCount,
