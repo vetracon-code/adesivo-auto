@@ -1,0 +1,909 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Il tuo QR in pratica</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    :root{
+      --accent:#2c74ff;
+      --accent2:#67b0ff;
+      --ok:#8dffb1;
+      --warn:#ffd36c;
+      --danger:#ff8f8f;
+      --bg1:#040915;
+      --bg2:#091325;
+      --panel:rgba(255,255,255,.05);
+      --line:rgba(255,255,255,.10);
+      --text:#f7fbff;
+      --muted:#b7c4d8;
+    }
+    *{box-sizing:border-box}
+    html,body{
+      margin:0;padding:0;min-height:100%;
+      font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Arial,sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(circle at 15% 0%, rgba(44,116,255,.22), transparent 25%),
+        radial-gradient(circle at 85% 10%, rgba(103,176,255,.14), transparent 22%),
+        linear-gradient(180deg, var(--bg1) 0%, #07101d 45%, var(--bg2) 100%);
+    }
+    .wrap{
+      width:min(1180px,calc(100% - 22px));
+      margin:0 auto;
+      padding:22px 0 34px;
+    }
+    .shell{
+      border-radius:34px;
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,.08);
+      background:
+        radial-gradient(circle at 70% 8%, rgba(45,110,240,.14), transparent 24%),
+        linear-gradient(180deg, rgba(11,21,35,.99) 0%, rgba(8,16,27,.995) 100%);
+      box-shadow:0 28px 64px rgba(0,0,0,.42);
+    }
+    .top{
+      padding:26px 22px 10px;
+      display:flex;
+      justify-content:space-between;
+      gap:14px;
+      flex-wrap:wrap;
+      align-items:flex-start;
+    }
+    .eyebrow{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 12px;
+      border-radius:999px;
+      background:rgba(255,255,255,.04);
+      border:1px solid var(--line);
+      color:#d9e7f8;
+      font-size:.86rem;
+    }
+    .dot{
+      width:9px;height:9px;border-radius:999px;background:var(--accent2);
+      box-shadow:0 0 18px rgba(103,176,255,.55);
+    }
+    h1{
+      margin:14px 0 0;
+      line-height:.94;
+      letter-spacing:-.06em;
+      font-weight:900;
+      font-size:clamp(2.4rem,5vw,4.2rem);
+      text-transform:uppercase;
+    }
+    h1 span{
+      display:block;
+      margin-top:7px;
+      color:var(--accent2);
+      text-shadow:0 0 18px rgba(103,176,255,.22);
+    }
+    .sub{
+      margin:16px 0 0;
+      color:var(--muted);
+      max-width:760px;
+      line-height:1.58;
+      font-size:1rem;
+    }
+    .actions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:10px;
+    }
+    .btn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:46px;
+      padding:0 16px;
+      border-radius:14px;
+      text-decoration:none;
+      color:#fff;
+      font-weight:800;
+      border:1px solid transparent;
+      cursor:pointer;
+    }
+    .btn-primary{
+      background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 100%);
+      box-shadow:0 14px 30px rgba(39,97,214,.28);
+    }
+    .btn-secondary{
+      background:rgba(255,255,255,.05);
+      border-color:var(--line);
+    }
+    .btn-warn{
+      background:rgba(255,211,108,.12);
+      border-color:rgba(255,211,108,.25);
+      color:#ffe4a7;
+    }
+
+    .hero{
+      padding:8px 22px 24px;
+      display:grid;
+      grid-template-columns:420px 1fr;
+      gap:18px;
+      align-items:stretch;
+    }
+
+    .radar-card,.status-card,.mini-card,.timeline-card,.area-card{
+      border-radius:28px;
+      background:linear-gradient(180deg, rgba(255,255,255,.035) 0%, rgba(255,255,255,.015) 100%);
+      border:1px solid var(--line);
+      position:relative;
+      overflow:hidden;
+    }
+
+    .radar-card{
+      padding:24px 20px 20px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      min-height:460px;
+    }
+
+    .radar-wrap{
+      position:relative;
+      width:280px;
+      height:280px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    .ring-bg, .ring-progress{
+      position:absolute;
+      inset:0;
+      border-radius:999px;
+    }
+
+    .ring-bg{
+      background:
+        radial-gradient(circle at center, rgba(255,255,255,.02) 0 42%, transparent 43%),
+        conic-gradient(from 0deg, rgba(255,255,255,.06), rgba(255,255,255,.02), rgba(255,255,255,.06));
+      box-shadow:
+        inset 0 0 0 1px rgba(255,255,255,.06),
+        0 0 30px rgba(44,116,255,.08);
+    }
+
+    .ring-progress{
+      background:conic-gradient(from -90deg, var(--accent2) 0deg, var(--accent) var(--deg), rgba(255,255,255,.06) var(--deg), rgba(255,255,255,.06) 360deg);
+      -webkit-mask:radial-gradient(circle at center, transparent 0 58%, #000 59%);
+      mask:radial-gradient(circle at center, transparent 0 58%, #000 59%);
+      filter:drop-shadow(0 0 18px rgba(103,176,255,.28));
+    }
+
+    .radar-core{
+      width:160px;
+      height:160px;
+      border-radius:999px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      background:
+        radial-gradient(circle at 50% 40%, rgba(103,176,255,.22), rgba(255,255,255,.03) 50%, rgba(255,255,255,.02) 100%);
+      border:1px solid rgba(255,255,255,.09);
+      box-shadow:
+        inset 0 0 30px rgba(255,255,255,.03),
+        0 0 28px rgba(44,116,255,.16);
+      position:relative;
+      z-index:2;
+      padding:12px;
+    }
+
+    .core-label{
+      color:#c3d4e7;
+      font-size:.76rem;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+    }
+
+    .core-value{
+      margin-top:6px;
+      font-size:2.5rem;
+      font-weight:900;
+      line-height:1;
+    }
+
+    .core-sub{
+      margin-top:6px;
+      color:#d8e8f8;
+      font-size:.92rem;
+      line-height:1.2;
+    }
+
+    .radar-legend{
+      margin-top:18px;
+      text-align:center;
+      max-width:290px;
+    }
+
+    .radar-legend h2{
+      margin:0;
+      font-size:1rem;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+    }
+
+    .radar-legend p{
+      margin:10px 0 0;
+      color:var(--muted);
+      line-height:1.55;
+      font-size:.96rem;
+    }
+
+    .right-col{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:14px;
+      align-content:start;
+    }
+
+    .mini-card{
+      padding:18px 16px;
+      min-height:150px;
+    }
+
+    .mini-label{
+      color:#9fb2c7;
+      font-size:.82rem;
+      text-transform:uppercase;
+      letter-spacing:.05em;
+    }
+
+    .mini-value{
+      margin-top:10px;
+      font-size:2rem;
+      font-weight:900;
+      line-height:1;
+    }
+
+    .mini-note{
+      margin-top:10px;
+      color:var(--muted);
+      line-height:1.45;
+      font-size:.92rem;
+    }
+
+    .status-card{
+      grid-column:1 / -1;
+      padding:18px 18px;
+      display:grid;
+      grid-template-columns:1.2fr .8fr;
+      gap:14px;
+      align-items:center;
+    }
+
+    .status-title{
+      font-size:1.15rem;
+      font-weight:900;
+      text-transform:uppercase;
+      margin:0 0 8px;
+    }
+
+    .status-copy{
+      color:var(--muted);
+      line-height:1.55;
+      font-size:.98rem;
+    }
+
+    .status-pill{
+      justify-self:end;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:52px;
+      padding:0 18px;
+      border-radius:999px;
+      font-weight:900;
+      font-size:1rem;
+      background:rgba(255,255,255,.05);
+      border:1px solid var(--line);
+    }
+
+    .status-pill.ok{color:var(--ok); border-color:rgba(141,255,177,.22); background:rgba(141,255,177,.08)}
+    .status-pill.warn{color:var(--warn); border-color:rgba(255,211,108,.22); background:rgba(255,211,108,.08)}
+    .status-pill.danger{color:var(--danger); border-color:rgba(255,143,143,.22); background:rgba(255,143,143,.08)}
+
+    .lower{
+      padding:0 22px 24px;
+      display:grid;
+      grid-template-columns:1fr 1.2fr;
+      gap:16px;
+    }
+
+    .area-card, .timeline-card{
+      padding:18px;
+    }
+
+    .section-title{
+      margin:0 0 12px;
+      font-size:1rem;
+      font-weight:900;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+    }
+
+    .area-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+    }
+
+    .area-box{
+      border-radius:18px;
+      background:rgba(255,255,255,.03);
+      border:1px solid rgba(255,255,255,.06);
+      padding:16px;
+    }
+
+    .area-box .big{
+      margin-top:8px;
+      font-size:1.2rem;
+      font-weight:800;
+      line-height:1.25;
+    }
+
+    .timeline{
+      display:grid;
+      gap:10px;
+    }
+
+    .event{
+      border-radius:16px;
+      padding:14px;
+      background:rgba(255,255,255,.03);
+      border:1px solid rgba(255,255,255,.06);
+    }
+
+    .event strong{
+      display:block;
+      margin-bottom:5px;
+      font-size:.98rem;
+    }
+
+    .event .muted{
+      line-height:1.45;
+      font-size:.92rem;
+    }
+
+    .good{color:var(--ok)}
+    .warn{color:var(--warn)}
+    .danger{color:var(--danger)}
+    .muted{color:var(--muted)}
+
+    .expiry-badge{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:42px;
+      padding:0 14px;
+      border-radius:999px;
+      font-weight:900;
+      font-size:.92rem;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.05);
+    }
+    .expiry-badge.ok{color:var(--ok); border-color:rgba(141,255,177,.22); background:rgba(141,255,177,.08)}
+    .expiry-badge.warn{color:var(--warn); border-color:rgba(255,211,108,.22); background:rgba(255,211,108,.08)}
+    .expiry-badge.danger{color:var(--danger); border-color:rgba(255,143,143,.22); background:rgba(255,143,143,.08)}
+
+    .modal{
+      position:fixed;
+      inset:0;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      background:rgba(0,0,0,.58);
+      z-index:1000;
+    }
+    .modal-card{
+      width:min(620px,100%);
+      border-radius:28px;
+      background:linear-gradient(180deg, rgba(11,21,35,.99) 0%, rgba(8,16,27,.995) 100%);
+      border:1px solid rgba(255,255,255,.08);
+      box-shadow:0 24px 56px rgba(0,0,0,.42);
+      padding:22px 18px 18px;
+    }
+    .modal-card h3{
+      margin:0;
+      line-height:1;
+      text-transform:uppercase;
+      letter-spacing:-.04em;
+      font-size:1.35rem;
+    }
+    .modal-copy{
+      margin:12px 0 16px;
+      color:var(--muted);
+      line-height:1.55;
+    }
+    .choice-grid{
+      display:grid;
+      grid-template-columns:repeat(5,1fr);
+      gap:10px;
+    }
+    .choice-btn{
+      min-height:44px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.05);
+      color:#fff;
+      font-weight:800;
+      cursor:pointer;
+    }
+    .modal-actions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:16px;
+    }
+
+    .balloon{
+      position:fixed;
+      right:18px;
+      bottom:18px;
+      width:min(420px,calc(100% - 24px));
+      border-radius:24px;
+      background:linear-gradient(180deg, rgba(31,18,8,.98) 0%, rgba(39,23,9,.99) 100%);
+      border:1px solid rgba(255,211,108,.18);
+      box-shadow:0 18px 42px rgba(0,0,0,.42);
+      padding:18px 16px 16px;
+      z-index:1100;
+      display:none;
+    }
+    .balloon h3{
+      margin:0;
+      font-size:1.15rem;
+      text-transform:uppercase;
+      color:#ffe2a1;
+    }
+    .balloon p{
+      margin:10px 0 0;
+      color:#f0d7a6;
+      line-height:1.52;
+      font-size:.96rem;
+    }
+    .balloon-actions{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-top:14px;
+    }
+
+    @media (max-width:1100px){
+      .hero{grid-template-columns:1fr}
+      .right-col{grid-template-columns:1fr 1fr}
+      .lower{grid-template-columns:1fr}
+    }
+
+    @media (max-width:720px){
+      .right-col{grid-template-columns:1fr}
+      .status-card{grid-template-columns:1fr}
+      .status-pill{justify-self:start}
+      .area-grid{grid-template-columns:1fr}
+      .radar-wrap{width:240px;height:240px}
+      .radar-core{width:145px;height:145px}
+      .choice-grid{grid-template-columns:1fr 1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="shell">
+      <div class="top">
+        <div>
+          <div class="eyebrow"><span class="dot"></span> Area personale del tuo QR</div>
+          <h1>IL TUO QR<span>STA LAVORANDO?</span></h1>
+          <p class="sub">Questa Web App ti mostra, in modo semplice e immediato, se il tuo QR sta registrando accessi reali, se qualcuno ha avviato un contatto e qual è stata l’ultima attività utile.</p>
+        </div>
+        <div class="actions">
+          <a id="openFullDashboard" class="btn btn-secondary" href="#">Versione completa</a>
+          <a id="renewBtn" class="btn btn-primary" href="#">Rinnova servizio</a>
+          <button id="openReminderBtn" class="btn btn-warn" type="button">Ricordami la scadenza</button>
+          <button id="forgetAccessBtn" class="btn btn-secondary" type="button">Rimuovi accesso salvato</button>
+        </div>
+      </div>
+
+      <div class="hero">
+        <div class="radar-card">
+          <div class="radar-wrap">
+            <div class="ring-bg"></div>
+            <div id="ringProgress" class="ring-progress" style="--deg:140deg;"></div>
+            <div class="radar-core">
+              <div class="core-label">Indice attività</div>
+              <div id="scoreValue" class="core-value">0%</div>
+              <div id="scoreSub" class="core-sub">In attesa di dati</div>
+            </div>
+          </div>
+          <div class="radar-legend">
+            <h2 id="heroTitle">Il tuo QR è in osservazione</h2>
+            <p id="heroCopy">Non risultano ancora interazioni significative. Appena arriveranno, qui vedrai subito il livello di attività in modo molto più intuitivo dei semplici numeri.</p>
+          </div>
+        </div>
+
+        <div class="right-col">
+          <div class="mini-card">
+            <div class="mini-label">Aperture pagina</div>
+            <div id="viewsValue" class="mini-value">0</div>
+            <div class="mini-note">Quante volte la pagina del veicolo è stata aperta.</div>
+          </div>
+
+          <div class="mini-card">
+            <div class="mini-label">Contatti avviati</div>
+            <div id="messagesValue" class="mini-value">0</div>
+            <div class="mini-note">Tentativi reali di contatto verso il proprietario.</div>
+          </div>
+
+          <div class="mini-card">
+            <div class="mini-label">Ultima attività</div>
+            <div id="lastActivityValue" class="mini-value" style="font-size:1rem;line-height:1.35;">-</div>
+            <div class="mini-note">L’ultimo evento registrato dal sistema.</div>
+          </div>
+
+          <div class="status-card">
+            <div>
+              <div class="status-title">Il tuo QR funziona davvero?</div>
+              <div id="workingText" class="status-copy">Caricamento in corso...</div>
+            </div>
+            <div id="statusPill" class="status-pill">-</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="lower">
+        <div class="area-card">
+          <h2 class="section-title">Dove ti hanno cercato</h2>
+          <div class="area-grid">
+            <div class="area-box">
+              <div class="mini-label">Ultima area indicativa</div>
+              <div id="lastAreaText" class="big">Non disponibile</div>
+            </div>
+            <div class="area-box">
+              <div class="mini-label">Stato del servizio</div>
+              <div id="statusText" class="big">-</div>
+              <div style="margin-top:10px;">
+                <span id="expiryBadge" class="expiry-badge">-</span>
+              </div>
+              <div id="expiryNote" class="muted" style="margin-top:10px; line-height:1.45;">Caricamento...</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="timeline-card">
+          <h2 class="section-title">Ultimi segnali registrati</h2>
+          <div id="eventsList" class="timeline">
+            <div class="muted">Caricamento...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="reminderModal" class="modal">
+    <div class="modal-card">
+      <h3>Ricordami la scadenza</h3>
+      <div class="modal-copy">Scegli con quanto anticipo vuoi essere avvisato in agenda prima della scadenza del servizio.</div>
+      <div class="choice-grid">
+        <button class="choice-btn" data-offset="1">1 giorno</button>
+        <button class="choice-btn" data-offset="3">3 giorni</button>
+        <button class="choice-btn" data-offset="7">7 giorni</button>
+        <button class="choice-btn" data-offset="15">15 giorni</button>
+        <button class="choice-btn" data-offset="30">1 mese</button>
+      </div>
+      <div class="modal-actions">
+        <button id="closeReminderModal" class="btn btn-secondary" type="button">Chiudi</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="expiryBalloon" class="balloon">
+    <h3>Il tuo servizio è in scadenza</h3>
+    <p id="balloonText">Mancano pochi giorni alla scadenza del tuo QR. Per evitare interruzioni, puoi rinnovarlo adesso oppure farti ricordare più avanti.</p>
+    <div class="balloon-actions">
+      <button id="balloonClose" class="btn btn-secondary" type="button">Chiudi</button>
+      <button id="balloonSnooze" class="btn btn-warn" type="button">Ricordamelo più avanti</button>
+      <a id="balloonRenew" class="btn btn-primary" href="#">Rinnova ora</a>
+    </div>
+  </div>
+
+  <script>
+    function qs(id){ return document.getElementById(id); }
+
+    function fmt(v){
+      if(!v) return '-';
+      try { return new Date(v).toLocaleString('it-IT'); } catch { return v; }
+    }
+
+    function fmtDateOnly(v){
+      if(!v) return '-';
+      try { return new Date(v).toLocaleDateString('it-IT'); } catch { return v; }
+    }
+
+    function statusLabel(v){
+      return v === 'used' ? 'Attivo'
+        : v === 'disabled' ? 'Disattivato'
+        : v === 'new' ? 'Non attivo'
+        : v === 'reactivated' ? 'Riattivato'
+        : (v || '-');
+    }
+
+    function scoreFromData(views, messages){
+      const weighted = (views * 6) + (messages * 22);
+      return Math.max(0, Math.min(100, weighted));
+    }
+
+    function scoreCopy(score, status){
+      if(status !== 'used') {
+        return {
+          title: 'Il tuo QR non è ancora attivo',
+          sub: 'Attivazione necessaria',
+          copy: 'Per iniziare a raccogliere accessi reali, il QR deve essere prima attivato correttamente.'
+        };
+      }
+      if(score === 0){
+        return {
+          title: 'Il tuo QR è pronto',
+          sub: 'In attesa di attività',
+          copy: 'Il sistema è attivo, ma al momento non risultano ancora aperture o contatti registrati.'
+        };
+      }
+      if(score < 35){
+        return {
+          title: 'Il tuo QR sta iniziando a muoversi',
+          sub: 'Prime interazioni rilevate',
+          copy: 'Sono già arrivate attività reali. Il QR ha iniziato a generare attenzione e monitoraggio.'
+        };
+      }
+      if(score < 70){
+        return {
+          title: 'Il tuo QR sta lavorando bene',
+          sub: 'Buon livello di attività',
+          copy: 'Il sistema sta già registrando interazioni concrete. Il QR è realmente operativo nella pratica.'
+        };
+      }
+      return {
+        title: 'Il tuo QR sta lavorando forte',
+        sub: 'Attività elevata',
+        copy: 'Hai già raccolto un livello molto interessante di attività. Il sistema sta dimostrando chiaramente il suo valore.'
+      };
+    }
+
+    function daysLeft(expiresAt){
+      if(!expiresAt) return null;
+      const now = new Date();
+      const exp = new Date(expiresAt);
+      return Math.floor((exp - now) / 86400000);
+    }
+
+    function buildRenewUrl(publicId){
+      return publicId ? `/renew/u/${encodeURIComponent(publicId)}` : '#';
+    }
+
+    function snoozeKey(code){
+      return `expiry_snooze_${code}`;
+    }
+
+    function shouldShowBalloon(code, dLeft, planType){
+      if(planType === 'always') return false;
+      if(dLeft === null || dLeft > 15 || dLeft < 0) return false;
+      const until = localStorage.getItem(snoozeKey(code));
+      if(!until) return true;
+      const when = new Date(until);
+      return new Date() > when;
+    }
+
+    function makeICS({title, description, startDate}) {
+      const pad = n => String(n).padStart(2,'0');
+      const dt = new Date(startDate);
+      const y = dt.getUTCFullYear();
+      const m = pad(dt.getUTCMonth()+1);
+      const d = pad(dt.getUTCDate());
+      const hh = '0900';
+      const stamp = `${y}${m}${d}T${hh}00Z`;
+      const end = `${y}${m}${d}T100000Z`;
+      const uid = `qr-reminder-${Date.now()}@adesivo-auto`;
+      return [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Adesivo Auto//QR Reminder//IT',
+        'BEGIN:VEVENT',
+        `UID:${uid}`,
+        `DTSTAMP:${stamp}`,
+        `DTSTART:${stamp}`,
+        `DTEND:${end}`,
+        `SUMMARY:${title}`,
+        `DESCRIPTION:${description.replace(/\n/g, '\\n')}`,
+        'END:VEVENT',
+        'END:VCALENDAR'
+      ].join('\r\n');
+    }
+
+    function downloadICS(filename, content){
+      const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    async function loadSimpleDashboard() {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code') || '';
+      const plate = params.get('plate') || '';
+
+      if (code && plate) {
+        localStorage.setItem('owner_saved_code', code);
+        localStorage.setItem('owner_saved_plate', plate);
+        localStorage.setItem('owner_saved_at', new Date().toISOString());
+      }
+
+      qs('openFullDashboard').href = `/owner-dashboard.html?code=${encodeURIComponent(code)}&plate=${encodeURIComponent(plate)}`;
+
+      const res = await fetch('/api/owner-dashboard', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code, plate })
+      });
+      const data = await res.json();
+
+      if(!res.ok || !data.success){
+        qs('statusPill').textContent = 'Errore';
+        qs('statusPill').className = 'status-pill danger';
+        qs('workingText').textContent = data.error || 'Impossibile caricare i dati.';
+        qs('eventsList').innerHTML = '<div class="muted">Nessun dato disponibile.</div>';
+        return;
+      }
+
+      const d = data.data || {};
+      const events = d.events || [];
+      const views = Number(d.viewsCount || 0);
+      const messages = Number(d.messagesCount || 0);
+      const score = scoreFromData(views, messages);
+      const deg = Math.round((score / 100) * 360);
+      const copy = scoreCopy(score, d.status);
+      const dLeft = daysLeft(d.expires_at);
+
+      qs('renewBtn').href = buildRenewUrl(d.public_id);
+      qs('balloonRenew').href = buildRenewUrl(d.public_id);
+
+      qs('ringProgress').style.setProperty('--deg', `${deg}deg`);
+      qs('scoreValue').textContent = `${score}%`;
+      qs('scoreSub').textContent = copy.sub;
+      qs('heroTitle').textContent = copy.title;
+      qs('heroCopy').textContent = copy.copy;
+
+      qs('viewsValue').textContent = String(views);
+      qs('messagesValue').textContent = String(messages);
+      qs('lastActivityValue').textContent = d.lastActivity ? fmt(d.lastActivity) : 'Nessuna attività recente';
+
+      qs('statusText').textContent = statusLabel(d.status);
+
+      if (d.status === 'used' && (views > 0 || messages > 0)) {
+        qs('workingText').innerHTML = `<span class="good"><strong>Sì, il tuo QR sta registrando attività reali.</strong></span><br>Stai già raccogliendo aperture della pagina e/o tentativi di contatto.`;
+        qs('statusPill').textContent = 'QR ATTIVO';
+        qs('statusPill').className = 'status-pill ok';
+      } else if (d.status === 'used') {
+        qs('workingText').innerHTML = `<span class="warn"><strong>Il tuo QR è attivo.</strong></span><br>Al momento non risultano ancora aperture o contatti, ma il sistema è pronto a registrarli.`;
+        qs('statusPill').textContent = 'PRONTO';
+        qs('statusPill').className = 'status-pill warn';
+      } else {
+        qs('workingText').innerHTML = `<span class="danger"><strong>Il tuo QR non risulta ancora operativo.</strong></span><br>Per farlo lavorare davvero, completa l’attivazione o verifica il suo stato.`;
+        qs('statusPill').textContent = 'NON ATTIVO';
+        qs('statusPill').className = 'status-pill danger';
+      }
+
+      const expiryBadge = qs('expiryBadge');
+      const expiryNote = qs('expiryNote');
+      if (d.plan_type === 'always') {
+        expiryBadge.textContent = 'SEMPRE ATTIVO';
+        expiryBadge.className = 'expiry-badge ok';
+        expiryNote.textContent = 'Questo servizio non ha una scadenza programmata.';
+        qs('openReminderBtn').style.display = 'none';
+      } else if (d.expires_at) {
+        if (dLeft < 0) {
+          expiryBadge.textContent = `SCADUTO DA ${Math.abs(dLeft)} GIORNI`;
+          expiryBadge.className = 'expiry-badge danger';
+          expiryNote.textContent = `Scadenza prevista: ${fmtDateOnly(d.expires_at)}. Ti consigliamo di rinnovare per evitare interruzioni.`;
+        } else if (dLeft <= 15) {
+          expiryBadge.textContent = `SCADE TRA ${dLeft} GIORNI`;
+          expiryBadge.className = 'expiry-badge warn';
+          expiryNote.textContent = `Scadenza prevista: ${fmtDateOnly(d.expires_at)}. Puoi anche salvare un promemoria in agenda.`;
+        } else {
+          expiryBadge.textContent = `${dLeft} GIORNI RESIDUI`;
+          expiryBadge.className = 'expiry-badge ok';
+          expiryNote.textContent = `Scadenza prevista: ${fmtDateOnly(d.expires_at)}. Il servizio è attivo e sotto controllo.`;
+        }
+      } else {
+        expiryBadge.textContent = 'SCADENZA NON DISPONIBILE';
+        expiryBadge.className = 'expiry-badge warn';
+        expiryNote.textContent = 'Non è disponibile una data di scadenza precisa.';
+      }
+
+      const firstArea = events.find(ev => ev.ip_city || ev.ip_region);
+      qs('lastAreaText').textContent = firstArea
+        ? [firstArea.ip_city, firstArea.ip_region].filter(Boolean).join(', ')
+        : 'Non disponibile';
+
+      if (!events.length) {
+        qs('eventsList').innerHTML = '<div class="muted">Nessun evento registrato fino ad ora.</div>';
+      } else {
+        qs('eventsList').innerHTML = events.slice(0, 8).map(ev => {
+          const areaText = [ev.ip_city, ev.ip_region].filter(Boolean).join(', ') || 'Area non disponibile';
+          return `
+            <div class="event">
+              <strong>${ev.type || 'Evento'}</strong>
+              <div class="muted">${fmt(ev.at)}</div>
+              <div class="muted">Area indicativa: ${areaText}</div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // Reminder modal
+      if (d.plan_type === 'always' || !d.expires_at) {
+        qs('openReminderBtn').style.display = 'none';
+      } else {
+        qs('openReminderBtn').addEventListener('click', () => {
+          qs('reminderModal').style.display = 'flex';
+        });
+      }
+
+      qs('closeReminderModal').addEventListener('click', () => {
+        qs('reminderModal').style.display = 'none';
+      });
+
+      document.querySelectorAll('.choice-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const offset = Number(btn.dataset.offset || '0');
+          if (!d.expires_at || !offset) return;
+
+          const exp = new Date(d.expires_at);
+          const remind = new Date(exp.getTime() - (offset * 86400000));
+          const ics = makeICS({
+            title: `Rinnovo QR veicolo ${code}`,
+            description: `Promemoria rinnovo del servizio associato al QR veicolo.\nCodice: ${code}\nScadenza prevista: ${fmtDateOnly(d.expires_at)}\nLink rinnovo: ${window.location.origin}${buildRenewUrl(d.public_id)}`,
+            startDate: remind
+          });
+          downloadICS(`promemoria-rinnovo-${code}.ics`, ics);
+          qs('reminderModal').style.display = 'none';
+        });
+      });
+
+      // Balloon scadenza
+      if (shouldShowBalloon(code, dLeft, d.plan_type)) {
+        qs('balloonText').textContent = `Mancano ${dLeft} giorni alla scadenza del tuo QR. Per evitare interruzioni, puoi rinnovarlo adesso oppure farti ricordare più avanti.`;
+        qs('expiryBalloon').style.display = 'block';
+      }
+
+      qs('balloonClose').addEventListener('click', () => {
+        qs('expiryBalloon').style.display = 'none';
+      });
+
+      qs('balloonSnooze').addEventListener('click', () => {
+        const until = new Date(Date.now() + (3 * 86400000));
+        localStorage.setItem(snoozeKey(code), until.toISOString());
+        qs('expiryBalloon').style.display = 'none';
+      });
+    }
+
+    document.getElementById('forgetAccessBtn').addEventListener('click', () => {
+      localStorage.removeItem('owner_saved_code');
+      localStorage.removeItem('owner_saved_plate');
+      localStorage.removeItem('owner_saved_at');
+      window.location.href = '/owner-login.html';
+    });
+
+    loadSimpleDashboard();
+  </script>
+</body>
+</html>
