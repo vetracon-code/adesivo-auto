@@ -144,6 +144,7 @@
         <input id="adminSearch" class="search" type="text" placeholder="Cerca per codice, public_id o targa">
         <button id="adminSearchBtn" class="btn btn-primary" type="button">Cerca</button>
         <button id="adminReloadBtn" class="btn btn-secondary" type="button">Ricarica</button>
+        <button id="adminCollectedBtn" class="btn btn-warn" type="button">VISUALIZZA DATI RACCOLTI</button>
         <button id="adminLogoutBtn" class="btn btn-secondary" type="button">Logout</button>
       </div>
 
@@ -247,6 +248,7 @@
     const searchEl = document.getElementById('adminSearch');
     const modal = document.getElementById('editModal');
     const inviteModal = document.getElementById('inviteModal');
+    const collectedModal = document.getElementById('collectedModal');
     const editResult = document.getElementById('editResult');
     const inviteResult = document.getElementById('inviteResult');
     let adminItems = [];
@@ -344,6 +346,7 @@
             <td>
               <div class="actions">
                 ${item.status === 'new' ? `<button class="mini" onclick="openInvite('${item.code}')">Invia</button>` : ''}
+                ${item.owner_access_token ? `<button class="mini" onclick="copyOwnerAccessLink('${item.code}')">Accesso diretto</button>` : ''}
                 ${item.phone ? `<button class="mini" onclick="sendRenewWhatsApp('${item.code}')">Invia rinnovo</button>` : ''}
                 ${item.phone ? `<button class="mini" onclick="sendFeedbackWhatsApp('${item.code}')">Chiedi feedback</button>` : ''}
                 <button class="mini" onclick="printSticker('${item.code}')">Stampa</button>
@@ -422,6 +425,20 @@
       if(data.success) loadAdmin(searchEl.value.trim());
     }
 
+
+
+
+    window.copyOwnerAccessLink = async function(code){
+      const item = adminItems.find(x => x.code === code);
+      if(!item || !item.owner_access_token) return;
+      const link = `${window.location.origin}/owner-access/${item.owner_access_token}`;
+      try {
+        await navigator.clipboard.writeText(link);
+        alert('Link di accesso diretto copiato.');
+      } catch (e) {
+        alert(link);
+      }
+    }
 
 
     window.sendRenewWhatsApp = function(code){
@@ -577,8 +594,52 @@
       await loadAdmin(searchEl.value.trim());
     });
 
+
+    async function loadCollectedData(){
+      const body = document.getElementById('collectedTableBody');
+      body.innerHTML = '<tr><td colspan="6" class="muted">Caricamento...</td></tr>';
+
+      const res = await fetch('/api/admin/collected-data');
+      const data = await res.json();
+
+      if(!res.ok || !data.success){
+        body.innerHTML = '<tr><td colspan="6" class="danger">Errore caricamento dati.</td></tr>';
+        return;
+      }
+
+      document.getElementById('collectedViews').textContent = data.summary.total_views ?? 0;
+      document.getElementById('collectedMessages').textContent = data.summary.total_messages ?? 0;
+      document.getElementById('collectedFeedback').textContent = data.summary.total_feedback ?? 0;
+      document.getElementById('collectedActive').textContent = data.summary.active_codes ?? 0;
+
+      const items = data.items || [];
+      if(!items.length){
+        body.innerHTML = '<tr><td colspan="6" class="muted">Nessun dato disponibile.</td></tr>';
+        return;
+      }
+
+      body.innerHTML = items.map(item => `
+        <tr>
+          <td class="mono">${item.code || '-'}</td>
+          <td>${item.plate || '-'}</td>
+          <td>${item.views_count ?? 0}</td>
+          <td>${item.messages_count ?? 0}</td>
+          <td>${item.feedback_count ?? 0}</td>
+          <td>${item.last_activity ? new Date(item.last_activity).toLocaleString('it-IT') : '-'}</td>
+        </tr>
+      `).join('');
+    }
+
+
     document.getElementById('adminSearchBtn').addEventListener('click', () => loadAdmin(searchEl.value.trim()));
     document.getElementById('adminReloadBtn').addEventListener('click', () => loadAdmin(searchEl.value.trim()));
+    document.getElementById('adminCollectedBtn').addEventListener('click', async () => {
+      await loadCollectedData();
+      collectedModal.style.display = 'flex';
+    });
+    document.getElementById('closeCollectedBtn').addEventListener('click', () => {
+      collectedModal.style.display = 'none';
+    });
     document.getElementById('adminLogoutBtn').addEventListener('click', async () => {
       await fetch('/api/admin-logout', { method: 'POST' });
       window.location.href = '/admin-login.html';
