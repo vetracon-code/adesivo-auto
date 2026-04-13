@@ -97,7 +97,7 @@ function initOwnerLoginPage() {
             </div>
           </div>
           <div class="owner-actions">
-            <a class="owner-link primary" href="/owner-dashboard.html?code=${encodeURIComponent(item.code || '')}&plate=${encodeURIComponent(item.plate || '')}">Controllo adesivo</a>
+            <a class="owner-link primary" href="/owner-simple.html?code=${encodeURIComponent(item.code || '')}&plate=${encodeURIComponent(item.plate || '')}">Controllo adesivo</a>
             <a class="owner-link secondary" href="/sticker.html?code=${encodeURIComponent(item.code || '')}" target="_blank">Ristampa</a>
           </div>
         </div>
@@ -167,7 +167,7 @@ function initOwnerDashboardPage() {
       lastEl.textContent = item.lastActivity ? new Date(item.lastActivity).toLocaleString('it-IT') : '-';
 
       reprintBtn.href = `/sticker.html?code=${encodeURIComponent(item.code || code)}`;
-      document.getElementById('dashControlBtn').href = `/owner-dashboard.html?code=${encodeURIComponent(item.code || code)}&plate=${encodeURIComponent(item.plate || plate)}`;
+      document.getElementById('dashControlBtn').href = `/owner-simple.html?code=${encodeURIComponent(item.code || code)}&plate=${encodeURIComponent(item.plate || plate)}`;
 
       if (eventsEl) {
         const events = item.events || [];

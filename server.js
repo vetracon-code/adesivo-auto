@@ -236,6 +236,51 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+
+let ownerQuickAccessDebug = {
+  code: null,
+  plate: null,
+  saved_at: null
+};
+
+app.post('/api/debug-owner-quick-access', express.json(), (req, res) => {
+  try {
+    const { code, plate } = req.body || {};
+    ownerQuickAccessDebug = {
+      code: code || null,
+      plate: plate || null,
+      saved_at: new Date().toISOString()
+    };
+    return res.json({ success: true, debug: ownerQuickAccessDebug });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false });
+  }
+});
+
+
+app.get('/api/debug-owner-quick-access-ping', (req, res) => {
+  try {
+    const code = String(req.query.code || '');
+    const plate = String(req.query.plate || '');
+    ownerQuickAccessDebug = {
+      code: code || null,
+      plate: plate || null,
+      saved_at: new Date().toISOString()
+    };
+    return res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    return res.status(500).end();
+  }
+});
+
+
+app.get('/api/debug-owner-quick-access', (req, res) => {
+  return res.json({ success: true, debug: ownerQuickAccessDebug });
+});
+
+
 app.get('/health', (req, res) => {
   res.json({ ok: true });
 });
