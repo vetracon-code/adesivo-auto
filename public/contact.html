@@ -76,8 +76,8 @@
 
         <div class="cp-form-wrap">
           <div class="cp-form">
-            <h2 class="cp-form-title">Motivo della segnalazione</h2>
-            <p class="cp-form-sub">Seleziona il motivo principale e, se necessario, aggiungi un dettaglio utile.</p>
+            <h2 class="cp-form-title">Scegli come avvisare il proprietario</h2>
+            <p class="cp-form-sub">Seleziona il motivo principale, aggiungi un dettaglio utile e scegli se registrare subito la segnalazione oppure usare WhatsApp.</p>
 
             <div class="cp-primary-block">
               <label class="cp-label" for="reason">SELEZIONE MOTIVO</label>
@@ -110,10 +110,21 @@
               <label for="shareLocation">Condividi anche la mia posizione attuale (facoltativo)</label>
             </div>
 
-            <button class="cp-btn" id="sendBtn" type="button">
-              <span>◔</span>
-              <span>INVIA SEGNALAZIONE VIA WHATSAPP</span>
-            </button>
+            <div style="margin:8px 0 12px;color:rgba(255,255,255,.74);font-size:.95rem;line-height:1.45;">
+              Puoi registrare subito la segnalazione nel sistema del proprietario oppure inviarla anche via WhatsApp.
+            </div>
+
+            <div style="display:grid;gap:10px;">
+              <button class="cp-btn" id="sendBtn" type="button">
+                <span>◔</span>
+                <span>INVIA IMMEDIATAMENTE</span>
+              </button>
+
+              <button class="cp-btn" id="sendWhatsappBtn" type="button" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);box-shadow:none;">
+                <span>◔</span>
+                <span>USA WHATSAPP</span>
+              </button>
+            </div>
 
             <div class="cp-note">
               <strong>Uso corretto:</strong> questo contatto è riservato esclusivamente a segnalazioni reali relative al veicolo.
@@ -143,6 +154,7 @@
     const charCount = document.getElementById('charCount');
     const reasonField = document.getElementById('reason');
     const sendBtn = document.getElementById('sendBtn');
+    const sendWhatsappBtn = document.getElementById('sendWhatsappBtn');
 
     const presetMessages = {
       'Intralcio al traffico': 'Scusa, volevo segnalarti che il veicolo risulta in intralcio al traffico.',
@@ -233,7 +245,7 @@
       window.location.href = `https://wa.me/${contactData.phone}?text=` + encodeURIComponent(text);
     }
 
-    async function logAndOpen(finalMessage, locationData = {}) {
+    async function logInternalMessage(finalMessage, locationData = {}) {
       try {
         await fetch('/api/log-contact-message', {
           method: 'POST',
@@ -253,11 +265,60 @@
           })
         });
       } catch (e) {}
+    }
 
+    async function logAndOpen(finalMessage, locationData = {}) {
+      await logInternalMessage(finalMessage, locationData);
       openWhatsApp(finalMessage);
     }
 
-    function go() {
+    function goInternal() {
+      const shareLocation = document.getElementById('shareLocation')?.checked;
+      const baseMessage = buildMessage();
+
+      if (!shareLocation) {
+        logInternalMessage(baseMessage).then(() => {
+          alert('Segnalazione registrata correttamente. Se vuoi aumentare la probabilità di consegna immediata, puoi usare anche WhatsApp.');
+        });
+        return;
+      }
+
+      if (!navigator.geolocation) {
+        alert('Geolocalizzazione non supportata dal dispositivo. La segnalazione verrà registrata senza posizione.');
+        logInternalMessage(baseMessage).then(() => {
+          alert('Segnalazione registrata correttamente. Se vuoi aumentare la probabilità di consegna immediata, puoi usare anche WhatsApp.');
+        });
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude.toFixed(6);
+          const lng = position.coords.longitude.toFixed(6);
+          const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
+          const extraLocation = `Posizione: ${lat}, ${lng}\nMappa: ${mapsUrl}\n`;
+          const finalMessage = buildMessage(extraLocation);
+
+          logInternalMessage(finalMessage, {
+            location_shared: true,
+            latitude: lat,
+            longitude: lng,
+            maps_url: mapsUrl
+          }).then(() => {
+            alert('Segnalazione registrata correttamente. Se vuoi aumentare la probabilità di consegna immediata, puoi usare anche WhatsApp.');
+          });
+        },
+        () => {
+          alert('Posizione non disponibile o permesso negato. La segnalazione verrà registrata senza coordinate.');
+          logInternalMessage(baseMessage).then(() => {
+            alert('Segnalazione registrata correttamente. Se vuoi aumentare la probabilità di consegna immediata, puoi usare anche WhatsApp.');
+          });
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+
+    function goWhatsApp() {
       const shareLocation = document.getElementById('shareLocation')?.checked;
       const baseMessage = buildMessage();
 
@@ -267,7 +328,7 @@
       }
 
       if (!navigator.geolocation) {
-        alert('Geolocalizzazione non supportata dal dispositivo. La segnalazione verrà inviata senza posizione.');
+        alert('Geolocalizzazione non supportata dal dispositivo. La segnalazione verrà inviata via WhatsApp senza posizione.');
         logAndOpen(baseMessage);
         return;
       }
@@ -288,14 +349,15 @@
           });
         },
         () => {
-          alert('Posizione non disponibile o permesso negato. La segnalazione verrà inviata senza coordinate.');
+          alert('Posizione non disponibile o permesso negato. La segnalazione verrà inviata via WhatsApp senza coordinate.');
           logAndOpen(baseMessage);
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     }
 
-    sendBtn.addEventListener('click', go);
+    sendBtn.addEventListener('click', goInternal);
+    if (sendWhatsappBtn) sendWhatsappBtn.addEventListener('click', goWhatsApp);
 
     async function init() {
       if (!publicId) {

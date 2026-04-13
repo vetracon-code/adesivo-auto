@@ -450,6 +450,264 @@ app.post('/api/log-contact-message', async (req, res) => {
 
 
 
+
+app.post('/api/owner-heartbeat', async (req, res) => {
+  try {
+    const { code, plate } = req.body || {};
+    if (!code || !plate) {
+      return res.status(400).json({ success: false, error: 'Code o plate mancanti.' });
+    }
+
+    const result = await pool.query(
+      `UPDATE sticker_codes
+       SET owner_last_seen = NOW()
+       WHERE code = $1 AND plate = $2
+       RETURNING code, plate, owner_last_seen`,
+      [code, plate]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, error: 'Record non trovato.' });
+    }
+
+    return res.json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore heartbeat proprietario.' });
+  }
+});
+
+app.get('/api/public-owner-status/:public_id', async (req, res) => {
+  try {
+    const publicId = String(req.params.public_id || '').trim().toUpperCase();
+
+    const result = await pool.query(
+      `SELECT code, public_id, owner_last_seen
+       FROM sticker_codes
+       WHERE public_id = $1
+       LIMIT 1`,
+      [publicId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, error: 'Riferimento non trovato.' });
+    }
+
+    const row = result.rows[0];
+    let owner_online = false;
+
+    if (row.owner_last_seen) {
+      const diffMs = Date.now() - new Date(row.owner_last_seen).getTime();
+      owner_online = diffMs <= 120000;
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        public_id: row.public_id,
+        owner_online,
+        owner_last_seen: row.owner_last_seen
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore controllo presenza proprietario.' });
+  }
+});
+
+
+
+app.post('/api/owner-messages', async (req, res) => {
+  try {
+    const { code, plate } = req.body || {};
+    if (!code || !plate) {
+      return res.status(400).json({ success: false, error: 'Code o plate mancanti.' });
+    }
+
+    const owner = await pool.query(
+      `SELECT code, plate
+       FROM sticker_codes
+       WHERE code = $1 AND plate = $2
+       LIMIT 1`,
+      [code, plate]
+    );
+
+    if (!owner.rows.length) {
+      return res.status(404).json({ success: false, error: 'Record proprietario non trovato.' });
+    }
+
+    const rows = await pool.query(
+      `SELECT
+         id,
+         code,
+         plate,
+         brand,
+         vehicle_model,
+         color,
+         reason,
+         message_text,
+         location_shared,
+         latitude,
+         longitude,
+         maps_url,
+         created_at,
+         read_at
+       FROM contact_message_logs
+       WHERE code = $1
+         AND deleted_at IS NULL
+       ORDER BY created_at DESC
+       LIMIT 200`,
+      [code]
+    );
+
+    const unread = rows.rows.filter(r => !r.read_at).length;
+
+    return res.json({
+      success: true,
+      unread_count: unread,
+      items: rows.rows
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore caricamento messaggi.' });
+  }
+});
+
+app.post('/api/owner-messages/read', async (req, res) => {
+  try {
+    const { code, plate, id } = req.body || {};
+    if (!code || !plate || !id) {
+      return res.status(400).json({ success: false, error: 'Dati mancanti.' });
+    }
+
+    const owner = await pool.query(
+      `SELECT code
+       FROM sticker_codes
+       WHERE code = $1 AND plate = $2
+       LIMIT 1`,
+      [code, plate]
+    );
+
+    if (!owner.rows.length) {
+      return res.status(404).json({ success: false, error: 'Record proprietario non trovato.' });
+    }
+
+    await pool.query(
+      `UPDATE contact_message_logs
+       SET read_at = COALESCE(read_at, NOW())
+       WHERE id = $1 AND code = $2`,
+      [id, code]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore aggiornamento messaggio.' });
+  }
+});
+
+app.post('/api/owner-messages/read-many', async (req, res) => {
+  try {
+    const { code, plate, ids } = req.body || {};
+    if (!code || !plate || !Array.isArray(ids) || !ids.length) {
+      return res.status(400).json({ success: false, error: 'Dati mancanti.' });
+    }
+
+    const owner = await pool.query(
+      `SELECT code
+       FROM sticker_codes
+       WHERE code = $1 AND plate = $2
+       LIMIT 1`,
+      [code, plate]
+    );
+
+    if (!owner.rows.length) {
+      return res.status(404).json({ success: false, error: 'Record proprietario non trovato.' });
+    }
+
+    await pool.query(
+      `UPDATE contact_message_logs
+       SET read_at = COALESCE(read_at, NOW())
+       WHERE code = $1
+         AND id = ANY($2::int[])`,
+      [code, ids]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore aggiornamento multiplo.' });
+  }
+});
+
+app.post('/api/owner-messages/delete', async (req, res) => {
+  try {
+    const { code, plate, id } = req.body || {};
+    if (!code || !plate || !id) {
+      return res.status(400).json({ success: false, error: 'Dati mancanti.' });
+    }
+
+    const owner = await pool.query(
+      `SELECT code
+       FROM sticker_codes
+       WHERE code = $1 AND plate = $2
+       LIMIT 1`,
+      [code, plate]
+    );
+
+    if (!owner.rows.length) {
+      return res.status(404).json({ success: false, error: 'Record proprietario non trovato.' });
+    }
+
+    await pool.query(
+      `UPDATE contact_message_logs
+       SET deleted_at = NOW()
+       WHERE id = $1 AND code = $2`,
+      [id, code]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore eliminazione messaggio.' });
+  }
+});
+
+app.post('/api/owner-messages/delete-many', async (req, res) => {
+  try {
+    const { code, plate, ids } = req.body || {};
+    if (!code || !plate || !Array.isArray(ids) || !ids.length) {
+      return res.status(400).json({ success: false, error: 'Dati mancanti.' });
+    }
+
+    const owner = await pool.query(
+      `SELECT code
+       FROM sticker_codes
+       WHERE code = $1 AND plate = $2
+       LIMIT 1`,
+      [code, plate]
+    );
+
+    if (!owner.rows.length) {
+      return res.status(404).json({ success: false, error: 'Record proprietario non trovato.' });
+    }
+
+    await pool.query(
+      `UPDATE contact_message_logs
+       SET deleted_at = NOW()
+       WHERE code = $1
+         AND id = ANY($2::int[])`,
+      [code, ids]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore eliminazione multipla.' });
+  }
+});
+
+
 app.post('/api/owner-dashboard', async (req, res) => {
   try {
     const { code, plate } = req.body;
