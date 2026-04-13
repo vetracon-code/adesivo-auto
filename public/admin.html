@@ -302,36 +302,42 @@
     }
 
     function setSummary(summary){
-      document.getElementById('kpiActive').textContent = summary.active_count ?? 0;
-      document.getElementById('kpiNew').textContent = summary.new_count ?? 0;
-      document.getElementById('kpiDisabled').textContent = summary.disabled_count ?? 0;
-      document.getElementById('kpiLocalhost').textContent = summary.localhost_count ?? 0;
-      document.getElementById('kpiViews').textContent = summary.total_views ?? 0;
-      document.getElementById('kpiMessages').textContent = summary.total_messages ?? 0;
+      const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value ?? 0;
+      };
+      setText('kpiActive', summary.active_count ?? 0);
+      setText('kpiNew', summary.new_count ?? 0);
+      setText('kpiDisabled', summary.disabled_count ?? 0);
+      setText('kpiLocalhost', summary.localhost_count ?? 0);
+      setText('kpiViews', summary.total_views ?? 0);
+      setText('kpiMessages', summary.total_messages ?? 0);
     }
 
     async function loadAdmin(q=''){
-      bodyEl.innerHTML = '<tr><td colspan="9" class="muted">Caricamento in corso...</td></tr>';
-      const url = q ? `/api/admin/list-stickers?q=${encodeURIComponent(q)}` : '/api/admin/list-stickers';
-      const res = await fetch(url);
-      const data = await res.json();
-      if(!res.ok || !data.success){
-        bodyEl.innerHTML = '<tr><td colspan="11" class="danger">Errore caricamento.</td></tr>';
-        return;
-      }
+      try {
+        bodyEl.innerHTML = '<tr><td colspan="11" class="muted">Caricamento in corso...</td></tr>';
+        const url = q ? `/api/admin/list-stickers?q=${encodeURIComponent(q)}` : '/api/admin/list-stickers';
+        const res = await fetch(url);
+        const data = await res.json();
 
-      adminItems = data.items || [];
-      setSummary(data.summary || {});
+        if(!res.ok || !data.success){
+          bodyEl.innerHTML = `<tr><td colspan="11" class="danger">Errore caricamento: ${data.error || 'risposta non valida'}</td></tr>`;
+          return;
+        }
 
-      if(!adminItems.length){
-        bodyEl.innerHTML = '<tr><td colspan="11" class="muted">Nessun record trovato.</td></tr>';
-        return;
-      }
+        adminItems = Array.isArray(data.items) ? data.items : [];
+        setSummary(data.summary || {});
 
-      bodyEl.innerHTML = adminItems.map(item => {
-        const vehicle = [item.brand, item.vehicle_model].filter(Boolean).join(' ') || '-';
-        const qrWarn = item.qr_url && item.qr_url.includes('localhost');
-        return `
+        if(!adminItems.length){
+          bodyEl.innerHTML = '<tr><td colspan="11" class="muted">Nessun record trovato.</td></tr>';
+          return;
+        }
+
+        bodyEl.innerHTML = adminItems.map(item => {
+          const vehicle = [item.brand, item.vehicle_model].filter(Boolean).join(' ') || '-';
+          const qrWarn = item.qr_url && item.qr_url.includes('localhost');
+          return `
           <tr>
             <td class="mono">${item.code || '-'}</td>
             <td class="mono">${item.public_id || '-'}</td>
@@ -360,6 +366,10 @@
           </tr>
         `;
       }).join('');
+      } catch (err) {
+        console.error(err);
+        bodyEl.innerHTML = `<tr><td colspan="11" class="danger">Errore rendering admin: ${err.message || err}</td></tr>`;
+      }
     }
 
 
