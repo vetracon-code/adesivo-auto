@@ -1043,10 +1043,31 @@
       };
     }
 
+    async function syncAppBadge(unread){
+      try {
+        if ('setAppBadge' in navigator) {
+          if (unread > 0) {
+            await navigator.setAppBadge(unread);
+          } else if ('clearAppBadge' in navigator) {
+            await navigator.clearAppBadge();
+          }
+        }
+
+        if ('serviceWorker' in navigator) {
+          const reg = await navigator.serviceWorker.getRegistration('/service-worker.js') || await navigator.serviceWorker.ready;
+          if (reg && reg.active) {
+            reg.active.postMessage({ type: 'SET_BADGE', count: unread });
+          }
+        }
+      } catch (e) {}
+    }
+
     function updateMessagesToolbar(unread){
       const badge = document.getElementById('messagesUnreadBadge');
       badge.textContent = `${unread} NUOVI`;
       badge.className = unread > 0 ? 'expiry-badge warn' : 'expiry-badge ok';
+
+      syncAppBadge(unread);
 
       document.getElementById('messagesMarkReadBtn').style.display = messagesSelectionMode ? 'inline-flex' : 'none';
       document.getElementById('messagesDeleteBtn').style.display = messagesSelectionMode ? 'inline-flex' : 'none';

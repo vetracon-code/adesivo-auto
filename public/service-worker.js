@@ -6,6 +6,18 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+async function setBadgeCount(count) {
+  if (typeof self.navigator !== 'undefined' && 'setAppBadge' in self.navigator) {
+    try {
+      if (count > 0) {
+        await self.navigator.setAppBadge(count);
+      } else if ('clearAppBadge' in self.navigator) {
+        await self.navigator.clearAppBadge();
+      }
+    } catch (e) {}
+  }
+}
+
 self.addEventListener('push', (event) => {
   let data = {};
   try {
@@ -13,6 +25,8 @@ self.addEventListener('push', (event) => {
   } catch (e) {
     data = {};
   }
+
+  const unreadCount = Number(data.unreadCount || 0);
 
   const title = data.title || 'Nuova segnalazione ricevuta';
   const options = {
@@ -24,7 +38,12 @@ self.addEventListener('push', (event) => {
     }
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      setBadgeCount(unreadCount)
+    ])
+  );
 });
 
 self.addEventListener('notificationclick', (event) => {
@@ -44,4 +63,11 @@ self.addEventListener('notificationclick', (event) => {
       }
     })
   );
+});
+
+self.addEventListener('message', (event) => {
+  const data = event.data || {};
+  if (data.type === 'SET_BADGE') {
+    event.waitUntil(setBadgeCount(Number(data.count || 0)));
+  }
 });

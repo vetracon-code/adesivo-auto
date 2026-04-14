@@ -574,11 +574,23 @@ app.post('/api/log-contact-message', async (req, res) => {
 
         const targetUrl = `/owner-simple.html?code=${encodeURIComponent(String(code).trim().toUpperCase())}&plate=${encodeURIComponent(String(plate || '').trim())}`;
 
+        const unreadRes = await pool.query(
+          `SELECT COUNT(*)::int AS unread_count
+           FROM contact_message_logs
+           WHERE code = $1
+             AND deleted_at IS NULL
+             AND read_at IS NULL`,
+          [String(code).trim().toUpperCase()]
+        );
+
+        const unreadCount = unreadRes.rows[0]?.unread_count || 0;
+
         for (const sub of subs.rows) {
           const payload = JSON.stringify({
             title,
             body,
-            url: targetUrl
+            url: targetUrl,
+            unreadCount
           });
 
           try {
