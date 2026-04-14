@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const webpush = require('web-push');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 const pool = require('./db');
@@ -283,6 +284,62 @@ app.get('/manifest/owner', async (req, res) => {
 });
 
 
+
+app.get('/api/push/public-key', (req, res) => {
+  return res.json({ success: true, publicKey: vapidPublicKey || '' });
+});
+
+app.post('/api/push/subscribe', async (req, res) => {
+  try {
+    const { code, plate, subscription } = req.body || {};
+    if (!code || !subscription || !subscription.endpoint || !subscription.keys?.p256dh || !subscription.keys?.auth) {
+      return res.status(400).json({ success: false, error: 'Dati subscription mancanti.' });
+    }
+
+    await pool.query(
+      `INSERT INTO push_subscriptions (code, plate, endpoint, p256dh, auth, user_agent, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       ON CONFLICT (endpoint)
+       DO UPDATE SET
+         code = EXCLUDED.code,
+         plate = EXCLUDED.plate,
+         p256dh = EXCLUDED.p256dh,
+         auth = EXCLUDED.auth,
+         user_agent = EXCLUDED.user_agent,
+         updated_at = NOW()`,
+      [
+        String(code).trim().toUpperCase(),
+        plate || null,
+        subscription.endpoint,
+        subscription.keys.p256dh,
+        subscription.keys.auth,
+        req.headers['user-agent'] || null
+      ]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore salvataggio subscription.' });
+  }
+});
+
+app.post('/api/push/unsubscribe', async (req, res) => {
+  try {
+    const { endpoint } = req.body || {};
+    if (!endpoint) {
+      return res.status(400).json({ success: false, error: 'Endpoint mancante.' });
+    }
+
+    await pool.query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [endpoint]);
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore unsubscribe.' });
+  }
+});
+
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
@@ -493,6 +550,44 @@ app.post('/api/log-contact-message', async (req, res) => {
         userAgent
       ]
     );
+
+    try {
+      if (vapidPublicKey && vapidPrivateKey && code) {
+        const subs = await pool.query(
+          `SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE code = $1`,
+          [String(code).trim().toUpperCase()]
+        );
+
+        const title = 'Nuova segnalazione ricevuta';
+        const body = plate
+          ? `Controlla il nuovo messaggio per ${plate}`
+          : 'Apri la Web App per leggere il nuovo messaggio.';
+
+        const targetUrl = `/owner-simple.html?code=${encodeURIComponent(String(code).trim().toUpperCase())}&plate=${encodeURIComponent(String(plate || '').trim())}`;
+
+        for (const sub of subs.rows) {
+          const payload = JSON.stringify({
+            title,
+            body,
+            url: targetUrl
+          });
+
+          try {
+            await webpush.sendNotification({
+              endpoint: sub.endpoint,
+              keys: { p256dh: sub.p256dh, auth: sub.auth }
+            }, payload);
+          } catch (pushErr) {
+            console.error('Push send error:', pushErr.statusCode || '', pushErr.body || pushErr.message || pushErr);
+            if (pushErr.statusCode === 404 || pushErr.statusCode === 410) {
+              await pool.query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [sub.endpoint]);
+            }
+          }
+        }
+      }
+    } catch (notifyErr) {
+      console.error('Push notify block error:', notifyErr);
+    }
 
     return res.json({ success: true });
   } catch (err) {
