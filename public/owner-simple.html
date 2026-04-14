@@ -503,34 +503,32 @@
   <div class="wrap">
     <div class="shell">
       <div class="top">
-
-      <div id="installAppSection" style="padding:0 22px 18px;">
-        <div class="timeline-card" style="padding:20px;border:1px solid rgba(141,255,177,.14);box-shadow:0 0 26px rgba(141,255,177,.04) inset;">
-          <div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:flex-start;">
-            <div style="max-width:760px;">
-              <h2 style="margin:0 0 8px;font-size:1.15rem;text-transform:uppercase;letter-spacing:.03em;">Salva la tua Web App</h2>
-              <div id="installIntroText" class="muted" style="line-height:1.55;font-size:1rem;">
-                Salva questa Web App sul tuo dispositivo per aprirla più rapidamente e usarla come area personale del tuo QR.
+      <div id="installAppSection" style="padding:0 22px 16px;">
+        <div class="timeline-card" style="padding:16px 18px;border:1px solid rgba(141,255,177,.10);box-shadow:none;">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+            <div>
+              <div style="font-size:.92rem;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.72);font-weight:800;">Web App & notifiche</div>
+              <div id="installCompactText" class="muted" style="margin-top:6px;line-height:1.45;font-size:.98rem;">
+                Verifica stato...
               </div>
             </div>
-            <div id="installStatusBadge" class="expiry-badge warn">NON INSTALLATA</div>
+            <div id="installStatusBadge" class="expiry-badge warn">VERIFICA</div>
           </div>
 
-          <div id="installInstructionsBox" style="margin-top:16px;padding:16px;border-radius:18px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);">
-            <div id="deviceDetectedLabel" class="mini-label">Dispositivo rilevato</div>
-            <div id="deviceDetectedValue" class="big" style="margin-top:8px;font-size:1.1rem;font-weight:800;">-</div>
-            <div id="installInstructionsText" class="muted" style="margin-top:10px;line-height:1.55;">Caricamento istruzioni...</div>
+          <div id="installExplainBox" style="display:none;margin-top:12px;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);">
+            <div id="deviceDetectedValue" style="font-size:1rem;font-weight:800;margin-bottom:8px;">-</div>
+            <div id="installInstructionsText" class="muted" style="line-height:1.5;font-size:.96rem;">-</div>
           </div>
 
-          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;">
-            <button id="installAppBtn" class="btn btn-primary" type="button">Salva sul dispositivo</button>
-            <button id="enableNotificationsBtn" class="btn btn-secondary" type="button">Attiva notifiche</button>
-            <button id="refreshInstallStateBtn" class="btn btn-secondary" type="button">Verifica stato</button>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;align-items:center;">
+            <button id="primaryInstallNotifyBtn" class="btn btn-primary" type="button">Verifica</button>
+            <button id="secondaryInstallActionBtn" class="btn btn-secondary" type="button" style="display:none;">Mostra dettagli</button>
           </div>
 
-          <div id="installActionResult" class="muted" style="margin-top:12px;line-height:1.5;"></div>
+          <div id="installActionResult" class="muted" style="margin-top:10px;line-height:1.45;font-size:.95rem;"></div>
         </div>
       </div>
+
 
         <div>
           <div class="eyebrow"><span class="dot"></span> Area personale del tuo QR</div>
@@ -1195,8 +1193,6 @@
       document.getElementById('messagesSelectBtn').textContent = 'Seleziona';
       await loadOwnerMessages();
     });
-
-
     function detectDeviceType(){
       const ua = navigator.userAgent || '';
       const isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -1210,118 +1206,178 @@
       return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
     }
 
+    function currentNotificationState(){
+      if (!('Notification' in window)) return 'unsupported';
+      return Notification.permission || 'default';
+    }
+
     let deferredInstallPrompt = null;
+    let currentInstallMode = 'check';
 
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       deferredInstallPrompt = e;
-      const resultEl = document.getElementById('installActionResult');
-      if (resultEl) {
-        resultEl.textContent = 'Installazione disponibile. Puoi salvare la Web App con il pulsante dedicato.';
-      }
+      updateInstallUI();
     });
 
-    function renderInstallInstructions(){
-      const device = detectDeviceType();
-      const installed = isStandaloneMode();
-
+    function setInstallBadge(label, cls='warn'){
       const badge = document.getElementById('installStatusBadge');
-      const deviceValue = document.getElementById('deviceDetectedValue');
-      const instructions = document.getElementById('installInstructionsText');
-      const resultEl = document.getElementById('installActionResult');
-
-      badge.textContent = installed ? 'GIÀ INSTALLATA' : 'NON INSTALLATA';
-      badge.className = installed ? 'expiry-badge ok' : 'expiry-badge warn';
-
-      if (device === 'ios') {
-        deviceValue.textContent = 'iPhone / iPad';
-        instructions.innerHTML = installed
-          ? 'La Web App risulta già salvata sul dispositivo. Per usare le notifiche, aprila dalla schermata Home e poi attivale con il pulsante qui sotto.'
-          : 'Su iPhone o iPad, tocca Condividi in Safari, poi <strong>Aggiungi a Home</strong>. Dopo averla salvata, riaprila dalla Home e poi attiva le notifiche.';
-      } else if (device === 'android') {
-        deviceValue.textContent = 'Android';
-        instructions.innerHTML = installed
-          ? 'La Web App risulta già installata. Puoi provare ad attivare subito le notifiche con il pulsante qui sotto.'
-          : 'Su Android puoi provare a salvarla direttamente con il pulsante qui sotto. Se il browser lo consente, l’installazione e le notifiche potranno essere attivate in modo più rapido.';
-      } else {
-        deviceValue.textContent = 'Altro dispositivo';
-        instructions.innerHTML = installed
-          ? 'La Web App risulta già installata sul dispositivo.'
-          : 'Puoi salvare questa Web App usando le opzioni del browser o del sistema, se supportate.';
-      }
-
-      if (resultEl && !resultEl.textContent.trim()) {
-        resultEl.textContent = installed
-          ? 'La Web App è già disponibile sul dispositivo.'
-          : 'Salva la Web App per un accesso più rapido al controllo del tuo QR.';
-      }
+      badge.textContent = label;
+      badge.className = `expiry-badge ${cls}`;
     }
 
-    async function tryInstallApp(){
+    function updateInstallUI(){
       const device = detectDeviceType();
+      const installed = isStandaloneMode();
+      const notif = currentNotificationState();
+
+      const compact = document.getElementById('installCompactText');
+      const explain = document.getElementById('installExplainBox');
+      const deviceLabel = document.getElementById('deviceDetectedValue');
+      const instructions = document.getElementById('installInstructionsText');
+      const primaryBtn = document.getElementById('primaryInstallNotifyBtn');
+      const secondaryBtn = document.getElementById('secondaryInstallActionBtn');
       const resultEl = document.getElementById('installActionResult');
 
+      deviceLabel.textContent =
+        device === 'ios' ? 'iPhone / iPad' :
+        device === 'android' ? 'Android' : 'Dispositivo rilevato';
+
+      explain.style.display = 'none';
+      secondaryBtn.style.display = 'none';
+      resultEl.textContent = '';
+
+      if (!installed) {
+        if (device === 'ios') {
+          setInstallBadge('NON SALVATA', 'warn');
+          compact.textContent = 'Per ricevere le notifiche sul tuo veicolo, su iPhone devi prima salvare la Web App.';
+          primaryBtn.textContent = 'Salva la Web App';
+          currentInstallMode = 'ios_install';
+          instructions.innerHTML = 'Apri questa pagina in Safari, tocca <strong>Condividi</strong>, poi <strong>Aggiungi a Home</strong>. Dopo il salvataggio, riaprila dalla Home e poi attiva le notifiche.';
+          secondaryBtn.textContent = 'Mostra dettagli';
+          secondaryBtn.style.display = 'inline-flex';
+        } else if (device === 'android') {
+          setInstallBadge('NON SALVATA', 'warn');
+          compact.textContent = 'Su Android puoi spesso salvare la Web App e poi attivare le notifiche in un flusso più diretto.';
+          primaryBtn.textContent = 'Salva e attiva notifiche';
+          currentInstallMode = 'android_install';
+          instructions.innerHTML = 'Se il browser lo consente, l’installazione partirà subito. In caso contrario, usa l’opzione del browser per <strong>Installa app</strong> o <strong>Aggiungi a schermata Home</strong>.';
+          secondaryBtn.textContent = 'Mostra dettagli';
+          secondaryBtn.style.display = 'inline-flex';
+        } else {
+          setInstallBadge('NON SALVATA', 'warn');
+          compact.textContent = 'Salva la Web App sul dispositivo per un accesso più rapido e per preparare gli avvisi.';
+          primaryBtn.textContent = 'Salva la Web App';
+          currentInstallMode = 'generic_install';
+          instructions.innerHTML = 'Usa le opzioni del browser o del sistema per aggiungere questa Web App al dispositivo.';
+          secondaryBtn.textContent = 'Mostra dettagli';
+          secondaryBtn.style.display = 'inline-flex';
+        }
+        return;
+      }
+
+      if (notif === 'granted') {
+        setInstallBadge('NOTIFICHE ATTIVE', 'ok');
+        compact.textContent = 'Web App salvata e notifiche attive.';
+        primaryBtn.textContent = 'Notifiche attive';
+        currentInstallMode = 'active';
+        return;
+      }
+
+      setInstallBadge('WEB APP SALVATA', 'ok');
+      compact.textContent = 'La Web App è già salvata. Ora puoi attivare le notifiche.';
+      primaryBtn.textContent = 'Attiva notifiche';
+      currentInstallMode = 'enable_notifications';
+
       if (device === 'ios') {
-        resultEl.innerHTML = 'Su iPhone o iPad devi prima salvarla manualmente: Safari → Condividi → <strong>Aggiungi a Home</strong>. Poi riaprila dalla Home e attiva le notifiche.';
+        instructions.innerHTML = 'Ora che la Web App è salvata e riaperta dalla Home, puoi attivare le notifiche da qui.';
+      } else if (device == 'android') {
+        instructions.innerHTML = 'La Web App risulta salvata. Attiva ora le notifiche per ricevere gli avvisi sul veicolo.';
+      } else {
+        instructions.innerHTML = 'Attiva ora le notifiche, se supportate dal dispositivo e dal browser.';
+      }
+
+      secondaryBtn.textContent = 'Perché è importante';
+      secondaryBtn.style.display = 'inline-flex';
+    }
+
+    async function tryInstallFlow(){
+      const device = detectDeviceType();
+      const resultEl = document.getElementById('installActionResult');
+      const explain = document.getElementById('installExplainBox');
+
+      if (currentInstallMode === 'ios_install') {
+        explain.style.display = 'block';
+        resultEl.innerHTML = 'Su iPhone le notifiche sul veicolo richiedono prima il salvataggio della Web App sulla Home.';
         return;
       }
 
-      if (deferredInstallPrompt) {
-        deferredInstallPrompt.prompt();
-        const choice = await deferredInstallPrompt.userChoice;
-        deferredInstallPrompt = null;
-        resultEl.textContent = choice && choice.outcome === 'accepted'
-          ? 'Installazione avviata. Verifica ora lo stato della Web App.'
-          : 'Installazione annullata o non completata.';
-        setTimeout(renderInstallInstructions, 1200);
+      if (currentInstallMode === 'android_install' || currentInstallMode === 'generic_install') {
+        if (deferredInstallPrompt) {
+          deferredInstallPrompt.prompt();
+          const choice = await deferredInstallPrompt.userChoice;
+          deferredInstallPrompt = null;
+          resultEl.textContent = choice && choice.outcome === 'accepted'
+            ? 'Installazione avviata. Riapri la Web App e poi attiva le notifiche.'
+            : 'Installazione non completata. Usa il menu del browser per salvare la Web App.';
+          setTimeout(updateInstallUI, 1200);
+          return;
+        }
+        explain.style.display = 'block';
+        resultEl.textContent = device === 'android'
+          ? 'Installazione diretta non disponibile in questo momento. Usa il menu del browser per salvare la Web App.'
+          : 'Usa le opzioni del browser per salvare la Web App sul dispositivo.';
         return;
       }
 
-      resultEl.textContent = 'Installazione diretta non disponibile in questo momento. Usa le opzioni del browser o il pulsante del sistema per salvare la Web App.';
+      if (currentInstallMode === 'enable_notifications') {
+        await tryEnableNotifications();
+        return;
+      }
+
+      if (currentInstallMode === 'active') {
+        resultEl.textContent = 'Le notifiche risultano già attive.';
+        return;
+      }
     }
 
     async function tryEnableNotifications(){
-      const device = detectDeviceType();
-      const installed = isStandaloneMode();
       const resultEl = document.getElementById('installActionResult');
 
-      if (device === 'ios' && !installed) {
-        resultEl.innerHTML = 'Per iPhone e iPad devi prima salvare la Web App sulla Home, riaprirla dal dispositivo e poi tornare qui per attivare le notifiche.';
-        return;
-      }
-
       if (!('Notification' in window)) {
-        resultEl.textContent = 'Questo browser non supporta la richiesta diretta delle notifiche.';
+        resultEl.textContent = 'Questo browser non supporta l’attivazione diretta delle notifiche.';
+        updateInstallUI();
         return;
       }
 
       try {
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
-          resultEl.textContent = 'Permesso notifiche concesso. Il collegamento al sistema notifiche verrà completato nel prossimo step.';
+          resultEl.textContent = 'Permesso notifiche concesso.';
         } else if (permission === 'denied') {
-          resultEl.textContent = 'Permesso notifiche negato. Puoi riattivarlo dalle impostazioni del browser o del dispositivo.';
+          resultEl.textContent = 'Permesso notifiche negato. Puoi riattivarlo dalle impostazioni del dispositivo o del browser.';
         } else {
           resultEl.textContent = 'Richiesta notifiche non completata.';
         }
       } catch (e) {
         resultEl.textContent = 'Impossibile attivare le notifiche in questo momento.';
       }
+      updateInstallUI();
     }
 
-    document.getElementById('installAppBtn').addEventListener('click', tryInstallApp);
-    document.getElementById('enableNotificationsBtn').addEventListener('click', tryEnableNotifications);
-    document.getElementById('refreshInstallStateBtn').addEventListener('click', () => {
-      document.getElementById('installActionResult').textContent = '';
-      renderInstallInstructions();
+    document.getElementById('primaryInstallNotifyBtn').addEventListener('click', tryInstallFlow);
+    document.getElementById('secondaryInstallActionBtn').addEventListener('click', () => {
+      const explain = document.getElementById('installExplainBox');
+      explain.style.display = explain.style.display === 'none' ? 'block' : 'none';
     });
 
-    renderInstallInstructions();
+    updateInstallUI();
 
     loadOwnerMessages();
     setInterval(loadOwnerMessages, 15000);
 
     loadSimpleDashboard();
+
 
 
   </script>
