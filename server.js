@@ -12,6 +12,15 @@ const pool = require('./db');
 
 const app = express();
 
+const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || '';
+const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || '';
+const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:test@example.com';
+
+if (vapidPublicKey && vapidPrivateKey) {
+  webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+}
+
+
 const ADMIN_COOKIE_NAME = 'admin_session';
 
 function getAdminUser() {
