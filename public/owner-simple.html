@@ -1351,45 +1351,61 @@
 
     async function registerPushSubscription(){
       const resultEl = document.getElementById('installActionResult');
-      if (!('serviceWorker' in navigator)) {
-        resultEl.textContent = 'Service worker non supportato.';
-        return false;
-      }
+      try {
+        if (!('serviceWorker' in navigator)) {
+          resultEl.textContent = 'Service worker non supportato.';
+          return false;
+        }
 
-      const reg = await navigator.serviceWorker.register('/service-worker.js');
-      await navigator.serviceWorker.ready;
+        resultEl.textContent = 'Registrazione service worker...';
+        const reg = await navigator.serviceWorker.register('/service-worker.js');
+        await navigator.serviceWorker.ready;
 
-      const keyRes = await fetch('/api/push/public-key');
-      const keyData = await keyRes.json();
-      if (!keyData.success || !keyData.publicKey) {
-        resultEl.textContent = 'Chiave notifiche non disponibile.';
-        return false;
-      }
+        resultEl.textContent = 'Recupero chiave notifiche...';
+        const keyRes = await fetch('/api/push/public-key');
+        const keyData = await keyRes.json();
+        if (!keyRes.ok || !keyData.success || !keyData.publicKey) {
+          resultEl.textContent = 'Chiave notifiche non disponibile.';
+          return false;
+        }
 
-      let sub = await reg.pushManager.getSubscription();
-      if (!sub) {
-        sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(keyData.publicKey)
+        resultEl.textContent = 'Verifica subscription...';
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+          resultEl.textContent = 'Creazione subscription push...';
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(keyData.publicKey)
+          });
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get('code') || '';
+        const plate = params.get('plate') || '';
+
+        resultEl.textContent = 'Salvataggio subscription sul server...';
+        const saveRes = await fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ code, plate, subscription: sub.toJSON() })
         });
-      }
 
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get('code') || '';
-      const plate = params.get('plate') || '';
+        let saveData = {};
+        try { saveData = await saveRes.json(); } catch(e) {}
 
-      const saveRes = await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ code, plate, subscription: sub.toJSON() })
-      });
+        if (!saveRes.ok || !saveData.success) {
+          resultEl.textContent = (saveData && saveData.error) ? saveData.error : `Errore registrazione notifiche (${saveRes.status})`;
+          alert(resultEl.textContent);
+          return false;
+        }
 
-      const saveData = await saveRes.json();
-      if (!saveRes.ok || !saveData.success) {
-        resultEl.textContent = saveData.error || 'Errore registrazione notifiche.';
+        resultEl.textContent = 'Subscription salvata correttamente.';
+        return true;
+      } catch (err) {
+        resultEl.textContent = 'Errore notifiche: ' + (err && err.message ? err.message : err);
+        alert(resultEl.textContent);
         return false;
       }
-      return true;
     }
 
     async function tryEnableNotifications(){
