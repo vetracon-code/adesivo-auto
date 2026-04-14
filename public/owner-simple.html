@@ -1171,14 +1171,46 @@
         await window.markMessageRead(id);
       }
 
-      alert(
-        `Motivo: ${item.reason || 'Segnalazione'}\n\n` +
-        `Data: ${fmt(item.created_at)}\n` +
-        `${item.sender_phone ? 'Numero richiamo: ' + item.sender_phone + '\n' : ''}\n` +
-        `${item.message_text || 'Nessun testo disponibile'}\n\n` +
-        `${item.location_shared && item.maps_url ? 'Mappa: ' + item.maps_url : 'Posizione non condivisa'}`
-      );
-    }
+      const modal = document.getElementById('messageDetailModal');
+      const reasonEl = document.getElementById('msgDetailReason');
+      const dateEl = document.getElementById('msgDetailDate');
+      const textEl = document.getElementById('msgDetailText');
+      const phoneWrap = document.getElementById('msgDetailPhoneWrap');
+      const phoneEl = document.getElementById('msgDetailPhone');
+      const mapWrap = document.getElementById('msgDetailMapWrap');
+      const mapEl = document.getElementById('msgDetailMap');
+
+      reasonEl.textContent = item.reason || 'Segnalazione';
+      dateEl.textContent = fmt(item.created_at);
+
+      const cleanText = String(item.message_text || '')
+        .replace(/^Segnalazione per .*\n?/i, '')
+        .replace(/^Motivo: .*\n?/i, '')
+        .replace(/^Numero per eventuale richiamo: .*\n?/gim, '')
+        .replace(/^Posizione: .*\n?/gim, '')
+        .replace(/^Mappa: .*\n?/gim, '')
+        .trim();
+
+      textEl.textContent = cleanText || 'Nessun testo disponibile';
+
+      if (item.sender_phone) {
+        const tel = String(item.sender_phone).trim();
+        phoneEl.textContent = tel;
+        phoneEl.href = 'tel:' + tel.replace(/\s+/g, '');
+        phoneWrap.style.display = 'block';
+      } else {
+        phoneWrap.style.display = 'none';
+      }
+
+      if (item.location_shared && item.maps_url) {
+        mapEl.href = item.maps_url;
+        mapWrap.style.display = 'block';
+      } else {
+        mapWrap.style.display = 'none';
+      }
+
+      modal.style.display = 'flex';
+    };
 
     document.getElementById('messagesSelectBtn').addEventListener('click', () => {
       messagesSelectionMode = !messagesSelectionMode;
@@ -1240,7 +1272,18 @@
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       deferredInstallPrompt = e;
-      updateInstallUI();
+  
+    document.getElementById('msgDetailCloseBtn').addEventListener('click', () => {
+      document.getElementById('messageDetailModal').style.display = 'none';
+    });
+
+    document.getElementById('messageDetailModal').addEventListener('click', (e) => {
+      if (e.target.id === 'messageDetailModal') {
+        document.getElementById('messageDetailModal').style.display = 'none';
+      }
+    });
+
+    updateInstallUI();
     });
 
     function setInstallBadge(label, cls='warn'){
@@ -1474,5 +1517,35 @@
 
 
   </script>
+
+  <div id="messageDetailModal" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(3,8,20,.72);backdrop-filter:blur(6px);padding:20px;align-items:center;justify-content:center;">
+    <div style="width:min(760px,100%);max-height:85vh;overflow:auto;border-radius:24px;background:linear-gradient(180deg,#0b1730 0%, #091224 100%);border:1px solid rgba(255,255,255,.08);box-shadow:0 20px 60px rgba(0,0,0,.45);padding:22px;">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
+        <div>
+          <div id="msgDetailReason" style="font-size:1.15rem;font-weight:900;color:#fff;"></div>
+          <div id="msgDetailDate" style="margin-top:6px;color:rgba(255,255,255,.68);font-size:.95rem;"></div>
+        </div>
+        <button id="msgDetailCloseBtn" type="button" style="border:0;border-radius:14px;padding:10px 14px;background:rgba(255,255,255,.08);color:#fff;font-weight:800;cursor:pointer;">Chiudi</button>
+      </div>
+
+      <div style="margin-top:16px;display:grid;gap:12px;">
+        <div id="msgDetailPhoneWrap" style="display:none;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);">
+          <div style="font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.62);">Numero per eventuale richiamo</div>
+          <a id="msgDetailPhone" href="#" style="display:inline-block;margin-top:6px;color:#8ec5ff;font-weight:800;text-decoration:none;"></a>
+        </div>
+
+        <div id="msgDetailMapWrap" style="display:none;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);">
+          <div style="font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.62);">Posizione condivisa</div>
+          <a id="msgDetailMap" href="#" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:6px;color:#8ec5ff;font-weight:800;text-decoration:none;">Apri mappa</a>
+        </div>
+
+        <div style="padding:16px 18px;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);">
+          <div style="font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.62);">Messaggio</div>
+          <div id="msgDetailText" style="margin-top:8px;color:#fff;line-height:1.55;white-space:pre-wrap;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>
