@@ -77,7 +77,7 @@
         <div class="cp-form-wrap">
           <div class="cp-form">
             <h2 class="cp-form-title">Scegli come avvisare il proprietario</h2>
-            <p class="cp-form-sub">Seleziona il motivo principale, aggiungi un dettaglio utile e scegli se registrare subito la segnalazione oppure usare WhatsApp.</p>
+            <p class="cp-form-sub">Seleziona il motivo principale e aggiungi un dettaglio utile per inviare subito la segnalazione al proprietario.</p>
 
             <div class="cp-primary-block">
               <label class="cp-label" for="reason">SELEZIONE MOTIVO</label>
@@ -110,8 +110,14 @@
               <label for="shareLocation">Condividi anche la mia posizione attuale (facoltativo)</label>
             </div>
 
+            <div class="cp-secondary-block">
+              <label class="cp-label" for="senderPhone">Numero per eventuale richiamo <small>(facoltativo)</small></label>
+              <input id="senderPhone" class="cp-field" type="tel" inputmode="tel" maxlength="30" placeholder="Es. 333 1234567">
+              <div class="cp-label-hint">Inseriscilo solo se desideri essere ricontattato in caso di necessità.</div>
+            </div>
+
             <div style="margin:8px 0 12px;color:rgba(255,255,255,.74);font-size:.95rem;line-height:1.45;">
-              Puoi registrare subito la segnalazione nel sistema del proprietario oppure inviarla anche via WhatsApp.
+              Invia subito la segnalazione in forma riservata, senza esporre il numero del proprietario.
             </div>
 
             <div style="display:grid;gap:10px;">
@@ -119,15 +125,10 @@
                 <span>◔</span>
                 <span>INVIA IMMEDIATAMENTE</span>
               </button>
-
-              <button class="cp-btn" id="sendWhatsappBtn" type="button" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);box-shadow:none;">
-                <span>◔</span>
-                <span>USA WHATSAPP</span>
-              </button>
             </div>
 
             <div class="cp-note">
-              <strong>Uso corretto:</strong> questo contatto è riservato esclusivamente a segnalazioni reali relative al veicolo.
+              <strong>Uso corretto:</strong> questo servizio è riservato esclusivamente a segnalazioni reali e pertinenti. Ogni utilizzo improprio potrà essere verificato.
             </div>
           </div>
         </div>
@@ -154,7 +155,7 @@
     const charCount = document.getElementById('charCount');
     const reasonField = document.getElementById('reason');
     const sendBtn = document.getElementById('sendBtn');
-    const sendWhatsappBtn = document.getElementById('sendWhatsappBtn');
+    const senderPhoneField = document.getElementById('senderPhone');
 
     const presetMessages = {
       'Intralcio al traffico': 'Scusa, volevo segnalarti che il veicolo risulta in intralcio al traffico.',
@@ -235,14 +236,12 @@
 
       let text = `Segnalazione per ${vehicleName} (${contactData.plate || ''})\n`;
       if (reason) text += `Motivo: ${reason}\n`;
+      const senderPhone = (senderPhoneField?.value || '').trim();
       if (msg) text += `Dettagli: ${msg}\n`;
+      if (senderPhone) text += `Numero per eventuale richiamo: ${senderPhone}\n`;
       if (extraLocation) text += extraLocation;
 
       return text.trim();
-    }
-
-    function openWhatsApp(text) {
-      window.location.href = `https://wa.me/${contactData.phone}?text=` + encodeURIComponent(text);
     }
 
     async function logInternalMessage(finalMessage, locationData = {}) {
@@ -258,6 +257,7 @@
             color: contactData.color,
             reason: reasonField.value,
             message_text: finalMessage,
+            sender_phone: (senderPhoneField?.value || '').trim() || null,
             location_shared: !!locationData.location_shared,
             latitude: locationData.latitude || null,
             longitude: locationData.longitude || null,
@@ -265,11 +265,6 @@
           })
         });
       } catch (e) {}
-    }
-
-    async function logAndOpen(finalMessage, locationData = {}) {
-      await logInternalMessage(finalMessage, locationData);
-      openWhatsApp(finalMessage);
     }
 
     function goInternal() {
@@ -318,46 +313,7 @@
       );
     }
 
-    function goWhatsApp() {
-      const shareLocation = document.getElementById('shareLocation')?.checked;
-      const baseMessage = buildMessage();
-
-      if (!shareLocation) {
-        logAndOpen(baseMessage);
-        return;
-      }
-
-      if (!navigator.geolocation) {
-        alert('Geolocalizzazione non supportata dal dispositivo. La segnalazione verrà inviata via WhatsApp senza posizione.');
-        logAndOpen(baseMessage);
-        return;
-      }
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const lat = position.coords.latitude.toFixed(6);
-          const lng = position.coords.longitude.toFixed(6);
-          const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
-          const extraLocation = `Posizione: ${lat}, ${lng}\nMappa: ${mapsUrl}\n`;
-          const finalMessage = buildMessage(extraLocation);
-
-          logAndOpen(finalMessage, {
-            location_shared: true,
-            latitude: lat,
-            longitude: lng,
-            maps_url: mapsUrl
-          });
-        },
-        () => {
-          alert('Posizione non disponibile o permesso negato. La segnalazione verrà inviata via WhatsApp senza coordinate.');
-          logAndOpen(baseMessage);
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      );
-    }
-
     sendBtn.addEventListener('click', goInternal);
-    if (sendWhatsappBtn) sendWhatsappBtn.addEventListener('click', goWhatsApp);
 
     async function init() {
       if (!publicId) {
