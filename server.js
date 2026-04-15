@@ -1377,11 +1377,13 @@ app.post('/api/admin/push-broadcast', requireAdmin, async (req, res) => {
         }
       };
 
+      const directOwnerUrl = `/owner-simple.html?code=${encodeURIComponent(String(row.code || '').trim().toUpperCase())}&plate=${encodeURIComponent(String(row.plate || '').trim())}`;
+
       const payloadBase = {
         title: cleanTitle,
         body: cleanMessage,
-        url: cleanUrl || '/owner-login.html',
-        targetUrl: cleanUrl || '/owner-login.html',
+        url: cleanUrl || directOwnerUrl,
+        targetUrl: cleanUrl || directOwnerUrl,
         icon: '/icons/android-chrome-192x192.png',
         badge: '/icons/favicon-32x32.png',
         broadcastNotificationId: notificationId,
