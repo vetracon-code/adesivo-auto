@@ -52,7 +52,8 @@ self.addEventListener('notificationclick', (event) => {
   const data = event.notification && event.notification.data ? event.notification.data : {};
   const notificationId = data.broadcastNotificationId;
   const recipientId = data.broadcastRecipientId;
-  const targetUrl = data.targetUrl || data.url || '/owner-login.html';
+  const rawTargetUrl = data.targetUrl || data.url || '/owner-login.html';
+  const targetUrl = new URL(rawTargetUrl, self.location.origin).href;
 
   event.waitUntil((async () => {
     if (notificationId && recipientId) {
@@ -70,11 +71,13 @@ self.addEventListener('notificationclick', (event) => {
 
     const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of clientList) {
-      if ('focus' in client) {
-        if ('navigate' in client) {
+      if (client.url && client.url.startsWith(self.location.origin)) {
+        try {
           await client.navigate(targetUrl);
+        } catch (e) {}
+        if ('focus' in client) {
+          return client.focus();
         }
-        return client.focus();
       }
     }
 
