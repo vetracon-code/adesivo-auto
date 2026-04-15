@@ -305,9 +305,26 @@ app.post('/api/push/subscribe', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Dati subscription mancanti.' });
     }
 
+    const cleanCode = String(code).trim().toUpperCase();
+    const cleanPlate = plate || null;
+
+    const existing = await pool.query(
+      `SELECT id
+       FROM push_subscriptions
+       WHERE code = $1
+         AND plate IS NOT DISTINCT FROM $2
+         AND endpoint <> $3
+         AND is_active = TRUE
+       ORDER BY id ASC`,
+      [cleanCode, cleanPlate, subscription.endpoint]
+    );
+
+    const isFirstDevice = existing.rows.length === 0;
+
     await pool.query(
-      `INSERT INTO push_subscriptions (code, plate, endpoint, p256dh, auth, user_agent, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      `INSERT INTO push_subscriptions
+       (code, plate, endpoint, p256dh, auth, user_agent, updated_at, is_primary, receive_admin_alerts, receive_passenger_alerts, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, TRUE, TRUE)
        ON CONFLICT (endpoint)
        DO UPDATE SET
          code = EXCLUDED.code,
@@ -317,16 +334,18 @@ app.post('/api/push/subscribe', async (req, res) => {
          user_agent = EXCLUDED.user_agent,
          updated_at = NOW()`,
       [
-        String(code).trim().toUpperCase(),
-        plate || null,
+        cleanCode,
+        cleanPlate,
         subscription.endpoint,
         subscription.keys.p256dh,
         subscription.keys.auth,
-        req.headers['user-agent'] || null
+        req.headers['user-agent'] || null,
+        isFirstDevice,
+        isFirstDevice
       ]
     );
 
-    return res.json({ success: true });
+    return res.json({ success: true, is_primary: isFirstDevice });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ success: false, error: 'Errore salvataggio subscription.' });
@@ -1318,7 +1337,7 @@ app.post('/api/admin/push-broadcast', requireAdmin, async (req, res) => {
         ps.plate
       FROM push_subscriptions ps
       LEFT JOIN sticker_codes sc ON sc.code = ps.code
-      ${whereClause}
+      ${whereClause ? whereClause + " AND " : "WHERE "} ps.is_active = TRUE AND ps.receive_admin_alerts = TRUE
       `
     );
 
