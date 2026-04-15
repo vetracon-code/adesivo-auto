@@ -350,7 +350,8 @@
         <input id="adminSearch" class="search" type="text" placeholder="Cerca per codice, public_id o targa">
         <button id="adminSearchBtn" class="btn btn-primary" type="button">Cerca</button>
         <button id="adminReloadBtn" class="btn btn-secondary" type="button">Ricarica</button>
-                <button id="adminLogoutBtn" class="btn btn-secondary" type="button">Logout</button>
+        <button id="adminAbuseBtnTop" class="btn btn-secondary" type="button">Blocchi abuso</button>
+        <button id="adminLogoutBtn" class="btn btn-secondary" type="button">Logout</button>
       </div>
 
       <div class="toolbar" style="padding-top:0;">
@@ -487,6 +488,55 @@
     </div>
   </div>
 
+
+  <div id="abuseModal" class="modal">
+    <div class="modal-card" style="width:min(980px,100%);">
+      <h2 style="margin-top:0;">Blocchi abuso</h2>
+      <div class="muted" style="margin-bottom:12px;line-height:1.5;">
+        Qui puoi vedere i blocchi attivi o storici e sbloccarli per i test.
+      </div>
+      <div style="display:grid;gap:12px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
+          <input id="abuseCode" class="input" placeholder="Codice" />
+          <input id="abusePlate" class="input" placeholder="Targa" />
+          <select id="abuseType" class="select">
+            <option value="phone">Telefono</option>
+            <option value="ip">IP</option>
+          </select>
+          <input id="abuseValue" class="input" placeholder="Numero o IP da bloccare" />
+        </div>
+        <input id="abuseReasonInput" class="input" placeholder="Motivo blocco (facoltativo)" />
+        <div class="actions">
+          <button id="createAbuseBtn" class="btn btn-primary" type="button">Blocca ora</button>
+        </div>
+        <div id="abuseResult" class="muted"></div>
+        <div style="max-height:55vh;overflow:auto;border:1px solid rgba(255,255,255,.08);border-radius:16px;">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Codice</th>
+                <th>Targa</th>
+                <th>Tipo</th>
+                <th>Valore</th>
+                <th>Motivo</th>
+                <th>Stato</th>
+                <th>Aggiornato</th>
+                <th>Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="abuseTableBody">
+              <tr><td colspan="9" class="muted">Caricamento...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="actions" style="margin-top:16px;">
+        <button id="closeAbuseBtn" class="btn btn-secondary" type="button">Chiudi</button>
+      </div>
+    </div>
+  </div>
+
   <div id="editModal" class="modal">
     <div class="modal-card">
       <h2 style="margin-top:0;">Modifica record</h2>
@@ -520,6 +570,7 @@
     const modal = document.getElementById('editModal');
     const inviteModal = document.getElementById('inviteModal');
     const collectedModal = document.getElementById('collectedModal');
+    const abuseModal = document.getElementById('abuseModal');
     const deliverWebAppModal = document.getElementById('deliverWebAppModal');
     const editResult = document.getElementById('editResult');
     const inviteResult = document.getElementById('inviteResult');
@@ -1093,6 +1144,98 @@
       collectedModal.style.display = 'none';
     });
 
+
+    async function loadAbuseBlocks(){
+      const body = document.getElementById('abuseTableBody');
+      const result = document.getElementById('abuseResult');
+      body.innerHTML = '<tr><td colspan="9" class="muted">Caricamento...</td></tr>';
+      result.textContent = '';
+
+      try {
+        const res = await fetch('/api/admin/list-abuse-blocks', { method: 'POST' });
+        const data = await res.json();
+
+        if(!res.ok || !data.success){
+          body.innerHTML = '<tr><td colspan="9" class="danger">Errore caricamento blocchi.</td></tr>';
+          return;
+        }
+
+        const items = data.items || [];
+        if(!items.length){
+          body.innerHTML = '<tr><td colspan="9" class="muted">Nessun blocco presente.</td></tr>';
+          return;
+        }
+
+        body.innerHTML = items.map(item => `
+          <tr>
+            <td>${item.id}</td>
+            <td class="mono">${item.code || '-'}</td>
+            <td>${item.plate || '-'}</td>
+            <td>${item.block_type || '-'}</td>
+            <td class="mono">${item.block_value || '-'}</td>
+            <td>${item.reason || '-'}</td>
+            <td>${item.is_active ? '<span class="status disabled">ATTIVO</span>' : '<span class="status used">SBLOCCATO</span>'}</td>
+            <td>${fmtDate(item.updated_at || item.created_at)}</td>
+            <td>
+              ${item.is_active ? `<button class="mini" type="button" onclick="unblockAbuse(${item.id})">Sblocca</button>` : '<span class="muted">-</span>'}
+            </td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        body.innerHTML = '<tr><td colspan="9" class="danger">Errore caricamento blocchi.</td></tr>';
+      }
+    }
+
+    window.unblockAbuse = async function(id){
+      const result = document.getElementById('abuseResult');
+      result.textContent = '';
+      const res = await fetch('/api/admin/unblock-abuse', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ id })
+      });
+      const data = await res.json();
+      result.textContent = data.success ? 'Blocco disattivato.' : (data.error || 'Errore sblocco.');
+      if(data.success) loadAbuseBlocks();
+    }
+
+    document.getElementById('adminAbuseBtnTop').addEventListener('click', async () => {
+      abuseModal.style.display = 'flex';
+      await loadAbuseBlocks();
+    });
+
+    document.getElementById('createAbuseBtn').addEventListener('click', async () => {
+      const result = document.getElementById('abuseResult');
+      const payload = {
+        code: document.getElementById('abuseCode').value.trim().toUpperCase() || null,
+        plate: document.getElementById('abusePlate').value.trim().toUpperCase().replace(/\s+/g, '') || null,
+        block_type: document.getElementById('abuseType').value,
+        block_value: document.getElementById('abuseValue').value.trim(),
+        reason: document.getElementById('abuseReasonInput').value.trim() || 'Uso improprio del servizio'
+      };
+
+      if(!payload.block_value){
+        result.textContent = 'Inserisci un numero o un IP da bloccare.';
+        return;
+      }
+
+      const res = await fetch('/api/admin/block-abuse', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      result.textContent = data.success ? 'Blocco salvato.' : (data.error || 'Errore blocco.');
+      if(data.success){
+        document.getElementById('abuseValue').value = '';
+        document.getElementById('abuseReasonInput').value = '';
+        loadAbuseBlocks();
+      }
+    });
+
+    document.getElementById('closeAbuseBtn').addEventListener('click', () => {
+      abuseModal.style.display = 'none';
+    });
 
     document.getElementById('adminLogoutBtn').addEventListener('click', async () => {
       await fetch('/api/admin-logout', { method: 'POST' });
