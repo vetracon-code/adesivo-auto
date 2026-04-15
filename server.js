@@ -639,6 +639,22 @@ app.post('/api/owner-heartbeat', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Record non trovato.' });
     }
 
+    await pool.query(
+      `UPDATE broadcast_notification_recipients
+       SET status = 'opened',
+           opened_at = COALESCE(opened_at, NOW())
+       WHERE id = (
+         SELECT id
+         FROM broadcast_notification_recipients
+         WHERE code = $1
+           AND plate = $2
+           AND status = 'sent'
+         ORDER BY id DESC
+         LIMIT 1
+       )`,
+      [code, plate]
+    );
+
     return res.json({ success: true, data: result.rows[0] });
   } catch (err) {
     console.error(err);
@@ -1406,6 +1422,7 @@ app.post('/api/admin/push-broadcast', requireAdmin, async (req, res) => {
 
 app.post('/api/push/broadcast-opened', async (req, res) => {
   try {
+    console.log('PUSH OPEN HIT', new Date().toISOString(), req.body);
     const { recipient_id, notification_id } = req.body || {};
     if (!recipient_id || !notification_id) {
       return res.status(400).json({ success: false, error: 'Dati tracking mancanti.' });
