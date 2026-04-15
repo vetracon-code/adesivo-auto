@@ -164,6 +164,47 @@
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
     .full{grid-column:1 / -1}
     .helper{padding:0 26px 20px;color:var(--muted);font-size:.9rem}
+    .push-broadcast{
+      margin:0 26px 20px;
+      padding:18px;
+      border-radius:24px;
+      border:1px solid rgba(255,255,255,.08);
+      background:linear-gradient(180deg, rgba(255,255,255,.04) 0%, rgba(255,255,255,.02) 100%);
+    }
+    .push-broadcast h2{
+      margin:0;
+      font-size:1.05rem;
+      font-weight:900;
+      letter-spacing:-.02em;
+      color:#fff;
+    }
+    .push-broadcast .copy{
+      margin-top:8px;
+      color:var(--muted);
+      line-height:1.5;
+      font-size:.94rem;
+      max-width:860px;
+    }
+    .push-grid{
+      margin-top:14px;
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+    }
+    .push-grid .full{
+      grid-column:1 / -1;
+    }
+    .push-broadcast textarea{
+      min-height:110px;
+      padding:12px 14px;
+      resize:vertical;
+    }
+    .push-result{
+      margin-top:12px;
+      color:var(--muted);
+      font-size:.9rem;
+      line-height:1.45;
+    }
     @media (max-width:1200px){.kpis{grid-template-columns:repeat(2,1fr)}}
     @media (max-width:900px){
       .grid{grid-template-columns:1fr}
@@ -238,6 +279,27 @@
       </div>
 
       <div id="adminCreateResult" class="helper"></div>
+
+      <div class="push-broadcast">
+        <h2>Invio push clienti</h2>
+        <div class="copy">Invia una notifica push simultanea ai clienti con notifiche attive. Se inserisci un URL, l’utente lo aprirà toccando la notifica.</div>
+        <div class="push-grid">
+          <input id="pushTitle" class="input" placeholder="Titolo notifica">
+          <select id="pushAudience" class="select">
+            <option value="all">Tutti con push attivo</option>
+            <option value="used">Solo attivi</option>
+            <option value="new">Solo nuovi da attivare</option>
+            <option value="disabled">Solo disattivati</option>
+            <option value="reactivated">Solo riattivati</option>
+          </select>
+          <textarea id="pushMessage" class="input full" placeholder="Messaggio push"></textarea>
+          <input id="pushUrl" class="input full" placeholder="URL da aprire al tap sulla notifica (facoltativo)">
+        </div>
+        <div class="actions" style="margin-top:14px;">
+          <button id="sendBroadcastPushBtn" class="btn btn-primary" type="button">Invia push ora</button>
+        </div>
+        <div id="pushBroadcastResult" class="push-result"></div>
+      </div>
 
       <div class="helper">Controlla qui le aperture reali, le segnalazioni inviate e i record che richiedono correzione prima dell’uso pubblico.</div>
 
@@ -364,6 +426,7 @@
     const deliverWebAppModal = document.getElementById('deliverWebAppModal');
     const editResult = document.getElementById('editResult');
     const inviteResult = document.getElementById('inviteResult');
+    const pushBroadcastResult = document.getElementById('pushBroadcastResult');
     let adminItems = [];
     let deliverWebAppState = null;
 
@@ -404,6 +467,47 @@
 
     function buildFeedbackText(item){
       return `Ciao, ho visto che il servizio associato al tuo QR veicolo non è stato ancora rinnovato. Se non desideri proseguire, mi sarebbe molto utile capire il motivo tramite un breve form anonimo:\n\n${buildFeedbackLink(item)}\n\nIl tuo riscontro ci aiuta a migliorare il servizio.`;
+    }
+
+    async function sendBroadcastPush(){
+      const title = document.getElementById('pushTitle').value.trim();
+      const message = document.getElementById('pushMessage').value.trim();
+      const url = document.getElementById('pushUrl').value.trim();
+      const audience = document.getElementById('pushAudience').value;
+
+      pushBroadcastResult.textContent = '';
+
+      if (!title) {
+        pushBroadcastResult.textContent = 'Inserisci il titolo della notifica.';
+        return;
+      }
+      if (!message) {
+        pushBroadcastResult.textContent = 'Inserisci il messaggio della notifica.';
+        return;
+      }
+
+      const ok = confirm('Confermi l’invio push massivo ai destinatari selezionati?');
+      if (!ok) return;
+
+      pushBroadcastResult.textContent = 'Invio in corso...';
+
+      try {
+        const res = await fetch('/api/admin/push-broadcast', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ title, message, url, audience })
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          pushBroadcastResult.textContent = data.error || 'Errore invio push.';
+          return;
+        }
+
+        pushBroadcastResult.textContent = `Invio completato. Consegnate: ${data.sent || 0} · Fallite: ${data.failed || 0} · Totale target: ${data.total || 0}`;
+      } catch (err) {
+        pushBroadcastResult.textContent = 'Errore invio push.';
+      }
     }
 
     function statusBadge(v){
@@ -827,6 +931,7 @@
     }
 
     document.getElementById('adminReloadBtn').addEventListener('click', () => loadAdmin(searchEl.value.trim()));
+    document.getElementById('sendBroadcastPushBtn').addEventListener('click', sendBroadcastPush);
     document.getElementById('adminCollectedBtn').addEventListener('click', async () => {
       await loadCollectedData();
       collectedModal.style.display = 'flex';

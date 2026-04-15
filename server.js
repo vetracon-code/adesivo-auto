@@ -1264,6 +1264,103 @@ app.post('/api/admin/save-invite', requireAdmin, async (req, res) => {
 });
 
 
+
+app.post('/api/admin/push-broadcast', requireAdmin, async (req, res) => {
+  try {
+    const {
+      title,
+      message,
+      url,
+      audience = 'all'
+    } = req.body || {};
+
+    const cleanTitle = String(title || '').trim();
+    const cleanMessage = String(message || '').trim();
+    const cleanUrl = String(url || '').trim();
+
+    if (!cleanTitle) {
+      return res.status(400).json({ success: false, error: 'Titolo mancante.' });
+    }
+    if (!cleanMessage) {
+      return res.status(400).json({ success: false, error: 'Messaggio mancante.' });
+    }
+
+    let whereClause = '';
+    if (audience === 'used') whereClause = "WHERE sc.status = 'used'";
+    else if (audience === 'new') whereClause = "WHERE sc.status = 'new'";
+    else if (audience === 'disabled') whereClause = "WHERE sc.status = 'disabled'";
+    else if (audience === 'reactivated') whereClause = "WHERE sc.status = 'reactivated'";
+
+    const rows = await pool.query(
+      `
+      SELECT DISTINCT
+        ps.endpoint,
+        ps.p256dh,
+        ps.auth,
+        ps.code,
+        ps.plate
+      FROM push_subscriptions ps
+      LEFT JOIN sticker_codes sc ON sc.code = ps.code
+      ${whereClause}
+      `
+    );
+
+    if (!rows.rows.length) {
+      return res.json({ success: true, sent: 0, failed: 0, total: 0 });
+    }
+
+    let sent = 0;
+    let failed = 0;
+
+    const payloadBase = {
+      title: cleanTitle,
+      body: cleanMessage,
+      url: cleanUrl || '/admin.html',
+      targetUrl: cleanUrl || '/admin.html',
+      icon: '/icons/android-chrome-192x192.png',
+      badge: '/icons/favicon-32x32.png'
+    };
+
+    for (const row of rows.rows) {
+      const subscription = {
+        endpoint: row.endpoint,
+        keys: {
+          p256dh: row.p256dh,
+          auth: row.auth
+        }
+      };
+
+      try {
+        await webpush.sendNotification(subscription, JSON.stringify(payloadBase));
+        sent += 1;
+      } catch (err) {
+        failed += 1;
+        console.error('Broadcast push failed:', row.code, row.endpoint, err?.message || err);
+
+        const statusCode = err?.statusCode || 0;
+        if (statusCode === 404 || statusCode === 410) {
+          try {
+            await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [row.endpoint]);
+          } catch (cleanupErr) {
+            console.error('Failed removing expired push subscription:', cleanupErr?.message || cleanupErr);
+          }
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      sent,
+      failed,
+      total: rows.rows.length
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore invio push massivo.' });
+  }
+});
+
+
 app.post('/api/admin/fix-qr-url', requireAdmin, async (req, res) => {
   try {
     const { code } = req.body || {};
