@@ -1310,6 +1310,7 @@ app.post('/api/owner-dashboard', async (req, res) => {
             viewed_at AS at,
             COALESCE(ip_city, '') AS ip_city,
             COALESCE(ip_region, '') AS ip_region,
+            COALESCE(ip_country, '') AS ip_country,
             FALSE AS location_shared
            FROM contact_page_views
            WHERE code = $1)
