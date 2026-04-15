@@ -1346,7 +1346,7 @@ app.post('/api/admin/push-broadcast', requireAdmin, async (req, res) => {
        (title, message_text, target_url, audience, total_targets)
        VALUES ($1,$2,$3,$4,$5)
        RETURNING id`,
-      [cleanTitle, cleanMessage, cleanUrl || '/owner-login.html', audience, rows.rows.length]
+      [cleanTitle, cleanMessage, (!cleanUrl || cleanUrl === '/owner-login.html') ? '/owner-simple.html' : cleanUrl, audience, rows.rows.length]
     );
 
     const notificationId = notificationInsert.rows[0].id;
@@ -1378,12 +1378,13 @@ app.post('/api/admin/push-broadcast', requireAdmin, async (req, res) => {
       };
 
       const directOwnerUrl = `/owner-simple.html?code=${encodeURIComponent(String(row.code || '').trim().toUpperCase())}&plate=${encodeURIComponent(String(row.plate || '').trim())}`;
+      const resolvedOwnerUrl = (!cleanUrl || cleanUrl === '/owner-login.html') ? directOwnerUrl : cleanUrl;
 
       const payloadBase = {
         title: cleanTitle,
         body: cleanMessage,
-        url: cleanUrl || directOwnerUrl,
-        targetUrl: cleanUrl || directOwnerUrl,
+        url: resolvedOwnerUrl,
+        targetUrl: resolvedOwnerUrl,
         icon: '/icons/android-chrome-192x192.png',
         badge: '/icons/favicon-32x32.png',
         broadcastNotificationId: notificationId,
