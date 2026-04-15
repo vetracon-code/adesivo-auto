@@ -512,6 +512,33 @@ app.post('/api/log-contact-view', async (req, res) => {
     const userAgent = req.headers['user-agent'] || null;
     const area = await lookupIpArea(ip);
 
+    const cleanCode = code ? String(code).trim().toUpperCase() : null;
+    const cleanPlate = plate ? String(plate).trim().toUpperCase().replace(/\s+/g, '') : null;
+    const cleanPhone = sender_phone ? String(sender_phone).trim() : null;
+
+    const blocked = await pool.query(
+      `SELECT id, block_type, block_value, reason
+       FROM abuse_blocks
+       WHERE is_active = TRUE
+         AND COALESCE(code,'') = COALESCE($1,'')
+         AND COALESCE(plate,'') = COALESCE($2,'')
+         AND (
+           (block_type = 'ip' AND block_value = COALESCE($3,'')) OR
+           (block_type = 'phone' AND block_value = COALESCE($4,''))
+         )
+       ORDER BY id DESC
+       LIMIT 1`,
+      [cleanCode, cleanPlate, ip || '', cleanPhone || '']
+    );
+
+    if (blocked.rows.length) {
+      return res.status(429).json({
+        success: false,
+        blocked: true,
+        error: 'Questo accesso è stato bloccato per uso improprio del servizio. I dati tecnici dell’evento sono stati registrati e potranno essere segnalati alle autorità competenti.'
+      });
+    }
+
     await pool.query(
       `INSERT INTO contact_page_views
        (code, plate, brand, vehicle_model, color, ip_address, ip_city, ip_region, ip_country, user_agent)
@@ -554,6 +581,33 @@ app.post('/api/log-contact-message', async (req, res) => {
 
     const userAgent = req.headers['user-agent'] || null;
     const area = await lookupIpArea(ip);
+
+    const cleanCode = code ? String(code).trim().toUpperCase() : null;
+    const cleanPlate = plate ? String(plate).trim().toUpperCase().replace(/\s+/g, '') : null;
+    const cleanPhone = sender_phone ? String(sender_phone).trim() : null;
+
+    const blocked = await pool.query(
+      `SELECT id, block_type, block_value, reason
+       FROM abuse_blocks
+       WHERE is_active = TRUE
+         AND COALESCE(code,'') = COALESCE($1,'')
+         AND COALESCE(plate,'') = COALESCE($2,'')
+         AND (
+           (block_type = 'ip' AND block_value = COALESCE($3,'')) OR
+           (block_type = 'phone' AND block_value = COALESCE($4,''))
+         )
+       ORDER BY id DESC
+       LIMIT 1`,
+      [cleanCode, cleanPlate, ip || '', cleanPhone || '']
+    );
+
+    if (blocked.rows.length) {
+      return res.status(429).json({
+        success: false,
+        blocked: true,
+        error: 'Questo accesso è stato bloccato per uso improprio del servizio. I dati tecnici dell’evento sono stati registrati e potranno essere segnalati alle autorità competenti.'
+      });
+    }
 
     await pool.query(
       `INSERT INTO contact_message_logs
@@ -639,6 +693,96 @@ app.post('/api/log-contact-message', async (req, res) => {
 
 
 
+
+
+app.post('/api/admin/block-abuse', requireAdmin, async (req, res) => {
+  try {
+    const { code, plate, block_type, block_value, reason } = req.body || {};
+    const allowed = new Set(['ip', 'phone']);
+    if (!block_type || !allowed.has(String(block_type))) {
+      return res.status(400).json({ success: false, error: 'Tipo blocco non valido.' });
+    }
+    if (!block_value || !String(block_value).trim()) {
+      return res.status(400).json({ success: false, error: 'Valore blocco mancante.' });
+    }
+
+    const cleanCode = code ? String(code).trim().toUpperCase() : null;
+    const cleanPlate = plate ? String(plate).trim().toUpperCase().replace(/\s+/g, '') : null;
+    const cleanValue = String(block_value).trim();
+    const cleanReason = reason ? String(reason).trim() : 'Uso improprio del servizio';
+
+    const result = await pool.query(
+      `INSERT INTO abuse_blocks (code, plate, block_type, block_value, reason, is_active, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,TRUE,NOW(),NOW())
+       ON CONFLICT DO NOTHING
+       RETURNING id, code, plate, block_type, block_value, reason, is_active, created_at`,
+      [cleanCode, cleanPlate, block_type, cleanValue, cleanReason]
+    );
+
+    if (!result.rows.length) {
+      const existing = await pool.query(
+        `UPDATE abuse_blocks
+         SET is_active = TRUE,
+             reason = $5,
+             updated_at = NOW()
+         WHERE COALESCE(code,'') = COALESCE($1,'')
+           AND COALESCE(plate,'') = COALESCE($2,'')
+           AND block_type = $3
+           AND block_value = $4
+         RETURNING id, code, plate, block_type, block_value, reason, is_active, created_at`,
+        [cleanCode, cleanPlate, block_type, cleanValue, cleanReason]
+      );
+      return res.json({ success: true, item: existing.rows[0] || null });
+    }
+
+    return res.json({ success: true, item: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore blocco abuso.' });
+  }
+});
+
+app.post('/api/admin/unblock-abuse', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.body || {};
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'ID blocco mancante.' });
+    }
+
+    const result = await pool.query(
+      `UPDATE abuse_blocks
+       SET is_active = FALSE,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, code, plate, block_type, block_value, reason, is_active, updated_at`,
+      [id]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, error: 'Blocco non trovato.' });
+    }
+
+    return res.json({ success: true, item: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore sblocco abuso.' });
+  }
+});
+
+app.post('/api/admin/list-abuse-blocks', requireAdmin, async (req, res) => {
+  try {
+    const rows = await pool.query(
+      `SELECT id, code, plate, block_type, block_value, reason, is_active, created_at, updated_at
+       FROM abuse_blocks
+       ORDER BY is_active DESC, updated_at DESC, id DESC
+       LIMIT 300`
+    );
+    return res.json({ success: true, items: rows.rows });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore elenco blocchi.' });
+  }
+});
 
 app.post('/api/owner-heartbeat', async (req, res) => {
   try {
@@ -2214,8 +2358,24 @@ async function initDb() {
 
     await pool.query("ALTER TABLE sticker_codes ADD COLUMN IF NOT EXISTS brand TEXT");
     await pool.query("ALTER TABLE sticker_codes ADD COLUMN IF NOT EXISTS color TEXT");
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS abuse_blocks (
+        id SERIAL PRIMARY KEY,
+        code TEXT,
+        plate TEXT,
+        block_type TEXT NOT NULL,
+        block_value TEXT NOT NULL,
+        reason TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
     console.log('Tabella sticker_codes pronta');
     console.log('Tabella qr_scans pronta');
+    console.log('Tabella abuse_blocks pronta');
   } catch (err) {
     console.error('Errore init DB:', err);
     throw err;
