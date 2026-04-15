@@ -205,6 +205,91 @@
       font-size:.9rem;
       line-height:1.45;
     }
+    .last-push{
+      margin:0 26px 20px;
+      padding:18px;
+      border-radius:24px;
+      border:1px solid rgba(255,255,255,.08);
+      background:linear-gradient(180deg, rgba(255,255,255,.04) 0%, rgba(255,255,255,.02) 100%);
+    }
+    .last-push h2{
+      margin:0;
+      font-size:1.02rem;
+      font-weight:900;
+      letter-spacing:-.02em;
+      color:#fff;
+    }
+    .last-push-copy{
+      margin-top:8px;
+      color:var(--muted);
+      line-height:1.5;
+      font-size:.94rem;
+    }
+    .last-push-stats{
+      margin-top:14px;
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:12px;
+    }
+    .last-push-box{
+      border-radius:18px;
+      border:1px solid rgba(255,255,255,.08);
+      background:rgba(255,255,255,.03);
+      padding:14px 14px;
+    }
+    .last-push-box .label{
+      color:#9fb1c8;
+      font-size:.8rem;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+    }
+    .last-push-box .value{
+      margin-top:6px;
+      font-size:1.2rem;
+      font-weight:900;
+      color:#fff;
+    }
+    .last-push-list{
+      margin-top:14px;
+      display:grid;
+      gap:10px;
+    }
+    .last-push-row{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:center;
+      padding:12px 14px;
+      border-radius:16px;
+      border:1px solid rgba(255,255,255,.08);
+      background:rgba(255,255,255,.03);
+    }
+    .last-push-main{
+      color:#fff;
+      font-weight:800;
+      line-height:1.3;
+    }
+    .last-push-sub{
+      margin-top:4px;
+      color:var(--muted);
+      font-size:.86rem;
+      line-height:1.4;
+    }
+    .push-flag{
+      min-width:18px;
+      width:18px;
+      height:18px;
+      border-radius:999px;
+      flex:0 0 auto;
+    }
+    .push-flag.opened{
+      background:#20c05c;
+      box-shadow:0 0 0 4px rgba(32,192,92,.15);
+    }
+    .push-flag.pending{
+      background:#d64545;
+      box-shadow:0 0 0 4px rgba(214,69,69,.15);
+    }
     @media (max-width:1200px){.kpis{grid-template-columns:repeat(2,1fr)}}
     @media (max-width:900px){
       .grid{grid-template-columns:1fr}
@@ -299,6 +384,18 @@
           <button id="sendBroadcastPushBtn" class="btn btn-primary" type="button">Invia push ora</button>
         </div>
         <div id="pushBroadcastResult" class="push-result"></div>
+      </div>
+
+      <div class="last-push">
+        <h2>Ultima push inviata</h2>
+        <div class="last-push-copy">Verde = notifica aperta. Rosso = non ancora aperta.</div>
+        <div class="last-push-stats">
+          <div class="last-push-box"><div class="label">Inviati</div><div class="value" id="lastPushSent">-</div></div>
+          <div class="last-push-box"><div class="label">Aperti</div><div class="value" id="lastPushOpened">-</div></div>
+          <div class="last-push-box"><div class="label">Non aperti</div><div class="value" id="lastPushPending">-</div></div>
+        </div>
+        <div id="lastPushMeta" class="last-push-copy" style="margin-top:12px;"></div>
+        <div id="lastPushList" class="last-push-list"></div>
       </div>
 
       <div class="helper">Controlla qui le aperture reali, le segnalazioni inviate e i record che richiedono correzione prima dell’uso pubblico.</div>
@@ -427,6 +524,8 @@
     const editResult = document.getElementById('editResult');
     const inviteResult = document.getElementById('inviteResult');
     const pushBroadcastResult = document.getElementById('pushBroadcastResult');
+    const lastPushList = document.getElementById('lastPushList');
+    const lastPushMeta = document.getElementById('lastPushMeta');
     let adminItems = [];
     let deliverWebAppState = null;
 
@@ -469,6 +568,58 @@
       return `Ciao, ho visto che il servizio associato al tuo QR veicolo non è stato ancora rinnovato. Se non desideri proseguire, mi sarebbe molto utile capire il motivo tramite un breve form anonimo:\n\n${buildFeedbackLink(item)}\n\nIl tuo riscontro ci aiuta a migliorare il servizio.`;
     }
 
+    async function loadLastBroadcastStatus(){
+      try {
+        const res = await fetch('/api/admin/last-broadcast-status');
+        const data = await res.json();
+
+        const setText = (id, value) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = value ?? '-';
+        };
+
+        if (!res.ok || !data.success || !data.notification) {
+          setText('lastPushSent', 0);
+          setText('lastPushOpened', 0);
+          setText('lastPushPending', 0);
+          if (lastPushMeta) lastPushMeta.textContent = 'Nessuna push inviata.';
+          if (lastPushList) lastPushList.innerHTML = '';
+          return;
+        }
+
+        const n = data.notification;
+        const recipients = Array.isArray(data.recipients) ? data.recipients : [];
+        const opened = recipients.filter(x => x.status === 'opened').length;
+        const pending = recipients.length - opened;
+
+        setText('lastPushSent', n.total_sent ?? recipients.length);
+        setText('lastPushOpened', opened);
+        setText('lastPushPending', pending);
+
+        if (lastPushMeta) {
+          lastPushMeta.textContent = `${n.title || '-'} · ${new Date(n.created_at).toLocaleString('it-IT')}`;
+        }
+
+        if (lastPushList) {
+          if (!recipients.length) {
+            lastPushList.innerHTML = '<div class="muted">Nessun destinatario registrato.</div>';
+          } else {
+            lastPushList.innerHTML = recipients.slice(0, 20).map(item => `
+              <div class="last-push-row">
+                <div>
+                  <div class="last-push-main">${item.plate || '-'} ${item.code ? '· ' + item.code : ''}</div>
+                  <div class="last-push-sub">${item.opened_at ? 'Aperta: ' + new Date(item.opened_at).toLocaleString('it-IT') : 'Non ancora aperta'}</div>
+                </div>
+                <div class="push-flag ${item.status === 'opened' ? 'opened' : 'pending'}"></div>
+              </div>
+            `).join('');
+          }
+        }
+      } catch (err) {
+        if (lastPushMeta) lastPushMeta.textContent = 'Errore lettura ultima push.';
+      }
+    }
+
     async function sendBroadcastPush(){
       const title = document.getElementById('pushTitle').value.trim();
       const message = document.getElementById('pushMessage').value.trim();
@@ -505,6 +656,7 @@
         }
 
         pushBroadcastResult.textContent = `Invio completato. Consegnate: ${data.sent || 0} · Fallite: ${data.failed || 0} · Totale target: ${data.total || 0}`;
+        loadLastBroadcastStatus();
       } catch (err) {
         pushBroadcastResult.textContent = 'Errore invio push.';
       }
@@ -932,6 +1084,7 @@
 
     document.getElementById('adminReloadBtn').addEventListener('click', () => loadAdmin(searchEl.value.trim()));
     document.getElementById('sendBroadcastPushBtn').addEventListener('click', sendBroadcastPush);
+    loadLastBroadcastStatus();
     document.getElementById('adminCollectedBtn').addEventListener('click', async () => {
       await loadCollectedData();
       collectedModal.style.display = 'flex';

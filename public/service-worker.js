@@ -48,6 +48,25 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+
+  const data = event.notification && event.notification.data ? event.notification.data : {};
+  const notificationId = data.broadcastNotificationId;
+  const recipientId = data.broadcastRecipientId;
+  const targetUrl = data.targetUrl || data.url || '/';
+
+  event.waitUntil((async () => {
+    if (notificationId && recipientId) {
+      try {
+        await fetch('/api/push/broadcast-opened', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            notification_id: notificationId,
+            recipient_id: recipientId
+          })
+        });
+      } catch (e) {}
+    }
   const targetUrl = event.notification.data?.url || '/owner-login.html';
 
   event.waitUntil(

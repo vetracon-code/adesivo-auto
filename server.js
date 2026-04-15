@@ -1265,6 +1265,7 @@ app.post('/api/admin/save-invite', requireAdmin, async (req, res) => {
 
 
 
+
 app.post('/api/admin/push-broadcast', requireAdmin, async (req, res) => {
   try {
     const {
@@ -1305,23 +1306,34 @@ app.post('/api/admin/push-broadcast', requireAdmin, async (req, res) => {
       `
     );
 
+    const notificationInsert = await pool.query(
+      `INSERT INTO broadcast_notifications
+       (title, message_text, target_url, audience, total_targets)
+       VALUES ($1,$2,$3,$4,$5)
+       RETURNING id`,
+      [cleanTitle, cleanMessage, cleanUrl || '/admin.html', audience, rows.rows.length]
+    );
+
+    const notificationId = notificationInsert.rows[0].id;
+
     if (!rows.rows.length) {
-      return res.json({ success: true, sent: 0, failed: 0, total: 0 });
+      return res.json({ success: true, sent: 0, failed: 0, total: 0, notification_id: notificationId });
     }
 
     let sent = 0;
     let failed = 0;
 
-    const payloadBase = {
-      title: cleanTitle,
-      body: cleanMessage,
-      url: cleanUrl || '/admin.html',
-      targetUrl: cleanUrl || '/admin.html',
-      icon: '/icons/android-chrome-192x192.png',
-      badge: '/icons/favicon-32x32.png'
-    };
-
     for (const row of rows.rows) {
+      const recipientInsert = await pool.query(
+        `INSERT INTO broadcast_notification_recipients
+         (notification_id, code, plate, endpoint, status)
+         VALUES ($1,$2,$3,$4,'sent')
+         RETURNING id`,
+        [notificationId, row.code || null, row.plate || null, row.endpoint]
+      );
+
+      const recipientId = recipientInsert.rows[0].id;
+
       const subscription = {
         endpoint: row.endpoint,
         keys: {
@@ -1330,12 +1342,30 @@ app.post('/api/admin/push-broadcast', requireAdmin, async (req, res) => {
         }
       };
 
+      const payloadBase = {
+        title: cleanTitle,
+        body: cleanMessage,
+        url: cleanUrl || '/admin.html',
+        targetUrl: cleanUrl || '/admin.html',
+        icon: '/icons/android-chrome-192x192.png',
+        badge: '/icons/favicon-32x32.png',
+        broadcastNotificationId: notificationId,
+        broadcastRecipientId: recipientId
+      };
+
       try {
         await webpush.sendNotification(subscription, JSON.stringify(payloadBase));
         sent += 1;
       } catch (err) {
         failed += 1;
         console.error('Broadcast push failed:', row.code, row.endpoint, err?.message || err);
+
+        await pool.query(
+          `UPDATE broadcast_notification_recipients
+           SET status = 'failed'
+           WHERE id = $1`,
+          [recipientId]
+        );
 
         const statusCode = err?.statusCode || 0;
         if (statusCode === 404 || statusCode === 410) {
@@ -1348,17 +1378,89 @@ app.post('/api/admin/push-broadcast', requireAdmin, async (req, res) => {
       }
     }
 
+    await pool.query(
+      `UPDATE broadcast_notifications
+       SET total_sent = $2, total_failed = $3
+       WHERE id = $1`,
+      [notificationId, sent, failed]
+    );
+
     return res.json({
       success: true,
       sent,
       failed,
-      total: rows.rows.length
+      total: rows.rows.length,
+      notification_id: notificationId
     });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ success: false, error: 'Errore invio push massivo.' });
   }
 });
+
+app.post('/api/push/broadcast-opened', async (req, res) => {
+  try {
+    const { recipient_id, notification_id } = req.body || {};
+    if (!recipient_id || !notification_id) {
+      return res.status(400).json({ success: false, error: 'Dati tracking mancanti.' });
+    }
+
+    await pool.query(
+      `UPDATE broadcast_notification_recipients
+       SET status = 'opened',
+           opened_at = COALESCE(opened_at, NOW())
+       WHERE id = $1
+         AND notification_id = $2`,
+      [recipient_id, notification_id]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore tracking apertura push.' });
+  }
+});
+
+app.get('/api/admin/last-broadcast-status', requireAdmin, async (req, res) => {
+  try {
+    const last = await pool.query(
+      `SELECT *
+       FROM broadcast_notifications
+       ORDER BY id DESC
+       LIMIT 1`
+    );
+
+    if (!last.rows.length) {
+      return res.json({ success: true, notification: null, recipients: [] });
+    }
+
+    const notification = last.rows[0];
+
+    const recipients = await pool.query(
+      `SELECT
+         id,
+         code,
+         plate,
+         status,
+         sent_at,
+         opened_at
+       FROM broadcast_notification_recipients
+       WHERE notification_id = $1
+       ORDER BY id DESC`,
+      [notification.id]
+    );
+
+    return res.json({
+      success: true,
+      notification,
+      recipients: recipients.rows
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore lettura ultima push.' });
+  }
+});
+
 
 
 app.post('/api/admin/fix-qr-url', requireAdmin, async (req, res) => {
