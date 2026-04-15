@@ -1345,8 +1345,8 @@ app.post('/api/admin/push-broadcast', requireAdmin, async (req, res) => {
       const payloadBase = {
         title: cleanTitle,
         body: cleanMessage,
-        url: cleanUrl || '/admin.html',
-        targetUrl: cleanUrl || '/admin.html',
+        url: cleanUrl || '/owner-login.html',
+        targetUrl: cleanUrl || '/owner-login.html',
         icon: '/icons/android-chrome-192x192.png',
         badge: '/icons/favicon-32x32.png',
         broadcastNotificationId: notificationId,
@@ -1354,6 +1354,12 @@ app.post('/api/admin/push-broadcast', requireAdmin, async (req, res) => {
       };
 
       try {
+        await pool.query(
+          `INSERT INTO contact_message_logs (code, plate, reason, message_text, location_shared, created_at)
+           VALUES ($1, $2, $3, $4, FALSE, NOW())`,
+          [row.code, row.plate, cleanTitle || 'Messaggio admin', cleanMessage]
+        );
+
         await webpush.sendNotification(subscription, JSON.stringify(payloadBase));
         sent += 1;
       } catch (err) {
