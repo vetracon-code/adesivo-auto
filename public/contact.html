@@ -363,6 +363,26 @@
         <div class="msg error" id="errorBox">Seleziona prima uno dei 6 motivi.</div>
         <div class="msg success" id="successBox">Notifica inviata al proprietario.</div>
 
+        <div id="successScreen" style="display:none;position:fixed;inset:0;z-index:99999;padding:24px;background:
+          radial-gradient(circle at top left, rgba(63,121,216,.10), transparent 32%),
+          radial-gradient(circle at bottom right, rgba(63,121,216,.08), transparent 28%),
+          linear-gradient(180deg,#f4f7fb 0%, #e9eef7 100%);
+          align-items:center;justify-content:center;">
+          <div style="width:min(760px,100%);background:rgba(255,255,255,.94);border:1px solid rgba(34,48,70,.10);border-radius:32px;box-shadow:0 20px 60px rgba(30,46,82,.12);padding:42px 28px 32px;text-align:center;position:relative;overflow:hidden;backdrop-filter:blur(10px);">
+            <div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:320px;gap:18px;">
+              <div style="font-size:.84rem;letter-spacing:.14em;text-transform:uppercase;color:#5b6980;font-weight:700;">Segnalazione inviata</div>
+              <div style="max-width:560px;margin:0 auto;font-family:Georgia,'Palatino Linotype','Book Antiqua',serif;font-style:italic;font-size:clamp(1.6rem,2.8vw,2.35rem);line-height:1.48;color:#1f2d42;letter-spacing:.01em;">
+                Grazie per la segnalazione.<br>
+                Il proprietario del veicolo è stato avvisato.
+              </div>
+              <div style="max-width:500px;margin:0 auto;color:#5b6980;font-size:1rem;line-height:1.55;">
+                La tua collaborazione è stata utile e verrà gestita in modo riservato.
+              </div>
+              <button id="closeSuccessScreenBtn" type="button" style="margin-top:12px;border:none;border-radius:18px;min-height:52px;padding:0 26px;background:linear-gradient(180deg,#3f79d8 0%, #2f5fad 100%);color:#fff;font-weight:800;font-size:1rem;cursor:pointer;box-shadow:0 12px 28px rgba(63,121,216,.22);">Chiudi</button>
+            </div>
+          </div>
+        </div>
+
         <div class="final-note">
           <strong>Usa questo servizio solo per segnalazioni reali.</strong><br>
           In caso di emergenza grave contatta subito i numeri di soccorso.
@@ -457,6 +477,19 @@
       });
     }
 
+    function showSuccessScreen(){
+      const successScreen = document.getElementById('successScreen');
+      if (successScreen) successScreen.style.display = 'flex';
+    }
+
+    function closeSuccessScreen(){
+      try {
+        window.open('', '_self');
+        window.close();
+      } catch (e) {}
+      document.body.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#223046;background:#eef3fa;">Puoi chiudere questa pagina dal browser.</div>';
+    }
+
     async function sendSignal(){
       errorBox.style.display = 'none';
       successBox.style.display = 'none';
@@ -470,13 +503,13 @@
 
       if (!shareLocationField.checked) {
         await logInternalMessage(baseMessage);
-        successBox.style.display = 'block';
+        showSuccessScreen();
         return;
       }
 
       if (!navigator.geolocation) {
         await logInternalMessage(baseMessage);
-        successBox.style.display = 'block';
+        showSuccessScreen();
         return;
       }
 
@@ -495,17 +528,18 @@
             maps_url: mapsUrl
           });
 
-          successBox.style.display = 'block';
+          showSuccessScreen();
         },
         async () => {
           await logInternalMessage(baseMessage);
-          successBox.style.display = 'block';
+          showSuccessScreen();
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     }
 
     sendBtn.addEventListener('click', sendSignal);
+    document.getElementById('closeSuccessScreenBtn').addEventListener('click', closeSuccessScreen);
 
     async function init() {
       if (!publicId) return;
