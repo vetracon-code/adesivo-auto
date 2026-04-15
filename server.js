@@ -667,13 +667,33 @@ app.post('/api/log-contact-message', async (req, res) => {
             unreadCount
           });
 
+          const channel = String(sub.endpoint || '').includes('web.push.apple.com')
+            ? 'apple-webpush'
+            : String(sub.endpoint || '').includes('fcm.googleapis.com')
+              ? 'fcm-webpush'
+              : 'webpush';
+
           try {
             await webpush.sendNotification({
               endpoint: sub.endpoint,
               keys: { p256dh: sub.p256dh, auth: sub.auth }
             }, payload);
+
+            await pool.query(
+              `INSERT INTO push_delivery_logs (code, plate, endpoint, channel, status, error_text)
+               VALUES ($1,$2,$3,$4,$5,$6)`,
+              [cleanCode, cleanPlate, sub.endpoint, channel, 'sent', null]
+            );
           } catch (pushErr) {
+            const errText = String(pushErr.statusCode || '') + ' ' + String(pushErr.body || pushErr.message || pushErr);
             console.error('Push send error:', pushErr.statusCode || '', pushErr.body || pushErr.message || pushErr);
+
+            await pool.query(
+              `INSERT INTO push_delivery_logs (code, plate, endpoint, channel, status, error_text)
+               VALUES ($1,$2,$3,$4,$5,$6)`,
+              [cleanCode, cleanPlate, sub.endpoint, channel, 'failed', errText]
+            );
+
             if (pushErr.statusCode === 404 || pushErr.statusCode === 410) {
               await pool.query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [sub.endpoint]);
             }
@@ -2525,9 +2545,23 @@ async function initDb() {
       );
     `);
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS push_delivery_logs (
+        id SERIAL PRIMARY KEY,
+        code TEXT,
+        plate TEXT,
+        endpoint TEXT,
+        channel TEXT,
+        status TEXT,
+        error_text TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
     console.log('Tabella sticker_codes pronta');
     console.log('Tabella qr_scans pronta');
     console.log('Tabella abuse_blocks pronta');
+    console.log('Tabella push_delivery_logs pronta');
   } catch (err) {
     console.error('Errore init DB:', err);
     throw err;
