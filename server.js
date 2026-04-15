@@ -695,6 +695,157 @@ app.post('/api/log-contact-message', async (req, res) => {
 
 
 
+
+app.post('/api/owner/block-abuse', async (req, res) => {
+  try {
+    const { code, plate, block_type, block_value, reason } = req.body || {};
+    const allowed = new Set(['ip', 'phone']);
+    if (!code || !plate) {
+      return res.status(400).json({ success: false, error: 'Code o plate mancanti.' });
+    }
+    if (!block_type || !allowed.has(String(block_type))) {
+      return res.status(400).json({ success: false, error: 'Tipo blocco non valido.' });
+    }
+    if (!block_value || !String(block_value).trim()) {
+      return res.status(400).json({ success: false, error: 'Valore blocco mancante.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+    const cleanPlate = String(plate).trim().toUpperCase().replace(/\s+/g, '');
+    const owner = await pool.query(
+      `SELECT code
+       FROM sticker_codes
+       WHERE code = $1 AND plate = $2
+       LIMIT 1`,
+      [cleanCode, cleanPlate]
+    );
+
+    if (!owner.rows.length) {
+      return res.status(404).json({ success: false, error: 'Record proprietario non trovato.' });
+    }
+
+    const cleanValue = String(block_value).trim();
+    const cleanReason = reason ? String(reason).trim() : 'Uso improprio del servizio';
+
+    const existing = await pool.query(
+      `SELECT id
+       FROM abuse_blocks
+       WHERE COALESCE(code,'') = COALESCE($1,'')
+         AND COALESCE(plate,'') = COALESCE($2,'')
+         AND block_type = $3
+         AND block_value = $4
+       LIMIT 1`,
+      [cleanCode, cleanPlate, block_type, cleanValue]
+    );
+
+    let result;
+    if (existing.rows.length) {
+      result = await pool.query(
+        `UPDATE abuse_blocks
+         SET is_active = TRUE,
+             reason = $5,
+             updated_at = NOW()
+         WHERE id = $6
+         RETURNING id, code, plate, block_type, block_value, reason, is_active, updated_at`,
+        [cleanCode, cleanPlate, block_type, cleanValue, cleanReason, existing.rows[0].id]
+      );
+    } else {
+      result = await pool.query(
+        `INSERT INTO abuse_blocks (code, plate, block_type, block_value, reason, is_active, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,TRUE,NOW(),NOW())
+         RETURNING id, code, plate, block_type, block_value, reason, is_active, created_at, updated_at`,
+        [cleanCode, cleanPlate, block_type, cleanValue, cleanReason]
+      );
+    }
+
+    return res.json({ success: true, item: result.rows[0] || null });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore blocco abuso proprietario.' });
+  }
+});
+
+app.post('/api/owner/unblock-abuse', async (req, res) => {
+  try {
+    const { code, plate, id } = req.body || {};
+    if (!code || !plate || !id) {
+      return res.status(400).json({ success: false, error: 'Dati mancanti.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+    const cleanPlate = String(plate).trim().toUpperCase().replace(/\s+/g, '');
+    const owner = await pool.query(
+      `SELECT code
+       FROM sticker_codes
+       WHERE code = $1 AND plate = $2
+       LIMIT 1`,
+      [cleanCode, cleanPlate]
+    );
+
+    if (!owner.rows.length) {
+      return res.status(404).json({ success: false, error: 'Record proprietario non trovato.' });
+    }
+
+    const result = await pool.query(
+      `UPDATE abuse_blocks
+       SET is_active = FALSE,
+           updated_at = NOW()
+       WHERE id = $1
+         AND COALESCE(code,'') = COALESCE($2,'')
+         AND COALESCE(plate,'') = COALESCE($3,'')
+       RETURNING id, code, plate, block_type, block_value, reason, is_active, updated_at`,
+      [id, cleanCode, cleanPlate]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, error: 'Blocco non trovato.' });
+    }
+
+    return res.json({ success: true, item: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore sblocco abuso proprietario.' });
+  }
+});
+
+app.post('/api/owner/list-abuse-blocks', async (req, res) => {
+  try {
+    const { code, plate } = req.body || {};
+    if (!code || !plate) {
+      return res.status(400).json({ success: false, error: 'Code o plate mancanti.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+    const cleanPlate = String(plate).trim().toUpperCase().replace(/\s+/g, '');
+    const owner = await pool.query(
+      `SELECT code
+       FROM sticker_codes
+       WHERE code = $1 AND plate = $2
+       LIMIT 1`,
+      [cleanCode, cleanPlate]
+    );
+
+    if (!owner.rows.length) {
+      return res.status(404).json({ success: false, error: 'Record proprietario non trovato.' });
+    }
+
+    const rows = await pool.query(
+      `SELECT id, code, plate, block_type, block_value, reason, is_active, created_at, updated_at
+       FROM abuse_blocks
+       WHERE COALESCE(code,'') = COALESCE($1,'')
+         AND COALESCE(plate,'') = COALESCE($2,'')
+       ORDER BY is_active DESC, updated_at DESC, id DESC
+       LIMIT 300`,
+      [cleanCode, cleanPlate]
+    );
+
+    return res.json({ success: true, items: rows.rows });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore elenco blocchi proprietario.' });
+  }
+});
+
 app.post('/api/admin/block-abuse', requireAdmin, async (req, res) => {
   try {
     const { code, plate, block_type, block_value, reason } = req.body || {};
@@ -900,6 +1051,7 @@ app.post('/api/owner-messages', async (req, res) => {
          longitude,
          maps_url,
          sender_phone,
+         ip_address,
          created_at,
          read_at
        FROM contact_message_logs

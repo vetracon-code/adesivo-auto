@@ -1201,6 +1201,10 @@
       const phoneEl = document.getElementById('msgDetailPhone');
       const mapWrap = document.getElementById('msgDetailMapWrap');
       const mapEl = document.getElementById('msgDetailMap');
+      const abuseResultEl = document.getElementById('msgDetailAbuseResult');
+      const blockPhoneBtn = document.getElementById('msgBlockPhoneBtn');
+      const blockIpBtn = document.getElementById('msgBlockIpBtn');
+      const showBlocksBtn = document.getElementById('msgShowBlocksBtn');
 
       reasonEl.textContent = item.reason || 'Segnalazione';
       dateEl.textContent = fmt(item.created_at);
@@ -1253,6 +1257,73 @@
         mapWrap.style.display = 'none';
         mapEl.href = '#';
       }
+
+      abuseResultEl.textContent = '';
+
+      if (extractedPhone) {
+        blockPhoneBtn.style.display = 'inline-flex';
+        blockPhoneBtn.onclick = async () => {
+          const { code, plate } = getOwnerParams();
+          const res = await fetch('/api/owner/block-abuse', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({
+              code,
+              plate,
+              block_type: 'phone',
+              block_value: extractedPhone,
+              reason: 'Blocco da dettaglio messaggio'
+            })
+          });
+          const data = await res.json();
+          abuseResultEl.textContent = data.success ? 'Numero bloccato.' : (data.error || 'Errore blocco numero.');
+        };
+      } else {
+        blockPhoneBtn.style.display = 'none';
+        blockPhoneBtn.onclick = null;
+      }
+
+      if (item.ip_address && String(item.ip_address).trim()) {
+        const ipValue = String(item.ip_address).trim();
+        blockIpBtn.style.display = 'inline-flex';
+        blockIpBtn.onclick = async () => {
+          const { code, plate } = getOwnerParams();
+          const res = await fetch('/api/owner/block-abuse', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({
+              code,
+              plate,
+              block_type: 'ip',
+              block_value: ipValue,
+              reason: 'Blocco IP da dettaglio messaggio'
+            })
+          });
+          const data = await res.json();
+          abuseResultEl.textContent = data.success ? 'IP bloccato.' : (data.error || 'Errore blocco IP.');
+        };
+      } else {
+        blockIpBtn.style.display = 'none';
+        blockIpBtn.onclick = null;
+      }
+
+      showBlocksBtn.onclick = async () => {
+        const { code, plate } = getOwnerParams();
+        const res = await fetch('/api/owner/list-abuse-blocks', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ code, plate })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          abuseResultEl.textContent = data.error || 'Errore caricamento blocchi.';
+          return;
+        }
+        const active = (data.items || []).filter(x => x.is_active);
+        abuseResultEl.textContent = active.length
+          ? active.map(x => `${x.block_type}: ${x.block_value}`).join(' | ')
+          : 'Nessun blocco attivo.';
+      };
 
       modal.style.display = 'flex';
     };
@@ -1629,6 +1700,16 @@
         <div id="msgDetailMapWrap" style="display:none;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);">
           <div style="font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.62);">Posizione condivisa</div>
           <a id="msgDetailMap" href="#" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:6px;color:#8ec5ff;font-weight:800;text-decoration:none;">Apri mappa</a>
+        </div>
+
+        <div id="msgDetailAbuseWrap" style="padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);display:grid;gap:10px;">
+          <div style="font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.62);">Protezione abuso</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button id="msgBlockPhoneBtn" type="button" class="btn btn-secondary" style="display:none;">Blocca numero</button>
+            <button id="msgBlockIpBtn" type="button" class="btn btn-secondary" style="display:none;">Blocca IP</button>
+            <button id="msgShowBlocksBtn" type="button" class="btn btn-secondary">Numeri/IP bloccati</button>
+          </div>
+          <div id="msgDetailAbuseResult" class="muted"></div>
         </div>
 
         <div style="padding:16px 18px;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);">
