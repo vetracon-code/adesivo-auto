@@ -1319,13 +1319,38 @@
           abuseResultEl.textContent = data.error || 'Errore caricamento blocchi.';
           return;
         }
+
         const active = (data.items || []).filter(x => x.is_active);
-        abuseResultEl.textContent = active.length
-          ? active.map(x => `${x.block_type}: ${x.block_value}`).join(' | ')
-          : 'Nessun blocco attivo.';
+        if (!active.length) {
+          abuseResultEl.textContent = 'Nessun blocco attivo.';
+          return;
+        }
+
+        abuseResultEl.innerHTML = active.map(x => `
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);margin-top:8px;">
+            <div><strong>${escapeHtml(x.block_type === 'phone' ? 'Numero' : 'IP')}</strong>: ${escapeHtml(x.block_value || '')}</div>
+            <button type="button" class="btn btn-secondary" style="min-height:36px;" onclick="ownerUnblockAbuse(${x.id}); return false;">Sblocca</button>
+          </div>
+        `).join('');
       };
 
       modal.style.display = 'flex';
+    };
+
+    window.ownerUnblockAbuse = async function(id){
+      const abuseResultEl = document.getElementById('msgDetailAbuseResult');
+      const { code, plate } = getOwnerParams();
+      const res = await fetch('/api/owner/unblock-abuse', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code, plate, id })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        abuseResultEl.textContent = data.error || 'Errore sblocco.';
+        return;
+      }
+      abuseResultEl.textContent = 'Blocco disattivato.';
     };
 
     document.getElementById('messagesSelectBtn').addEventListener('click', () => {
