@@ -542,7 +542,7 @@ app.post('/api/log-contact-message', async (req, res) => {
     const {
       code, plate, brand, vehicle_model, color,
       reason, message_text, location_shared,
-      latitude, longitude, maps_url
+      latitude, longitude, maps_url, sender_phone
     } = req.body || {};
 
     const forwardedFor = req.headers['x-forwarded-for'];
@@ -557,8 +557,8 @@ app.post('/api/log-contact-message', async (req, res) => {
 
     await pool.query(
       `INSERT INTO contact_message_logs
-       (code, plate, brand, vehicle_model, color, reason, message_text, location_shared, latitude, longitude, maps_url, ip_address, ip_city, ip_region, ip_country, user_agent)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+       (code, plate, brand, vehicle_model, color, reason, message_text, location_shared, latitude, longitude, maps_url, ip_address, ip_city, ip_region, ip_country, user_agent, sender_phone)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
       [
         code || null,
         plate || null,
@@ -575,7 +575,8 @@ app.post('/api/log-contact-message', async (req, res) => {
         area.city,
         area.region,
         area.country,
-        userAgent
+        userAgent,
+        sender_phone || null
       ]
     );
 
