@@ -1319,6 +1319,7 @@ app.post('/api/owner-dashboard', async (req, res) => {
             created_at AS at,
             COALESCE(ip_city, '') AS ip_city,
             COALESCE(ip_region, '') AS ip_region,
+            COALESCE(ip_country, '') AS ip_country,
             COALESCE(location_shared, FALSE) AS location_shared
            FROM contact_message_logs
            WHERE code = $1)
