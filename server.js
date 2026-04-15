@@ -754,6 +754,7 @@ app.post('/api/owner-messages', async (req, res) => {
          latitude,
          longitude,
          maps_url,
+         sender_phone,
          created_at,
          read_at
        FROM contact_message_logs
