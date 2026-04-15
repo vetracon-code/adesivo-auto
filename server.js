@@ -1311,7 +1311,7 @@ app.post('/api/admin/push-broadcast', requireAdmin, async (req, res) => {
        (title, message_text, target_url, audience, total_targets)
        VALUES ($1,$2,$3,$4,$5)
        RETURNING id`,
-      [cleanTitle, cleanMessage, cleanUrl || '/admin.html', audience, rows.rows.length]
+      [cleanTitle, cleanMessage, cleanUrl || '/owner-login.html', audience, rows.rows.length]
     );
 
     const notificationId = notificationInsert.rows[0].id;
