@@ -1640,6 +1640,7 @@
       const blockIpBtn = document.getElementById('msgBlockIpBtn');
       const showBlocksBtn = document.getElementById('msgShowBlocksBtn');
 
+      modal.style.display = 'flex';
       reasonEl.textContent = item.reason || 'Segnalazione';
       dateEl.textContent = fmt(item.created_at);
 
@@ -1694,7 +1695,7 @@
         if (Number.isFinite(lat) && Number.isFinite(lon) && mapPreviewWrap && mapBox && window.L) {
           mapPreviewWrap.style.display = 'block';
 
-          setTimeout(() => {
+          const ensureLeafletMap = () => {
             try {
               if (!detailLeafletMap) {
                 detailLeafletMap = L.map(mapBox, {
@@ -1716,9 +1717,16 @@
                 detailLeafletMarker = L.marker([lat, lon]).addTo(detailLeafletMap);
               }
 
-              detailLeafletMap.invalidateSize();
+              requestAnimationFrame(() => {
+                try { detailLeafletMap.invalidateSize(true); } catch (e) {}
+                setTimeout(() => {
+                  try { detailLeafletMap.invalidateSize(true); } catch (e) {}
+                }, 350);
+              });
             } catch (e) {}
-          }, 120);
+          };
+
+          setTimeout(ensureLeafletMap, 120);
         } else if (mapPreviewWrap) {
           mapPreviewWrap.style.display = 'none';
         }
