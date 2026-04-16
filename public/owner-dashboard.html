@@ -217,6 +217,17 @@
         <div class="stack">
           <div class="card">
             <h2>Promemoria intelligenti</h2>
+            <div class="mini-actions" style="margin-bottom:12px;">
+              <select id="testPushType" class="input" style="max-width:220px;min-height:36px;">
+                <option value="revisione">Revisione</option>
+                <option value="assicurazione">Assicurazione</option>
+                <option value="bollo">Bollo</option>
+                <option value="gomme">Cambio gomme</option>
+                <option value="tagliando">Tagliando</option>
+              </select>
+              <button class="btn btn-primary btn-small" type="button" id="sendTestPushBtn">Invia ora</button>
+            </div>
+            <div id="testPushResult" class="muted" style="margin-bottom:10px;font-size:.88rem;"></div>
             <div class="toggle-list">
               <div class="toggle-item"><span>30 giorni prima</span><input type="checkbox" id="r30" checked></div>
               <div class="toggle-item"><span>15 giorni prima</span><input type="checkbox" id="r15" checked></div>
@@ -492,6 +503,31 @@
       }
     }catch(e){}
   }
+
+  qs('sendTestPushBtn').addEventListener('click', async () => {
+    const resultEl = qs('testPushResult');
+    resultEl.textContent = 'Invio push test in corso...';
+
+    try{
+      const res = await fetch('/api/owner-services/test-push', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          code,
+          plate,
+          service_type: qs('testPushType').value
+        })
+      });
+      const out = await res.json();
+      if(!res.ok || !out.success){
+        resultEl.textContent = out.error || 'Errore invio push test.';
+        return;
+      }
+      resultEl.textContent = `Push test inviata. Dispositivi raggiunti: ${out.sent_count}. Tipo: ${out.service_type}.`;
+    }catch(e){
+      resultEl.textContent = 'Errore di collegamento durante l’invio push test.';
+    }
+  });
 
   qs('saveAllBtn').addEventListener('click', () => { saveLocal(); });
   qs('recalcBtn').addEventListener('click', refreshUI);

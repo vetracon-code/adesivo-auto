@@ -1291,6 +1291,113 @@ app.post('/api/owner-messages/delete-many', async (req, res) => {
 });
 
 
+app.post('/api/owner-services/test-push', async (req, res) => {
+  try {
+    const cleanCode = req.body?.code ? String(req.body.code).trim().toUpperCase() : '';
+    const cleanPlate = req.body?.plate ? String(req.body.plate).trim().toUpperCase().replace(/\s+/g, '') : '';
+    const serviceType = req.body?.service_type ? String(req.body.service_type).trim().toLowerCase() : 'revisione';
+
+    if (!cleanCode || !cleanPlate) {
+      return res.status(400).json({ success: false, error: 'Code e targa sono obbligatori.' });
+    }
+
+    if (!vapidPublicKey || !vapidPrivateKey) {
+      return res.status(500).json({ success: false, error: 'Configurazione push non disponibile.' });
+    }
+
+    const labels = {
+      revisione: 'revisione',
+      assicurazione: 'assicurazione',
+      bollo: 'bollo',
+      gomme: 'cambio gomme',
+      tagliando: 'tagliando'
+    };
+    const serviceLabel = labels[serviceType] || 'scadenza veicolo';
+
+    const subs = await pool.query(
+      `SELECT endpoint, p256dh, auth
+       FROM push_subscriptions
+       WHERE code = $1
+         AND plate = $2
+         AND is_active = TRUE
+         AND receive_passenger_alerts = TRUE`,
+      [cleanCode, cleanPlate]
+    );
+
+    if (!subs.rows.length) {
+      return res.status(404).json({ success: false, error: 'Nessun dispositivo attivo trovato per l’invio push.' });
+    }
+
+    const title = '[TEST] Promemoria veicolo';
+    const body = `[TEST] La ${serviceLabel} della tua vettura richiede attenzione. Apri i dettagli per controllare.`;
+    const targetUrl = `/owner-dashboard.html?code=${encodeURIComponent(cleanCode)}&plate=${encodeURIComponent(cleanPlate)}&service=${encodeURIComponent(serviceType)}&testPush=1`;
+
+    let sentCount = 0;
+
+    for (const sub of subs.rows) {
+      const payload = JSON.stringify({
+        title,
+        body,
+        url: targetUrl,
+        serviceType,
+        isTest: true
+      });
+
+      try {
+        await webpush.sendNotification({
+          endpoint: sub.endpoint,
+          keys: { p256dh: sub.p256dh, auth: sub.auth }
+        }, payload);
+
+        sentCount += 1;
+
+        try {
+          await pool.query(
+            `INSERT INTO push_delivery_logs (code, plate, endpoint, channel, status, error_text, created_at)
+             VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
+            [
+              cleanCode,
+              cleanPlate,
+              sub.endpoint,
+              sub.endpoint.includes('apple') ? 'apple-webpush-test' : 'fcm-webpush-test',
+              'sent',
+              null
+            ]
+          );
+        } catch (e) {}
+      } catch (pushErr) {
+        console.error('owner-services/test-push error:', pushErr.statusCode || '', pushErr.body || pushErr.message || pushErr);
+
+        try {
+          await pool.query(
+            `INSERT INTO push_delivery_logs (code, plate, endpoint, channel, status, error_text, created_at)
+             VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
+            [
+              cleanCode,
+              cleanPlate,
+              sub.endpoint,
+              sub.endpoint.includes('apple') ? 'apple-webpush-test' : 'fcm-webpush-test',
+              'error',
+              String(pushErr.body || pushErr.message || pushErr).slice(0, 500)
+            ]
+          );
+        } catch (e) {}
+
+        if (pushErr.statusCode === 404 || pushErr.statusCode === 410) {
+          try {
+            await pool.query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [sub.endpoint]);
+          } catch (e) {}
+        }
+      }
+    }
+
+    return res.json({ success: true, sent_count: sentCount, service_type: serviceType });
+  } catch (err) {
+    console.error('owner-services/test-push fatal error:', err);
+    return res.status(500).json({ success: false, error: 'Errore invio push test.' });
+  }
+});
+
 app.post('/api/owner-services/get', async (req, res) => {
   try {
     const cleanCode = req.body?.code ? String(req.body.code).trim().toUpperCase() : '';
