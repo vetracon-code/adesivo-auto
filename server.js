@@ -670,10 +670,11 @@ app.post('/api/log-contact-message', async (req, res) => {
       });
     }
 
-    await pool.query(
+    const insertedMessage = await pool.query(
       `INSERT INTO contact_message_logs
        (code, plate, brand, vehicle_model, color, reason, message_text, location_shared, latitude, longitude, maps_url, ip_address, ip_city, ip_region, ip_country, user_agent, sender_phone)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+       RETURNING id`,
       [
         code || null,
         plate || null,
@@ -695,6 +696,8 @@ app.post('/api/log-contact-message', async (req, res) => {
       ]
     );
 
+    const insertedMessageId = insertedMessage.rows[0]?.id || null;
+
     try {
       if (vapidPublicKey && vapidPrivateKey && code) {
         const subs = await pool.query(
@@ -707,7 +710,7 @@ app.post('/api/log-contact-message', async (req, res) => {
           ? `Controlla il nuovo messaggio per ${plate}`
           : 'Apri la Web App per leggere il nuovo messaggio.';
 
-        const targetUrl = `/owner-simple.html?code=${encodeURIComponent(String(code).trim().toUpperCase())}&plate=${encodeURIComponent(String(plate || '').trim())}`;
+        const targetUrl = `/owner-simple.html?code=${encodeURIComponent(String(code).trim().toUpperCase())}&plate=${encodeURIComponent(String(plate || '').trim())}${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}`;
 
         const unreadRes = await pool.query(
           `SELECT COUNT(*)::int AS unread_count
