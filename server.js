@@ -65,6 +65,67 @@ function verifyAdminSession(token) {
   return sig === expected && value === 'admin-authenticated';
 }
 
+function endOfMonthFromDate(dateValue) {
+  const d = new Date(dateValue);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0));
+}
+
+function addYearsUtc(dateValue, years) {
+  const d = new Date(dateValue);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Date(Date.UTC(d.getUTCFullYear() + years, d.getUTCMonth(), d.getUTCDate()));
+}
+
+function toIsoDateOnly(dateValue) {
+  if (!dateValue) return null;
+  const d = new Date(dateValue);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+function computeNextReviewDate(firstRegistrationDate, lastReviewDate) {
+  if (lastReviewDate) {
+    const d = addYearsUtc(lastReviewDate, 2);
+    return toIsoDateOnly(endOfMonthFromDate(d));
+  }
+  if (firstRegistrationDate) {
+    const d = addYearsUtc(firstRegistrationDate, 4);
+    return toIsoDateOnly(endOfMonthFromDate(d));
+  }
+  return null;
+}
+
+function pgDateToYmd(value) {
+  if (!value) return null;
+
+  if (typeof value === 'string') {
+    return value.slice(0, 10);
+  }
+
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function normalizeVehicleServiceRow(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    first_registration_date: pgDateToYmd(row.first_registration_date),
+    last_review_date: pgDateToYmd(row.last_review_date),
+    next_review_date: pgDateToYmd(row.next_review_date),
+    insurance_expiry_date: pgDateToYmd(row.insurance_expiry_date),
+    tax_expiry_date: pgDateToYmd(row.tax_expiry_date),
+    tires_expiry_date: pgDateToYmd(row.tires_expiry_date),
+    service_expiry_date: pgDateToYmd(row.service_expiry_date)
+  };
+}
+
 function requireAdmin(req, res, next) {
   const cookies = parseCookies(req);
   const token = cookies[ADMIN_COOKIE_NAME];
@@ -1229,6 +1290,136 @@ app.post('/api/owner-messages/delete-many', async (req, res) => {
   }
 });
 
+
+app.post('/api/owner-services/get', async (req, res) => {
+  try {
+    const cleanCode = req.body?.code ? String(req.body.code).trim().toUpperCase() : '';
+    const cleanPlate = req.body?.plate ? String(req.body.plate).trim().toUpperCase().replace(/\s+/g, '') : '';
+
+    if (!cleanCode || !cleanPlate) {
+      return res.status(400).json({ success: false, error: 'Code e targa sono obbligatori.' });
+    }
+
+    const row = await pool.query(
+      `SELECT
+         code,
+         plate,
+         first_registration_date,
+         last_review_date,
+         next_review_date,
+         insurance_expiry_date,
+         tax_expiry_date,
+         tires_expiry_date,
+         service_expiry_date,
+         notes,
+         created_at,
+         updated_at
+       FROM vehicle_service_data
+       WHERE code = $1 AND plate = $2
+       LIMIT 1`,
+      [cleanCode, cleanPlate]
+    );
+
+    return res.json({
+      success: true,
+      item: normalizeVehicleServiceRow(row.rows[0]) || {
+        code: cleanCode,
+        plate: cleanPlate,
+        first_registration_date: null,
+        last_review_date: null,
+        next_review_date: null,
+        insurance_expiry_date: null,
+        tax_expiry_date: null,
+        tires_expiry_date: null,
+        service_expiry_date: null,
+        notes: ''
+      }
+    });
+  } catch (err) {
+    console.error('owner-services/get error:', err);
+    return res.status(500).json({ success: false, error: 'Errore caricamento servizi veicolo.' });
+  }
+});
+
+app.post('/api/owner-services/save', async (req, res) => {
+  try {
+    const cleanCode = req.body?.code ? String(req.body.code).trim().toUpperCase() : '';
+    const cleanPlate = req.body?.plate ? String(req.body.plate).trim().toUpperCase().replace(/\s+/g, '') : '';
+
+    if (!cleanCode || !cleanPlate) {
+      return res.status(400).json({ success: false, error: 'Code e targa sono obbligatori.' });
+    }
+
+    const firstRegistrationDate = req.body?.first_registration_date || null;
+    const lastReviewDate = req.body?.last_review_date || null;
+    const insuranceExpiryDate = req.body?.insurance_expiry_date || null;
+    const taxExpiryDate = req.body?.tax_expiry_date || null;
+    const tiresExpiryDate = req.body?.tires_expiry_date || null;
+    const serviceExpiryDate = req.body?.service_expiry_date || null;
+    const notes = req.body?.notes ? String(req.body.notes).trim() : '';
+
+    const nextReviewDate = computeNextReviewDate(firstRegistrationDate, lastReviewDate);
+
+    const saved = await pool.query(
+      `INSERT INTO vehicle_service_data (
+         code,
+         plate,
+         first_registration_date,
+         last_review_date,
+         next_review_date,
+         insurance_expiry_date,
+         tax_expiry_date,
+         tires_expiry_date,
+         service_expiry_date,
+         notes,
+         created_at,
+         updated_at
+       )
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),NOW())
+       ON CONFLICT (code, plate)
+       DO UPDATE SET
+         first_registration_date = EXCLUDED.first_registration_date,
+         last_review_date = EXCLUDED.last_review_date,
+         next_review_date = EXCLUDED.next_review_date,
+         insurance_expiry_date = EXCLUDED.insurance_expiry_date,
+         tax_expiry_date = EXCLUDED.tax_expiry_date,
+         tires_expiry_date = EXCLUDED.tires_expiry_date,
+         service_expiry_date = EXCLUDED.service_expiry_date,
+         notes = EXCLUDED.notes,
+         updated_at = NOW()
+       RETURNING
+         code,
+         plate,
+         first_registration_date,
+         last_review_date,
+         next_review_date,
+         insurance_expiry_date,
+         tax_expiry_date,
+         tires_expiry_date,
+         service_expiry_date,
+         notes,
+         created_at,
+         updated_at`,
+      [
+        cleanCode,
+        cleanPlate,
+        firstRegistrationDate || null,
+        lastReviewDate || null,
+        nextReviewDate || null,
+        insuranceExpiryDate || null,
+        taxExpiryDate || null,
+        tiresExpiryDate || null,
+        serviceExpiryDate || null,
+        notes
+      ]
+    );
+
+    return res.json({ success: true, item: normalizeVehicleServiceRow(saved.rows[0]) });
+  } catch (err) {
+    console.error('owner-services/save error:', err);
+    return res.status(500).json({ success: false, error: 'Errore salvataggio servizi veicolo.' });
+  }
+});
 
 app.post('/api/owner-dashboard', async (req, res) => {
   try {
@@ -2560,10 +2751,30 @@ async function initDb() {
       );
     `);
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS vehicle_service_data (
+        id SERIAL PRIMARY KEY,
+        code TEXT NOT NULL,
+        plate TEXT NOT NULL,
+        first_registration_date DATE,
+        last_review_date DATE,
+        next_review_date DATE,
+        insurance_expiry_date DATE,
+        tax_expiry_date DATE,
+        tires_expiry_date DATE,
+        service_expiry_date DATE,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(code, plate)
+      );
+    `);
+
     console.log('Tabella sticker_codes pronta');
     console.log('Tabella qr_scans pronta');
     console.log('Tabella abuse_blocks pronta');
     console.log('Tabella push_delivery_logs pronta');
+    console.log('Tabella vehicle_service_data pronta');
   } catch (err) {
     console.error('Errore init DB:', err);
     throw err;
