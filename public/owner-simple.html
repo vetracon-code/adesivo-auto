@@ -1031,6 +1031,71 @@
       }).join('');
     }
 
+    function normalizeGeoKey(v){
+      return String(v || '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function getMapPositionForEvent(ev, bucket){
+      const city = normalizeGeoKey(ev?.ip_city);
+      const region = normalizeGeoKey(ev?.ip_region);
+
+      const cityMap = {
+        'milan':   { left: 36.4, top: 18.4 },
+        'milano':  { left: 36.4, top: 18.4 },
+        'rome':    { left: 46.2, top: 46.1 },
+        'roma':    { left: 46.2, top: 46.1 },
+        'naples':  { left: 47.7, top: 58.4 },
+        'napoli':  { left: 47.7, top: 58.4 },
+        'turin':   { left: 25.4, top: 19.0 },
+        'torino':  { left: 25.4, top: 19.0 },
+        'genoa':   { left: 28.0, top: 27.2 },
+        'genova':  { left: 28.0, top: 27.2 },
+        'bologna': { left: 40.7, top: 28.8 },
+        'florence':{ left: 42.7, top: 38.0 },
+        'firenze': { left: 42.7, top: 38.0 },
+        'bari':    { left: 61.0, top: 58.8 },
+        'palermo': { left: 51.8, top: 87.3 },
+        'cagliari':{ left: 21.8, top: 78.7 },
+        'venice':  { left: 49.2, top: 20.5 },
+        'venezia': { left: 49.2, top: 20.5 }
+      };
+
+      const regionMap = {
+        'lombardy':       { left: 36.4, top: 18.4 },
+        'lombardia':      { left: 36.4, top: 18.4 },
+        'lazio':          { left: 46.2, top: 46.1 },
+        'tuscany':        { left: 42.7, top: 38.0 },
+        'toscana':        { left: 42.7, top: 38.0 },
+        'emilia-romagna': { left: 40.7, top: 28.8 },
+        'emilia romagna': { left: 40.7, top: 28.8 },
+        'campania':       { left: 47.7, top: 58.4 },
+        'puglia':         { left: 61.0, top: 58.8 },
+        'sicily':         { left: 51.8, top: 87.3 },
+        'sicilia':        { left: 51.8, top: 87.3 },
+        'sardinia':       { left: 21.8, top: 78.7 },
+        'sardegna':       { left: 21.8, top: 78.7 },
+        'piedmont':       { left: 25.4, top: 19.0 },
+        'piemonte':       { left: 25.4, top: 19.0 },
+        'liguria':        { left: 28.0, top: 27.2 },
+        'veneto':         { left: 49.2, top: 20.5 }
+      };
+
+      if (cityMap[city]) return cityMap[city];
+      if (regionMap[region]) return regionMap[region];
+
+      const fallback = {
+        north:   { left: 37.0, top: 21.0 },
+        center:  { left: 45.8, top: 45.8 },
+        south:   { left: 54.0, top: 69.5 },
+        islands: { left: 39.0, top: 84.0 }
+      };
+      return fallback[bucket] || fallback.center;
+    }
+
     function renderItalyMapGroups(events){
       const visualBox = qs('mapVisualBox');
       const countryValues = (events || []).map(ev => String(ev.ip_country || '').trim()).filter(Boolean);
@@ -1086,6 +1151,12 @@
           const size = Math.min(18, 12 + conf.count);
           conf.el.style.width = size + 'px';
           conf.el.style.height = size + 'px';
+
+          const refEvent = (groups[key] && groups[key][0]) ? groups[key][0] : null;
+          const pos = getMapPositionForEvent(refEvent, key);
+          conf.el.style.left = pos.left + '%';
+          conf.el.style.top = pos.top + '%';
+
           conf.el.onclick = () => renderAreaPointDetails(key, groups);
         } else {
           conf.el.style.display = 'none';
