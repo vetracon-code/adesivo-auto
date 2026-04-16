@@ -713,6 +713,12 @@
             <button id="secondaryInstallActionBtn" class="btn btn-secondary" type="button" style="display:none;min-height:34px;padding:0 12px;font-size:.8rem;">Dettagli</button>
           </div>
 
+          <div id="installRefreshWrap" style="display:none;margin-top:8px;">
+            <button id="refreshOwnerAppBtn" type="button" style="min-height:32px;padding:0 12px;border-radius:10px;border:0;background:#5aa0ff;color:#fff;font-size:.8rem;font-weight:800;cursor:pointer;box-shadow:0 8px 18px rgba(90,160,255,.18);">
+              Refresh
+            </button>
+          </div>
+
           <div id="installActionResult" class="muted" style="margin-top:8px;line-height:1.42;font-size:.84rem;"></div>
         </div>
       </div>
@@ -1872,6 +1878,7 @@
 
       const compact = document.getElementById('installCompactText');
       const explain = document.getElementById('installExplainBox');
+      const refreshWrap = document.getElementById('installRefreshWrap');
       const deviceLabel = document.getElementById('deviceDetectedValue');
       const instructions = document.getElementById('installInstructionsText');
       const primaryBtn = document.getElementById('primaryInstallNotifyBtn');
@@ -1881,7 +1888,6 @@
       deviceLabel.innerHTML = `${installVisualIcon(device)} ${installDeviceLabel(device)}`;
       explain.style.display = 'none';
       secondaryBtn.style.display = 'none';
-      const refreshWrap = document.getElementById('installRefreshWrap');
       if (refreshWrap) refreshWrap.style.display = (installed || notif === 'granted') ? 'block' : 'none';
       resultEl.textContent = '';
 
@@ -2143,6 +2149,25 @@
         resultEl.textContent = 'Impossibile attivare le notifiche in questo momento.';
       }
       updateInstallUI();
+    }
+
+    const refreshOwnerAppBtn = document.getElementById('refreshOwnerAppBtn');
+    if (refreshOwnerAppBtn) {
+      refreshOwnerAppBtn.addEventListener('click', async () => {
+        const resultEl = document.getElementById('installActionResult');
+        resultEl.textContent = 'Aggiornamento in corso...';
+        try {
+          if ('serviceWorker' in navigator) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            for (const reg of regs) {
+              try { await reg.update(); } catch (e) {}
+            }
+          }
+          setTimeout(() => window.location.reload(), 250);
+        } catch (e) {
+          resultEl.textContent = 'Impossibile aggiornare in questo momento.';
+        }
+      });
     }
 
     document.getElementById('primaryInstallNotifyBtn').addEventListener('click', tryInstallFlow);
