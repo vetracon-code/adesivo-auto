@@ -1,3 +1,4 @@
+
 // SECURITY PATCH 1
 require('dotenv').config();
 const express = require('express');
@@ -2367,6 +2368,57 @@ app.get('/api/code/:code', async (req, res) => {
   } catch (err) {
     console.error('get code error:', err);
     res.status(500).json({ success: false, message: 'Errore interno' });
+  }
+});
+
+
+
+app.get('/api/admin/qr-only/:code', requireAdmin, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const cleanCode = String(code || '').trim().toUpperCase();
+    const wantDownload = String(req.query.download || '') === '1';
+
+    if (!cleanCode) {
+      return res.status(400).json({ success: false, error: 'Codice obbligatorio.' });
+    }
+
+    const result = await pool.query(
+      'SELECT qr_url FROM sticker_codes WHERE code = $1 LIMIT 1',
+      [cleanCode]
+    );
+
+    const row = result.rows[0];
+
+    if (!row) {
+      return res.status(404).send('Codice non trovato');
+    }
+
+    if (!row.qr_url) {
+      return res.status(400).send('QR non ancora disponibile per questo codice');
+    }
+
+    const pngBuffer = await QRCode.toBuffer(row.qr_url, {
+      errorCorrectionLevel: 'H',
+      type: 'png',
+      width: 2000,
+      margin: 2,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      }
+    });
+
+    res.setHeader('Content-Type', 'image/png');
+    if (wantDownload) {
+      res.setHeader('Content-Disposition', `attachment; filename="qr-${cleanCode}.png"`);
+    } else {
+      res.setHeader('Content-Disposition', `inline; filename="qr-${cleanCode}.png"`);
+    }
+    res.send(pngBuffer);
+  } catch (err) {
+    console.error('Errore generazione QR HD:', err);
+    res.status(500).send('Errore generazione QR');
   }
 });
 
