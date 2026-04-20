@@ -149,6 +149,21 @@ function generateCode() {
   return 'AMC-' + crypto.randomBytes(4).toString('hex').toUpperCase();
 }
 
+
+function formatEventDateTimeIT(date = new Date()) {
+  try {
+    return new Intl.DateTimeFormat('it-IT', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(date);
+  } catch (_) {
+    return date.toISOString();
+  }
+}
+
 function generatePublicId() {
   return require('crypto')
     .randomBytes(6)
