@@ -1543,14 +1543,7 @@ window.fixQrUrl = async function(code){
   }
 
   function phoneForWa(v){
-    let raw = String(v || '').trim();
-    raw = raw.replace(/\s+/g,'').replace(/[()\-]/g,'');
-    raw = raw.replace(/^00/, '+');
-    if (!raw) return '';
-    if (raw.startsWith('+')) return raw.replace(/[^\d+]/g,'');
-    raw = raw.replace(/\D/g,'');
-    if (raw.startsWith('39')) return '+' + raw;
-    return '+39' + raw;
+    return String(v || '').replace(/[^\d+]/g,'');
   }
 
   async function loadTrialRequests(){
@@ -1580,34 +1573,15 @@ window.fixQrUrl = async function(code){
       }
 
       body.innerHTML = items.map(item => {
-        const activationCode = item.code || item.activation_code || item.trial_code || 'CODICE DA GENERARE';
-        const appUrl = item.owner_access_token
-          ? `${window.location.origin}/owner-access/${item.owner_access_token}`
-          : (item.code && item.plate
-              ? `${window.location.origin}/owner-simple.html?code=${encodeURIComponent(item.code)}&plate=${encodeURIComponent(item.plate)}`
-              : `${window.location.origin}/activate.html${item.code ? `?code=${encodeURIComponent(item.code)}` : ''}`);
-
         const waText = [
           `Ciao ${item.full_name || ''},`,
-          ``,
-          `la tua richiesta di prova gratuita è stata approvata e i controlli sono stati superati con esito positivo.`,
-          ``,
-          `Il tuo codice personale di attivazione è: *${activationCode}*`,
-          ``,
-          `Puoi aprire subito la tua App da questo link:`,
-          `${appUrl}`,
-          ``,
-          `Una volta aperta potrai:`,
-          `- attivare il servizio`,
-          `- salvare l’App sul telefono`,
-          `- attivare le notifiche`,
-          `- stampare la comunicazione collegata`,
-          ``,
-          `Il sistema è ora pronto per la tua prova gratuita.`
+          `ho ricevuto la tua richiesta di prova gratuita per il servizio QR veicolo.`,
+          `Targa: ${item.plate || '-'}`,
+          `Veicolo: ${(item.brand || '') + ' ' + (item.vehicle_model || '')}`.trim(),
+          `Ti contatto per procedere con la preparazione della prova gratuita.`
         ].join('\n');
 
-        const cleanWaPhone = phoneForWa(item.phone || '').replace(/^\+/, '');
-        const waUrl = `https://wa.me/${cleanWaPhone}?text=${encodeURIComponent(waText)}`;
+        const waUrl = `https://wa.me/${phoneForWa(item.phone || '')}?text=${encodeURIComponent(waText)}`;
         return `
           <tr>
             <td>${esc(fmtDate(item.created_at))}</td>
@@ -1747,8 +1721,7 @@ window.fixQrUrl = async function(code){
                 `Veicolo: ${(item.brand || '') + ' ' + (item.vehicle_model || '')}`.trim(),
                 `Ti contatto per procedere con la preparazione della prova gratuita.`
               ].join('\n');
-              const cleanWaPhone = phoneForWa(item.phone || '').replace(/^\+/, '');
-        const waUrl = `https://wa.me/${cleanWaPhone}?text=${encodeURIComponent(waText)}`;
+              const waUrl = `https://wa.me/${phoneForWa(item.phone || '')}?text=${encodeURIComponent(waText)}`;
               const raw = JSON.stringify(item).replace(/'/g, "&apos;");
               return `
                 <tr>
