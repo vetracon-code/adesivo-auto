@@ -443,7 +443,7 @@ let ownerQuickAccessDebug = {
   saved_at: null
 };
 
-app.post('/api/debug-owner-quick-access', requireAdmin, express.json(), (req, res) => {
+app.post('/api/debug-owner-quick-access', express.json(), (req, res) => {
   try {
     const { code, plate } = req.body || {};
     ownerQuickAccessDebug = {
@@ -459,7 +459,7 @@ app.post('/api/debug-owner-quick-access', requireAdmin, express.json(), (req, re
 });
 
 
-app.get('/api/debug-owner-quick-access-ping', requireAdmin, (req, res) => {
+app.get('/api/debug-owner-quick-access-ping', (req, res) => {
   try {
     const code = String(req.query.code || '');
     const plate = String(req.query.plate || '');
@@ -476,7 +476,7 @@ app.get('/api/debug-owner-quick-access-ping', requireAdmin, (req, res) => {
 });
 
 
-app.get('/api/debug-owner-quick-access', requireAdmin, (req, res) => {
+app.get('/api/debug-owner-quick-access', (req, res) => {
   return res.json({ success: true, debug: ownerQuickAccessDebug });
 });
 
@@ -485,55 +485,7 @@ app.get('/health', (req, res) => {
   res.json({ ok: true });
 });
 
-
-app.post('/api/trial-request', async (req, res) => {
-  try {
-    const {
-      full_name, phone, email, plate, brand, vehicle_model, color,
-      notes, privacy_consent, marketing_consent
-    } = req.body || {};
-
-    const cleanName = String(full_name || '').trim();
-    const cleanPhone = String(phone || '').trim();
-    const cleanEmail = String(email || '').trim().toLowerCase();
-    const cleanPlate = String(plate || '').trim().toUpperCase();
-    const cleanBrand = String(brand || '').trim();
-    const cleanModel = String(vehicle_model || '').trim();
-    const cleanColor = String(color || '').trim();
-    const cleanNotes = String(notes || '').trim();
-
-    if (!cleanName || !cleanPhone || !cleanPlate || !cleanBrand || !cleanModel || !privacy_consent) {
-      return res.status(400).json({ success: false, error: 'Compila tutti i campi obbligatori e accetta la privacy.' });
-    }
-
-    await pool.query(
-      `INSERT INTO trial_requests
-       (full_name, phone, email, plate, brand, vehicle_model, color, notes, privacy_consent, marketing_consent, source_page, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())`,
-      [
-        cleanName,
-        cleanPhone,
-        cleanEmail || null,
-        cleanPlate,
-        cleanBrand,
-        cleanModel,
-        cleanColor || null,
-        cleanNotes || null,
-        !!privacy_consent,
-        !!marketing_consent,
-        '/'
-      ]
-    );
-
-    return res.json({ success: true, message: 'Richiesta ricevuta correttamente.' });
-  } catch (err) {
-    console.error('trial-request error:', err);
-    return res.status(500).json({ success: false, error: 'Errore invio richiesta prova gratuita.' });
-  }
-});
-
-
-app.post('/api/create-code', requireAdmin, async (req, res) => {
+app.post('/api/create-code', async (req, res) => {
   try {
     const { plan_type, offered_by } = req.body || {};
     const allowedPlans = ['always', '1week', '1month', '6months'];
@@ -2824,7 +2776,7 @@ app.get('/contact/:code', async (req, res) => {
   }
 });
 
-app.post('/api/admin/find-code', requireAdmin, async (req, res) => {
+app.post('/api/admin/find-code', async (req, res) => {
   try {
     const { email, password, code } = req.body;
 
@@ -2848,7 +2800,7 @@ app.post('/api/admin/find-code', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/admin/scan-stats', requireAdmin, async (req, res) => {
+app.post('/api/admin/scan-stats', async (req, res) => {
   try {
     const { email, password, code } = req.body;
 
@@ -2883,7 +2835,7 @@ app.post('/api/admin/scan-stats', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/admin/reactivate-code', requireAdmin, async (req, res) => {
+app.post('/api/admin/reactivate-code', async (req, res) => {
   try {
     const { email, password, code } = req.body;
 
@@ -2981,25 +2933,6 @@ async function initDb() {
         updated_at TIMESTAMP DEFAULT NOW(),
         UNIQUE(code, plate)
       );
-    `);
-
-    
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS trial_requests (
-        id SERIAL PRIMARY KEY,
-        full_name TEXT NOT NULL,
-        phone TEXT NOT NULL,
-        email TEXT,
-        plate TEXT NOT NULL,
-        brand TEXT NOT NULL,
-        vehicle_model TEXT NOT NULL,
-        color TEXT,
-        notes TEXT,
-        privacy_consent BOOLEAN NOT NULL DEFAULT FALSE,
-        marketing_consent BOOLEAN NOT NULL DEFAULT FALSE,
-        source_page TEXT,
-        created_at TIMESTAMP NOT NULL DEFAULT NOW()
-      )
     `);
 
     console.log('Tabella sticker_codes pronta');
