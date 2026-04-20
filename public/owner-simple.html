@@ -680,18 +680,8 @@
       .actions{justify-content:flex-start}
     }
   
-.installed-notify-status{
-  display:block !important;
-  width:100% !important;
-  text-align:left !important;
-  align-self:flex-start !important;
-  margin-left:0 !important;
-  margin-right:auto !important;
-}
-.refresh-right{
-  margin-left:auto !important;
-  text-align:right !important;
-}
+
+
 
 </style>
 
@@ -1958,7 +1948,7 @@
       }
 
       if (notif === 'granted' && hasPushSubscription) {
-        setInstallBadge('<span class="installed-notify-status">APP INSTALLATA + NOTIFICHE ATTIVE</span>', 'ok');
+        setInstallBadge('APP INSTALLATA + NOTIFICHE ATTIVE', 'ok');
         compact.textContent = '';
         primaryBtn.textContent = 'Disattiva notifiche';
         currentInstallMode = 'disable_notifications';
@@ -2268,43 +2258,100 @@
   </div>
 
 
-<script>
+
+
+
+<style id="owner-fix-refresh-status">
+.owner-top-refresh-bar{
+  width:100%;
+  display:flex;
+  justify-content:flex-end;
+  align-items:flex-start;
+  margin:0 0 14px 0;
+}
+.owner-top-refresh-bar .top-refresh-btn{
+  margin-left:auto !important;
+}
+.owner-status-left{
+  display:block !important;
+  width:100% !important;
+  text-align:left !important;
+  margin:0 0 10px 0 !important;
+}
+</style>
+
+<script id="owner-fix-refresh-status-script">
 document.addEventListener('DOMContentLoaded', function () {
-  const all = Array.from(document.querySelectorAll('button, a, div, span, p, strong'));
+  const nodes = Array.from(document.querySelectorAll('button, a, div, span, p, strong'));
 
-  all.forEach(el => {
-    const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+  // Ripulisce eventuale stringa HTML stampata come testo
+  nodes.forEach(el => {
+    const raw = (el.innerHTML || '').trim();
+    const txt = (el.textContent || '').replace(/\s+/g,' ').trim();
 
-    if (t === 'APP INSTALLATA + NOTIFICHE ATTIVE') {
-      el.style.display = 'block';
-      el.style.width = '100%';
-      el.style.textAlign = 'left';
-      el.style.marginLeft = '0';
-      el.style.marginRight = 'auto';
-      el.style.alignSelf = 'flex-start';
-
-      const parent = el.parentElement;
-      if (parent) {
-        parent.style.display = 'flex';
-        parent.style.flexDirection = 'column';
-        parent.style.alignItems = 'flex-start';
-        parent.style.justifyContent = 'flex-start';
-      }
-    }
-
-    if (t === 'Refresh') {
-      el.style.marginLeft = 'auto';
-      el.style.marginRight = '0';
-      el.style.display = 'block';
-
-      const parent = el.parentElement;
-      if (parent) {
-        parent.style.display = 'flex';
-        parent.style.justifyContent = 'flex-end';
-        parent.style.alignItems = 'flex-start';
-      }
+    if (
+      raw.includes('&lt;span class="installed-notify-status"&gt;APP INSTALLATA + NOTIFICHE ATTIVE&lt;/span&gt;') ||
+      txt === '<span class="installed-notify-status">APP INSTALLATA + NOTIFICHE ATTIVE</span>'
+    ) {
+      el.textContent = 'APP INSTALLATA + NOTIFICHE ATTIVE';
     }
   });
+
+  const refreshEl = nodes.find(el => (el.textContent || '').replace(/\s+/g,' ').trim() === 'Refresh');
+  const statusEl = Array.from(document.querySelectorAll('button, a, div, span, p, strong'))
+    .find(el => (el.textContent || '').replace(/\s+/g,' ').trim() === 'APP INSTALLATA + NOTIFICHE ATTIVE');
+  const disableEl = Array.from(document.querySelectorAll('button, a, div, span, p, strong'))
+    .find(el => (el.textContent || '').replace(/\s+/g,' ').trim() === 'Disattiva notifiche');
+
+  if (statusEl) {
+    statusEl.classList.add('owner-status-left');
+    const parent = statusEl.parentElement;
+    if (parent) {
+      parent.style.display = 'flex';
+      parent.style.flexDirection = 'column';
+      parent.style.alignItems = 'flex-start';
+      parent.style.justifyContent = 'flex-start';
+    }
+  }
+
+  if (refreshEl) {
+    let anchor = null;
+
+    if (statusEl && statusEl.closest('div')) {
+      anchor = statusEl.closest('div');
+      while (anchor.parentElement && anchor.parentElement.tagName === 'DIV') {
+        const p = anchor.parentElement;
+        if (p.children.length > 1) { anchor = p; break; }
+        anchor = p;
+      }
+    } else if (disableEl && disableEl.closest('div')) {
+      anchor = disableEl.closest('div');
+    } else {
+      anchor = document.body;
+    }
+
+    let bar = document.getElementById('owner-top-refresh-bar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'owner-top-refresh-bar';
+      bar.className = 'owner-top-refresh-bar';
+    }
+
+    refreshEl.classList.add('top-refresh-btn');
+    refreshEl.style.marginLeft = 'auto';
+    refreshEl.style.marginRight = '0';
+    refreshEl.style.display = 'inline-flex';
+
+    if (!bar.contains(refreshEl)) {
+      bar.appendChild(refreshEl);
+    }
+
+    if (anchor && anchor.parentNode) {
+      anchor.parentNode.insertBefore(bar, anchor);
+    } else {
+      document.body.insertBefore(bar, document.body.firstChild);
+    }
+  }
 });
 </script>
 
