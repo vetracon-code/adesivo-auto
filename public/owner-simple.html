@@ -1650,9 +1650,7 @@
       const mapCoordsEl = document.getElementById('msgDetailMapCoords');
       const copyCoordsBtn = document.getElementById('msgDetailCopyCoords');
       const abuseResultEl = document.getElementById('msgDetailAbuseResult');
-      const blockPhoneBtn = document.getElementById('msgBlockPhoneBtn');
       const blockIpBtn = document.getElementById('msgBlockIpBtn');
-      const showBlocksBtn = document.getElementById('msgShowBlocksBtn');
 
       modal.style.display = 'flex';
       reasonEl.textContent = item.reason || 'Segnalazione';
@@ -1738,29 +1736,6 @@
 
       abuseResultEl.textContent = '';
 
-      if (extractedPhone) {
-        blockPhoneBtn.style.display = 'inline-flex';
-        blockPhoneBtn.onclick = async () => {
-          const { code, plate } = getOwnerParams();
-          const res = await fetch('/api/owner/block-abuse', {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({
-              code,
-              plate,
-              block_type: 'phone',
-              block_value: extractedPhone,
-              reason: 'Blocco da dettaglio messaggio'
-            })
-          });
-          const data = await res.json();
-          abuseResultEl.textContent = data.success ? 'Numero bloccato.' : (data.error || 'Errore blocco numero.');
-        };
-      } else {
-        blockPhoneBtn.style.display = 'none';
-        blockPhoneBtn.onclick = null;
-      }
-
       if (item.ip_address && String(item.ip_address).trim()) {
         const ipValue = String(item.ip_address).trim();
         blockIpBtn.style.display = 'inline-flex';
@@ -1784,33 +1759,6 @@
         blockIpBtn.style.display = 'none';
         blockIpBtn.onclick = null;
       }
-
-      showBlocksBtn.onclick = async () => {
-        const { code, plate } = getOwnerParams();
-        const res = await fetch('/api/owner/list-abuse-blocks', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ code, plate })
-        });
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          abuseResultEl.textContent = data.error || 'Errore caricamento blocchi.';
-          return;
-        }
-
-        const active = (data.items || []).filter(x => x.is_active);
-        if (!active.length) {
-          abuseResultEl.textContent = 'Nessun blocco attivo.';
-          return;
-        }
-
-        abuseResultEl.innerHTML = active.map(x => `
-          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);margin-top:8px;">
-            <div><strong>${escapeHtml(x.block_type === 'phone' ? 'Numero' : 'IP')}</strong>: ${escapeHtml(x.block_value || '')}</div>
-            <button type="button" class="btn btn-secondary" style="min-height:36px;" onclick="ownerUnblockAbuse(${x.id}); return false;">Sblocca</button>
-          </div>
-        `).join('');
-      };
 
       modal.style.display = 'flex';
     };
@@ -2280,20 +2228,20 @@
           </div>
         </div>
 
-        <div id="msgDetailAbuseWrap" style="padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);display:grid;gap:10px;">
-          <div style="font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.62);">Protezione abuso</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button id="msgBlockPhoneBtn" type="button" class="btn btn-secondary" style="display:none;">Blocca numero</button>
-            <button id="msgBlockIpBtn" type="button" class="btn btn-secondary" style="display:none;">Blocca IP</button>
-            <button id="msgShowBlocksBtn" type="button" class="btn btn-secondary">Numeri/IP bloccati</button>
-          </div>
-          <div id="msgDetailAbuseResult" class="muted"></div>
-        </div>
-
         <div style="padding:16px 18px;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);">
           <div style="font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.62);">Messaggio</div>
           <div id="msgDetailText" style="margin-top:8px;color:#fff;line-height:1.7;white-space:pre-wrap;font-size:1.08rem;word-break:break-word;"></div>
         </div>
+
+<div id="msgDetailAbuseWrap" style="padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);display:grid;gap:10px;">
+          <div style="font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.62);">Protezione abuso</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button id="msgBlockIpBtn" type="button" class="btn btn-secondary" style="display:none;">Blocca IP</button>
+          </div>
+          <div id="msgDetailAbuseResult" class="muted"></div>
+        </div>
+
+        
       </div>
     </div>
   </div>
