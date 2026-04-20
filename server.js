@@ -1932,7 +1932,6 @@ app.post('/api/admin/generate-trial-code', requireAdmin, async (req, res) => {
       return res.status(500).json({ success: false, error: 'Impossibile generare un codice univoco.' });
     }
 
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const qrUrl = `${baseUrl.replace(/\/$/, '')}/contact/u/${encodeURIComponent(publicId)}`;
 
