@@ -2936,6 +2936,11 @@ async function initDb() {
     console.log('Tabella qr_scans pronta');
     console.log('Tabella abuse_blocks pronta');
     console.log('Tabella push_delivery_logs pronta');
+    await pool.query(`
+      ALTER TABLE sticker_codes
+      ADD COLUMN IF NOT EXISTS offered_by TEXT
+    `);
+
     console.log('Tabella vehicle_service_data pronta');
   } catch (err) {
     console.error('Errore init DB:', err);
