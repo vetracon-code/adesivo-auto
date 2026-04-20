@@ -530,32 +530,6 @@ app.post('/api/trial-request', async (req, res) => {
       const trialPushPlate = 'GL740CH';
       const nowLabel = new Date().toLocaleString('it-IT');
 
-      let insertedMessageId = null;
-      try {
-        const msgText = [
-          'Nuovo utente registrato',
-          `Data e ora: ${nowLabel}`,
-          `Nome: ${cleanName}`,
-          `Telefono: ${cleanPhone}`,
-          cleanEmail ? `Email: ${cleanEmail}` : null,
-          `Targa: ${cleanPlate}`,
-          `Veicolo: ${cleanBrand} ${cleanModel}`.trim(),
-          cleanColor ? `Colore: ${cleanColor}` : null,
-          cleanNotes ? `Note: ${cleanNotes}` : null
-        ].filter(Boolean).join('\n');
-
-        const insertedMsg = await pool.query(
-          `INSERT INTO contact_message_logs
-           (code, plate, reason, message_text, location_shared, created_at)
-           VALUES ($1, $2, $3, $4, FALSE, NOW())
-           RETURNING id`,
-          [trialPushCode, trialPushPlate, 'Nuovo utente registrato', msgText]
-        );
-        insertedMessageId = insertedMsg.rows?.[0]?.id || null;
-      } catch (msgErr) {
-        console.error('trial registration log message error:', msgErr);
-      }
-
       if (vapidPublicKey && vapidPrivateKey) {
         const subs = await pool.query(
           `SELECT endpoint, p256dh, auth
@@ -566,7 +540,7 @@ app.post('/api/trial-request', async (req, res) => {
           [trialPushCode, trialPushPlate]
         );
 
-        const targetUrl = `/owner-simple.html?code=${encodeURIComponent(trialPushCode)}&plate=${encodeURIComponent(trialPushPlate)}${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}`;
+        const targetUrl = `/owner-simple.html?code=${encodeURIComponent(trialPushCode)}&plate=${encodeURIComponent(trialPushPlate)}`;
 
         for (const sub of subs.rows || []) {
           try {
@@ -583,7 +557,6 @@ app.post('/api/trial-request', async (req, res) => {
                 body: `Data e ora: ${nowLabel}`,
                 url: targetUrl,
                 targetUrl,
-                messageId: insertedMessageId,
                 channel: 'trial-registration-alert'
               })
             );
