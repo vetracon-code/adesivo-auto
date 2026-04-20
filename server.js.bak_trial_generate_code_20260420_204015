@@ -1876,109 +1876,6 @@ app.post('/api/admin/delete-trial-request', requireAdmin, async (req, res) => {
 });
 
 
-
-app.post('/api/admin/generate-trial-code', requireAdmin, async (req, res) => {
-  try {
-    const { id } = req.body || {};
-    if (!id) {
-      return res.status(400).json({ success: false, error: 'ID richiesta obbligatorio.' });
-    }
-
-    const trialRes = await pool.query(
-      `SELECT * FROM trial_requests WHERE id = $1 LIMIT 1`,
-      [id]
-    );
-
-    const trial = trialRes.rows[0];
-    if (!trial) {
-      return res.status(404).json({ success: false, error: 'Richiesta non trovata.' });
-    }
-
-    if (trial.code && trial.public_id && trial.owner_access_token) {
-      const app_url = `${baseUrl.replace(/\/$/, '')}/owner-access/${trial.owner_access_token}`;
-      return res.json({
-        success: true,
-        code: trial.code,
-        public_id: trial.public_id,
-        owner_access_token: trial.owner_access_token,
-        app_url
-      });
-    }
-
-    let code = null;
-    let publicId = null;
-    let ownerAccessToken = null;
-
-    for (let i = 0; i < 20; i++) {
-      const tryCode = generateCode();
-      const tryPublicId = generatePublicId();
-      const tryToken = generateOwnerAccessToken();
-
-      const existsCode = await pool.query('SELECT 1 FROM sticker_codes WHERE code = $1 LIMIT 1', [tryCode]);
-      const existsPid = await pool.query('SELECT 1 FROM sticker_codes WHERE public_id = $1 LIMIT 1', [tryPublicId]);
-      if (!existsCode.rows.length && !existsPid.rows.length) {
-        code = tryCode;
-        publicId = tryPublicId;
-        ownerAccessToken = tryToken;
-        break;
-      }
-    }
-
-    if (!code || !publicId || !ownerAccessToken) {
-      return res.status(500).json({ success: false, error: 'Impossibile generare un codice univoco.' });
-    }
-
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    const qrUrl = `${baseUrl.replace(/\/$/, '')}/contact/u/${encodeURIComponent(publicId)}`;
-
-    await pool.query(
-      `INSERT INTO sticker_codes
-       (code, public_id, status, plan_type, expires_at, owner_access_token, qr_url, offered_by,
-        brand, plate, vehicle_model, color, phone, activated_at)
-       VALUES
-       ($1, $2, 'used', '1month', $3, $4, $5, $6,
-        $7, $8, $9, $10, $11, NOW())`,
-      [
-        code,
-        publicId,
-        expiresAt,
-        ownerAccessToken,
-        qrUrl,
-        'Prova gratuita',
-        trial.brand || null,
-        String(trial.plate || '').trim().toUpperCase(),
-        trial.vehicle_model || null,
-        trial.color || null,
-        trial.phone || null
-      ]
-    );
-
-    await pool.query(
-      `UPDATE trial_requests
-       SET code = $2,
-           public_id = $3,
-           owner_access_token = $4,
-           generated_at = NOW()
-       WHERE id = $1`,
-      [id, code, publicId, ownerAccessToken]
-    );
-
-    const app_url = `${baseUrl.replace(/\/$/, '')}/owner-access/${ownerAccessToken}`;
-
-    return res.json({
-      success: true,
-      code,
-      public_id: publicId,
-      owner_access_token: ownerAccessToken,
-      app_url
-    });
-  } catch (err) {
-    console.error('admin generate-trial-code error:', err);
-    return res.status(500).json({ success: false, error: 'Errore generazione codice prova.' });
-  }
-});
-
-
 app.get('/api/admin/trial-requests', requireAdmin, async (req, res) => {
   try {
     const rows = await pool.query(
@@ -3285,12 +3182,6 @@ async function initDb() {
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       )
     `);
-
-    
-    await pool.query("ALTER TABLE trial_requests ADD COLUMN IF NOT EXISTS code TEXT");
-    await pool.query("ALTER TABLE trial_requests ADD COLUMN IF NOT EXISTS public_id TEXT");
-    await pool.query("ALTER TABLE trial_requests ADD COLUMN IF NOT EXISTS owner_access_token TEXT");
-    await pool.query("ALTER TABLE trial_requests ADD COLUMN IF NOT EXISTS generated_at TIMESTAMP");
 
     console.log('Tabella sticker_codes pronta');
     console.log('Tabella qr_scans pronta');
