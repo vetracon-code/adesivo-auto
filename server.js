@@ -487,7 +487,7 @@ app.get('/health', (req, res) => {
 
 app.post('/api/create-code', async (req, res) => {
   try {
-    const { plan_type } = req.body || {};
+    const { plan_type, offered_by } = req.body || {};
     const allowedPlans = ['always', '1week', '1month', '6months'];
     const selectedPlan = allowedPlans.includes(plan_type) ? plan_type : 'always';
 
@@ -508,8 +508,8 @@ app.post('/api/create-code', async (req, res) => {
     const qrUrl = `${baseUrl}/contact/u/${encodeURIComponent(publicId)}`;
 
     await pool.query(
-      'INSERT INTO sticker_codes (code, public_id, status, plan_type, expires_at, owner_access_token, qr_url) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [code, publicId, 'new', selectedPlan, expiresAt, ownerAccessToken, qrUrl]
+      'INSERT INTO sticker_codes (code, public_id, status, plan_type, expires_at, owner_access_token, qr_url, offered_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [code, publicId, 'new', selectedPlan, expiresAt, ownerAccessToken, qrUrl, offered_by ? String(offered_by).trim() : null]
     );
 
     return res.json({
@@ -1671,7 +1671,7 @@ app.get('/api/admin/list-stickers', requireAdmin, async (req, res) => {
     if (q) {
       result = await pool.query(
         `SELECT
-           code, public_id, plate, brand, vehicle_model, color, phone,
+           code, public_id, plate, brand, vehicle_model, color, offered_by, phone,
            status, qr_url, plan_type, expires_at, activated_at,
            invite_sent_to, invite_channel, invite_target, invite_variant, invite_sent_at
          FROM sticker_codes
@@ -1684,7 +1684,7 @@ app.get('/api/admin/list-stickers', requireAdmin, async (req, res) => {
     } else {
       result = await pool.query(
         `SELECT
-           code, public_id, plate, brand, vehicle_model, color, phone,
+           code, public_id, plate, brand, vehicle_model, color, offered_by, phone,
            status, qr_url, plan_type, expires_at, activated_at,
            invite_sent_to, invite_channel, invite_target, invite_variant, invite_sent_at
          FROM sticker_codes
@@ -1724,7 +1724,7 @@ app.get('/api/admin/list-stickers', requireAdmin, async (req, res) => {
 app.post('/api/admin/update-sticker', requireAdmin, async (req, res) => {
   try {
     const {
-      code, brand, plate, vehicle_model, color, phone,
+      code, brand, plate, vehicle_model, color, offered_by, phone,
       plan_type, expires_at
     } = req.body || {};
 
@@ -1740,9 +1740,10 @@ app.post('/api/admin/update-sticker', requireAdmin, async (req, res) => {
            plate = $3,
            vehicle_model = $4,
            color = $5,
-           phone = $6,
-           plan_type = $7,
-           expires_at = $8
+           offered_by = $6,
+           phone = $7,
+           plan_type = $8,
+           expires_at = $9
        WHERE code = $1`,
       [
         cleanCode,
@@ -1750,6 +1751,7 @@ app.post('/api/admin/update-sticker', requireAdmin, async (req, res) => {
         plate || null,
         vehicle_model || null,
         color || null,
+        offered_by ? String(offered_by).trim() : null,
         phone || null,
         plan_type || null,
         expires_at || null

@@ -361,6 +361,11 @@
           <option value="1month">Valido 1 mese</option>
           <option value="6months">Valido 6 mesi</option>
         </select>
+        <select id="isSponsored" class="select">
+          <option value="no" selected>Non sponsorizzato</option>
+          <option value="yes">Sponsorizzato</option>
+        </select>
+        <input id="sponsorName" class="input" placeholder="Servizio offerto da" style="display:none;min-width:260px;">
         <button id="adminCreateCodeBtn" class="btn btn-primary" type="button">Genera nuovo codice</button>
       </div>
 
@@ -579,7 +584,16 @@
     const pushBroadcastResult = document.getElementById('pushBroadcastResult');
     const lastPushList = document.getElementById('lastPushList');
     const lastPushMeta = document.getElementById('lastPushMeta');
+    const isSponsoredEl = document.getElementById('isSponsored');
+    const sponsorNameEl = document.getElementById('sponsorName');
     let adminItems = [];
+
+    if (isSponsoredEl && sponsorNameEl) {
+      isSponsoredEl.addEventListener('change', () => {
+        sponsorNameEl.style.display = isSponsoredEl.value === 'yes' ? 'block' : 'none';
+        if (isSponsoredEl.value !== 'yes') sponsorNameEl.value = '';
+      });
+    }
     let deliverWebAppState = null;
 
     function fmtDate(v){
@@ -1282,10 +1296,14 @@ window.fixQrUrl = async function(code){
       resultEl.textContent = 'Generazione in corso...';
 
       try {
+        const offeredBy = (document.getElementById('isSponsored')?.value === 'yes')
+          ? document.getElementById('sponsorName')?.value.trim()
+          : '';
+
         const res = await fetch('/api/create-code', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ plan_type: planType })
+          body: JSON.stringify({ plan_type: planType, offered_by: offeredBy })
         });
 
         const data = await res.json();
