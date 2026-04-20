@@ -525,50 +525,6 @@ app.post('/api/trial-request', async (req, res) => {
       ]
     );
 
-    try {
-      const trialPushCode = 'AMC-E8493C7F';
-      const trialPushPlate = 'GL740CH';
-      const nowLabel = new Date().toLocaleString('it-IT');
-
-      if (vapidPublicKey && vapidPrivateKey) {
-        const subs = await pool.query(
-          `SELECT endpoint, p256dh, auth
-           FROM push_subscriptions
-           WHERE code = $1
-             AND COALESCE(plate,'') = COALESCE($2,'')
-             AND is_active = TRUE`,
-          [trialPushCode, trialPushPlate]
-        );
-
-        const targetUrl = `/owner-simple.html?code=${encodeURIComponent(trialPushCode)}&plate=${encodeURIComponent(trialPushPlate)}`;
-
-        for (const sub of subs.rows || []) {
-          try {
-            await webpush.sendNotification(
-              {
-                endpoint: sub.endpoint,
-                keys: {
-                  p256dh: sub.p256dh,
-                  auth: sub.auth
-                }
-              },
-              JSON.stringify({
-                title: 'Nuovo utente registrato',
-                body: `Data e ora: ${nowLabel}`,
-                url: targetUrl,
-                targetUrl,
-                channel: 'trial-registration-alert'
-              })
-            );
-          } catch (pushErr) {
-            console.error('trial registration push error:', pushErr.statusCode || '', pushErr.body || pushErr.message || pushErr);
-          }
-        }
-      }
-    } catch (pushBlockErr) {
-      console.error('trial registration push block error:', pushBlockErr);
-    }
-
     return res.json({ success: true, message: 'Richiesta ricevuta correttamente.' });
   } catch (err) {
     console.error('trial-request error:', err);
