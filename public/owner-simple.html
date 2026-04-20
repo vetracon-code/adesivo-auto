@@ -692,28 +692,6 @@
 
 
 
-<style id="force-center-installed-status">
-#installed-status-center-wrap{
-  width:100% !important;
-  display:flex !important;
-  justify-content:center !important;
-  align-items:center !important;
-  text-align:center !important;
-  margin:0 0 12px 0 !important;
-}
-#installed-status-center-wrap > *{
-  text-align:center !important;
-  margin-left:0 !important;
-  margin-right:0 !important;
-  left:auto !important;
-  right:auto !important;
-  transform:none !important;
-  position:static !important;
-  width:auto !important;
-  max-width:calc(100vw - 40px) !important;
-}
-</style>
-
 </head>
 <body>
   <div class="wrap">
@@ -729,7 +707,7 @@
         </div>
 
         <div class="timeline-card" style="padding:10px 12px;border:1px solid rgba(63,121,216,.10);box-shadow:0 10px 22px rgba(30,46,82,.08);backdrop-filter:blur(10px);">
-          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;">
+          <div id="installStatusRow" style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;">
             <div>
               <div style="font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:#72829a;font-weight:800;"></div>
               <div id="installCompactText" class="muted" style="margin-top:4px;line-height:1.42;font-size:.88rem;">
@@ -2384,28 +2362,51 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
-<script id="force-center-installed-status-script">
+
+<script id="install-status-center-fix">
 document.addEventListener('DOMContentLoaded', function () {
-  const els = Array.from(document.querySelectorAll('div, span, p, strong, h1, h2, h3'));
-  const target = els.find(el => (el.textContent || '').replace(/\s+/g,' ').trim() === 'APP INSTALLATA + NOTIFICHE ATTIVE');
-  if (!target) return;
+  const badge = document.getElementById('installStatusBadge');
+  const row = document.getElementById('installStatusRow');
+  if (!badge || !row) return;
 
-  let wrap = document.getElementById('installed-status-center-wrap');
-  if (!wrap) {
-    wrap = document.createElement('div');
-    wrap.id = 'installed-status-center-wrap';
-    target.parentNode.insertBefore(wrap, target);
+  function syncInstallBadgeLayout() {
+    const t = (badge.textContent || '').replace(/\s+/g, ' ').trim();
+
+    if (t === 'APP INSTALLATA + NOTIFICHE ATTIVE') {
+      row.style.display = 'flex';
+      row.style.flexDirection = 'column';
+      row.style.justifyContent = 'center';
+      row.style.alignItems = 'center';
+      row.style.textAlign = 'center';
+
+      badge.style.display = 'inline-flex';
+      badge.style.alignSelf = 'center';
+      badge.style.margin = '8px auto 0 auto';
+      badge.style.textAlign = 'center';
+      badge.style.width = 'fit-content';
+      badge.style.maxWidth = 'calc(100% - 20px)';
+    } else {
+      row.style.display = 'flex';
+      row.style.flexDirection = 'row';
+      row.style.justifyContent = 'space-between';
+      row.style.alignItems = 'center';
+      row.style.textAlign = '';
+
+      badge.style.display = 'inline-flex';
+      badge.style.alignSelf = '';
+      badge.style.margin = '';
+      badge.style.textAlign = 'center';
+      badge.style.width = '';
+      badge.style.maxWidth = '';
+    }
   }
-  wrap.appendChild(target);
 
-  target.style.textAlign = 'center';
-  target.style.marginLeft = '0';
-  target.style.marginRight = '0';
-  target.style.left = 'auto';
-  target.style.right = 'auto';
-  target.style.transform = 'none';
-  target.style.position = 'static';
-  target.style.display = 'block';
+  syncInstallBadgeLayout();
+  new MutationObserver(syncInstallBadgeLayout).observe(badge, {
+    childList: true,
+    subtree: true,
+    characterData: true
+  });
 });
 </script>
 
