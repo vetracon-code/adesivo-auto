@@ -1974,7 +1974,17 @@ app.post('/api/admin/generate-trial-code', requireAdmin, async (req, res) => {
     });
   } catch (err) {
     console.error('admin generate-trial-code error:', err);
-    return res.status(500).json({ success: false, error: 'Errore generazione codice prova.' });
+    return res.status(500).json({
+      success: false,
+      error: 'Errore generazione codice prova.',
+      debug_message: err?.message || null,
+      debug_detail: err?.detail || null,
+      debug_hint: err?.hint || null,
+      debug_code: err?.code || null,
+      debug_table: err?.table || null,
+      debug_column: err?.column || null,
+      debug_constraint: err?.constraint || null
+    });
   }
 });
 
