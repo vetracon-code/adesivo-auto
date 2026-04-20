@@ -169,11 +169,26 @@ function normalizePhoneForOwnerLogin(value) {
   let raw = String(value || '').trim();
   raw = raw.replace(/\s+/g, '').replace(/[().-]/g, '');
   if (!raw) return '';
-  if (raw.startsWith('00')) raw = '+' + raw.slice(2);
-  if (raw.startsWith('+')) return raw.replace(/[^\d+]/g, '');
+
+  if (raw.startsWith('00')) {
+    raw = '+' + raw.slice(2);
+  }
+
+  if (raw.startsWith('+')) {
+    return raw.replace(/[^\d+]/g, '');
+  }
+
   raw = raw.replace(/\D/g, '');
   if (!raw) return '';
-  if (raw.startsWith('39')) return '+' + raw;
+
+  if (raw.length <= 10) {
+    return '+39' + raw;
+  }
+
+  if (raw.startsWith('39')) {
+    return '+' + raw;
+  }
+
   return '+39' + raw;
 }
 
