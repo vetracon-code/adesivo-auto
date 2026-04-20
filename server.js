@@ -1879,6 +1879,10 @@ app.post('/api/admin/delete-trial-request', requireAdmin, async (req, res) => {
 
 app.post('/api/admin/generate-trial-code', requireAdmin, async (req, res) => {
   try {
+    const host = req.get('host');
+    const isRenderHost = /onrender\.com$/i.test(host || '');
+    const baseUrl = isRenderHost ? `https://${host}` : `${req.protocol}://${host}`;
+
     const { id } = req.body || {};
     if (!id) {
       return res.status(400).json({ success: false, error: 'ID richiesta obbligatorio.' });
