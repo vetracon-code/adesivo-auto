@@ -1739,38 +1739,17 @@ window.fixQrUrl = async function(code){
                 .replace(/"/g,'&quot;')
                 .replace(/'/g,'&#39;');
               const fmtDate = v => { try { return v ? new Date(v).toLocaleString('it-IT') : '-'; } catch(e){ return v || '-'; } };
-
-              const activationCode = item.code || item.activation_code || item.trial_code || 'CODICE DA GENERARE';
-              const appUrl = item.owner_access_token
-                ? `${window.location.origin}/owner-access/${item.owner_access_token}`
-                : (item.code && item.plate
-                    ? `${window.location.origin}/owner-simple.html?code=${encodeURIComponent(item.code)}&plate=${encodeURIComponent(item.plate)}`
-                    : `${window.location.origin}/activate.html${item.code ? `?code=${encodeURIComponent(item.code)}` : ''}`);
-
+              const phoneForWa = v => String(v || '').replace(/[^\d+]/g,'');
               const waText = [
                 `Ciao ${item.full_name || ''},`,
-                ``,
-                `la tua richiesta di prova gratuita è stata approvata e i controlli sono stati superati con esito positivo.`,
-                ``,
-                `Il tuo codice personale di attivazione è: *${activationCode}*`,
-                ``,
-                `Puoi aprire subito la tua App da questo link:`,
-                `${appUrl}`,
-                ``,
-                `Una volta aperta potrai:`,
-                `- attivare il servizio`,
-                `- salvare l’App sul telefono`,
-                `- attivare le notifiche`,
-                `- stampare la comunicazione collegata`,
-                ``,
-                `Il sistema è ora pronto per la tua prova gratuita.`
+                `ho ricevuto la tua richiesta di prova gratuita per il servizio QR veicolo.`,
+                `Targa: ${item.plate || '-'}`,
+                `Veicolo: ${(item.brand || '') + ' ' + (item.vehicle_model || '')}`.trim(),
+                `Ti contatto per procedere con la preparazione della prova gratuita.`
               ].join('\n');
-
               const cleanWaPhone = phoneForWa(item.phone || '').replace(/^\+/, '');
-              const waUrl = cleanWaPhone ? `https://wa.me/${cleanWaPhone}?text=${encodeURIComponent(waText)}` : '';
-              const mailSubject = encodeURIComponent('Attivazione prova gratuita QR veicolo');
-              const mailBody = encodeURIComponent(waText);
-
+        const waUrl = `https://wa.me/${cleanWaPhone}?text=${encodeURIComponent(waText)}`;
+              const raw = JSON.stringify(item).replace(/'/g, "&apos;");
               return `
                 <tr>
                   <td>${esc(fmtDate(item.created_at))}</td>
@@ -1784,11 +1763,10 @@ window.fixQrUrl = async function(code){
                   <td>${item.marketing_consent ? '<span class="trial-badge yes">SI</span>' : '<span class="trial-badge no">NO</span>'}</td>
                   <td>
                     <div class="trial-actions">
-                      ${item.phone ? `<button class="trial-mini" type="button" onclick="openTrialWhatsApp(${item.id})">WhatsApp</button>` : ''}
-                      ${item.phone ? `<button class="trial-mini" type="button" onclick="copyTrialPhone(${item.id})">Copia numero</button>` : ''}
-                      ${item.plate ? `<button class="trial-mini" type="button" onclick="copyTrialPlate(${item.id})">Copia targa</button>` : ''}
-                      <button class="trial-mini" type="button" onclick="copyTrialText(${item.id})">Copia testo</button>
-                      ${item.email ? `<button class="trial-mini" type="button" onclick="sendTrialEmail(${item.id})">Email</button>` : ''}
+                      ${item.phone ? `<button class="trial-mini" type="button" onclick="window.location.href='${waUrl}'">WhatsApp</button>` : ''}
+                      ${item.phone ? `<button class="trial-mini" type="button" onclick="navigator.clipboard.writeText('${esc(item.phone || '')}')">Copia numero</button>` : ''}
+                      ${item.plate ? `<button class="trial-mini" type="button" onclick="navigator.clipboard.writeText('${esc(item.plate || '')}')">Copia targa</button>` : ''}
+                      ${item.email ? `<button class="trial-mini" type="button" onclick="window.location.href='mailto:${esc(item.email || '')}'">Email</button>` : ''}
                       <button class="trial-mini" type="button" onclick="openTrialEditModalById(${item.id})">Modifica</button>
                       <button class="trial-mini" type="button" onclick="deleteTrialRequest(${item.id})">Elimina</button>
                     </div>
@@ -1802,93 +1780,6 @@ window.fixQrUrl = async function(code){
     };
     window.loadTrialRequests = wrappedLoad;
   }
-
-  
-  function getTrialItemById(id){
-    return (trialItemsCache || []).find(x => String(x.id) === String(id));
-  }
-
-  function buildTrialAppUrl(item){
-    if (item.owner_access_token) return `${window.location.origin}/owner-access/${item.owner_access_token}`;
-    if (item.code && item.plate) return `${window.location.origin}/owner-simple.html?code=${encodeURIComponent(item.code)}&plate=${encodeURIComponent(item.plate)}`;
-    return `${window.location.origin}/activate.html${item.code ? `?code=${encodeURIComponent(item.code)}` : ''}`;
-  }
-
-  function buildTrialMessage(item){
-    const activationCode = item.code || item.activation_code || item.trial_code || 'CODICE DA GENERARE';
-    const appUrl = buildTrialAppUrl(item);
-    return [
-      `Ciao ${item.full_name || ''},`,
-      ``,
-      `la tua richiesta di prova gratuita è stata approvata e i controlli sono stati superati con esito positivo.`,
-      ``,
-      `Il tuo codice personale di attivazione è: *${activationCode}*`,
-      ``,
-      `Puoi aprire subito la tua App da questo link:`,
-      `${appUrl}`,
-      ``,
-      `Una volta aperta potrai:`,
-      `- attivare il servizio`,
-      `- salvare l’App sul telefono`,
-      `- attivare le notifiche`,
-      `- stampare la comunicazione collegata`,
-      ``,
-      `Il sistema è ora pronto per la tua prova gratuita.`
-    ].join('\n');
-  }
-
-  window.openTrialWhatsApp = function(id){
-    const item = getTrialItemById(id);
-    if (!item) return alert('Contatto non trovato.');
-    const cleanWaPhone = phoneForWa(item.phone || '').replace(/^\+/, '');
-    if (!cleanWaPhone) return alert('Numero non disponibile.');
-    const waText = buildTrialMessage(item);
-    const waUrl = `https://wa.me/${cleanWaPhone}?text=${encodeURIComponent(waText)}`;
-    window.location.href = waUrl;
-  };
-
-  window.copyTrialPhone = async function(id){
-    const item = getTrialItemById(id);
-    if (!item || !item.phone) return alert('Numero non disponibile.');
-    try {
-      await navigator.clipboard.writeText(String(item.phone));
-      alert('Numero copiato.');
-    } catch(e) {
-      prompt('Copia il numero:', String(item.phone));
-    }
-  };
-
-  window.copyTrialPlate = async function(id){
-    const item = getTrialItemById(id);
-    if (!item || !item.plate) return alert('Targa non disponibile.');
-    try {
-      await navigator.clipboard.writeText(String(item.plate));
-      alert('Targa copiata.');
-    } catch(e) {
-      prompt('Copia la targa:', String(item.plate));
-    }
-  };
-
-  window.copyTrialText = async function(id){
-    const item = getTrialItemById(id);
-    if (!item) return alert('Contatto non trovato.');
-    const txt = buildTrialMessage(item);
-    try {
-      await navigator.clipboard.writeText(txt);
-      alert('Testo copiato.');
-    } catch(e) {
-      prompt('Copia il testo:', txt);
-    }
-  };
-
-  window.sendTrialEmail = function(id){
-    const item = getTrialItemById(id);
-    if (!item || !item.email) return alert('Email non disponibile.');
-    const subject = encodeURIComponent('Attivazione prova gratuita QR veicolo');
-    const body = encodeURIComponent(buildTrialMessage(item));
-    window.location.href = `mailto:${encodeURIComponent(item.email)}?subject=${subject}&body=${body}`;
-  };
-
 
   window.openTrialEditModalById = function(id){
     const item = (trialItemsCache || []).find(x => String(x.id) === String(id));
