@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Area servizi e scadenze</title>
+  <link rel="icon" type="image/x-icon" href="/icons/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <style>
+    :root{
+      --bg:#eef5fc;
+      --bg2:#f8fbff;
+      --panel:#ffffff;
+      --panel2:#f6faff;
+      --line:rgba(35,65,108,.10);
+      --text:#223046;
+      --muted:#6f8198;
+      --blue:#5aa0ff;
+      --blue2:#7fb2ff;
+      --blue3:#eaf4ff;
+      --ok:#26a269;
+      --warn:#c98a11;
+      --danger:#cf4b4b;
+      --shadow:0 18px 42px rgba(48,73,112,.08);
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:linear-gradient(180deg,var(--bg) 0%,var(--bg2) 100%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Arial,sans-serif}
+    .wrap{width:min(1220px,calc(100% - 22px));margin:0 auto;padding:18px 0 34px}
+    .shell{border-radius:30px;background:rgba(255,255,255,.72);backdrop-filter:blur(8px);border:1px solid var(--line);box-shadow:var(--shadow);overflow:hidden}
+    .topbar{padding:14px 18px;display:flex;justify-content:space-between;gap:12px;align-items:center;border-bottom:1px solid var(--line);background:rgba(255,255,255,.65)}
+    .navline{display:flex;gap:8px;flex-wrap:wrap}
+    .btn{
+      display:inline-flex;align-items:center;justify-content:center;text-decoration:none;
+      min-height:38px;padding:0 14px;border-radius:12px;border:1px solid var(--line);
+      background:#fff;color:var(--text);font-weight:800;cursor:pointer
+    }
+    .btn-primary{background:linear-gradient(135deg,var(--blue) 0%,var(--blue2) 100%);color:#fff;border:0}
+    .btn-soft{background:var(--blue3);color:#2b5b9a;border-color:rgba(90,160,255,.18)}
+    .btn-small{min-height:32px;padding:0 11px;font-size:.82rem}
+    .hero{padding:22px 20px 14px;display:grid;grid-template-columns:1.15fr .95fr;gap:16px;border-bottom:1px solid var(--line)}
+    .hero-card,.card{background:var(--panel);border:1px solid var(--line);border-radius:24px;box-shadow:0 10px 24px rgba(55,87,128,.05)}
+    .hero-card{padding:18px}
+    .hero-title{margin:0;font-size:clamp(1.2rem,2.8vw,1.8rem);line-height:1.05;letter-spacing:-.03em}
+    .hero-sub{display:block;margin-top:8px;color:#4a6a92;font-size:.9em}
+    .vehicle-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+    .vehicle-box,.plate-box{padding:12px 14px;border-radius:16px;border:1px solid var(--line);background:#fff}
+    .vehicle-box{flex:1;min-width:220px}
+    .plate-box{min-width:135px;text-align:center;background:linear-gradient(135deg,#eef7ff 0%,#f8fbff 100%);font-weight:900;letter-spacing:.08em}
+    .helper{margin-top:12px;color:var(--muted);line-height:1.5;font-size:.92rem}
+    .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .stat{padding:14px;border-radius:18px;background:var(--panel2);border:1px solid var(--line)}
+    .label{font-size:.77rem;text-transform:uppercase;letter-spacing:.06em;color:#678}
+    .value{margin-top:8px;font-size:1.35rem;font-weight:900}
+    .content{padding:18px;display:grid;grid-template-columns:1.05fr .95fr;gap:16px}
+    .stack{display:grid;gap:16px}
+    .card{padding:16px}
+    .card h2{margin:0 0 10px;font-size:1.04rem;letter-spacing:-.02em}
+    .muted{color:var(--muted)}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .full{grid-column:1 / -1}
+    .field{display:grid;gap:6px}
+    .field label{font-size:.8rem;font-weight:800;color:#5c708c;text-transform:uppercase;letter-spacing:.05em}
+    .input, textarea{
+      width:100%;min-height:44px;border-radius:14px;border:1px solid var(--line);
+      background:#fff;color:var(--text);padding:0 12px;font:inherit
+    }
+    textarea{padding:10px 12px;min-height:88px;resize:vertical}
+    .mini-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .deadline{
+      display:flex;justify-content:space-between;gap:12px;align-items:center;
+      padding:12px 14px;border-radius:16px;background:var(--panel2);border:1px solid var(--line)
+    }
+    .deadline strong{font-size:1rem}
+    .badge{display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:0 10px;border-radius:999px;font-size:.77rem;font-weight:900}
+    .ok{background:rgba(38,162,105,.12);color:var(--ok)}
+    .warn{background:rgba(201,138,17,.12);color:var(--warn)}
+    .danger{background:rgba(207,75,75,.12);color:var(--danger)}
+    .toggle-list{display:grid;gap:8px}
+    .toggle-item{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 12px;border-radius:14px;background:var(--panel2);border:1px solid var(--line)}
+    .services-list{display:grid;gap:10px}
+    .service-tile{padding:12px 14px;border-radius:16px;border:1px solid var(--line);background:linear-gradient(180deg,#fff 0%,#f8fbff 100%)}
+    .service-tile strong{display:block}
+    .service-tile .muted{margin-top:4px;font-size:.9rem}
+    .upload-row{display:grid;gap:10px}
+    .upload-box{padding:12px 14px;border-radius:16px;border:1px dashed rgba(90,160,255,.38);background:#fbfdff}
+    .footnote{padding:0 18px 18px;color:var(--muted);font-size:.88rem;line-height:1.5}
+    @media (max-width:980px){
+      .hero,.content{grid-template-columns:1fr}
+      .stats,.grid{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="shell">
+      <div class="topbar">
+        <div class="navline">
+          <a class="btn btn-small" id="backQuickBtn" href="#">Area rapida</a>
+          <button class="btn btn-small btn-soft" id="saveAllBtn" type="button">Salva dati</button>
+          <button class="btn btn-small btn-primary" id="exportIcsBtn" type="button">Esporta calendario</button>
+        </div>
+        <div class="navline">
+          <button class="btn btn-small btn-soft" id="loadDemoBtn" type="button">Compila esempio</button>
+        </div>
+      </div>
+
+      <div class="hero">
+        <div class="hero-card">
+          <h1 class="hero-title">Area servizi e scadenze <span class="hero-sub">Documenti, revisioni, promemoria e funzioni evolute del veicolo</span></h1>
+          <div class="vehicle-row">
+            <div class="vehicle-box">
+              <div class="label">Marca e modello</div>
+              <div id="heroVehicle" class="value" style="font-size:1.12rem;">-</div>
+            </div>
+            <div class="plate-box">
+              <div class="label" style="font-size:.68rem;">Targa</div>
+              <div id="heroPlate" style="margin-top:6px;font-size:1.04rem;">-</div>
+            </div>
+          </div>
+          <div class="helper">
+            Qui il proprietario gestisce scadenze, documenti utili e promemoria del veicolo, come estensione premium dell’area rapida.
+          </div>
+        </div>
+
+        <div class="hero-card">
+          <div class="stats">
+            <div class="stat">
+              <div class="label">Prossima revisione</div>
+              <div class="value" id="kpiReview">-</div>
+            </div>
+            <div class="stat">
+              <div class="label">Scadenza più vicina</div>
+              <div class="value" id="kpiNearest">-</div>
+            </div>
+            <div class="stat">
+              <div class="label">Promemoria attivi</div>
+              <div class="value" id="kpiReminders">4</div>
+            </div>
+          </div>
+          <div class="helper" id="heroSummary">Inserisci le date principali del veicolo. Il sistema calcola automaticamente la revisione e prepara l’export calendario.</div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="stack">
+          <div class="card">
+            <h2>Scadenze principali</h2>
+            <div class="grid">
+              <div class="field">
+                <label>Prima immatricolazione</label>
+                <input class="input" type="date" id="firstRegistration">
+              </div>
+              <div class="field">
+                <label>Ultima revisione</label>
+                <input class="input" type="date" id="lastReview">
+              </div>
+            </div>
+
+            <div class="deadline" style="margin-top:12px;">
+              <div>
+                <div class="label">Prossima revisione calcolata</div>
+                <strong id="nextReviewText">Non disponibile</strong>
+                <div class="muted" id="reviewRuleText" style="margin-top:4px;font-size:.9rem;">Se manca l’ultima revisione, il sistema usa la prima immatricolazione + 4 anni. Dopo, calcola + 2 anni.</div>
+              </div>
+              <span id="nextReviewBadge" class="badge warn">IN ATTESA</span>
+            </div>
+
+            <div class="grid" style="margin-top:12px;">
+              <div class="field">
+                <label>Scadenza assicurazione</label>
+                <input class="input" type="date" id="insuranceExpiry">
+              </div>
+              <div class="field">
+                <label>Scadenza bollo</label>
+                <input class="input" type="date" id="taxExpiry">
+              </div>
+              <div class="field">
+                <label>Cambio gomme / stagionale</label>
+                <input class="input" type="date" id="tiresExpiry">
+              </div>
+              <div class="field">
+                <label>Tagliando / manutenzione</label>
+                <input class="input" type="date" id="serviceExpiry">
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Documenti del veicolo</h2>
+            <div class="upload-row">
+              <div class="upload-box">
+                <div class="label">Carta di circolazione</div>
+                <input class="input" type="file" id="docLibretto" accept=".pdf,image/*">
+              </div>
+              <div class="upload-box">
+                <div class="label">Polizza / assicurazione</div>
+                <input class="input" type="file" id="docInsurance" accept=".pdf,image/*">
+              </div>
+              <div class="upload-box">
+                <div class="label">Altri documenti utili</div>
+                <input class="input" type="file" id="docOther" accept=".pdf,image/*" multiple>
+              </div>
+            </div>
+            <div class="helper">Questa prima versione collega le scadenze reali al server. I documenti verranno gestiti nello step successivo.</div>
+          </div>
+
+          <div class="card">
+            <h2>Note e informazioni servizio</h2>
+            <div class="field">
+              <label>Note libere</label>
+              <textarea id="vehicleNotes" placeholder="Inserisci annotazioni, promemoria, officina di riferimento, numero polizza, dettagli utili..."></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="stack">
+          <div class="card">
+            <h2>Promemoria intelligenti</h2>
+            <div class="mini-actions" style="margin-bottom:12px;">
+              <select id="testPushType" class="input" style="max-width:220px;min-height:36px;">
+                <option value="revisione">Revisione</option>
+                <option value="assicurazione">Assicurazione</option>
+                <option value="bollo">Bollo</option>
+                <option value="gomme">Cambio gomme</option>
+                <option value="tagliando">Tagliando</option>
+              </select>
+              <button class="btn btn-primary btn-small" type="button" id="sendTestPushBtn">Invia ora</button>
+            </div>
+            <div id="testPushResult" class="muted" style="margin-bottom:10px;font-size:.88rem;"></div>
+            <div class="toggle-list">
+              <div class="toggle-item"><span>30 giorni prima</span><input type="checkbox" id="r30" checked></div>
+              <div class="toggle-item"><span>15 giorni prima</span><input type="checkbox" id="r15" checked></div>
+              <div class="toggle-item"><span>7 giorni prima</span><input type="checkbox" id="r7" checked></div>
+              <div class="toggle-item"><span>3 giorni prima</span><input type="checkbox" id="r3" checked></div>
+            </div>
+            <div class="mini-actions" style="margin-top:12px;">
+              <button class="btn btn-soft btn-small" type="button" id="previewPushBtn">Anteprima logica push</button>
+              <button class="btn btn-soft btn-small" type="button" id="recalcBtn">Ricalcola scadenze</button>
+            </div>
+            <div class="helper" id="pushPreviewText" style="margin-top:10px;">Quando passeremo allo step server, queste scadenze potranno generare push automatiche al proprietario.</div>
+          </div>
+
+          <div class="card">
+            <h2>Calendario esportabile</h2>
+            <div class="services-list">
+              <div class="service-tile">
+                <strong>File .ics unico</strong>
+                <div class="muted">Tutte le scadenze selezionate verranno generate in un solo file importabile in Calendario.</div>
+              </div>
+              <div class="service-tile">
+                <strong>Ricalcolo automatico revisione</strong>
+                <div class="muted">Se aggiorni l’ultima revisione, il sistema ricalcola automaticamente la successiva.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Funzioni attivabili / upgrade</h2>
+            <div class="services-list">
+              <div class="service-tile">
+                <strong>Archivio documenti</strong>
+                <div class="muted">Conservazione online dei documenti del veicolo con storico.</div>
+              </div>
+              <div class="service-tile">
+                <strong>Promemoria automatici push</strong>
+                <div class="muted">Avvisi server-side prima delle scadenze impostate.</div>
+              </div>
+              <div class="service-tile">
+                <strong>Multi-veicolo</strong>
+                <div class="muted">Gestione di più vetture nella stessa area proprietario.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footnote">
+        Base attuale: salvataggio server-side delle scadenze e logica locale di export calendario. Il prossimo step sarà il motore push automatico sulle scadenze.
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const qs = id => document.getElementById(id);
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code') || '';
+  const plate = params.get('plate') || '';
+  const storageKey = `owner_services_${code}_${plate}`;
+
+  const fields = [
+    'firstRegistration','lastReview','insuranceExpiry','taxExpiry',
+    'tiresExpiry','serviceExpiry','vehicleNotes'
+  ];
+
+  function mapApiToUi(item){
+    if(!item) return;
+    qs('firstRegistration').value = item.first_registration_date || '';
+    qs('lastReview').value = item.last_review_date || '';
+    qs('insuranceExpiry').value = item.insurance_expiry_date || '';
+    qs('taxExpiry').value = item.tax_expiry_date || '';
+    qs('tiresExpiry').value = item.tires_expiry_date || '';
+    qs('serviceExpiry').value = item.service_expiry_date || '';
+    qs('vehicleNotes').value = item.notes || '';
+  }
+
+  function buildSavePayload(){
+    return {
+      code,
+      plate,
+      first_registration_date: qs('firstRegistration').value || null,
+      last_review_date: qs('lastReview').value || null,
+      insurance_expiry_date: qs('insuranceExpiry').value || null,
+      tax_expiry_date: qs('taxExpiry').value || null,
+      tires_expiry_date: qs('tiresExpiry').value || null,
+      service_expiry_date: qs('serviceExpiry').value || null,
+      notes: qs('vehicleNotes').value || ''
+    };
+  }
+
+  function fmtDate(dateStr){
+    if(!dateStr) return 'Non disponibile';
+    try { return new Date(dateStr + 'T12:00:00').toLocaleDateString('it-IT'); } catch { return dateStr; }
+  }
+
+  function endOfMonth(dateObj){
+    return new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0);
+  }
+
+  function addYears(dateObj, years){
+    const d = new Date(dateObj);
+    d.setFullYear(d.getFullYear() + years);
+    return d;
+  }
+
+  function iso(dateObj){
+    return dateObj.toISOString().slice(0,10);
+  }
+
+  function daysTo(dateStr){
+    if(!dateStr) return null;
+    const now = new Date();
+    const d = new Date(dateStr + 'T12:00:00');
+    return Math.floor((d - now) / 86400000);
+  }
+
+  function reviewDue(){
+    const first = qs('firstRegistration').value;
+    const last = qs('lastReview').value;
+    if(last){
+      return iso(endOfMonth(addYears(new Date(last + 'T12:00:00'), 2)));
+    }
+    if(first){
+      return iso(endOfMonth(addYears(new Date(first + 'T12:00:00'), 4)));
+    }
+    return '';
+  }
+
+  function badgeFor(dateStr){
+    const d = daysTo(dateStr);
+    if(d === null) return {label:'IN ATTESA', cls:'warn'};
+    if(d < 0) return {label:'SCADUTA', cls:'danger'};
+    if(d <= 30) return {label:`${d} GG`, cls:'warn'};
+    return {label:'OK', cls:'ok'};
+  }
+
+  function nearestExpiry(){
+    const arr = [
+      ['Revisione', reviewDue()],
+      ['Assicurazione', qs('insuranceExpiry').value],
+      ['Bollo', qs('taxExpiry').value],
+      ['Cambio gomme', qs('tiresExpiry').value],
+      ['Tagliando', qs('serviceExpiry').value]
+    ].filter(x => !!x[1]).sort((a,b) => new Date(a[1]) - new Date(b[1]));
+    return arr[0] || null;
+  }
+
+  async function saveLocal(){
+    const data = {};
+    fields.forEach(id => data[id] = qs(id).value || '');
+    data.r30 = qs('r30').checked;
+    data.r15 = qs('r15').checked;
+    data.r7 = qs('r7').checked;
+    data.r3 = qs('r3').checked;
+    localStorage.setItem(storageKey, JSON.stringify(data));
+
+    try{
+      const res = await fetch('/api/owner-services/save', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(buildSavePayload())
+      });
+      const out = await res.json();
+      if(!res.ok || !out.success){
+        alert(out.error || 'Errore salvataggio servizi veicolo.');
+        return;
+      }
+      mapApiToUi(out.item);
+      refreshUI();
+      alert('Dati servizi e scadenze salvati correttamente.');
+    }catch(e){
+      alert('Errore di collegamento durante il salvataggio.');
+    }
+  }
+
+  async function loadLocal(){
+    try{
+      const raw = localStorage.getItem(storageKey);
+      if(raw){
+        const data = JSON.parse(raw);
+        fields.forEach(id => { if(data[id] !== undefined) qs(id).value = data[id]; });
+        ['r30','r15','r7','r3'].forEach(id => { if(data[id] !== undefined) qs(id).checked = !!data[id]; });
+      }
+    }catch(e){}
+
+    try{
+      const res = await fetch('/api/owner-services/get', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code, plate })
+      });
+      const out = await res.json();
+      if(res.ok && out.success && out.item){
+        mapApiToUi(out.item);
+      }
+    }catch(e){}
+  }
+
+  function makeICS(events){
+    const pad = n => String(n).padStart(2,'0');
+    const blocks = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Adesivo Auto//Servizi Veicolo//IT'];
+    events.forEach((ev, idx) => {
+      const dt = new Date(ev.date + 'T09:00:00');
+      const dtEnd = new Date(ev.date + 'T10:00:00');
+      const stamp = `${dt.getUTCFullYear()}${pad(dt.getUTCMonth()+1)}${pad(dt.getUTCDate())}T090000Z`;
+      const end = `${dtEnd.getUTCFullYear()}${pad(dtEnd.getUTCMonth()+1)}${pad(dtEnd.getUTCDate())}T100000Z`;
+      blocks.push(
+        'BEGIN:VEVENT',
+        `UID:${code || 'vehicle'}-${idx}-${Date.now()}@adesivo-auto`,
+        `DTSTAMP:${stamp}`,
+        `DTSTART:${stamp}`,
+        `DTEND:${end}`,
+        `SUMMARY:${ev.title}`,
+        `DESCRIPTION:${ev.desc.replace(/\n/g,'\\n')}`,
+        'END:VEVENT'
+      );
+    });
+    blocks.push('END:VCALENDAR');
+    return blocks.join('\r\n');
+  }
+
+  function downloadFile(name, content, type){
+    const blob = new Blob([content], {type});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function refreshUI(){
+    const nextReview = reviewDue();
+    qs('nextReviewText').textContent = nextReview ? fmtDate(nextReview) : 'Non disponibile';
+    const b = badgeFor(nextReview);
+    qs('nextReviewBadge').textContent = b.label;
+    qs('nextReviewBadge').className = `badge ${b.cls}`;
+
+    const nearest = nearestExpiry();
+    qs('kpiReview').textContent = nextReview ? fmtDate(nextReview) : '-';
+    qs('kpiNearest').textContent = nearest ? `${nearest[0]} · ${fmtDate(nearest[1])}` : '-';
+
+    const activeReminders = ['r30','r15','r7','r3'].filter(id => qs(id).checked).length;
+    qs('kpiReminders').textContent = String(activeReminders);
+
+    qs('pushPreviewText').textContent = activeReminders
+      ? `Promemoria selezionati: ${['r30','r15','r7','r3'].filter(id => qs(id).checked).map(id => id.replace('r','') + 'gg').join(', ')}. Nello step server questi trigger potranno generare push automatiche.`
+      : 'Nessun promemoria selezionato.';
+
+    const nearestText = nearest
+      ? `La scadenza più vicina al momento è ${nearest[0].toLowerCase()} (${fmtDate(nearest[1])}).`
+      : 'Inserisci le date principali del veicolo. Il sistema calcola automaticamente la revisione e prepara l’export calendario.';
+    qs('heroSummary').textContent = nearestText;
+  }
+
+  async function loadVehicleHeader(){
+    qs('heroPlate').textContent = plate || '-';
+    qs('backQuickBtn').href = `/owner-simple.html?code=${encodeURIComponent(code)}&plate=${encodeURIComponent(plate)}`;
+    try{
+      const res = await fetch('/api/owner-dashboard', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({code, plate})
+      });
+      const data = await res.json();
+      if(res.ok && data.success && data.data){
+        const d = data.data;
+        qs('heroVehicle').textContent = [d.brand, d.vehicle_model].filter(Boolean).join(' ') || '-';
+        if (d.plate) qs('heroPlate').textContent = d.plate;
+      }
+    }catch(e){}
+  }
+
+  qs('sendTestPushBtn').addEventListener('click', async () => {
+    const resultEl = qs('testPushResult');
+    resultEl.textContent = 'Invio push test in corso...';
+
+    try{
+      const res = await fetch('/api/owner-services/test-push', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          code,
+          plate,
+          service_type: qs('testPushType').value
+        })
+      });
+      const out = await res.json();
+      if(!res.ok || !out.success){
+        resultEl.textContent = out.error || 'Errore invio push test.';
+        return;
+      }
+      resultEl.textContent = `Push test inviata. Dispositivi raggiunti: ${out.sent_count}. Tipo: ${out.service_type}.`;
+    }catch(e){
+      resultEl.textContent = 'Errore di collegamento durante l’invio push test.';
+    }
+  });
+
+  qs('saveAllBtn').addEventListener('click', () => { saveLocal(); });
+  qs('recalcBtn').addEventListener('click', refreshUI);
+  qs('previewPushBtn').addEventListener('click', refreshUI);
+
+  qs('loadDemoBtn').addEventListener('click', () => {
+    if(!qs('firstRegistration').value) qs('firstRegistration').value = '2022-05-16';
+    if(!qs('lastReview').value) qs('lastReview').value = '2024-05-31';
+    if(!qs('insuranceExpiry').value) qs('insuranceExpiry').value = '2026-07-31';
+    if(!qs('taxExpiry').value) qs('taxExpiry').value = '2026-08-31';
+    if(!qs('tiresExpiry').value) qs('tiresExpiry').value = '2026-10-15';
+    if(!qs('serviceExpiry').value) qs('serviceExpiry').value = '2026-09-30';
+    if(!qs('vehicleNotes').value) qs('vehicleNotes').value = 'Bozza premium: area servizi e scadenze del veicolo.';
+    refreshUI();
+  });
+
+  qs('exportIcsBtn').addEventListener('click', () => {
+    const events = [];
+    const nextReview = reviewDue();
+    const items = [
+      ['Revisione veicolo', nextReview],
+      ['Scadenza assicurazione', qs('insuranceExpiry').value],
+      ['Scadenza bollo', qs('taxExpiry').value],
+      ['Cambio gomme / stagionale', qs('tiresExpiry').value],
+      ['Tagliando / manutenzione', qs('serviceExpiry').value]
+    ];
+    items.forEach(([title, date]) => {
+      if(date){
+        events.push({
+          title: `${title} ${plate ? '- ' + plate : ''}`,
+          date,
+          desc: `Promemoria generato dall'Area servizi e scadenze${plate ? '\nTarga: ' + plate : ''}${code ? '\nCodice: ' + code : ''}`
+        });
+      }
+    });
+    if(!events.length){
+      alert('Inserisci almeno una scadenza prima di esportare il calendario.');
+      return;
+    }
+    const ics = makeICS(events);
+    downloadFile(`scadenze-veicolo-${plate || 'owner'}.ics`, ics, 'text/calendar;charset=utf-8');
+  });
+
+  fields.forEach(id => qs(id).addEventListener('change', refreshUI));
+  ['r30','r15','r7','r3'].forEach(id => qs(id).addEventListener('change', refreshUI));
+
+  loadLocal();
+  loadVehicleHeader();
+  refreshUI();
+})();
+</script>
+</body>
+</html>
