@@ -2261,22 +2261,34 @@
 
 
 
+
 <style id="owner-fix-refresh-status">
 .owner-top-refresh-bar{
   width:100%;
   display:flex;
-  justify-content:flex-end;
+  justify-content:flex-start;
   align-items:flex-start;
-  margin:0 0 14px 0;
+  margin:22px 0 18px 0;
+  padding:0 22px;
+  box-sizing:border-box;
 }
 .owner-top-refresh-bar .top-refresh-btn{
-  margin-left:auto !important;
+  display:inline-flex !important;
+  margin:0 !important;
 }
 .owner-status-left{
   display:block !important;
   width:100% !important;
   text-align:left !important;
-  margin:0 0 10px 0 !important;
+  margin:0 0 12px 0 !important;
+  align-self:flex-start !important;
+}
+.owner-status-stack{
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:flex-start !important;
+  justify-content:flex-start !important;
+  gap:10px !important;
 }
 </style>
 
@@ -2284,7 +2296,6 @@
 document.addEventListener('DOMContentLoaded', function () {
   const nodes = Array.from(document.querySelectorAll('button, a, div, span, p, strong'));
 
-  // Ripulisce eventuale stringa HTML stampata come testo
   nodes.forEach(el => {
     const raw = (el.innerHTML || '').trim();
     const txt = (el.textContent || '').replace(/\s+/g,' ').trim();
@@ -2297,9 +2308,12 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
-  const refreshEl = nodes.find(el => (el.textContent || '').replace(/\s+/g,' ').trim() === 'Refresh');
+  const refreshEl = Array.from(document.querySelectorAll('button, a, div, span'))
+    .find(el => (el.textContent || '').replace(/\s+/g,' ').trim() === 'Refresh');
+
   const statusEl = Array.from(document.querySelectorAll('button, a, div, span, p, strong'))
     .find(el => (el.textContent || '').replace(/\s+/g,' ').trim() === 'APP INSTALLATA + NOTIFICHE ATTIVE');
+
   const disableEl = Array.from(document.querySelectorAll('button, a, div, span, p, strong'))
     .find(el => (el.textContent || '').replace(/\s+/g,' ').trim() === 'Disattiva notifiche');
 
@@ -2307,10 +2321,14 @@ document.addEventListener('DOMContentLoaded', function () {
     statusEl.classList.add('owner-status-left');
     const parent = statusEl.parentElement;
     if (parent) {
-      parent.style.display = 'flex';
-      parent.style.flexDirection = 'column';
-      parent.style.alignItems = 'flex-start';
-      parent.style.justifyContent = 'flex-start';
+      parent.classList.add('owner-status-stack');
+    }
+  }
+
+  if (disableEl) {
+    const parent = disableEl.parentElement;
+    if (parent) {
+      parent.classList.add('owner-status-stack');
     }
   }
 
@@ -2320,9 +2338,9 @@ document.addEventListener('DOMContentLoaded', function () {
     if (statusEl && statusEl.closest('div')) {
       anchor = statusEl.closest('div');
       while (anchor.parentElement && anchor.parentElement.tagName === 'DIV') {
-        const p = anchor.parentElement;
-        if (p.children.length > 1) { anchor = p; break; }
-        anchor = p;
+        const up = anchor.parentElement;
+        if (up.children.length > 1) { anchor = up; break; }
+        anchor = up;
       }
     } else if (disableEl && disableEl.closest('div')) {
       anchor = disableEl.closest('div');
@@ -2338,9 +2356,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     refreshEl.classList.add('top-refresh-btn');
-    refreshEl.style.marginLeft = 'auto';
-    refreshEl.style.marginRight = '0';
-    refreshEl.style.display = 'inline-flex';
 
     if (!bar.contains(refreshEl)) {
       bar.appendChild(refreshEl);
