@@ -164,6 +164,23 @@ function formatEventDateTimeIT(date = new Date()) {
   }
 }
 
+
+function normalizePhoneForOwnerLogin(value) {
+  let raw = String(value || '').trim();
+  raw = raw.replace(/\s+/g, '').replace(/[().-]/g, '');
+  if (!raw) return '';
+  if (raw.startsWith('00')) raw = '+' + raw.slice(2);
+  if (raw.startsWith('+')) return raw.replace(/[^\d+]/g, '');
+  raw = raw.replace(/\D/g, '');
+  if (!raw) return '';
+  if (raw.startsWith('39')) return '+' + raw;
+  return '+39' + raw;
+}
+
+function normalizePlateForOwnerLogin(value) {
+  return String(value || '').toUpperCase().replace(/\s+/g, '').trim();
+}
+
 function generatePublicId() {
   return require('crypto')
     .randomBytes(6)
@@ -2573,6 +2590,49 @@ app.post('/api/owner-disable', async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ success: false, error: 'Errore di comunicazione con il server.' });
+  }
+});
+
+
+
+app.post('/api/owner-login-phone-plate', async (req, res) => {
+  try {
+    const phoneInput = req.body?.phone || '';
+    const plateInput = req.body?.plate || '';
+
+    const phone = normalizePhoneForOwnerLogin(phoneInput);
+    const plate = normalizePlateForOwnerLogin(plateInput);
+
+    if (!phone || !plate) {
+      return res.status(400).json({ success: false, error: 'Inserisci cellulare e targa.' });
+    }
+
+    const found = await pool.query(
+      `SELECT owner_access_token, code, plate, phone
+       FROM sticker_codes
+       WHERE owner_access_token IS NOT NULL
+         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $1
+       ORDER BY activated_at DESC NULLS LAST
+       LIMIT 50`,
+      [plate]
+    );
+
+    const row = (found.rows || []).find(r => {
+      const rowPhone = normalizePhoneForOwnerLogin(r.phone || '');
+      return rowPhone && rowPhone === phone;
+    });
+
+    if (!row || !row.owner_access_token) {
+      return res.status(401).json({ success: false, error: 'Cellulare o targa non riconosciuti.' });
+    }
+
+    return res.json({
+      success: true,
+      redirect_url: `/owner-access/${row.owner_access_token}`
+    });
+  } catch (err) {
+    console.error('owner-login-phone-plate error:', err);
+    return res.status(500).json({ success: false, error: 'Errore accesso proprietario.' });
   }
 });
 
