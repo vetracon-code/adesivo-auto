@@ -7,6 +7,7 @@ const path = require('path');
 const webpush = require('web-push');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
+const { generateStickerPrintPdf } = require('./lib/generateStickerPrintPdf');
 const pool = require('./db');
 
 
@@ -525,6 +526,50 @@ app.get('/api/debug-owner-quick-access-ping', requireAdmin, (req, res) => {
 
 app.get('/api/debug-owner-quick-access', requireAdmin, (req, res) => {
   return res.json({ success: true, debug: ownerQuickAccessDebug });
+});
+
+
+
+app.get('/api/admin/sticker-print-pdf/:code', requireAdmin, async (req, res) => {
+  try {
+    const cleanCode = String(req.params.code || '').trim().toUpperCase();
+    if (!cleanCode) {
+      return res.status(400).json({ success: false, error: 'Codice mancante.' });
+    }
+
+    const found = await pool.query(
+      `SELECT code, public_id, qr_url
+       FROM sticker_codes
+       WHERE code = $1
+       LIMIT 1`,
+      [cleanCode]
+    );
+
+    if (!found.rows.length) {
+      return res.status(404).json({ success: false, error: 'Codice non trovato.' });
+    }
+
+    const row = found.rows[0];
+
+    let qrValue = '';
+    if (row.qr_url && String(row.qr_url).trim()) {
+      qrValue = String(row.qr_url).trim();
+    } else if (row.public_id && String(row.public_id).trim()) {
+      const baseUrl = (process.env.PUBLIC_BASE_URL || 'https://adesivo-auto.onrender.com').replace(/\/$/, '');
+      qrValue = `${baseUrl}/contact/u/${encodeURIComponent(String(row.public_id).trim())}`;
+    } else {
+      return res.status(400).json({ success: false, error: 'QR URL o public_id mancanti per questo codice.' });
+    }
+
+    const pdfBuffer = await generateStickerPrintPdf({ qrValue });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="adesivo-${cleanCode}.pdf"`);
+    return res.send(pdfBuffer);
+  } catch (err) {
+    console.error('sticker-print-pdf error:', err);
+    return res.status(500).json({ success: false, error: 'Errore generazione PDF stampa adesivo.' });
+  }
 });
 
 
