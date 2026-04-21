@@ -530,6 +530,55 @@ app.get('/api/debug-owner-quick-access', requireAdmin, (req, res) => {
 
 
 
+app.get('/api/owner/sticker-print-pdf', async (req, res) => {
+  try {
+    const cleanCode = String(req.query.code || '').trim().toUpperCase();
+    const cleanPlate = String(req.query.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    if (!cleanCode || !cleanPlate) {
+      return res.status(400).json({ success: false, error: 'Codice e targa obbligatori.' });
+    }
+
+    const found = await pool.query(
+      `SELECT code, plate, public_id, qr_url
+       FROM sticker_codes
+       WHERE code = $1
+       LIMIT 1`,
+      [cleanCode]
+    );
+
+    if (!found.rows.length) {
+      return res.status(404).json({ success: false, error: 'Codice non trovato.' });
+    }
+
+    const row = found.rows[0];
+    const dbPlate = String(row.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    if (dbPlate !== cleanPlate) {
+      return res.status(401).json({ success: false, error: 'Targa non corrispondente al codice.' });
+    }
+
+    let qrValue = '';
+    if (row.qr_url && String(row.qr_url).trim()) {
+      qrValue = String(row.qr_url).trim();
+    } else if (row.public_id && String(row.public_id).trim()) {
+      const baseUrl = (process.env.PUBLIC_BASE_URL || 'https://adesivo-auto.onrender.com').replace(/\/$/, '');
+      qrValue = `${baseUrl}/contact/u/${encodeURIComponent(String(row.public_id).trim())}`;
+    } else {
+      return res.status(400).json({ success: false, error: 'QR URL o public_id mancanti per questo codice.' });
+    }
+
+    const pdfBuffer = await generateStickerPrintPdf({ qrValue });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="adesivo-${cleanCode}.pdf"`);
+    return res.send(pdfBuffer);
+  } catch (err) {
+    console.error('owner sticker-print-pdf error:', err);
+    return res.status(500).json({ success: false, error: 'Errore generazione PDF stampa adesivo.' });
+  }
+});
+
 app.get('/api/admin/sticker-print-pdf/:code', requireAdmin, async (req, res) => {
   try {
     const cleanCode = String(req.params.code || '').trim().toUpperCase();

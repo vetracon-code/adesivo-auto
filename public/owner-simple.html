@@ -759,7 +759,6 @@
           <a id="renewBtn" class="btn btn-primary" href="#">Rinnova</a>
           <button id="printStickerBtn" class="btn btn-primary" type="button">Stampa adesivo</button>
           <button id="previewStickerBtn" class="btn btn-secondary" type="button" style="background:#4f8df0;color:#fff;border-color:#4f8df0;">Anteprima</button>
-          <button id="tryQrBtn" class="btn btn-secondary" type="button" style="background:#4f8df0;color:#fff;border-color:#4f8df0;">Prova QR</button>
           <button id="forgetAccessBtn" class="btn btn-secondary" type="button" style="display:none !important; pointer-events:none !important;">Esci da questo dispositivo</button>
         </div>
       </div>
@@ -772,6 +771,9 @@
               <div class="muted" style="line-height:1.45;font-size:.84rem;">Qui puoi vedere quasi a pagina piena l’adesivo esatto da stampare o mostrare per una prova rapida.</div>
             </div>
             <button id="closeStickerPreviewBtn" class="btn btn-secondary" type="button" style="background:#4f8df0;color:#fff;border-color:#4f8df0;">Chiudi anteprima</button>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+            <button id="previewTryQrBtn" class="btn btn-secondary" type="button" style="background:#4f8df0;color:#fff;border-color:#4f8df0;">Mostralo a un amico</button>
           </div>
           <div style="border-radius:20px;overflow:hidden;border:1px solid rgba(34,48,70,.08);background:#f3f7fc;min-height:72vh;">
             <iframe id="stickerPreviewFrame" src="about:blank" style="width:100%;height:72vh;border:0;background:#fff;" loading="lazy"></iframe>
@@ -1311,11 +1313,11 @@
 
       const printStickerBtn = qs('printStickerBtn');
       const previewStickerBtn = qs('previewStickerBtn');
-      const tryQrBtn = qs('tryQrBtn');
+      const previewTryQrBtn = qs('previewTryQrBtn');
       const closeStickerPreviewBtn = qs('closeStickerPreviewBtn');
       const stickerPreviewFrame = qs('stickerPreviewFrame');
 
-      const stickerPrintUrl = buildStickerPrintUrl(code);
+      const stickerPrintUrl = buildStickerPrintUrl(code, d.plate || plate);
       const publicQrUrl = buildPublicQrUrl(d.public_id);
 
       if (stickerPreviewFrame) {
@@ -1337,8 +1339,8 @@
         closeStickerPreviewBtn.onclick = () => closeStickerPreview();
       }
 
-      if (tryQrBtn) {
-        tryQrBtn.onclick = () => {
+      if (previewTryQrBtn) {
+        previewTryQrBtn.onclick = () => {
           if (!publicQrUrl || publicQrUrl === '#') return;
           window.open(publicQrUrl, '_blank', 'noopener');
         };
@@ -1542,8 +1544,12 @@
       };
     }
 
-    function buildStickerPrintUrl(code){
-      return code ? `/api/admin/sticker-print-pdf/${encodeURIComponent(String(code).trim().toUpperCase())}` : '#';
+    function buildStickerPrintUrl(code, plate){
+      const cleanCode = String(code || '').trim().toUpperCase();
+      const cleanPlate = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
+      return (cleanCode && cleanPlate)
+        ? `/api/owner/sticker-print-pdf?code=${encodeURIComponent(cleanCode)}&plate=${encodeURIComponent(cleanPlate)}`
+        : '#';
     }
 
     function buildPublicQrUrl(publicId){
