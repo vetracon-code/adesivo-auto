@@ -670,6 +670,35 @@
       #vehicleHeroBox{flex-wrap:wrap !important}
     }
 
+    .expired-soft #ownerMessagesSection,
+    .expired-soft .hero,
+    .expired-soft .section-card,
+    .expired-soft .timeline-card:not(#stickerPreviewSection .timeline-card),
+    .expired-soft .mini-card,
+    .expired-soft .status-card,
+    .expired-soft .map-card,
+    .expired-soft .info-card,
+    .expired-soft .expiry-card,
+    .expired-soft .right-col,
+    .expired-soft .radar-card{
+      opacity:.38;
+      filter:saturate(.72);
+      transition:opacity .22s ease, filter .22s ease;
+      pointer-events:none;
+    }
+
+    .expired-soft #renewBtn{
+      opacity:1 !important;
+      filter:none !important;
+      pointer-events:auto !important;
+      box-shadow:0 10px 24px rgba(63,121,216,.22);
+    }
+
+    .expired-soft #printStickerBtn,
+    .expired-soft #previewStickerBtn{
+      display:none !important;
+    }
+
     @media (max-width:720px){
       .right-col{grid-template-columns:1fr}
       .status-card{grid-template-columns:1fr}
@@ -1408,29 +1437,37 @@
 
       const expiryBadge = qs('expiryBadge');
       const expiryNote = qs('expiryNote');
+      document.body.classList.remove('expired-soft');
+
+      const offeredByText = String(d.offered_by || '').trim().toLowerCase();
+      const isFreeTrial = offeredByText.includes('prova gratuita');
+
       if (d.plan_type === 'always') {
-        expiryBadge.textContent = 'SEMPRE ATTIVO';
+        expiryBadge.textContent = 'OMAGGIO GRATUITO';
         expiryBadge.className = 'expiry-badge ok';
-        expiryNote.textContent = 'Questo servizio non ha una scadenza programmata.';
+        expiryNote.textContent = 'Sempre attivo.';
         qs('openReminderBtn').style.display = 'none';
       } else if (d.expires_at) {
         if (dLeft < 0) {
-          expiryBadge.textContent = `SCADUTO DA ${Math.abs(dLeft)} GIORNI`;
+          expiryBadge.textContent = 'SCADUTO';
           expiryBadge.className = 'expiry-badge danger';
-          expiryNote.textContent = `Scadenza prevista: ${fmtDateOnly(d.expires_at)}. Ti consigliamo di rinnovare per evitare interruzioni.`;
-        } else if (dLeft <= 15) {
-          expiryBadge.textContent = `SCADE TRA ${dLeft} GIORNI`;
+          expiryNote.textContent = 'Servizio scaduto. Per riattivarlo, usa Attiva ora.';
+          qs('openReminderBtn').style.display = 'none';
+          document.body.classList.add('expired-soft');
+        } else if (isFreeTrial) {
+          expiryBadge.textContent = 'PROVA GRATUITA';
           expiryBadge.className = 'expiry-badge warn';
-          expiryNote.textContent = `Scadenza prevista: ${fmtDateOnly(d.expires_at)}. Puoi anche salvare un promemoria in agenda.`;
+          expiryNote.textContent = dLeft === 0 ? 'Scade oggi.' : `Scade tra ${dLeft} giorni.`;
         } else {
-          expiryBadge.textContent = `${dLeft} GIORNI RESIDUI`;
-          expiryBadge.className = 'expiry-badge ok';
-          expiryNote.textContent = `Scadenza prevista: ${fmtDateOnly(d.expires_at)}. Il servizio è attivo e sotto controllo.`;
+          expiryBadge.textContent = 'SERVIZIO ATTIVO';
+          expiryBadge.className = dLeft <= 15 ? 'expiry-badge warn' : 'expiry-badge ok';
+          expiryNote.textContent = dLeft === 0 ? 'Scade oggi.' : `Scade tra ${dLeft} giorni.`;
         }
       } else {
-        expiryBadge.textContent = 'SCADENZA NON DISPONIBILE';
-        expiryBadge.className = 'expiry-badge warn';
-        expiryNote.textContent = 'Non è disponibile una data di scadenza precisa.';
+        expiryBadge.textContent = 'OMAGGIO GRATUITO';
+        expiryBadge.className = 'expiry-badge ok';
+        expiryNote.textContent = 'Sempre attivo.';
+        qs('openReminderBtn').style.display = 'none';
       }
 
       renderItalyMapGroups(events);
