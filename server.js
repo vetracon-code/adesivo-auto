@@ -3209,6 +3209,57 @@ app.get('/renew/u/:public_id', async (req, res) => {
   }
 });
 
+app.get('/api/public-renew/:public_id', async (req, res) => {
+  try {
+    const publicId = String(req.params.public_id || '').trim().toUpperCase();
+    if (!publicId) {
+      return res.status(400).json({ success: false, error: 'Public ID mancante.' });
+    }
+
+    const result = await pool.query(
+      `SELECT code, public_id, plate, brand, vehicle_model, status, plan_type, expires_at, activated_at
+       FROM sticker_codes
+       WHERE public_id = $1
+       LIMIT 1`,
+      [publicId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, error: 'Riferimento non trovato.' });
+    }
+
+    const row = result.rows[0];
+    let days_left = null;
+    let is_expired = false;
+
+    if (row.expires_at) {
+      const diffMs = new Date(row.expires_at).getTime() - Date.now();
+      days_left = Math.floor(diffMs / 86400000);
+      is_expired = diffMs < 0;
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        code: row.code,
+        public_id: row.public_id,
+        plate: row.plate,
+        brand: row.brand,
+        vehicle_model: row.vehicle_model,
+        status: row.status,
+        plan_type: row.plan_type,
+        expires_at: row.expires_at,
+        activated_at: row.activated_at,
+        days_left,
+        is_expired
+      }
+    });
+  } catch (err) {
+    console.error('public-renew error:', err);
+    return res.status(500).json({ success: false, error: 'Errore lettura dati rinnovo.' });
+  }
+});
+
 app.get('/feedback/u/:public_id', async (req, res) => {
   try {
     const publicId = String(req.params.public_id || '').trim().toUpperCase();
