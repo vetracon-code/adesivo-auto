@@ -3330,7 +3330,7 @@ app.get('/api/public-renew/:public_id', async (req, res) => {
     }
 
     const result = await pool.query(
-      `SELECT code, public_id, plate, brand, vehicle_model, status, plan_type, expires_at, activated_at
+      `SELECT code, public_id, plate, brand, vehicle_model, status, offered_by, plan_type, expires_at, activated_at
        FROM sticker_codes
        WHERE public_id = $1
        LIMIT 1`,
@@ -3360,6 +3360,7 @@ app.get('/api/public-renew/:public_id', async (req, res) => {
         brand: row.brand,
         vehicle_model: row.vehicle_model,
         status: row.status,
+        offered_by: row.offered_by || null,
         plan_type: row.plan_type,
         expires_at: row.expires_at,
         activated_at: row.activated_at,
