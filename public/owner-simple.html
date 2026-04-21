@@ -757,7 +757,25 @@
         </div>
         <div class="actions">
           <a id="renewBtn" class="btn btn-primary" href="#">Rinnova</a>
+          <button id="printStickerBtn" class="btn btn-primary" type="button">Stampa adesivo</button>
+          <button id="previewStickerBtn" class="btn btn-secondary" type="button" style="background:#4f8df0;color:#fff;border-color:#4f8df0;">Anteprima</button>
+          <button id="tryQrBtn" class="btn btn-secondary" type="button" style="background:#4f8df0;color:#fff;border-color:#4f8df0;">Prova QR</button>
           <button id="forgetAccessBtn" class="btn btn-secondary" type="button" style="display:none !important; pointer-events:none !important;">Esci da questo dispositivo</button>
+        </div>
+      </div>
+
+      <div id="stickerPreviewSection" style="display:none;padding:0 22px 20px;">
+        <div class="timeline-card" style="padding:18px;border:1px solid rgba(63,121,216,.16);box-shadow:0 0 30px rgba(63,121,216,.06) inset;">
+          <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+            <div>
+              <h2 class="section-title" style="margin-bottom:8px;font-size:.9rem;">Anteprima adesivo</h2>
+              <div class="muted" style="line-height:1.45;font-size:.84rem;">Qui puoi vedere quasi a pagina piena l’adesivo esatto da stampare o mostrare per una prova rapida.</div>
+            </div>
+            <button id="closeStickerPreviewBtn" class="btn btn-secondary" type="button" style="background:#4f8df0;color:#fff;border-color:#4f8df0;">Chiudi anteprima</button>
+          </div>
+          <div style="border-radius:20px;overflow:hidden;border:1px solid rgba(34,48,70,.08);background:#f3f7fc;min-height:72vh;">
+            <iframe id="stickerPreviewFrame" src="about:blank" style="width:100%;height:72vh;border:0;background:#fff;" loading="lazy"></iframe>
+          </div>
         </div>
       </div>
 
@@ -1291,6 +1309,41 @@
 
       qs('renewBtn').href = buildRenewUrl(d.public_id);
 
+      const printStickerBtn = qs('printStickerBtn');
+      const previewStickerBtn = qs('previewStickerBtn');
+      const tryQrBtn = qs('tryQrBtn');
+      const closeStickerPreviewBtn = qs('closeStickerPreviewBtn');
+      const stickerPreviewFrame = qs('stickerPreviewFrame');
+
+      const stickerPrintUrl = buildStickerPrintUrl(code);
+      const publicQrUrl = buildPublicQrUrl(d.public_id);
+
+      if (stickerPreviewFrame) {
+        stickerPreviewFrame.dataset.src = stickerPrintUrl;
+      }
+
+      if (printStickerBtn) {
+        printStickerBtn.onclick = () => {
+          if (!stickerPrintUrl || stickerPrintUrl === '#') return;
+          window.open(stickerPrintUrl, '_blank', 'noopener');
+        };
+      }
+
+      if (previewStickerBtn) {
+        previewStickerBtn.onclick = () => openStickerPreview();
+      }
+
+      if (closeStickerPreviewBtn) {
+        closeStickerPreviewBtn.onclick = () => closeStickerPreview();
+      }
+
+      if (tryQrBtn) {
+        tryQrBtn.onclick = () => {
+          if (!publicQrUrl || publicQrUrl === '#') return;
+          window.open(publicQrUrl, '_blank', 'noopener');
+        };
+      }
+
       const vehicleModelText = [d.brand, d.vehicle_model].filter(Boolean).join(' ').trim() || 'Veicolo registrato';
       qs('vehicleHeroModel').textContent = vehicleModelText;
       qs('vehicleHeroPlate').textContent = d.plate || 'Targa non disponibile';
@@ -1487,6 +1540,31 @@
         code: params.get('code') || '',
         plate: params.get('plate') || ''
       };
+    }
+
+    function buildStickerPrintUrl(code){
+      return code ? `/api/admin/sticker-print-pdf/${encodeURIComponent(String(code).trim().toUpperCase())}` : '#';
+    }
+
+    function buildPublicQrUrl(publicId){
+      return publicId ? `/contact/u/${encodeURIComponent(publicId)}` : '#';
+    }
+
+    function openStickerPreview(){
+      const section = document.getElementById('stickerPreviewSection');
+      const frame = document.getElementById('stickerPreviewFrame');
+      if (!section || !frame) return;
+      const url = frame.dataset.src || '';
+      if (!url) return;
+      frame.src = url;
+      section.style.display = 'block';
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function closeStickerPreview(){
+      const section = document.getElementById('stickerPreviewSection');
+      if (!section) return;
+      section.style.display = 'none';
     }
 
     async function syncAppBadge(unread){
