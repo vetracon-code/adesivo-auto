@@ -344,7 +344,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object;
       const publicId = String(session.client_reference_id || '').trim().toUpperCase();
-      const amount = Number(session.amount_total || 0);
+      const paymentLinkId = String(session.payment_link || '').trim();
 
       if (!publicId) {
         throw new Error('client_reference_id mancante');
@@ -371,20 +371,20 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
           ? newExpiresAt
           : new Date();
 
-      if (amount === 100) {
+      if (paymentLinkId === 'plink_1TOheDLHke5YTzVMZFj7FEWu') {
         newPlanType = '1month';
         newExpiresAt = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
-      } else if (amount === 110) {
+      } else if (paymentLinkId === 'plink_1TOiDLLHke5YTzVMHyYzU2fg') {
         newPlanType = '6months';
         newExpiresAt = new Date(baseDate.getTime() + 180 * 24 * 60 * 60 * 1000);
-      } else if (amount === 120) {
+      } else if (paymentLinkId === 'plink_1TOiFYLHke5YTzVMZ4ZrwwYd') {
         newPlanType = '1year';
         newExpiresAt = new Date(baseDate.getTime() + 365 * 24 * 60 * 60 * 1000);
-      } else if (amount === 130) {
+      } else if (paymentLinkId === 'plink_1TOiHPLHke5YTzVM4FDxT4DC') {
         newPlanType = 'always';
         newExpiresAt = null;
       } else {
-        throw new Error(`Importo non riconosciuto: ${amount}`);
+        throw new Error(`Payment Link non riconosciuto: ${paymentLinkId || 'vuoto'}`);
       }
 
       await pool.query(
