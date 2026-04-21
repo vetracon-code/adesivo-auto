@@ -3304,6 +3304,9 @@ app.get('/contact/u/:public_id', async (req, res) => {
     }
 
     if (row.plan_type && row.plan_type !== 'always' && row.expires_at && new Date(row.expires_at) < new Date()) {
+      if (row.public_id) {
+        return res.redirect(302, `/renew/u/${encodeURIComponent(String(row.public_id).trim())}`);
+      }
       return res.redirect(302, '/renew.html');
     }
 
