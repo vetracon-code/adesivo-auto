@@ -767,10 +767,11 @@
 
 
         <div>
-          <div id="offeredByWrap" style="display:none;margin-top:2px;margin-bottom:12px;width:100%;">
-            <div style="display:flex;flex-direction:column;gap:4px;padding:12px 16px;border-radius:18px;background:linear-gradient(135deg,#3f79d8 0%, #2f5fad 100%);border:1px solid rgba(63,121,216,.22);align-items:center;justify-content:center;box-shadow:0 10px 24px rgba(63,121,216,.18);width:100%;text-align:center;">
-              <div style="font-size:.74rem;text-transform:uppercase;letter-spacing:.09em;color:rgba(255,255,255,.72);">Servizio offerto da</div>
-              <div id="offeredByValue" style="font-size:1.02rem;font-weight:900;line-height:1.2;color:#ffffff;text-align:center;">-</div>
+          <div id="serviceStatusWrap" style="display:none;margin-top:2px;margin-bottom:12px;width:100%;">
+            <div id="serviceStatusCard" style="display:flex;flex-direction:column;gap:4px;padding:12px 16px;border-radius:18px;background:linear-gradient(135deg,#3f79d8 0%, #2f5fad 100%);border:1px solid rgba(63,121,216,.22);align-items:center;justify-content:center;box-shadow:0 10px 24px rgba(63,121,216,.18);width:100%;text-align:center;">
+              <div style="font-size:.74rem;text-transform:uppercase;letter-spacing:.09em;color:rgba(255,255,255,.72);">Stato del servizio</div>
+              <div id="serviceStatusValue" style="font-size:1.02rem;font-weight:900;line-height:1.2;color:#ffffff;text-align:center;">-</div>
+              <div id="serviceStatusSub" style="font-size:.84rem;font-weight:700;line-height:1.25;color:rgba(255,255,255,.86);text-align:center;">-</div>
             </div>
           </div>
 
@@ -1379,23 +1380,28 @@
       qs('vehicleHeroModel').textContent = vehicleModelText;
       qs('vehicleHeroPlate').textContent = d.plate || 'Targa non disponibile';
 
-      const offeredByWrap = qs('offeredByWrap');
-      const offeredByValue = qs('offeredByValue');
-      if (offeredByWrap && offeredByValue) {
-        const offeredByRaw = String(d.offered_by || '').trim();
-        const offeredByNorm = offeredByRaw.toLowerCase();
+      const serviceStatusWrap = qs('serviceStatusWrap');
+      const serviceStatusValue = qs('serviceStatusValue');
+      const serviceStatusSub = qs('serviceStatusSub');
+      const serviceStatusCard = qs('serviceStatusCard');
 
-        const hideGenericOfferLabel =
-          !offeredByRaw ||
-          offeredByNorm === 'prova gratuita' ||
-          offeredByNorm === 'omaggio gratuito';
+      if (serviceStatusWrap && serviceStatusValue && serviceStatusSub && serviceStatusCard) {
+        serviceStatusWrap.style.display = 'block';
+        serviceStatusCard.style.opacity = '1';
 
-        if (!hideGenericOfferLabel) {
-          offeredByValue.textContent = offeredByRaw;
-          offeredByWrap.style.display = 'block';
+        if (d.plan_type === 'always' || !d.expires_at) {
+          serviceStatusValue.textContent = 'Omaggio gratuito';
+          serviceStatusSub.textContent = 'Sempre attivo';
+        } else if (dLeft < 0) {
+          serviceStatusValue.textContent = 'Scaduto';
+          serviceStatusSub.textContent = 'Riattivalo con Attiva ora';
+          serviceStatusCard.style.opacity = '.72';
+        } else if (isFreeTrial) {
+          serviceStatusValue.textContent = 'Prova gratuita';
+          serviceStatusSub.textContent = dLeft === 0 ? 'Scade oggi' : `Scade tra ${dLeft} giorni`;
         } else {
-          offeredByValue.textContent = '';
-          offeredByWrap.style.display = 'none';
+          serviceStatusValue.textContent = 'Servizio attivo';
+          serviceStatusSub.textContent = dLeft === 0 ? 'Scade oggi' : `Scade tra ${dLeft} giorni`;
         }
       }
 
