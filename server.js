@@ -2,6 +2,7 @@
 // SECURITY PATCH 1
 require('dotenv').config();
 const express = require('express');
+const Stripe = require('stripe');
 const cors = require('cors');
 const path = require('path');
 const webpush = require('web-push');
@@ -13,6 +14,10 @@ const pool = require('./db');
 
 
 const app = express();
+
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY)
+  : null;
 
 const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || '';
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || '';
@@ -295,6 +300,114 @@ if (!process.env.BASE_URL) {
 }
 
 app.use(cors());
+
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!stripe || !process.env.STRIPE_WEBHOOK_SECRET) {
+    return res.status(500).send('Stripe non configurato.');
+  }
+
+  let event;
+  try {
+    const signature = req.headers['stripe-signature'];
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      signature,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+  } catch (err) {
+    console.error('Stripe webhook signature error:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS processed_stripe_events (
+        event_id TEXT PRIMARY KEY,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    const eventId = String(event.id || '').trim();
+    if (!eventId) {
+      return res.status(400).send('Missing event id.');
+    }
+
+    const already = await pool.query(
+      'SELECT event_id FROM processed_stripe_events WHERE event_id = $1 LIMIT 1',
+      [eventId]
+    );
+
+    if (already.rows.length) {
+      return res.status(200).json({ received: true, duplicate: true });
+    }
+
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      const publicId = String(session.client_reference_id || '').trim().toUpperCase();
+      const amount = Number(session.amount_total || 0);
+
+      if (!publicId) {
+        throw new Error('client_reference_id mancante');
+      }
+
+      const found = await pool.query(
+        `SELECT code, public_id, plan_type, expires_at
+         FROM sticker_codes
+         WHERE public_id = $1
+         LIMIT 1`,
+        [publicId]
+      );
+
+      if (!found.rows.length) {
+        throw new Error(`public_id non trovato: ${publicId}`);
+      }
+
+      const row = found.rows[0];
+      let newPlanType = row.plan_type;
+      let newExpiresAt = row.expires_at ? new Date(row.expires_at) : null;
+
+      const baseDate =
+        newExpiresAt && newExpiresAt > new Date()
+          ? newExpiresAt
+          : new Date();
+
+      if (amount === 100) {
+        newPlanType = '1month';
+        newExpiresAt = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+      } else if (amount === 110) {
+        newPlanType = '6months';
+        newExpiresAt = new Date(baseDate.getTime() + 180 * 24 * 60 * 60 * 1000);
+      } else if (amount === 120) {
+        newPlanType = '1year';
+        newExpiresAt = new Date(baseDate.getTime() + 365 * 24 * 60 * 60 * 1000);
+      } else if (amount === 130) {
+        newPlanType = 'always';
+        newExpiresAt = null;
+      } else {
+        throw new Error(`Importo non riconosciuto: ${amount}`);
+      }
+
+      await pool.query(
+        `UPDATE sticker_codes
+         SET plan_type = $2,
+             expires_at = $3
+         WHERE public_id = $1`,
+        [publicId, newPlanType, newExpiresAt]
+      );
+    }
+
+    await pool.query(
+      'INSERT INTO processed_stripe_events (event_id) VALUES ($1)',
+      [eventId]
+    );
+
+    return res.status(200).json({ received: true });
+  } catch (err) {
+    console.error('Stripe webhook processing error:', err);
+    return res.status(500).send('Webhook processing failed.');
+  }
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
