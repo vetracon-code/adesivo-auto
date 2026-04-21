@@ -3286,6 +3286,79 @@ app.get('/contact/u/:public_id', async (req, res) => {
       ]
     );
 
+    try {
+      const nowLabel = new Date().toLocaleString('it-IT');
+
+      const insertedMessage = await pool.query(
+        `INSERT INTO contact_message_logs
+         (code, plate, brand, vehicle_model, color, reason, message_text, location_shared, ip_address, ip_city, ip_region, ip_country, user_agent, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,FALSE,$8,$9,$10,$11,$12,NOW())
+         RETURNING id`,
+        [
+          row.code || null,
+          row.plate || null,
+          row.brand || null,
+          row.vehicle_model || null,
+          row.color || null,
+          'QR Visualizzato',
+          `Data e ora: ${nowLabel}`,
+          ip,
+          area.city,
+          area.region,
+          area.country,
+          userAgent
+        ]
+      );
+
+      const insertedMessageId = insertedMessage.rows?.[0]?.id || null;
+
+      if (vapidPublicKey && vapidPrivateKey && row.code) {
+        const subs = await pool.query(
+          `SELECT endpoint, p256dh, auth
+           FROM push_subscriptions
+           WHERE code = $1
+             AND is_active = TRUE
+             AND receive_passenger_alerts = TRUE`,
+          [String(row.code).trim().toUpperCase()]
+        );
+
+        const targetUrl = `/owner-simple.html?code=${encodeURIComponent(String(row.code).trim().toUpperCase())}&plate=${encodeURIComponent(String(row.plate || '').trim())}${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}`;
+
+        for (const sub of subs.rows || []) {
+          try {
+            await webpush.sendNotification(
+              {
+                endpoint: sub.endpoint,
+                keys: {
+                  p256dh: sub.p256dh,
+                  auth: sub.auth
+                }
+              },
+              JSON.stringify({
+                title: 'QR Visualizzato',
+                body: `Data e ora: ${nowLabel}`,
+                url: targetUrl,
+                targetUrl,
+                messageId: insertedMessageId,
+                channel: 'qr-view-alert'
+              })
+            );
+          } catch (pushErr) {
+            console.error('contact/u push error:', pushErr.statusCode || '', pushErr.body || pushErr.message || pushErr);
+            if (pushErr.statusCode === 404 || pushErr.statusCode === 410) {
+              try {
+                await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]);
+              } catch (cleanupErr) {
+                console.error('contact/u push cleanup error:', cleanupErr);
+              }
+            }
+          }
+        }
+      }
+    } catch (notifyErr) {
+      console.error('contact/u qr visualizzato error:', notifyErr);
+    }
+
     return res.sendFile(require('path').join(__dirname, 'public', 'contact.html'));
   } catch (err) {
     console.error(err);
