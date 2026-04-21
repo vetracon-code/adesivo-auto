@@ -1802,6 +1802,35 @@ window.fixQrUrl = async function(code){
     }
   };
 
+  window.deleteTrialRequest = async function(id){
+    const item = getTrialItemById(id);
+    if (!item) return alert('Richiesta non trovata.');
+
+    const ok = confirm(`Vuoi davvero eliminare la richiesta prova gratuita di ${item.full_name || 'questo utente'}?`);
+    if (!ok) return;
+
+    try{
+      const res = await fetch('/api/admin/delete-trial-request', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'same-origin',
+        body: JSON.stringify({ id })
+      });
+
+      const out = await res.json().catch(() => ({}));
+
+      if (!res.ok || !out.success) {
+        alert(out.error || 'Errore eliminazione richiesta prova gratuita.');
+        return;
+      }
+
+      await loadTrialRequests();
+      alert('Richiesta eliminata correttamente.');
+    }catch(err){
+      alert('Errore di collegamento durante l’eliminazione.');
+    }
+  };
+
   window.openTrialEditModalById = function(id){
     const item = getTrialItemById(id);
     if (!item) return alert('Richiesta non trovata.');
