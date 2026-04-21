@@ -787,7 +787,6 @@ app.post('/api/log-contact-view', async (req, res) => {
 
     const cleanCode = code ? String(code).trim().toUpperCase() : null;
     const cleanPlate = plate ? String(plate).trim().toUpperCase().replace(/\s+/g, '') : null;
-    const cleanPhone = sender_phone ? String(sender_phone).trim() : null;
 
     const blocked = await pool.query(
       `SELECT id, block_type, block_value, reason
@@ -795,13 +794,10 @@ app.post('/api/log-contact-view', async (req, res) => {
        WHERE is_active = TRUE
          AND COALESCE(code,'') = COALESCE($1,'')
          AND COALESCE(plate,'') = COALESCE($2,'')
-         AND (
-           (block_type = 'ip' AND block_value = COALESCE($3,'')) OR
-           (block_type = 'phone' AND block_value = COALESCE($4,''))
-         )
+         AND (block_type = 'ip' AND block_value = COALESCE($3,''))
        ORDER BY id DESC
        LIMIT 1`,
-      [cleanCode, cleanPlate, ip || '', cleanPhone || '']
+      [cleanCode, cleanPlate, ip || '']
     );
 
     if (blocked.rows.length) {
@@ -829,6 +825,83 @@ app.post('/api/log-contact-view', async (req, res) => {
         userAgent
       ]
     );
+
+    let insertedMessageId = null;
+    const nowLabel = new Date().toLocaleString('it-IT');
+
+    try {
+      const insertedMessage = await pool.query(
+        `INSERT INTO contact_message_logs
+         (code, plate, brand, vehicle_model, color, reason, message_text, location_shared, ip_address, ip_city, ip_region, ip_country, user_agent, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,FALSE,$8,$9,$10,$11,$12,NOW())
+         RETURNING id`,
+        [
+          code || null,
+          plate || null,
+          brand || null,
+          vehicle_model || null,
+          color || null,
+          'QR Visualizzato',
+          `Data e ora: ${nowLabel}`,
+          ip,
+          area.city,
+          area.region,
+          area.country,
+          userAgent
+        ]
+      );
+      insertedMessageId = insertedMessage.rows?.[0]?.id || null;
+    } catch (msgErr) {
+      console.error('log-contact-view message insert error:', msgErr);
+    }
+
+    try {
+      if (vapidPublicKey && vapidPrivateKey && cleanCode) {
+        const subs = await pool.query(
+          `SELECT endpoint, p256dh, auth
+           FROM push_subscriptions
+           WHERE code = $1
+             AND is_active = TRUE
+             AND receive_passenger_alerts = TRUE`,
+          [cleanCode]
+        );
+
+        const targetUrl = `/owner-simple.html?code=${encodeURIComponent(cleanCode)}&plate=${encodeURIComponent(String(plate || '').trim())}${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}`;
+
+        for (const sub of subs.rows || []) {
+          try {
+            await webpush.sendNotification(
+              {
+                endpoint: sub.endpoint,
+                keys: {
+                  p256dh: sub.p256dh,
+                  auth: sub.auth
+                }
+              },
+              JSON.stringify({
+                title: 'QR Visualizzato',
+                body: `Data e ora: ${nowLabel}`,
+                url: targetUrl,
+                targetUrl,
+                messageId: insertedMessageId,
+                channel: 'qr-view-alert'
+              })
+            );
+          } catch (pushErr) {
+            console.error('log-contact-view push error:', pushErr.statusCode || '', pushErr.body || pushErr.message || pushErr);
+            if (pushErr.statusCode === 404 || pushErr.statusCode === 410) {
+              try {
+                await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]);
+              } catch (cleanupErr) {
+                console.error('log-contact-view push cleanup error:', cleanupErr);
+              }
+            }
+          }
+        }
+      }
+    } catch (notifyErr) {
+      console.error('log-contact-view push block error:', notifyErr);
+    }
 
     return res.json({ success: true });
   } catch (err) {
@@ -1353,7 +1426,9 @@ app.post('/api/owner-messages', async (req, res) => {
        FROM contact_message_logs
        WHERE code = $1
          AND deleted_at IS NULL
-       ORDER BY created_at DESC
+       ORDER BY
+         CASE WHEN reason = 'QR Visualizzato' THEN 1 ELSE 0 END ASC,
+         created_at DESC
        LIMIT 200`,
       [code]
     );
