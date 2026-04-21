@@ -1,0 +1,1819 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dashboard Admin</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    :root{
+      --accent:#2c74ff;
+      --accent2:#5aa0ff;
+      --bg1:#050b14;
+      --bg2:#0a1320;
+      --panel:#0b1523;
+      --line:rgba(255,255,255,.10);
+      --text:#f7fbff;
+      --muted:#b6c2d4;
+      --soft:rgba(255,255,255,.04);
+      --warn:#ffd27d;
+      --danger:#ffb0b0;
+      --ok:#9de2a7;
+    }
+    *{box-sizing:border-box}
+    html,body{
+      margin:0;padding:0;min-height:100%;
+      font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Arial,sans-serif;
+      background:
+        radial-gradient(circle at 18% 0%, rgba(33,78,166,.22), transparent 28%),
+        linear-gradient(180deg,var(--bg1) 0%,#07101b 48%,var(--bg2) 100%);
+      color:var(--text)
+    }
+    .wrap{width:min(1450px,calc(100% - 24px));margin:0 auto;padding:28px 0 34px}
+    .panel{
+      border-radius:30px;overflow:hidden;
+      background:
+        radial-gradient(circle at 70% 8%, rgba(45,110,240,.12), transparent 24%),
+        linear-gradient(180deg, rgba(11,21,35,.99) 0%, rgba(8,16,27,.995) 100%);
+      border:1px solid rgba(255,255,255,.08);
+      box-shadow:0 24px 56px rgba(0,0,0,.38)
+    }
+    .head{padding:28px 26px 20px}
+    .title{
+      margin:0;line-height:.94;letter-spacing:-.06em;font-weight:900;
+      font-size:clamp(2.2rem,5.2vw,3.8rem);text-transform:uppercase
+    }
+    .title span{display:block;margin-top:6px;color:var(--accent2)}
+    .sub{margin:14px 0 0;color:var(--muted);max-width:850px;line-height:1.55}
+    .focus-wrap{
+      padding:0 26px 18px;
+    }
+    .focus-card{
+      display:grid;
+      grid-template-columns:1.4fr .9fr;
+      gap:14px;
+      border-radius:24px;
+      border:1px solid rgba(255,255,255,.08);
+      background:linear-gradient(180deg, rgba(255,255,255,.04) 0%, rgba(255,255,255,.02) 100%);
+      padding:18px 18px;
+    }
+    .focus-title{
+      margin:0;
+      font-size:1.08rem;
+      font-weight:900;
+      letter-spacing:-.02em;
+      color:#fff;
+    }
+    .focus-copy{
+      margin-top:8px;
+      color:var(--muted);
+      line-height:1.52;
+      max-width:620px;
+      font-size:.95rem;
+    }
+    .focus-stats{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+      align-content:start;
+    }
+    .focus-mini{
+      border-radius:18px;
+      border:1px solid rgba(255,255,255,.08);
+      background:rgba(255,255,255,.03);
+      padding:14px 14px;
+    }
+    .focus-mini .label{
+      color:#9fb1c8;
+      font-size:.8rem;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+    }
+    .focus-mini .value{
+      margin-top:6px;
+      font-size:1.25rem;
+      font-weight:900;
+      color:#fff;
+    }
+    .kpis{
+      padding:0 26px 20px;
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:12px
+    }
+    .kpi{
+      border-radius:20px;
+      background:linear-gradient(180deg, rgba(255,255,255,.03) 0%, rgba(255,255,255,.015) 100%);
+      border:1px solid var(--line);
+      padding:16px
+    }
+    .kpi .label{color:#9fb1c8;font-size:.82rem;text-transform:uppercase;letter-spacing:.04em}
+    .kpi .value{margin-top:8px;font-size:1.45rem;font-weight:900;color:#fff}
+    .toolbar{
+      padding:0 26px 20px;
+      display:flex;gap:12px;flex-wrap:wrap;align-items:center
+    }
+    .search,.select,.input{
+      min-height:48px;border-radius:14px;border:1px solid var(--line);
+      background:var(--soft);color:#fff;padding:0 14px
+    }
+    .search{min-width:340px}
+    .btn{
+      min-height:48px;padding:0 16px;border-radius:14px;border:0;cursor:pointer;
+      color:#fff;font-weight:800
+    }
+    .btn-primary{background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 100%)}
+    .btn-secondary{background:rgba(255,255,255,.06);border:1px solid var(--line)}
+    .btn-warn{background:rgba(255,210,125,.10);border:1px solid rgba(255,210,125,.25);color:#ffe3a9}
+    .table-wrap{padding:0 26px 26px;overflow:auto}
+    table{
+      width:100%;border-collapse:collapse;background:rgba(255,255,255,.02);
+      border:1px solid var(--line);border-radius:18px;overflow:hidden
+    }
+    th,td{
+      padding:12px 10px;text-align:left;border-bottom:1px solid rgba(255,255,255,.06);
+      vertical-align:top;font-size:.92rem
+    }
+    th{color:#dce7f7;background:rgba(255,255,255,.04);position:sticky;top:0}
+    td{color:#d1dbea}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.84rem}
+    .status{
+      display:inline-flex;align-items:center;justify-content:center;
+      min-height:28px;padding:0 10px;border-radius:999px;font-size:.78rem;font-weight:800
+    }
+    .status.used{background:rgba(157,226,167,.12);color:var(--ok);border:1px solid rgba(157,226,167,.20)}
+    .status.new{background:rgba(90,160,255,.12);color:#b6d4ff;border:1px solid rgba(90,160,255,.20)}
+    .status.disabled{background:rgba(255,176,176,.12);color:var(--danger);border:1px solid rgba(255,176,176,.20)}
+    .status.reactivated{background:rgba(255,210,125,.10);color:#ffe3a9;border:1px solid rgba(255,210,125,.20)}
+    .actions{display:flex;gap:8px;flex-wrap:wrap}
+    .mini{
+      min-height:34px;padding:0 10px;border-radius:10px;border:1px solid var(--line);
+      background:rgba(255,255,255,.05);color:#fff;cursor:pointer;font-size:.82rem
+    }
+    .warn{color:var(--warn)}
+    .danger{color:var(--danger)}
+    .muted{color:var(--muted)}
+    .modal{
+      position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;
+      align-items:center;justify-content:center;padding:20px
+    }
+    .modal-card{
+      width:min(760px,100%);background:#0d1727;border:1px solid var(--line);
+      border-radius:22px;padding:20px
+    }
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .full{grid-column:1 / -1}
+    .helper{padding:0 26px 20px;color:var(--muted);font-size:.9rem}
+    .push-broadcast{
+      margin:0 26px 20px;
+      padding:18px;
+      border-radius:24px;
+      border:1px solid rgba(255,255,255,.08);
+      background:linear-gradient(180deg, rgba(255,255,255,.04) 0%, rgba(255,255,255,.02) 100%);
+    }
+    .push-broadcast h2{
+      margin:0;
+      font-size:1.05rem;
+      font-weight:900;
+      letter-spacing:-.02em;
+      color:#fff;
+    }
+    .push-broadcast .copy{
+      margin-top:8px;
+      color:var(--muted);
+      line-height:1.5;
+      font-size:.94rem;
+      max-width:860px;
+    }
+    .push-grid{
+      margin-top:14px;
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+    }
+    .push-grid .full{
+      grid-column:1 / -1;
+    }
+    .push-broadcast textarea{
+      min-height:110px;
+      padding:12px 14px;
+      resize:vertical;
+    }
+    .push-result{
+      margin-top:12px;
+      color:var(--muted);
+      font-size:.9rem;
+      line-height:1.45;
+    }
+    .last-push{
+      margin:0 26px 20px;
+      padding:18px;
+      border-radius:24px;
+      border:1px solid rgba(255,255,255,.08);
+      background:linear-gradient(180deg, rgba(255,255,255,.04) 0%, rgba(255,255,255,.02) 100%);
+    }
+    .last-push h2{
+      margin:0;
+      font-size:1.02rem;
+      font-weight:900;
+      letter-spacing:-.02em;
+      color:#fff;
+    }
+    .last-push-copy{
+      margin-top:8px;
+      color:var(--muted);
+      line-height:1.5;
+      font-size:.94rem;
+    }
+    .last-push-stats{
+      margin-top:14px;
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:12px;
+    }
+    .last-push-box{
+      border-radius:18px;
+      border:1px solid rgba(255,255,255,.08);
+      background:rgba(255,255,255,.03);
+      padding:14px 14px;
+    }
+    .last-push-box .label{
+      color:#9fb1c8;
+      font-size:.8rem;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+    }
+    .last-push-box .value{
+      margin-top:6px;
+      font-size:1.2rem;
+      font-weight:900;
+      color:#fff;
+    }
+    .last-push-list{
+      margin-top:14px;
+      display:grid;
+      gap:10px;
+    }
+    .last-push-row{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:center;
+      padding:12px 14px;
+      border-radius:16px;
+      border:1px solid rgba(255,255,255,.08);
+      background:rgba(255,255,255,.03);
+    }
+    .last-push-main{
+      color:#fff;
+      font-weight:800;
+      line-height:1.3;
+    }
+    .last-push-sub{
+      margin-top:4px;
+      color:var(--muted);
+      font-size:.86rem;
+      line-height:1.4;
+    }
+    .push-flag{
+      min-width:18px;
+      width:18px;
+      height:18px;
+      border-radius:999px;
+      flex:0 0 auto;
+    }
+    .push-flag.opened{
+      background:#20c05c;
+      box-shadow:0 0 0 4px rgba(32,192,92,.15);
+    }
+    .push-flag.pending{
+      background:#d64545;
+      box-shadow:0 0 0 4px rgba(214,69,69,.15);
+    }
+    @media (max-width:1200px){.kpis{grid-template-columns:repeat(2,1fr)}}
+    @media (max-width:900px){
+      .grid{grid-template-columns:1fr}
+      .search{min-width:unset;width:100%}
+      .kpis{grid-template-columns:repeat(2,1fr)}
+      .focus-card{grid-template-columns:1fr}
+      .focus-stats{grid-template-columns:1fr 1fr}
+    }
+    @media (max-width:640px){.kpis{grid-template-columns:1fr}}
+  
+.trial-card{
+  margin-top:14px;
+  border-radius:22px;
+  background:linear-gradient(180deg, rgba(255,255,255,.88) 0%, rgba(248,251,255,.96) 100%);
+  border:1px solid rgba(34,48,70,.08);
+  box-shadow:0 10px 28px rgba(30,46,82,.06);
+  padding:16px;
+}
+.trial-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-bottom:10px;
+}
+.trial-title{
+  font-size:.95rem;
+  font-weight:900;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+}
+.trial-muted{
+  color:#6b778c;
+  font-size:.86rem;
+}
+.trial-table-wrap{
+  overflow:auto;
+  border-radius:16px;
+  border:1px solid rgba(34,48,70,.08);
+  background:rgba(255,255,255,.72);
+}
+.trial-table{
+  width:100%;
+  border-collapse:collapse;
+  min-width:980px;
+}
+.trial-table th,
+.trial-table td{
+  padding:10px 11px;
+  text-align:left;
+  font-size:.85rem;
+  border-bottom:1px solid rgba(34,48,70,.08);
+  vertical-align:top;
+}
+.trial-table th{
+  font-size:.78rem;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+  color:#6b778c;
+  background:rgba(255,255,255,.82);
+}
+.trial-actions{
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.trial-mini{
+  min-height:32px;
+  padding:0 10px;
+  border-radius:10px;
+  border:1px solid rgba(34,48,70,.10);
+  background:rgba(255,255,255,.88);
+  cursor:pointer;
+  font-size:.8rem;
+  font-weight:700;
+}
+.trial-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:26px;
+  padding:0 9px;
+  border-radius:999px;
+  font-size:.74rem;
+  font-weight:800;
+  border:1px solid rgba(34,48,70,.08);
+}
+.trial-badge.yes{
+  background:rgba(141,255,177,.10);
+  color:#2f8b56;
+}
+.trial-badge.no{
+  background:rgba(255,143,143,.10);
+  color:#c25b5b;
+}
+
+
+.trial-modal{
+  position:fixed;
+  inset:0;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  background:rgba(0,0,0,.45);
+  z-index:3000;
+  padding:18px;
+}
+.trial-modal-card{
+  width:min(760px,100%);
+  max-height:90vh;
+  overflow:auto;
+  border-radius:22px;
+  background:linear-gradient(180deg, rgba(255,255,255,.96) 0%, rgba(248,251,255,.98) 100%);
+  border:1px solid rgba(34,48,70,.10);
+  box-shadow:0 18px 42px rgba(30,46,82,.16);
+  padding:18px;
+}
+.trial-form-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+.trial-field{
+  display:grid;
+  gap:6px;
+}
+.trial-field label{
+  font-size:.8rem;
+  font-weight:800;
+  color:#31445d;
+}
+.trial-field input,
+.trial-field textarea{
+  width:100%;
+  min-height:40px;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid rgba(34,48,70,.12);
+  background:#fff;
+}
+.trial-field textarea{
+  min-height:90px;
+  resize:vertical;
+}
+.trial-modal-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:14px;
+}
+@media (max-width:760px){
+  .trial-form-grid{grid-template-columns:1fr}
+}
+
+</style>
+</head>
+<body>
+  <div class="wrap">
+
+<div class="trial-card">
+  <div class="trial-head">
+    <div>
+      <div class="trial-title">Richieste prova gratuita</div>
+      <div class="trial-muted">Lead raccolti dalla nuova landing pubblica con prova gratuita 30 giorni.</div>
+    </div>
+    <button id="reloadTrialRequestsBtn" class="btn btn-secondary" type="button">Aggiorna richieste</button>
+  </div>
+
+  <div id="trialRequestsResult" class="trial-muted" style="margin-bottom:10px;">Caricamento in corso...</div>
+
+  <div class="trial-table-wrap">
+    <table class="trial-table">
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Nome</th>
+          <th>Cellulare</th>
+          <th>Email</th>
+          <th>Targa</th>
+          <th>Veicolo</th>
+          <th>Colore</th>
+          <th>Note</th>
+          <th>Marketing</th>
+          <th>Azioni</th>
+        </tr>
+      </thead>
+      <tbody id="trialRequestsBody">
+        <tr><td colspan="10" class="trial-muted">Caricamento in corso...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+    <div class="panel">
+      <div class="head">
+        <h1 class="title">DASHBOARD<span>SERVIZIO</span></h1>
+        <p class="sub">Il tuo QR è attivo. Monitora aperture, ritorni e segnalazioni. Da qui puoi gestire record, link, stato del servizio e dati raccolti.</p>
+      </div>
+
+      <div class="focus-wrap">
+        <div class="focus-card">
+          <div>
+            <h2 class="focus-title">Messaggi arrivati</h2>
+            <div class="focus-copy">Qui controlli subito se i QR stanno ricevendo segnalazioni reali. Apri il pannello raccolta per leggere i messaggi e verificare i dati più utili.</div>
+            <div class="actions" style="margin-top:14px;">
+              <button id="adminCollectedBtnTop" class="btn btn-warn" type="button">MESSAGGI E DATI RACCOLTI</button>
+            </div>
+          </div>
+          <div class="focus-stats">
+            <div class="focus-mini">
+              <div class="label">Segnalazioni inviate</div>
+              <div class="value" id="focusMessages">-</div>
+            </div>
+            <div class="focus-mini">
+              <div class="label">Aperture pagina QR</div>
+              <div class="value" id="focusViews">-</div>
+            </div>
+            <div class="focus-mini">
+              <div class="label">Nuovi da attivare</div>
+              <div class="value" id="focusNew">-</div>
+            </div>
+            <div class="focus-mini">
+              <div class="label">Link da correggere</div>
+              <div class="value" id="focusLocalhost">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi"><div class="label">Aperture pagina QR</div><div class="value" id="kpiViews">-</div></div>
+        <div class="kpi"><div class="label">Segnalazioni inviate</div><div class="value" id="kpiMessages">-</div></div>
+        <div class="kpi"><div class="label">Nuovi da attivare</div><div class="value" id="kpiNew">-</div></div>
+        <div class="kpi"><div class="label">Link da correggere</div><div class="value" id="kpiLocalhost">-</div></div>
+      </div>
+
+      <div class="toolbar">
+        <input id="adminSearch" class="search" type="text" placeholder="Cerca per codice, public_id o targa">
+        <button id="adminSearchBtn" class="btn btn-primary" type="button">Cerca</button>
+        <button id="adminReloadBtn" class="btn btn-secondary" type="button">Ricarica</button>
+        <button id="adminAbuseBtnTop" class="btn btn-secondary" type="button">Blocchi abuso</button>
+        <button id="adminLogoutBtn" class="btn btn-secondary" type="button">Logout</button>
+      </div>
+
+      <div class="toolbar" style="padding-top:0;">
+        <select id="adminPlanType" class="select">
+          <option value="always">Sempre valido</option>
+          <option value="1week">Valido 1 settimana</option>
+          <option value="1month">Valido 1 mese</option>
+          <option value="6months">Valido 6 mesi</option>
+        </select>
+        <select id="isSponsored" class="select">
+          <option value="no" selected>Non sponsorizzato</option>
+          <option value="yes">Sponsorizzato</option>
+        </select>
+        <input id="sponsorName" class="input" placeholder="Servizio offerto da" style="display:none;min-width:260px;">
+        <button id="adminCreateCodeBtn" class="btn btn-primary" type="button">Genera nuovo codice</button>
+      </div>
+
+      <div id="adminCreateResult" class="helper"></div>
+
+      <div class="push-broadcast">
+        <h2>Invio push clienti</h2>
+        <div class="copy">Invia una notifica push simultanea ai clienti con notifiche attive. Se inserisci un URL, l’utente lo aprirà toccando la notifica.</div>
+        <div class="push-grid">
+          <input id="pushTitle" class="input" placeholder="Titolo notifica">
+          <select id="pushAudience" class="select">
+            <option value="all">Tutti con push attivo</option>
+            <option value="used">Solo attivi</option>
+            <option value="new">Solo nuovi da attivare</option>
+            <option value="disabled">Solo disattivati</option>
+            <option value="reactivated">Solo riattivati</option>
+          </select>
+          <textarea id="pushMessage" class="input full" placeholder="Messaggio push"></textarea>
+          <input id="pushUrl" class="input full" placeholder="URL da aprire al tap sulla notifica (facoltativo)">
+        </div>
+        <div class="actions" style="margin-top:14px;">
+          <button id="sendBroadcastPushBtn" class="btn btn-primary" type="button">Invia push ora</button>
+        </div>
+        <div id="pushBroadcastResult" class="push-result"></div>
+      </div>
+
+      <div class="last-push">
+        <h2>Ultima push inviata</h2>
+        <div class="last-push-copy">Verde = notifica aperta. Rosso = non ancora aperta.</div>
+        <div class="last-push-stats">
+          <div class="last-push-box"><div class="label">Inviati</div><div class="value" id="lastPushSent">-</div></div>
+          <div class="last-push-box"><div class="label">Aperti</div><div class="value" id="lastPushOpened">-</div></div>
+          <div class="last-push-box"><div class="label">Non aperti</div><div class="value" id="lastPushPending">-</div></div>
+        </div>
+        <div id="lastPushMeta" class="last-push-copy" style="margin-top:12px;"></div>
+        <div id="lastPushList" class="last-push-list"></div>
+      </div>
+
+      <div class="helper">Controlla qui le aperture reali, le segnalazioni inviate e i record che richiedono correzione prima dell’uso pubblico.</div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Codice</th>
+              <th>Public ID</th>
+              <th>Targa</th>
+              <th>Veicolo</th>
+              <th>Offerto da</th>
+                <th>Stato</th>
+              <th>Piano</th>
+              <th>Scadenza</th>
+              <th>Bonus</th>
+              <th>Consegna</th>
+              <th>QR URL</th>
+              <th>Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="adminTableBody">
+            <tr><td colspan="11" class="muted">Caricamento in corso...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+
+
+  <div id="deliverWebAppModal" class="modal">
+    <div class="modal-card" style="width:min(760px,100%);">
+      <h2 style="margin-top:0;">Consegna Web App proprietario</h2>
+      <div class="muted" style="margin-bottom:12px;line-height:1.5;">
+        Questo link apre direttamente la Web App del proprietario riferita al codice selezionato.
+      </div>
+      <div style="display:grid;gap:12px;">
+        <div>
+          <div class="muted" style="margin-bottom:6px;">Codice</div>
+          <div id="deliverWebAppCode" class="mono">-</div>
+        </div>
+        <div>
+          <div class="muted" style="margin-bottom:6px;">Veicolo / Targa</div>
+          <div id="deliverWebAppVehicle">-</div>
+        </div>
+        <div>
+          <div class="muted" style="margin-bottom:6px;">Link Web App</div>
+          <div id="deliverWebAppLink" class="mono" style="word-break:break-all;">-</div>
+        </div>
+      </div>
+
+      <div class="actions" style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
+        <button id="deliverOpenBtn" class="btn btn-primary" type="button" onclick="deliverOpenWebApp()">Apri Web App</button>
+        <button id="deliverCopyBtn" class="btn btn-secondary" type="button" onclick="deliverCopyWebAppLink()">Copia link</button>
+                <button id="deliverEmailBtn" class="btn btn-secondary" type="button" onclick="deliverSendWebAppEmail()">Invia via email</button>
+        <button id="deliverInstallGuideBtn" class="btn btn-secondary" type="button" onclick="deliverSendInstallGuide()">Invia istruzioni salvataggio</button>
+        <button id="deliverCloseBtn" class="btn btn-secondary" type="button" onclick="deliverCloseModal()">Chiudi</button>
+      </div>
+
+      <div id="deliverWebAppResult" class="muted" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <div id="inviteModal" class="modal">
+    <div class="modal-card">
+      <h2 style="margin-top:0;">Invia invito</h2>
+      <div class="grid">
+        <input id="inviteCode" class="input" disabled>
+        <input id="inviteSentTo" class="input" placeholder="Inviato a">
+        <select id="inviteChannel" class="select">
+          <option value="email">Email</option>
+        </select>
+        <input id="inviteTarget" class="input" placeholder="Indirizzo email">
+        <select id="inviteVariant" class="select">
+          <option value="short">Invito breve</option>
+          <option value="full">Invito completo</option>
+        </select>
+        <input id="inviteLink" class="input full" disabled>
+        <textarea id="invitePreview" class="input full" style="min-height:180px;padding:12px;" placeholder="Anteprima messaggio"></textarea>
+      </div>
+      <div class="actions" style="margin-top:16px;">
+        <button id="openInviteSendBtn" class="btn btn-primary" type="button">Apri email</button>
+        <button id="copyInviteTextBtn" class="btn btn-secondary" type="button">Copia testo invito</button>
+        <button id="copyInviteLinkBtn" class="btn btn-secondary" type="button">Copia link attivazione</button>
+        <button id="closeInviteBtn" class="btn btn-secondary" type="button">Chiudi</button>
+      </div>
+      <div id="inviteResult" class="muted" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+
+  <div id="abuseModal" class="modal">
+    <div class="modal-card" style="width:min(980px,100%);">
+      <h2 style="margin-top:0;">Blocchi abuso</h2>
+      <div class="muted" style="margin-bottom:12px;line-height:1.5;">
+        Qui puoi vedere i blocchi attivi o storici e sbloccarli per i test.
+      </div>
+      <div style="display:grid;gap:12px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
+          <input id="abuseCode" class="input" placeholder="Codice" />
+          <input id="abusePlate" class="input" placeholder="Targa" />
+          <select id="abuseType" class="select">
+            <option value="phone">Telefono</option>
+            <option value="ip">IP</option>
+          </select>
+          <input id="abuseValue" class="input" placeholder="Numero o IP da bloccare" />
+        </div>
+        <input id="abuseReasonInput" class="input" placeholder="Motivo blocco (facoltativo)" />
+        <div class="actions">
+          <button id="createAbuseBtn" class="btn btn-primary" type="button">Blocca ora</button>
+        </div>
+        <div id="abuseResult" class="muted"></div>
+        <div style="max-height:55vh;overflow:auto;border:1px solid rgba(255,255,255,.08);border-radius:16px;">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Codice</th>
+                <th>Targa</th>
+                <th>Tipo</th>
+                <th>Valore</th>
+                <th>Motivo</th>
+                <th>Stato</th>
+                <th>Aggiornato</th>
+                <th>Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="abuseTableBody">
+              <tr><td colspan="9" class="muted">Caricamento...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="actions" style="margin-top:16px;">
+        <button id="closeAbuseBtn" class="btn btn-secondary" type="button">Chiudi</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="editModal" class="modal">
+    <div class="modal-card">
+      <h2 style="margin-top:0;">Modifica record</h2>
+      <div class="grid">
+        <input id="editCode" class="input" disabled>
+        <input id="editPublicId" class="input" disabled>
+        <input id="editBrand" class="input" placeholder="Marca">
+        <input id="editModel" class="input" placeholder="Modello">
+        <input id="editPlate" class="input" placeholder="Targa">
+        <input id="editColor" class="input" placeholder="Colore">
+        <input id="editOfferedBy" class="input full" placeholder="Servizio offerto da">
+        <input id="editPhone" class="input full" placeholder="Telefono">
+        <select id="editPlanType" class="select">
+          <option value="always">Sempre valido</option>
+          <option value="1week">1 settimana</option>
+          <option value="1month">1 mese</option>
+          <option value="6months">6 mesi</option>
+        </select>
+        <input id="editExpiresAt" class="input" type="datetime-local">
+      </div>
+      <div class="actions" style="margin-top:16px;">
+        <button id="saveEditBtn" class="btn btn-primary" type="button">Salva modifiche</button>
+        <button id="closeEditBtn" class="btn btn-secondary" type="button">Chiudi</button>
+      </div>
+      <div id="editResult" class="muted" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <script>
+    const bodyEl = document.getElementById('adminTableBody');
+    const searchEl = document.getElementById('adminSearch');
+    const modal = document.getElementById('editModal');
+    const inviteModal = document.getElementById('inviteModal');
+    const collectedModal = document.getElementById('collectedModal');
+    const abuseModal = document.getElementById('abuseModal');
+    const deliverWebAppModal = document.getElementById('deliverWebAppModal');
+    const editResult = document.getElementById('editResult');
+    const inviteResult = document.getElementById('inviteResult');
+    const pushBroadcastResult = document.getElementById('pushBroadcastResult');
+    const lastPushList = document.getElementById('lastPushList');
+    const lastPushMeta = document.getElementById('lastPushMeta');
+    const isSponsoredEl = document.getElementById('isSponsored');
+    const sponsorNameEl = document.getElementById('sponsorName');
+    let adminItems = [];
+
+    if (isSponsoredEl && sponsorNameEl) {
+      isSponsoredEl.addEventListener('change', () => {
+        sponsorNameEl.style.display = isSponsoredEl.value === 'yes' ? 'block' : 'none';
+        if (isSponsoredEl.value !== 'yes') sponsorNameEl.value = '';
+      });
+    }
+    let deliverWebAppState = null;
+
+    function fmtDate(v){
+      if(!v) return '-';
+      try { return new Date(v).toLocaleString('it-IT'); } catch { return v; }
+    }
+
+    function planLabel(v){
+      return v === 'always' ? 'Sempre valido'
+        : v === '1week' ? '1 settimana'
+        : v === '1month' ? '1 mese'
+        : v === '6months' ? '6 mesi'
+        : (v || '-');
+    }
+
+    function expiryLabel(item){
+      if(item.plan_type === 'always') return '<span class="muted">Sempre attivo</span>';
+      if(!item.expires_at) return '<span class="muted">-</span>';
+      const d = Number(item.days_left);
+      if (Number.isNaN(d)) return fmtDate(item.expires_at);
+      if (d < 0) return `<span class="danger"><strong>Scaduto da ${Math.abs(d)} gg</strong></span><br><span class="muted">${fmtDate(item.expires_at)}</span>`;
+      if (d <= 15) return `<span class="warn"><strong>Scade tra ${d} gg</strong></span><br><span class="muted">${fmtDate(item.expires_at)}</span>`;
+      return `<span class="ok"><strong>${d} gg residui</strong></span><br><span class="muted">${fmtDate(item.expires_at)}</span>`;
+    }
+
+    function buildRenewLink(item){
+      return `${window.location.origin}/renew/u/${encodeURIComponent(item.public_id || '')}`;
+    }
+
+    function buildFeedbackLink(item){
+      return `${window.location.origin}/feedback/u/${encodeURIComponent(item.public_id || '')}`;
+    }
+
+    function buildRenewText(item){
+      return `Ciao, ti ricordo che il servizio associato al tuo QR veicolo risulta in scadenza o già scaduto. Per mantenerlo attivo ed evitare interruzioni, puoi proseguire direttamente da qui:\n\n${buildRenewLink(item)}\n\nSe vuoi, posso anche aiutarti io direttamente.`;
+    }
+
+    function buildFeedbackText(item){
+      return `Ciao, ho visto che il servizio associato al tuo QR veicolo non è stato ancora rinnovato. Se non desideri proseguire, mi sarebbe molto utile capire il motivo tramite un breve form anonimo:\n\n${buildFeedbackLink(item)}\n\nIl tuo riscontro ci aiuta a migliorare il servizio.`;
+    }
+
+    async function loadLastBroadcastStatus(){
+      try {
+        const res = await fetch('/api/admin/last-broadcast-status');
+        const data = await res.json();
+
+        const setText = (id, value) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = value ?? '-';
+        };
+
+        if (!res.ok || !data.success || !data.notification) {
+          setText('lastPushSent', 0);
+          setText('lastPushOpened', 0);
+          setText('lastPushPending', 0);
+          if (lastPushMeta) lastPushMeta.textContent = 'Nessuna push inviata.';
+          if (lastPushList) lastPushList.innerHTML = '';
+          return;
+        }
+
+        const n = data.notification;
+        const recipients = Array.isArray(data.recipients) ? data.recipients : [];
+        const opened = recipients.filter(x => x.status === 'opened').length;
+        const pending = recipients.length - opened;
+
+        setText('lastPushSent', n.total_sent ?? recipients.length);
+        setText('lastPushOpened', opened);
+        setText('lastPushPending', pending);
+
+        if (lastPushMeta) {
+          lastPushMeta.textContent = `${n.title || '-'} · ${new Date(n.created_at).toLocaleString('it-IT')}`;
+        }
+
+        if (lastPushList) {
+          if (!recipients.length) {
+            lastPushList.innerHTML = '<div class="muted">Nessun destinatario registrato.</div>';
+          } else {
+            lastPushList.innerHTML = recipients.slice(0, 20).map(item => `
+              <div class="last-push-row">
+                <div>
+                  <div class="last-push-main">${item.plate || '-'} ${item.code ? '· ' + item.code : ''}</div>
+                  <div class="last-push-sub">${item.opened_at ? 'Aperta: ' + new Date(item.opened_at).toLocaleString('it-IT') : 'Non ancora aperta'}</div>
+                </div>
+                <div class="push-flag ${item.status === 'opened' ? 'opened' : 'pending'}"></div>
+              </div>
+            `).join('');
+          }
+        }
+      } catch (err) {
+        if (lastPushMeta) lastPushMeta.textContent = 'Errore lettura ultima push.';
+      }
+    }
+
+    async function sendBroadcastPush(){
+      const title = document.getElementById('pushTitle').value.trim();
+      const message = document.getElementById('pushMessage').value.trim();
+      const url = document.getElementById('pushUrl').value.trim();
+      const audience = document.getElementById('pushAudience').value;
+
+      pushBroadcastResult.textContent = '';
+
+      if (!title) {
+        pushBroadcastResult.textContent = 'Inserisci il titolo della notifica.';
+        return;
+      }
+      if (!message) {
+        pushBroadcastResult.textContent = 'Inserisci il messaggio della notifica.';
+        return;
+      }
+
+      const ok = confirm('Confermi l’invio push massivo ai destinatari selezionati?');
+      if (!ok) return;
+
+      pushBroadcastResult.textContent = 'Invio in corso...';
+
+      try {
+        const res = await fetch('/api/admin/push-broadcast', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ title, message, url, audience })
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          pushBroadcastResult.textContent = data.error || 'Errore invio push.';
+          return;
+        }
+
+        pushBroadcastResult.textContent = `Invio completato. Consegnate: ${data.sent || 0} · Fallite: ${data.failed || 0} · Totale target: ${data.total || 0}`;
+        loadLastBroadcastStatus();
+      } catch (err) {
+        pushBroadcastResult.textContent = 'Errore invio push.';
+      }
+    }
+
+    function statusBadge(v){
+      const label = v === 'used' ? 'Attivo'
+        : v === 'disabled' ? 'Disattivato'
+        : v === 'new' ? 'Nuovo'
+        : v === 'reactivated' ? 'Riattivato'
+        : (v || '-');
+      return `<span class="status ${v || ''}">${label}</span>`;
+    }
+
+    function setSummary(summary){
+      const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value ?? 0;
+      };
+      setText('kpiActive', summary.active_count ?? 0);
+      setText('kpiNew', summary.new_count ?? 0);
+      setText('kpiDisabled', summary.disabled_count ?? 0);
+      setText('kpiLocalhost', summary.localhost_count ?? 0);
+      setText('kpiViews', summary.total_views ?? 0);
+      setText('kpiMessages', summary.total_messages ?? 0);
+      setText('focusViews', summary.total_views ?? 0);
+      setText('focusMessages', summary.total_messages ?? 0);
+      setText('focusNew', summary.new_count ?? 0);
+      setText('focusLocalhost', summary.localhost_count ?? 0);
+    }
+
+    async function loadAdmin(q=''){
+      try {
+        bodyEl.innerHTML = '<tr><td colspan="11" class="muted">Caricamento in corso...</td></tr>';
+        const url = q ? `/api/admin/list-stickers?q=${encodeURIComponent(q)}` : '/api/admin/list-stickers';
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if(!res.ok || !data.success){
+          bodyEl.innerHTML = `<tr><td colspan="11" class="danger">Errore caricamento: ${data.error || 'risposta non valida'}</td></tr>`;
+          return;
+        }
+
+        adminItems = Array.isArray(data.items) ? data.items : [];
+        setSummary(data.summary || {});
+
+        if(!adminItems.length){
+          bodyEl.innerHTML = '<tr><td colspan="11" class="muted">Nessun record trovato.</td></tr>';
+          return;
+        }
+
+        bodyEl.innerHTML = adminItems.map(item => {
+          const vehicle = [item.brand, item.vehicle_model].filter(Boolean).join(' ') || '-';
+          const qrWarn = item.qr_url && item.qr_url.includes('localhost');
+          return `
+          <tr>
+            <td class="mono">${item.code || '-'}</td>
+            <td class="mono">${item.public_id || '-'}</td>
+            <td>${item.plate || '-'}</td>
+            <td>${vehicle}</td>
+            <td>${item.offered_by || '-'}</td>
+            <td>${statusBadge(item.status)}</td>
+            <td>${item.subscription_label || planLabel(item.plan_type)}</td>
+            <td>${expiryLabel(item)}</td>
+            <td>${item.feedback_bonus_used ? '<span class="warn"><strong>Usato</strong></span>' : '<span class="ok"><strong>Disponibile</strong></span>'}</td>
+            <td>${item.invite_sent_to ? `${item.invite_sent_to}<br><span class="muted">${item.invite_channel || '-'} · ${fmtDate(item.invite_sent_at)}</span>` : '-'}</td>
+            <td class="mono ${qrWarn ? 'warn' : ''}">${item.qr_url || '-'}</td>
+            <td>
+              <div class="actions">
+                ${item.status === 'new' ? `<button class="mini" onclick="openInvite('${item.code}')">Invia</button>` : ''}
+                ${item.status === 'used' ? `<button class="mini" onclick="openDeliverWebApp('${item.code}')">Consegna Web App</button>` : ''}
+                ${item.owner_access_token ? `<button class="mini" onclick="copyOwnerAccessLink('${item.code}')">Accesso diretto</button>` : ''}
+                ${item.phone ? `<button class="mini" onclick="sendRenewWhatsApp('${item.code}')">Invia rinnovo</button>` : ''}
+                ${item.phone ? `<button class="mini" onclick="sendFeedbackWhatsApp('${item.code}')">Chiedi feedback</button>` : ''}
+                <button class="mini" onclick="printSticker('${item.code}')">Stampa</button>
+                <button class="mini" onclick="printQrHd('${item.code}')">Solo QR HD</button>
+                <button class="mini" onclick="openEdit('${item.code}')">Modifica</button>
+                <button class="mini" onclick="fixQrUrl('${item.code}')">Correggi URL</button>
+                <button class="mini" onclick="setStatus('${item.code}','disabled')">Disattiva</button>
+                <button class="mini" onclick="setStatus('${item.code}','used')">Riattiva</button>
+                <button class="mini" onclick="deleteSticker('${item.code}')">Elimina</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+      } catch (err) {
+        console.error(err);
+        bodyEl.innerHTML = `<tr><td colspan="11" class="danger">Errore rendering admin: ${err.message || err}</td></tr>`;
+      }
+    }
+
+
+    function buildInviteLink(item){
+      return `${window.location.origin}/activate.html?code=${encodeURIComponent(item.code || '')}`;
+    }
+
+    function buildInviteText(item, channel, variant){
+      const link = buildInviteLink(item);
+      if(channel === 'whatsapp' && variant === 'short'){
+        return `Ti invio un codice già pronto per attivare il tuo adesivo QR veicolo. In pochi minuti puoi renderlo operativo e ricevere segnalazioni rapide in caso di urto, intralcio o necessità reale.\n\nAttivalo da qui: ${link}`;
+      }
+      if(channel === 'whatsapp' && variant === 'full'){
+        return `Ti invio il tuo codice personale per attivare il sistema QR dedicato al veicolo.\n\nCome funziona:\n1. apri il link\n2. inserisci i dati richiesti del veicolo\n3. completa l’attivazione\n4. il codice sarà subito pronto per essere utilizzato\n\nVantaggi principali:\n- permette un contatto rapido in caso di urto, intralcio o urgenza\n- evita di esporre pubblicamente il numero di telefono\n- rende più semplice farsi contattare quando serve davvero\n\nNel servizio è incluso anche il monitoraggio degli accessi, con la possibilità di verificare visualizzazioni, invii avviati e area indicativa di accesso.\n\nLink attivazione: ${link}`;
+      }
+      if(channel === 'email' && variant === 'short'){
+        return `Ti invio il tuo codice già pronto per essere attivato. In pochi minuti puoi rendere operativo il sistema e permettere a chi trova il veicolo di contattarti rapidamente in caso di necessità.\n\nLink attivazione: ${link}`;
+      }
+      return `Ti invio il codice personale per attivare il sistema QR dedicato al veicolo.\n\nProcedura di attivazione:\n1. apri il link riportato sotto\n2. inserisci i dati richiesti del veicolo\n3. completa l’attivazione\n4. il sistema sarà subito operativo\n\nUna volta attivo, il QR consente a chi trova il veicolo di inviarti rapidamente una segnalazione in caso di urto, intralcio, emergenza o altra necessità reale, senza esporre direttamente il tuo numero in modo pubblico.\n\nIl servizio include anche il monitoraggio delle interazioni, con visualizzazione degli accessi, degli invii avviati e dell’area indicativa di accesso.\n\nLink attivazione: ${link}`;
+    }
+
+    function refreshInvitePreview(){
+      const code = document.getElementById('inviteCode').value;
+      const item = adminItems.find(x => x.code === code);
+      if(!item) return;
+      const channel = document.getElementById('inviteChannel').value;
+      const variant = document.getElementById('inviteVariant').value;
+      document.getElementById('inviteLink').value = buildInviteLink(item);
+      document.getElementById('invitePreview').value = buildInviteText(item, channel, variant);
+    }
+
+    window.openInvite = function(code){
+      const item = adminItems.find(x => x.code === code);
+      if(!item) return;
+      document.getElementById('inviteCode').value = item.code || '';
+      document.getElementById('inviteSentTo').value = item.invite_sent_to || '';
+      document.getElementById('inviteChannel').value = item.invite_channel || 'whatsapp';
+      document.getElementById('inviteTarget').value = item.invite_target || '';
+      document.getElementById('inviteVariant').value = item.invite_variant || 'short';
+      inviteResult.textContent = '';
+      refreshInvitePreview();
+      inviteModal.style.display = 'flex';
+    }
+
+
+
+    window.printSticker = function(code){
+      window.open(`/sticker.html?code=${encodeURIComponent(code)}`, '_blank');
+    }
+
+    window.deleteSticker = async function(code){
+      const ok = confirm(`Confermi l'eliminazione definitiva del codice ${code}?`);
+      if(!ok) return;
+
+      const res = await fetch('/api/admin/delete-sticker', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code })
+      });
+
+      const data = await res.json();
+      alert(data.success ? 'Codice eliminato.' : (data.error || 'Errore eliminazione.'));
+      if(data.success) loadAdmin(searchEl.value.trim());
+    }
+
+
+
+
+    window.copyOwnerAccessLink = async function(code){
+      const item = adminItems.find(x => x.code === code);
+      if(!item || !item.owner_access_token) return;
+      const link = `${window.location.origin}/owner-access/${item.owner_access_token}`;
+      try {
+        await navigator.clipboard.writeText(link);
+        alert('Link di accesso diretto copiato.');
+      } catch (e) {
+        alert(link);
+      }
+    }
+
+
+
+    function buildOwnerWebAppLink(item){
+      return `${window.location.origin}/owner-simple.html?code=${encodeURIComponent(item.code || '')}&plate=${encodeURIComponent(item.plate || '')}`;
+    }
+
+    window.openDeliverWebApp = function(code){
+      const item = adminItems.find(x => x.code === code);
+      if (!item) return;
+
+      if (!item.plate) {
+        alert('Questo record non ha ancora una targa associata. La Web App proprietario richiede codice e targa.');
+        return;
+      }
+
+      deliverWebAppState = item;
+      const vehicle = [item.brand, item.vehicle_model].filter(Boolean).join(' ') || 'Veicolo registrato';
+      const link = buildOwnerWebAppLink(item);
+
+      document.getElementById('deliverWebAppCode').textContent = item.code || '-';
+      document.getElementById('deliverWebAppVehicle').textContent = `${vehicle} — ${item.plate || '-'}`;
+      document.getElementById('deliverWebAppLink').textContent = link;
+      document.getElementById('deliverWebAppResult').textContent = '';
+      deliverWebAppModal.style.display = 'flex';
+    }
+
+
+
+    window.deliverCloseModal = function(){
+      if (deliverWebAppModal) deliverWebAppModal.style.display = 'none';
+    };
+
+    window.deliverOpenWebApp = function(){
+      if (!deliverWebAppState) return;
+      window.open(buildOwnerWebAppLink(deliverWebAppState), '_blank');
+    };
+
+    window.deliverCopyWebAppLink = async function(){
+      if (!deliverWebAppState) return;
+      const link = buildOwnerWebAppLink(deliverWebAppState);
+      const resultEl = document.getElementById('deliverWebAppResult');
+      try {
+        await navigator.clipboard.writeText(link);
+        resultEl.textContent = 'Link Web App copiato.';
+      } catch (e) {
+        resultEl.textContent = link;
+      }
+    };
+
+    window.deliverSendWebAppWhatsApp = function(){};
+
+    window.deliverSendWebAppEmail = function(){
+      if (!deliverWebAppState) return;
+      const link = buildOwnerWebAppLink(deliverWebAppState);
+      const vehicle = [deliverWebAppState.brand, deliverWebAppState.vehicle_model].filter(Boolean).join(' ') || 'veicolo';
+      const subject = 'La tua Web App personale è pronta';
+      const body = `La tua Web App personale è pronta.\n\nDa qui puoi controllare se il tuo QR è attivo, vedere aperture, messaggi ricevuti e scadenza del servizio.\n\n${vehicle} — ${deliverWebAppState.plate || ''}\n${link}`;
+      window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    };
+
+    window.deliverSendInstallGuide = function(){
+      if (!deliverWebAppState) return;
+      const link = buildOwnerWebAppLink(deliverWebAppState);
+      const vehicle = [deliverWebAppState.brand, deliverWebAppState.vehicle_model].filter(Boolean).join(' ') || 'veicolo';
+      const plate = deliverWebAppState.plate || '';
+      const text = `La tua Web App personale è pronta.\n\n${vehicle} — ${plate}\n${link}\n\nPer salvarla sul telefono:\n\nIPHONE / IPAD\n1. Apri il link in Safari\n2. Tocca Condividi\n3. Scegli Aggiungi a Home\n4. Riaprila dalla Home\n5. Poi attiva le notifiche dall'interno della Web App\n\nANDROID\n1. Apri il link nel browser\n2. Usa Salva sul dispositivo / Installa app quando disponibile\n3. Poi attiva le notifiche dall'interno della Web App\n\nSe hai dubbi, contattami e ti guiderò io.`;
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    };
+
+
+    window.sendRenewWhatsApp = function(){}
+
+    window.sendFeedbackWhatsApp = function(){}
+
+
+    window.openEdit = function(code){
+      const item = adminItems.find(x => x.code === code);
+      if(!item) return;
+      document.getElementById('editCode').value = item.code || '';
+      document.getElementById('editPublicId').value = item.public_id || '';
+      document.getElementById('editBrand').value = item.brand || '';
+      document.getElementById('editModel').value = item.vehicle_model || '';
+      document.getElementById('editPlate').value = item.plate || '';
+      document.getElementById('editColor').value = item.color || '';
+      document.getElementById('editOfferedBy').value = item.offered_by || '';
+      document.getElementById('editPhone').value = item.phone || '';
+      document.getElementById('editPlanType').value = item.plan_type || 'always';
+      document.getElementById('editExpiresAt').value = item.expires_at ? new Date(item.expires_at).toISOString().slice(0,16) : '';
+      editResult.textContent = '';
+      modal.style.display = 'flex';
+    }
+
+    
+
+    window.printQrHd = function(code){
+      if (!code) {
+        alert('Codice non disponibile.');
+        return;
+      }
+      window.open(`/api/admin/qr-only/${encodeURIComponent(code)}`, '_blank');
+    };
+
+
+
+    window.openQrHd = function(code){
+      if (!code) {
+        alert('Codice non disponibile.');
+        return;
+      }
+      window.open(`/api/admin/qr-only/${encodeURIComponent(code)}`, '_blank');
+    };
+
+    window.downloadQrHd = function(code){
+      if (!code) {
+        alert('Codice non disponibile.');
+        return;
+      }
+      window.location.href = `/api/admin/qr-only/${encodeURIComponent(code)}?download=1`;
+    };
+
+window.fixQrUrl = async function(code){
+      const res = await fetch('/api/admin/fix-qr-url', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code })
+      });
+      const data = await res.json();
+      alert(data.success ? 'URL corretto.' : (data.error || 'Errore correzione URL.'));
+      loadAdmin(searchEl.value.trim());
+    }
+
+    window.setStatus = async function(code, status){
+      const res = await fetch('/api/admin/set-status', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code, status })
+      });
+      const data = await res.json();
+      alert(data.success ? 'Stato aggiornato.' : (data.error || 'Errore stato.'));
+      loadAdmin(searchEl.value.trim());
+    }
+
+    document.getElementById('saveEditBtn').addEventListener('click', async () => {
+      const payload = {
+        code: document.getElementById('editCode').value,
+        brand: document.getElementById('editBrand').value,
+        plate: document.getElementById('editPlate').value,
+        vehicle_model: document.getElementById('editModel').value,
+        color: document.getElementById('editColor').value,
+        offered_by: document.getElementById('editOfferedBy').value,
+        phone: document.getElementById('editPhone').value,
+        plan_type: document.getElementById('editPlanType').value,
+        expires_at: document.getElementById('editExpiresAt').value || null
+      };
+
+      const res = await fetch('/api/admin/update-sticker', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      editResult.textContent = data.success ? 'Modifiche salvate.' : (data.error || 'Errore salvataggio.');
+      if(data.success) loadAdmin(searchEl.value.trim());
+    });
+
+    document.getElementById('closeEditBtn').addEventListener('click', () => {
+      modal.style.display = 'none';
+    });
+
+    document.getElementById('closeInviteBtn').addEventListener('click', () => {
+      inviteModal.style.display = 'none';
+    });
+
+    document.getElementById('copyInviteTextBtn').addEventListener('click', async () => {
+      try {
+        const text = document.getElementById('invitePreview').value || '';
+        await navigator.clipboard.writeText(text);
+        inviteResult.textContent = 'Testo invito copiato negli appunti.';
+      } catch (err) {
+        inviteResult.textContent = 'Impossibile copiare il testo.';
+      }
+    });
+
+    document.getElementById('copyInviteLinkBtn').addEventListener('click', async () => {
+      try {
+        const link = document.getElementById('inviteLink').value || '';
+        await navigator.clipboard.writeText(link);
+        inviteResult.textContent = 'Link di attivazione copiato negli appunti.';
+      } catch (err) {
+        inviteResult.textContent = 'Impossibile copiare il link.';
+      }
+    });
+
+    document.getElementById('inviteChannel').addEventListener('change', refreshInvitePreview);
+    document.getElementById('inviteVariant').addEventListener('change', refreshInvitePreview);
+
+    document.getElementById('openInviteSendBtn').addEventListener('click', async () => {
+      const code = document.getElementById('inviteCode').value;
+      const sentTo = document.getElementById('inviteSentTo').value.trim();
+      const channel = document.getElementById('inviteChannel').value;
+      const target = document.getElementById('inviteTarget').value.trim();
+      const variant = document.getElementById('inviteVariant').value;
+      const preview = document.getElementById('invitePreview').value;
+
+      if(!target){
+        inviteResult.textContent = 'Inserisci un indirizzo email.';
+        return;
+      }
+
+      const saveRes = await fetch('/api/admin/save-invite', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          code,
+          invite_sent_to: sentTo,
+          invite_channel: channel,
+          invite_target: target,
+          invite_variant: variant
+        })
+      });
+      const saveData = await saveRes.json();
+
+      if(!saveRes.ok || !saveData.success){
+        inviteResult.textContent = saveData.error || 'Errore salvataggio invito.';
+        return;
+      }
+
+      if(channel === 'whatsapp'){
+        const cleanTarget = target.replace(/\s+/g,'').replace(/^\+/, '');
+        const waUrl = `https://wa.me/${encodeURIComponent(cleanTarget)}?text=${encodeURIComponent(preview)}`;
+        window.open(waUrl, '_blank');
+      } else {
+        const subject = variant === 'short' ? 'Prova il tuo codice QR veicolo' : 'Istruzioni per attivare il tuo adesivo QR veicolo';
+        const mailUrl = `mailto:${encodeURIComponent(target)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(preview)}`;
+        window.location.href = mailUrl;
+      }
+
+      inviteResult.textContent = 'Invito registrato correttamente.';
+      await loadAdmin(searchEl.value.trim());
+    });
+
+
+    async function loadCollectedData(){
+      const body = document.getElementById('collectedTableBody');
+      body.innerHTML = '<tr><td colspan="6" class="muted">Caricamento...</td></tr>';
+
+      const res = await fetch('/api/admin/collected-data');
+      const data = await res.json();
+
+      if(!res.ok || !data.success){
+        body.innerHTML = '<tr><td colspan="6" class="danger">Errore caricamento dati.</td></tr>';
+        return;
+      }
+
+      document.getElementById('collectedViews').textContent = data.summary.total_views ?? 0;
+      document.getElementById('collectedMessages').textContent = data.summary.total_messages ?? 0;
+      document.getElementById('collectedFeedback').textContent = data.summary.total_feedback ?? 0;
+      document.getElementById('collectedActive').textContent = data.summary.active_codes ?? 0;
+
+      const items = data.items || [];
+      if(!items.length){
+        body.innerHTML = '<tr><td colspan="6" class="muted">Nessun dato disponibile.</td></tr>';
+        return;
+      }
+
+      body.innerHTML = items.map(item => `
+        <tr>
+          <td class="mono">${item.code || '-'}</td>
+          <td>${item.plate || '-'}</td>
+          <td>${item.views_count ?? 0}</td>
+          <td>${item.messages_count ?? 0}</td>
+          <td>${item.feedback_count ?? 0}</td>
+          <td>${item.last_activity ? new Date(item.last_activity).toLocaleString('it-IT') : '-'}</td>
+        </tr>
+      `).join('');
+    }
+
+
+    document.getElementById('adminSearchBtn').addEventListener('click', () => loadAdmin(searchEl.value.trim()));
+    const adminCollectedBtnTop = document.getElementById('adminCollectedBtnTop');
+    if (adminCollectedBtnTop) {
+      adminCollectedBtnTop.addEventListener('click', () => {
+        const legacyBtn = document.getElementById('adminCollectedBtn');
+        if (legacyBtn) legacyBtn.click();
+      });
+    }
+
+    document.getElementById('adminReloadBtn').addEventListener('click', () => loadAdmin(searchEl.value.trim()));
+    document.getElementById('sendBroadcastPushBtn').addEventListener('click', sendBroadcastPush);
+    loadLastBroadcastStatus();
+    const adminCollectedBtn = document.getElementById('adminCollectedBtn');
+    if (adminCollectedBtn) {
+      adminCollectedBtn.addEventListener('click', async () => {
+        await loadCollectedData();
+        collectedModal.style.display = 'flex';
+      });
+    }
+    const closeCollectedBtn = document.getElementById('closeCollectedBtn');
+    if (closeCollectedBtn && collectedModal) {
+      closeCollectedBtn.addEventListener('click', () => {
+        collectedModal.style.display = 'none';
+      });
+    }
+
+
+    async function loadAbuseBlocks(){
+      const body = document.getElementById('abuseTableBody');
+      const result = document.getElementById('abuseResult');
+      body.innerHTML = '<tr><td colspan="9" class="muted">Caricamento...</td></tr>';
+      result.textContent = '';
+
+      try {
+        const res = await fetch('/api/admin/list-abuse-blocks', { method: 'POST' });
+        const data = await res.json();
+
+        if(!res.ok || !data.success){
+          body.innerHTML = '<tr><td colspan="9" class="danger">Errore caricamento blocchi.</td></tr>';
+          return;
+        }
+
+        const items = data.items || [];
+        if(!items.length){
+          body.innerHTML = '<tr><td colspan="9" class="muted">Nessun blocco presente.</td></tr>';
+          return;
+        }
+
+        body.innerHTML = items.map(item => `
+          <tr>
+            <td>${item.id}</td>
+            <td class="mono">${item.code || '-'}</td>
+            <td>${item.plate || '-'}</td>
+            <td>${item.block_type || '-'}</td>
+            <td class="mono">${item.block_value || '-'}</td>
+            <td>${item.reason || '-'}</td>
+            <td>${item.is_active ? '<span class="status disabled">ATTIVO</span>' : '<span class="status used">SBLOCCATO</span>'}</td>
+            <td>${fmtDate(item.updated_at || item.created_at)}</td>
+            <td>
+              ${item.is_active ? `<button class="mini" type="button" onclick="unblockAbuse(${item.id})">Sblocca</button>` : '<span class="muted">-</span>'}
+            </td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        body.innerHTML = '<tr><td colspan="9" class="danger">Errore caricamento blocchi.</td></tr>';
+      }
+    }
+
+    window.unblockAbuse = async function(id){
+      const result = document.getElementById('abuseResult');
+      result.textContent = '';
+      const res = await fetch('/api/admin/unblock-abuse', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ id })
+      });
+      const data = await res.json();
+      result.textContent = data.success ? 'Blocco disattivato.' : (data.error || 'Errore sblocco.');
+      if(data.success) loadAbuseBlocks();
+    }
+
+    document.getElementById('adminAbuseBtnTop').addEventListener('click', async () => {
+      abuseModal.style.display = 'flex';
+      await loadAbuseBlocks();
+    });
+
+    document.getElementById('createAbuseBtn').addEventListener('click', async () => {
+      const result = document.getElementById('abuseResult');
+      const payload = {
+        code: document.getElementById('abuseCode').value.trim().toUpperCase() || null,
+        plate: document.getElementById('abusePlate').value.trim().toUpperCase().replace(/\s+/g, '') || null,
+        block_type: document.getElementById('abuseType').value,
+        block_value: document.getElementById('abuseValue').value.trim(),
+        reason: document.getElementById('abuseReasonInput').value.trim() || 'Uso improprio del servizio'
+      };
+
+      if(!payload.block_value){
+        result.textContent = 'Inserisci un numero o un IP da bloccare.';
+        return;
+      }
+
+      const res = await fetch('/api/admin/block-abuse', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      result.textContent = data.success ? 'Blocco salvato.' : (data.error || 'Errore blocco.');
+      if(data.success){
+        document.getElementById('abuseValue').value = '';
+        document.getElementById('abuseReasonInput').value = '';
+        loadAbuseBlocks();
+      }
+    });
+
+    document.getElementById('closeAbuseBtn').addEventListener('click', () => {
+      abuseModal.style.display = 'none';
+    });
+
+    document.getElementById('adminLogoutBtn').addEventListener('click', async () => {
+      await fetch('/api/admin-logout', { method: 'POST' });
+      window.location.href = '/admin-login.html';
+    });
+
+    document.getElementById('adminCreateCodeBtn').addEventListener('click', async () => {
+      const planType = document.getElementById('adminPlanType').value || 'always';
+      const resultEl = document.getElementById('adminCreateResult');
+      resultEl.textContent = 'Generazione in corso...';
+
+      try {
+        const offeredBy = (document.getElementById('isSponsored')?.value === 'yes')
+          ? document.getElementById('sponsorName')?.value.trim()
+          : '';
+
+        const res = await fetch('/api/create-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ plan_type: planType, offered_by: offeredBy })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          resultEl.textContent = data.error || 'Errore nella generazione del codice.';
+          return;
+        }
+
+        const planLabel = planType === 'always' ? 'Sempre valido'
+          : planType === '1week' ? '1 settimana'
+          : planType === '1month' ? '1 mese'
+          : '6 mesi';
+
+        resultEl.innerHTML = `
+          <strong>Nuovo codice generato:</strong>
+          <span class="mono">${data.code}</span>
+          &nbsp; | &nbsp;
+          <strong>Public ID:</strong>
+          <span class="mono">${data.public_id || '-'}</span>
+          &nbsp; | &nbsp;
+          <strong>Validità:</strong>
+          ${planLabel}
+          ${data.expires_at ? `&nbsp; | &nbsp; <strong>Scadenza:</strong> ${new Date(data.expires_at).toLocaleString('it-IT')}` : ''}
+        `;
+
+        setTimeout(() => { loadAdmin(searchEl.value.trim()); }, 50);
+      } catch (err) {
+        resultEl.textContent = 'Errore di comunicazione con il server.';
+      }
+    });
+
+    loadAdmin();
+  </script>
+
+<div id="trialEditModal" class="trial-modal">
+  <div class="trial-modal-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+      <div style="font-size:1rem;font-weight:900;text-transform:uppercase;letter-spacing:.04em;">Modifica richiesta prova gratuita</div>
+      <button type="button" class="trial-mini" onclick="closeTrialEditModal()">Chiudi</button>
+    </div>
+
+    <div id="trialEditResult" class="trial-muted" style="margin-bottom:10px;"></div>
+
+    <form id="trialEditForm">
+      <input type="hidden" id="trialEditId">
+
+      <div class="trial-form-grid">
+        <div class="trial-field">
+          <label for="trialEditFullName">Nome e cognome *</label>
+          <input id="trialEditFullName" required>
+        </div>
+        <div class="trial-field">
+          <label for="trialEditPhone">Cellulare *</label>
+          <input id="trialEditPhone" required>
+        </div>
+
+        <div class="trial-field">
+          <label for="trialEditEmail">Email</label>
+          <input id="trialEditEmail" type="email">
+        </div>
+        <div class="trial-field">
+          <label for="trialEditPlate">Targa *</label>
+          <input id="trialEditPlate" required>
+        </div>
+
+        <div class="trial-field">
+          <label for="trialEditBrand">Marca *</label>
+          <input id="trialEditBrand" required>
+        </div>
+        <div class="trial-field">
+          <label for="trialEditModel">Modello *</label>
+          <input id="trialEditModel" required>
+        </div>
+
+        <div class="trial-field">
+          <label for="trialEditColor">Colore</label>
+          <input id="trialEditColor">
+        </div>
+        <div class="trial-field">
+          <label for="trialEditMarketing">Consenso marketing</label>
+          <select id="trialEditMarketing" style="min-height:40px;padding:10px 12px;border-radius:12px;border:1px solid rgba(34,48,70,.12);background:#fff;">
+            <option value="true">Sì</option>
+            <option value="false">No</option>
+          </select>
+        </div>
+
+        <div class="trial-field" style="grid-column:1 / -1;">
+          <label for="trialEditNotes">Note</label>
+          <textarea id="trialEditNotes"></textarea>
+        </div>
+      </div>
+
+      <div class="trial-modal-actions">
+        <button id="saveTrialEditBtn" class="btn btn-primary" type="submit">Salva modifiche</button>
+        <button type="button" class="btn btn-secondary" onclick="closeTrialEditModal()">Annulla</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<script id="trial-admin-hard-fix">
+(function(){
+  function esc(v){
+    return String(v || '')
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#39;');
+  }
+
+  function fmtDate(v){
+    if(!v) return '-';
+    try { return new Date(v).toLocaleString('it-IT'); } catch(e){ return v; }
+  }
+
+  function phoneForWa(v){
+    let raw = String(v || '').trim();
+    raw = raw.replace(/\s+/g,'').replace(/[()\-]/g,'');
+    if (!raw) return '';
+    if (raw.startsWith('00')) raw = '+' + raw.slice(2);
+    if (raw.startsWith('+')) return raw.replace(/[^\d+]/g,'');
+    raw = raw.replace(/\D/g,'');
+    if (!raw) return '';
+    if (raw.startsWith('39')) return '+' + raw;
+    return '+39' + raw;
+  }
+
+  let trialItemsCache = [];
+  window.trialItemsCache = trialItemsCache;
+
+  function getTrialItemById(id){
+    return (trialItemsCache || []).find(x => String(x.id) === String(id));
+  }
+
+  function buildTrialAppUrl(item){
+    if (item.owner_access_token) return `${window.location.origin}/owner-access/${item.owner_access_token}`;
+    if (item.code) return `${window.location.origin}/activate.html?code=${encodeURIComponent(item.code)}`;
+    return '';
+  }
+
+  function buildTrialMessage(item){
+    if (!item) return null;
+    const appUrl = buildTrialAppUrl(item);
+    return [
+      `Ciao ${item.full_name || ''},`,
+      ``,
+      `la tua richiesta di prova gratuita è stata approvata.`,
+      ``,
+      `Puoi aprire subito la tua App da questo link:`,
+      `${appUrl}`,
+      ``,
+      `Una volta aperta potrai:`,
+      `- attivare il servizio`,
+      `- salvare l’App sul telefono`,
+      `- attivare le notifiche`,
+      `- stampare la comunicazione collegata`,
+      ``,
+      `Il sistema è ora pronto per la tua prova gratuita.`
+    ].join('
+');
+  }
+
+  async function loadTrialRequests(){
+    const body = document.getElementById('trialRequestsBody');
+    const result = document.getElementById('trialRequestsResult');
+    if(!body || !result) return;
+
+    result.textContent = 'Caricamento richieste prova gratuita...';
+    body.innerHTML = '<tr><td colspan="10" class="trial-muted">Caricamento in corso...</td></tr>';
+
+    try{
+      const res = await fetch('/api/admin/trial-requests', { credentials:'same-origin' });
+      const out = await res.json();
+
+      if(!res.ok || !out.success){
+        result.textContent = out.error || 'Errore caricamento richieste.';
+        body.innerHTML = '<tr><td colspan="10" class="trial-muted">Errore caricamento richieste.</td></tr>';
+        return;
+      }
+
+      trialItemsCache = out.items || [];
+      window.trialItemsCache = trialItemsCache;
+
+      result.textContent = `Richieste trovate: ${trialItemsCache.length}`;
+
+      if(!trialItemsCache.length){
+        body.innerHTML = '<tr><td colspan="10" class="trial-muted">Nessuna richiesta prova gratuita presente.</td></tr>';
+        return;
+      }
+
+      body.innerHTML = trialItemsCache.map(item => `
+        <tr>
+          <td>${esc(fmtDate(item.created_at))}</td>
+          <td>${esc(item.full_name || '-')}</td>
+          <td>${item.phone ? `<a href="tel:${esc(item.phone)}">${esc(item.phone)}</a>` : '-'}</td>
+          <td>${item.email ? `<a href="mailto:${esc(item.email)}">${esc(item.email)}</a>` : '-'}</td>
+          <td><strong>${esc(item.plate || '-')}</strong></td>
+          <td>${esc(((item.brand || '') + ' ' + (item.vehicle_model || '')).trim() || '-')}</td>
+          <td>${esc(item.color || '-')}</td>
+          <td>${esc(item.notes || '-')}</td>
+          <td>${item.marketing_consent ? '<span class="trial-badge yes">SI</span>' : '<span class="trial-badge no">NO</span>'}</td>
+          <td>
+            <div class="trial-actions">
+              <button class="trial-mini" type="button" style="background:#1f6feb;color:#fff;border-color:#1f6feb;font-weight:800;" onclick="generateTrialCode(${item.id})">Attiva prova</button>
+              <button class="trial-mini" type="button" style="background:#3f79d8;color:#fff;border-color:#3f79d8;font-weight:800;" onclick="copyTrialText(${item.id})">Copia testo</button>
+              ${item.phone ? `<button class="trial-mini" type="button" onclick="openTrialWhatsApp(${item.id})">WhatsApp</button>` : ''}
+              ${item.email ? `<button class="trial-mini" type="button" onclick="sendTrialEmail(${item.id})">Email</button>` : ''}
+              ${item.phone ? `<button class="trial-mini" type="button" onclick="copyTrialPhone(${item.id})">Copia numero</button>` : ''}
+              ${item.plate ? `<button class="trial-mini" type="button" onclick="copyTrialPlate(${item.id})">Copia targa</button>` : ''}
+              <button class="trial-mini" type="button" onclick="openTrialEditModalById(${item.id})">Modifica</button>
+              <button class="trial-mini" type="button" onclick="deleteTrialRequest(${item.id})">Elimina</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }catch(err){
+      result.textContent = 'Errore di collegamento durante il caricamento.';
+      body.innerHTML = '<tr><td colspan="10" class="trial-muted">Errore di collegamento.</td></tr>';
+    }
+  }
+
+  window.loadTrialRequests = loadTrialRequests;
+
+  window.generateTrialCode = async function(id){
+    const item = getTrialItemById(id);
+    if (!item) return alert('Richiesta non trovata.');
+
+    try{
+      const res = await fetch('/api/admin/generate-trial-code', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'same-origin',
+        body: JSON.stringify({ id })
+      });
+      const out = await res.json();
+
+      if (!res.ok || !out.success) {
+        alert(out.error || 'Errore generazione codice.');
+        return;
+      }
+
+      await loadTrialRequests();
+      alert(`Codice generato: ${out.code}`);
+    }catch(err){
+      alert('Errore di collegamento durante la generazione del codice.');
+    }
+  };
+
+  window.copyTrialText = async function(id){
+    const item = getTrialItemById(id);
+    if (!item) return alert('Contatto non trovato.');
+    if (!item.code) return alert('Errore: prima devi premere "Genera codice".');
+    const txt = buildTrialMessage(item);
+    try{
+      await navigator.clipboard.writeText(txt);
+      alert('Testo copiato.');
+    }catch(e){
+      prompt('Copia il testo:', txt);
+    }
+  };
+
+  window.openTrialWhatsApp = function(id){
+    const item = getTrialItemById(id);
+    if (!item) return alert('Contatto non trovato.');
+    if (!item.code) return alert('Errore: prima devi premere "Genera codice".');
+
+    const normalized = phoneForWa(item.phone || '');
+    if (!normalized) return alert('Numero non disponibile.');
+
+    const waText = buildTrialMessage(item);
+    const waUrl = `https://wa.me/${normalized.replace(/^\+/,'')}?text=${encodeURIComponent(waText)}`;
+    window.open(waUrl, '_blank');
+  };
+
+  window.sendTrialEmail = function(id){
+    const item = getTrialItemById(id);
+    if (!item) return alert('Contatto non trovato.');
+    if (!item.code) return alert('Errore: prima devi premere "Genera codice".');
+    if (!item.email) return alert('Email non disponibile.');
+
+    const subject = encodeURIComponent('Attivazione prova gratuita QR veicolo');
+    const body = encodeURIComponent(buildTrialMessage(item));
+    window.location.href = `mailto:${encodeURIComponent(item.email)}?subject=${subject}&body=${body}`;
+  };
+
+  window.copyTrialPhone = async function(id){
+    const item = getTrialItemById(id);
+    if (!item || !item.phone) return alert('Numero non disponibile.');
+    try{
+      await navigator.clipboard.writeText(String(item.phone));
+      alert('Numero copiato.');
+    }catch(e){
+      prompt('Copia il numero:', String(item.phone));
+    }
+  };
+
+  window.copyTrialPlate = async function(id){
+    const item = getTrialItemById(id);
+    if (!item || !item.plate) return alert('Targa non disponibile.');
+    try{
+      await navigator.clipboard.writeText(String(item.plate));
+      alert('Targa copiata.');
+    }catch(e){
+      prompt('Copia la targa:', String(item.plate));
+    }
+  };
+
+  window.openTrialEditModalById = function(id){
+    const item = getTrialItemById(id);
+    if (!item) return alert('Richiesta non trovata.');
+    window.openTrialEditModal(item);
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    const btn = document.getElementById('reloadTrialRequestsBtn');
+    if (btn) btn.addEventListener('click', loadTrialRequests);
+    loadTrialRequests();
+  });
+})();
+</script>
+
+</body>
+</html>

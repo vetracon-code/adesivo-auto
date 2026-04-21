@@ -1,0 +1,2412 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Contatto Veicolo</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    :root{
+      --accent:#3f79d8;
+      --accent2:#7fb2ff;
+      --ok:#8dffb1;
+      --warn:#ffd36c;
+      --danger:#ff8f8f;
+      --bg1:#eef3fa;
+      --bg2:#e3ebf6;
+      --panel:rgba(255,255,255,.82);
+      --line:rgba(34,48,70,.10);
+      --text:#223046;
+      --muted:#5b6980;
+    }
+    *{box-sizing:border-box}
+    html,body{
+      margin:0;padding:0;min-height:100%;
+      font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Arial,sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(circle at 12% 0%, rgba(63,121,216,.10), transparent 28%),
+        radial-gradient(circle at 88% 10%, rgba(63,121,216,.08), transparent 24%),
+        linear-gradient(180deg, var(--bg1) 0%, var(--bg2) 100%);
+    }
+    .wrap{
+      width:min(1140px,calc(100% - 20px));
+      margin:0 auto;
+      padding:14px 0 24px;
+    }
+    .shell{
+      border-radius:34px;
+      overflow:hidden;
+      border:1px solid var(--line);
+      background:
+        radial-gradient(circle at 70% 8%, rgba(63,121,216,.08), transparent 24%),
+        linear-gradient(180deg, rgba(255,255,255,.92) 0%, rgba(248,251,255,.96) 100%);
+      box-shadow:0 20px 56px rgba(30,46,82,.12);
+    }
+    .top{
+      padding:12px 14px 6px;
+      display:grid;
+      grid-template-columns:1.1fr .9fr;
+      gap:12px;
+      align-items:start;
+    }
+    .eyebrow{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:7px 11px;
+      border-radius:999px;
+      background:rgba(255,255,255,.62);
+      border:1px solid var(--line);
+      color:#3b4d66;
+      font-size:.78rem;
+      font-weight:700;
+    }
+    .dot{
+      width:8px;height:8px;border-radius:999px;background:var(--accent);
+      box-shadow:0 0 12px rgba(63,121,216,.28);
+    }
+    h1{
+      margin:10px 0 0;
+      line-height:1.02;
+      letter-spacing:-.04em;
+      font-weight:900;
+      font-size:clamp(1.8rem,3.8vw,3rem);
+      text-transform:none;
+      color:#223046;
+    }
+    h1 span{
+      display:block;
+      margin-top:4px;
+      color:#3f79d8;
+      text-shadow:none;
+      font-size:.92em;
+    }
+    .sub{
+      margin:12px 0 0;
+      color:var(--muted);
+      max-width:760px;
+      line-height:1.55;
+      font-size:.98rem;
+    }
+    .actions{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-top:8px;
+      align-items:flex-start;
+      justify-content: flex-end;
+    }
+    .btn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:38px;
+      padding:0 13px;
+      border-radius:12px;
+      text-decoration:none;
+      color:#223046;
+      font-weight:700;
+      font-size:.86rem;
+      border:1px solid transparent;
+      cursor:pointer;
+    }
+    .btn-primary{
+      background:linear-gradient(180deg,var(--accent) 0%, #2f5fad 100%);
+      color:#fff;
+      box-shadow:0 10px 22px rgba(63,121,216,.18);
+    }
+    .btn-secondary{
+      background:rgba(255,255,255,.66);
+      border-color:var(--line);
+      color:#31445d;
+    }
+    .btn-warn{
+      background:rgba(255,211,108,.18);
+      border-color:rgba(255,211,108,.28);
+      color:#7b5a16;
+    }
+
+    .hero{
+      padding:0 14px 14px;
+      display:grid;
+      grid-template-columns:320px 1fr;
+      gap:12px;
+      align-items:stretch;
+    }
+
+    .radar-card,.status-card,.mini-card,.timeline-card,.area-card{
+      border-radius:24px;
+      background:linear-gradient(180deg, rgba(255,255,255,.86) 0%, rgba(250,252,255,.96) 100%);
+      border:1px solid var(--line);
+      position:relative;
+      overflow:hidden;
+      box-shadow:0 10px 28px rgba(30,46,82,.06);
+    }
+
+    .radar-card{
+      padding:16px 14px 14px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      min-height:330px;
+    }
+
+    .radar-wrap{
+      position:relative;
+      width:230px;
+      height:230px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    .ring-bg, .ring-progress{
+      position:absolute;
+      inset:0;
+      border-radius:999px;
+    }
+
+    .ring-bg{
+      background:
+        radial-gradient(circle at center, rgba(255,255,255,.02) 0 42%, transparent 43%),
+        conic-gradient(from 0deg, rgba(255,255,255,.06), rgba(255,255,255,.02), rgba(255,255,255,.06));
+      box-shadow:
+        inset 0 0 0 1px rgba(255,255,255,.06),
+        0 0 30px rgba(44,116,255,.08);
+    }
+
+    .ring-progress{
+      background:conic-gradient(from -90deg, var(--accent2) 0deg, var(--accent) var(--deg), rgba(255,255,255,.06) var(--deg), rgba(255,255,255,.06) 360deg);
+      -webkit-mask:radial-gradient(circle at center, transparent 0 58%, #000 59%);
+      mask:radial-gradient(circle at center, transparent 0 58%, #000 59%);
+      filter:drop-shadow(0 0 18px rgba(103,176,255,.28));
+    }
+
+    .radar-core{
+      width:138px;
+      height:138px;
+      border-radius:999px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      background:
+        radial-gradient(circle at 50% 40%, rgba(127,178,255,.22), rgba(255,255,255,.65) 55%, rgba(255,255,255,.42) 100%);
+      border:1px solid rgba(34,48,70,.08);
+      box-shadow:
+        inset 0 0 20px rgba(255,255,255,.25),
+        0 0 18px rgba(63,121,216,.10);
+      position:relative;
+      z-index:2;
+      padding:10px;
+    }
+
+    .core-label{
+      color:#72829a;
+      font-size:.68rem;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      font-weight:700;
+    }
+
+    .core-value{
+      margin-top:5px;
+      font-size:2rem;
+      font-weight:900;
+      line-height:1;
+      color:#223046;
+    }
+
+    .core-sub{
+      margin-top:5px;
+      color:#5b6980;
+      font-size:.8rem;
+      line-height:1.22;
+    }
+
+    .radar-legend{
+      margin-top:18px;
+      text-align:center;
+      max-width:290px;
+    }
+
+    .radar-legend h2{
+      margin:0;
+      font-size:.94rem;
+      text-transform:uppercase;
+      letter-spacing:.05em;
+      color:#31445d;
+    }
+
+    .radar-legend p{
+      margin:8px 0 0;
+      color:var(--muted);
+      line-height:1.5;
+      font-size:.9rem;
+    }
+
+    .right-col{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:12px;
+      align-content:start;
+    }
+
+    .mini-card{
+      padding:14px 13px;
+      min-height:116px;
+    }
+
+    .mini-label{
+      color:#72829a;
+      font-size:.74rem;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      font-weight:700;
+    }
+
+    .mini-value{
+      margin-top:8px;
+      font-size:1.55rem;
+      font-weight:900;
+      line-height:1.02;
+      color:#223046;
+    }
+
+    .mini-note{
+      margin-top:8px;
+      color:var(--muted);
+      line-height:1.42;
+      font-size:.84rem;
+    }
+
+    .status-card{
+      grid-column:1 / -1;
+      padding:14px 14px;
+      display:grid;
+      grid-template-columns:1.2fr .8fr;
+      gap:10px;
+      align-items:center;
+    }
+
+    .status-title{
+      font-size:.96rem;
+      font-weight:900;
+      text-transform:uppercase;
+      margin:0 0 6px;
+      color:#31445d;
+      letter-spacing:.04em;
+    }
+
+    .status-copy{
+      color:var(--muted);
+      line-height:1.48;
+      font-size:.88rem;
+    }
+
+    .status-pill{
+      justify-self:end;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:42px;
+      padding:0 14px;
+      border-radius:999px;
+      font-weight:900;
+      font-size:.88rem;
+      background:rgba(255,255,255,.75);
+      border:1px solid var(--line);
+    }
+
+    .status-pill.ok{color:var(--ok); border-color:rgba(141,255,177,.22); background:rgba(141,255,177,.08)}
+    .status-pill.warn{color:var(--warn); border-color:rgba(255,211,108,.22); background:rgba(255,211,108,.08)}
+    .status-pill.danger{color:var(--danger); border-color:rgba(255,143,143,.22); background:rgba(255,143,143,.08)}
+
+    .lower{
+      padding:0 14px 16px;
+      display:grid;
+      grid-template-columns:1fr;
+      gap:12px;
+    }
+
+    .area-card, .timeline-card{
+      padding:14px;
+    }
+
+    .section-title{
+      margin:0 0 10px;
+      font-size:.9rem;
+      font-weight:900;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      color:#31445d;
+    }
+
+    .area-grid{
+      display:grid;
+      grid-template-columns:1fr;
+      gap:12px;
+    }
+
+    .area-box{
+      border-radius:18px;
+      background:rgba(255,255,255,.68);
+      border:1px solid rgba(34,48,70,.08);
+      padding:14px;
+    }
+
+    .area-box .big{
+      margin-top:7px;
+      font-size:1rem;
+      font-weight:800;
+      line-height:1.3;
+      color:#223046;
+    }
+
+    .italy-map-wrap{
+      display:grid;
+      grid-template-columns: 1fr .92fr;
+      gap:12px;
+      align-items:stretch;
+    }
+
+    .italy-map-box{
+      border-radius:20px;
+      background:linear-gradient(180deg, rgba(255,255,255,.72) 0%, rgba(248,251,255,.96) 100%);
+      border:1px solid rgba(34,48,70,.08);
+      padding:10px;
+      min-height:290px;
+      position:relative;
+      overflow:hidden;
+    }
+
+    .italy-map-head{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+      margin-bottom:10px;
+    }
+
+    .italy-map-note{
+      font-size:.82rem;
+      color:var(--muted);
+      line-height:1.45;
+    }
+
+    .italy-map-wrap-real{
+      position:relative;
+      width:100%;
+      max-width:320px;
+      margin:8px auto 0;
+      aspect-ratio: 4 / 5;
+    }
+
+    .italy-real-map{
+      width:100%;
+      height:100%;
+      object-fit:contain;
+      display:block;
+      opacity:.95;
+      filter:grayscale(.08) brightness(1.02);
+    }
+
+    .italy-dot{
+      position:absolute;
+      width:14px;
+      height:14px;
+      border-radius:999px;
+      background:#3f79d8;
+      border:2px solid #fff;
+      cursor:pointer;
+      transition:transform .12s ease, opacity .12s ease, box-shadow .12s ease;
+      box-shadow:0 4px 10px rgba(63,121,216,.18);
+      display:none;
+      transform:translate(-50%,-50%);
+    }
+
+    .italy-dot:hover{
+      transform:translate(-50%,-50%) scale(1.08);
+      opacity:.95;
+    }
+
+    .italy-dot.active{
+      background:#2f5fad;
+      box-shadow:0 6px 14px rgba(63,121,216,.26);
+      outline:3px solid rgba(159,195,255,.9);
+      transform:translate(-50%,-50%) scale(1.06);
+    }
+
+    .dot-north{ left:41.2%; top:17.6%; }   /* Milano / Lombardia */
+    .dot-center{ left:45.3%; top:45.2%; }   /* Roma / Lazio */
+    .dot-south{ left:53.8%; top:72.8%; }    /* Sud */
+    .dot-islands{ left:42.0%; top:85.6%; }  /* Sicilia + Sardegna */
+
+    .map-country-badge{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:34px;
+      padding:0 12px;
+      border-radius:999px;
+      background:rgba(255,255,255,.78);
+      border:1px solid rgba(34,48,70,.08);
+      color:#31445d;
+      font-size:.78rem;
+      font-weight:800;
+      letter-spacing:.04em;
+      text-transform:uppercase;
+    }
+
+    .country-focus{
+      display:grid;
+      place-items:center;
+      min-height:248px;
+      padding:18px 14px;
+      text-align:center;
+    }
+
+    .country-focus .country-name{
+      font-size:1.35rem;
+      font-weight:900;
+      color:#223046;
+      line-height:1.15;
+    }
+
+    .country-focus .country-copy{
+      margin-top:10px;
+      color:var(--muted);
+      font-size:.88rem;
+      line-height:1.5;
+      max-width:240px;
+    }
+
+    .italy-detail{
+      border-radius:20px;
+      background:rgba(255,255,255,.68);
+      border:1px solid rgba(34,48,70,.08);
+      padding:12px;
+      display:grid;
+      gap:10px;
+      align-content:start;
+      min-height:290px;
+    }
+
+    .italy-detail-title{
+      font-size:.84rem;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      color:#72829a;
+      font-weight:700;
+    }
+
+    .italy-detail-big{
+      font-size:.96rem;
+      font-weight:900;
+      color:#223046;
+      line-height:1.25;
+    }
+
+    .italy-detail-list{
+      display:grid;
+      gap:8px;
+    }
+
+    .italy-detail-item{
+      border-radius:12px;
+      background:rgba(255,255,255,.7);
+      border:1px solid rgba(34,48,70,.08);
+      padding:8px 10px;
+    }
+
+    .italy-detail-empty{
+      color:var(--muted);
+      font-size:.88rem;
+      line-height:1.5;
+    }
+
+    .timeline{
+      display:grid;
+      gap:8px;
+    }
+
+    .event{
+      border-radius:14px;
+      padding:10px 11px;
+      background:rgba(255,255,255,.72);
+      border:1px solid rgba(34,48,70,.08);
+    }
+
+    .event strong{
+      display:block;
+      margin-bottom:4px;
+      font-size:.9rem;
+      color:#223046;
+    }
+
+    .event .muted{
+      line-height:1.42;
+      font-size:.84rem;
+    }
+
+    .good{color:#2f8b56}
+    .warn{color:#a97816}
+    .danger{color:#c25b5b}
+    .muted{color:var(--muted)}
+
+    .expiry-badge{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:34px;
+      padding:0 12px;
+      border-radius:999px;
+      font-weight:900;
+      font-size:.8rem;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.72);
+    }
+    .expiry-badge.ok{color:var(--ok); border-color:rgba(141,255,177,.22); background:rgba(141,255,177,.08)}
+    .expiry-badge.warn{color:var(--warn); border-color:rgba(255,211,108,.22); background:rgba(255,211,108,.08)}
+    .expiry-badge.danger{color:var(--danger); border-color:rgba(255,143,143,.22); background:rgba(255,143,143,.08)}
+
+    .modal{
+      position:fixed;
+      inset:0;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      background:rgba(0,0,0,.58);
+      z-index:1000;
+    }
+    .modal-card{
+      width:min(620px,100%);
+      border-radius:24px;
+      background:linear-gradient(180deg, rgba(255,255,255,.96) 0%, rgba(247,250,255,.98) 100%);
+      border:1px solid rgba(34,48,70,.10);
+      box-shadow:0 18px 42px rgba(30,46,82,.16);
+      padding:20px 16px 16px;
+      color:#223046;
+    }
+    .modal-card h3{
+      margin:0;
+      line-height:1.05;
+      text-transform:uppercase;
+      letter-spacing:-.03em;
+      font-size:1.1rem;
+      color:#223046;
+    }
+    .modal-copy{
+      margin:10px 0 14px;
+      color:var(--muted);
+      line-height:1.5;
+      font-size:.9rem;
+    }
+    .choice-grid{
+      display:grid;
+      grid-template-columns:repeat(5,1fr);
+      gap:10px;
+    }
+    .choice-btn{
+      min-height:40px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.75);
+      color:#223046;
+      font-weight:700;
+      cursor:pointer;
+    }
+    .modal-actions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:16px;
+    }
+
+    .balloon{
+      position:fixed;
+      right:18px;
+      bottom:18px;
+      width:min(420px,calc(100% - 24px));
+      border-radius:24px;
+      background:linear-gradient(180deg, rgba(31,18,8,.98) 0%, rgba(39,23,9,.99) 100%);
+      border:1px solid rgba(255,211,108,.18);
+      box-shadow:0 18px 42px rgba(0,0,0,.42);
+      padding:18px 16px 16px;
+      z-index:1100;
+      display:none;
+    }
+    .balloon h3{
+      margin:0;
+      font-size:1.15rem;
+      text-transform:uppercase;
+      color:#ffe2a1;
+    }
+    .balloon p{
+      margin:10px 0 0;
+      color:#f0d7a6;
+      line-height:1.52;
+      font-size:.96rem;
+    }
+    .balloon-actions{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-top:14px;
+    }
+
+    @media (max-width:1100px){
+      .top{grid-template-columns:1fr}
+      .hero{grid-template-columns:1fr}
+      .right-col{grid-template-columns:1fr 1fr}
+      .lower{grid-template-columns:1fr}
+      .italy-map-wrap{grid-template-columns:1fr}
+      #vehicleHeroBox{flex-wrap:wrap !important}
+    }
+
+    @media (max-width:720px){
+      .right-col{grid-template-columns:1fr}
+      .status-card{grid-template-columns:1fr}
+      .status-pill{justify-self:start}
+      .area-grid{grid-template-columns:1fr}
+      .radar-wrap{width:210px;height:210px}
+      .radar-core{width:132px;height:132px}
+      .choice-grid{grid-template-columns:1fr 1fr}
+      .actions{justify-content:flex-start}
+    }
+  
+
+
+
+
+    .actions:empty{display:none !important;}
+    </style>
+
+  <link rel="icon" type="image/x-icon" href="/icons/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link id="dynamicManifestLink" rel="manifest" href="/manifest/owner">
+
+
+
+</head>
+<body>
+  <div class="wrap">
+    <div class="shell">
+      <div class="top">
+      <div id="installAppSection" style="padding:0 14px 10px;position:sticky;top:8px;z-index:30;">
+        <div style="display:flex;justify-content: flex-end;margin-bottom:8px;">
+          <div id="installRefreshWrap" style="display:none;">
+            <button id="refreshOwnerAppBtn" type="button" style="min-height:30px;padding:0 11px;border-radius:10px;border:0;background:#5aa0ff;color:#fff;font-size:.78rem;font-weight:800;cursor:pointer;box-shadow:0 8px 18px rgba(90,160,255,.18);">
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        <div class="timeline-card" style="padding:10px 12px;border:1px solid rgba(63,121,216,.10);box-shadow:0 10px 22px rgba(30,46,82,.08);backdrop-filter:blur(10px);">
+          <div id="installStatusRow" style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;">
+            <div>
+              <div style="font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:#72829a;font-weight:800;">INSTALLAZIONE E NOTIFICHE</div>
+              <div id="installCompactText" class="muted" style="margin-top:4px;line-height:1.42;font-size:.88rem;">
+                Verifica stato...
+              </div>
+            </div>
+            <div id="installStatusBadge" class="expiry-badge warn">VERIFICA</div>
+          </div>
+
+          <div id="installExplainBox" style="display:none;margin-top:10px;padding:12px 13px;border-radius:14px;background:rgba(255,255,255,.66);border:1px solid rgba(34,48,70,.08);">
+            <div id="deviceDetectedValue" style="font-size:.9rem;font-weight:800;margin-bottom:6px;color:#223046;">-</div>
+            <div id="installInstructionsText" class="muted" style="line-height:1.45;font-size:.86rem;">-</div>
+          </div>
+
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center;">
+            <button id="primaryInstallNotifyBtn" class="btn btn-primary" type="button" style="min-height:34px;padding:0 12px;font-size:.8rem;">Verifica</button>
+            <button id="secondaryInstallActionBtn" class="btn btn-secondary" type="button" style="display:none;min-height:34px;padding:0 12px;font-size:.8rem;">Dettagli</button>
+          </div>
+
+          <div id="installActionResult" class="muted" style="margin-top:8px;line-height:1.42;font-size:.84rem;"></div>
+        </div>
+      </div>
+
+
+        <div>
+          <div id="offeredByWrap" style="display:none;margin-top:2px;margin-bottom:12px;width:100%;">
+            <div style="display:flex;flex-direction:column;gap:4px;padding:12px 16px;border-radius:18px;background:linear-gradient(135deg,#3f79d8 0%, #2f5fad 100%);border:1px solid rgba(63,121,216,.22);align-items:center;justify-content:center;box-shadow:0 10px 24px rgba(63,121,216,.18);width:100%;text-align:center;">
+              <div style="font-size:.74rem;text-transform:uppercase;letter-spacing:.09em;color:rgba(255,255,255,.72);">Servizio offerto da</div>
+              <div id="offeredByValue" style="font-size:1.02rem;font-weight:900;line-height:1.2;color:#ffffff;text-align:center;">-</div>
+            </div>
+          </div>
+
+          <div id="vehicleHeroBox" style="margin-top:10px;display:flex;gap:8px;flex-wrap:nowrap;align-items:center;">
+            <div style="padding:10px 12px;border-radius:16px;background:rgba(255,255,255,.72);border:1px solid var(--line);min-width:0;flex:1;">
+              <div id="vehicleHeroModel" style="margin-top:4px;font-size:.98rem;font-weight:900;line-height:1.08;color:#223046;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">-</div>
+            </div>
+            <div id="vehicleHeroPlate" style="padding:10px 12px;border-radius:16px;background:linear-gradient(135deg, rgba(63,121,216,.16) 0%, rgba(127,178,255,.16) 100%);border:1px solid rgba(63,121,216,.16);font-size:.94rem;font-weight:900;letter-spacing:.06em;min-width:126px;text-align:center;color:#223046;white-space:nowrap;">
+              -
+            </div>
+          </div>
+          <h1 style="font-size:clamp(1.15rem,2.6vw,1.7rem);margin-top:18px;margin-bottom:16px;">Controllo del tuo QR<span style="font-size:.82em;margin-top:8px;">Messaggi, attività e stato del servizio</span></h1>
+        </div>
+        <div class="actions">
+        </div>
+      </div>
+
+      <div id="ownerMessagesSection" style="padding:0 22px 20px;">
+        <div class="timeline-card" style="padding:22px;border:1px solid rgba(103,176,255,.18);box-shadow:0 0 30px rgba(103,176,255,.06) inset;">
+          <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;">
+            <div>
+              <h2 class="section-title" style="margin-bottom:8px;font-size:.9rem;">Segnalazioni ricevute</h2>
+              <div class="muted" style="line-height:1.45;font-size:.84rem;">Qui trovi le segnalazioni ricevute dal tuo QR.<br>Apri un messaggio per gestirlo o bloccare eventuali abusi.</div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <div id="messagesUnreadBadge" class="expiry-badge warn">0 NUOVI</div>
+              <button id="messagesSelectBtn" class="btn btn-secondary" type="button">Seleziona</button>
+              <button id="messagesMarkReadBtn" class="btn btn-secondary" type="button" style="display:none;">Segna letti</button>
+              <button id="messagesDeleteBtn" class="btn btn-secondary" type="button" style="display:none;">Elimina</button>
+            </div>
+          </div>
+
+          <div id="messagesList" style="display:grid;gap:10px;margin-top:16px;">
+            <div class="muted">Caricamento messaggi...</div>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="hero">
+        <div class="radar-card">
+          <div class="radar-wrap">
+            <div class="ring-bg"></div>
+            <div id="ringProgress" class="ring-progress" style="--deg:140deg;"></div>
+            <div class="radar-core">
+              <div class="core-label">Indice attività</div>
+              <div id="scoreValue" class="core-value">0%</div>
+              <div id="scoreSub" class="core-sub">In attesa di dati</div>
+            </div>
+          </div>
+          <div class="radar-legend">
+            <h2 id="heroTitle">Indice attività QR</h2>
+            <p id="heroCopy">Una sintesi immediata del livello di attività del tuo QR, basata su aperture, contatti e segnali utili registrati.</p>
+          </div>
+        </div>
+
+        <div class="right-col">
+          <div class="mini-card">
+            <div class="mini-label">Aperture pagina</div>
+            <div id="viewsValue" class="mini-value">0</div>
+            <div class="mini-note">Quante volte la pagina del veicolo è stata aperta.</div>
+          </div>
+
+          <div class="mini-card">
+            <div class="mini-label">Contatti avviati</div>
+            <div id="messagesValue" class="mini-value">0</div>
+            <div class="mini-note">Tentativi reali di contatto verso il proprietario.</div>
+          </div>
+
+          <div class="status-card">
+            <div>
+              <div class="status-title">Informazioni sul servizio</div>
+              <div id="workingText" class="status-copy">Caricamento in corso...</div>
+            </div>
+            <div id="statusPill" class="status-pill">-</div>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="lower">
+        <div class="area-card">
+          <h2 class="section-title">Aree di provenienza</h2>
+          <div class="italy-map-wrap">
+            <div class="italy-map-box">
+              <div class="italy-map-head">
+                <div>
+                  <div class="mini-label">Area geografica</div>
+                  <div class="italy-map-note">In Italia i punti mostrano le aree aggregate da cui sono arrivate aperture o segnalazioni. Se l’accesso proviene dall’estero, qui vedrai direttamente la nazione.</div>
+                </div>
+                <div id="lastAreaText" class="map-country-badge">Italia</div>
+              </div>
+
+              <div id="mapVisualBox">
+                <div class="italy-map-wrap-real">
+                  <img class="italy-real-map" src="/assets/italy-real.svg" alt="Mappa Italia"> <!-- marker-tune-20260416-1339 -->
+                  <button id="mapDotNorth" class="italy-dot dot-north" type="button" aria-label="Nord Italia"></button>
+                  <button id="mapDotCenter" class="italy-dot dot-center" type="button" aria-label="Centro Italia"></button>
+                  <button id="mapDotSouth" class="italy-dot dot-south" type="button" aria-label="Sud Italia"></button>
+                  <button id="mapDotIslands" class="italy-dot dot-islands" type="button" aria-label="Isole"></button>
+                </div>
+              </div>
+            </div>
+
+            <div class="italy-detail">
+              <div class="italy-detail-title">Dettaglio area</div>
+              <div id="mapAreaTitle" class="italy-detail-big">Seleziona un punto</div>
+              <div id="mapAreaSummary" class="muted" style="font-size:.9rem;line-height:1.5;">Qui vedrai città, regione e ultimi accessi registrati per l’area selezionata.</div>
+              <div id="mapAreaList" class="italy-detail-list">
+                <div class="italy-detail-empty">Nessun dettaglio disponibile.</div>
+              </div>
+              <div class="area-box" style="margin-top:auto;">
+                <div class="mini-label">Stato del servizio</div>
+                <div id="statusText" class="big">-</div>
+                <div style="margin-top:10px;">
+                  <span id="expiryBadge" class="expiry-badge">-</span>
+                </div>
+                <div id="expiryNote" class="muted" style="margin-top:10px; line-height:1.45;">Caricamento...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="timeline-card" style="display:none;">
+          <h2 class="section-title">Ultimi segnali registrati</h2>
+          <div id="eventsList" class="timeline">
+            <div class="muted">Caricamento...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="reminderModal" class="modal">
+    <div class="modal-card">
+      <h3>Ricordami la scadenza</h3>
+      <div class="modal-copy">Scegli con quanto anticipo vuoi essere avvisato in agenda prima della scadenza del servizio.</div>
+      <div class="choice-grid">
+        <button class="choice-btn" data-offset="1">1 giorno</button>
+        <button class="choice-btn" data-offset="3">3 giorni</button>
+        <button class="choice-btn" data-offset="7">7 giorni</button>
+        <button class="choice-btn" data-offset="15">15 giorni</button>
+        <button class="choice-btn" data-offset="30">1 mese</button>
+      </div>
+      <div class="modal-actions">
+        <button id="closeReminderModal" class="btn btn-secondary" type="button">Chiudi</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="expiryBalloon" class="balloon">
+    <h3>Il tuo servizio è in scadenza</h3>
+    <p id="balloonText">Mancano pochi giorni alla scadenza del tuo QR. Per evitare interruzioni, puoi rinnovarlo adesso oppure farti ricordare più avanti.</p>
+    <div class="balloon-actions">
+      <button id="balloonClose" class="btn btn-secondary" type="button">Chiudi</button>
+      <button id="balloonSnooze" class="btn btn-warn" type="button">Ricordamelo più avanti</button>
+      <a id="balloonRenew" class="btn btn-primary" href="#">Rinnova ora</a>
+    </div>
+  </div>
+
+  
+<script>
+(function ownerQuickAccessBootstrap(){
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code') || '';
+    const plate = params.get('plate') || '';
+
+    if (code && plate) {
+      localStorage.setItem('owner_saved_code', code);
+      localStorage.setItem('owner_saved_plate', plate);
+      localStorage.setItem('owner_saved_at', new Date().toISOString());
+
+      const img = new Image();
+      img.src = `/api/debug-owner-quick-access-ping?code=${encodeURIComponent(code)}&plate=${encodeURIComponent(plate)}&t=${Date.now()}`;
+    }
+  } catch (e) {}
+})();
+</script>
+
+<script>
+    function qs(id){ return document.getElementById(id); }
+
+    function fmt(v){
+      if(!v) return '-';
+      try { return new Date(v).toLocaleString('it-IT'); } catch { return v; }
+    }
+
+    function fmtDateOnly(v){
+      if(!v) return '-';
+      try { return new Date(v).toLocaleDateString('it-IT'); } catch { return v; }
+    }
+
+    function statusLabel(v){
+      return v === 'used' ? 'Attivo'
+        : v === 'disabled' ? 'Disattivato'
+        : v === 'new' ? 'Non attivo'
+        : v === 'reactivated' ? 'Riattivato'
+        : (v || '-');
+    }
+
+    function scoreFromData(views, messages){
+      const weighted = (views * 6) + (messages * 22);
+      return Math.max(0, Math.min(100, weighted));
+    }
+
+    function scoreCopy(score, status){
+      if(status !== 'used') {
+        return {
+          title: 'Il tuo QR non è ancora attivo',
+          sub: 'Attivazione necessaria',
+          copy: 'Per iniziare a raccogliere accessi reali, il QR deve essere prima attivato correttamente.'
+        };
+      }
+      if(score === 0){
+        return {
+          title: 'Il tuo QR è pronto',
+          sub: 'In attesa di attività',
+          copy: 'Il sistema è attivo, ma al momento non risultano ancora aperture o contatti registrati.'
+        };
+      }
+      if(score < 35){
+        return {
+          title: 'Il tuo QR sta iniziando a muoversi',
+          sub: 'Prime interazioni rilevate',
+          copy: 'Sono già arrivate attività reali. Il QR ha iniziato a generare attenzione e monitoraggio.'
+        };
+      }
+      if(score < 70){
+        return {
+          title: 'Il tuo QR è attivo bene',
+          sub: 'Buon livello di attività',
+          copy: 'Il sistema sta già registrando interazioni concrete. Il QR è realmente operativo nella pratica.'
+        };
+      }
+      return {
+        title: 'Il tuo QR è attivo forte',
+        sub: 'Attività elevata',
+        copy: 'Hai già raccolto un livello molto interessante di attività. Il sistema sta dimostrando chiaramente il suo valore.'
+      };
+    }
+
+    function daysLeft(expiresAt){
+      if(!expiresAt) return null;
+      const now = new Date();
+      const exp = new Date(expiresAt);
+      return Math.floor((exp - now) / 86400000);
+    }
+
+    function buildRenewUrl(publicId){
+      return publicId ? `/renew/u/${encodeURIComponent(publicId)}` : '#';
+    }
+
+    function areaBucket(city, region){
+      const value = `${city || ''} ${region || ''}`.toLowerCase();
+      if (/(sicilia|sardegna|palermo|catania|cagliari|sassari|trapani|siracusa)/.test(value)) return 'islands';
+      if (/(calabria|puglia|basilicata|campania|molise|abruzzo|napoli|bari|lecce|taranto|catanzaro|reggio calabria|potenza|salerno)/.test(value)) return 'south';
+      if (/(toscana|lazio|umbria|marche|roma|firenze|perugia|ancona)/.test(value)) return 'center';
+      return 'north';
+    }
+
+    function buildAreaGroups(events){
+      const groups = { north: [], center: [], south: [], islands: [] };
+      (events || []).forEach(ev => {
+        const city = ev.ip_city || '';
+        const region = ev.ip_region || '';
+        const bucket = areaBucket(city, region);
+        groups[bucket].push(ev);
+      });
+      return groups;
+    }
+
+    function renderAreaPointDetails(bucket, groups){
+      const titles = {
+        north: 'Nord Italia',
+        center: 'Centro Italia',
+        south: 'Sud Italia',
+        islands: 'Isole'
+      };
+      const items = groups[bucket] || [];
+      const titleEl = qs('mapAreaTitle');
+      const summaryEl = qs('mapAreaSummary');
+      const listEl = qs('mapAreaList');
+
+      document.querySelectorAll('.italy-dot').forEach(el => el.classList.remove('active'));
+      const activeDot = qs(
+        bucket === 'north' ? 'mapDotNorth' :
+        bucket === 'center' ? 'mapDotCenter' :
+        bucket === 'south' ? 'mapDotSouth' : 'mapDotIslands'
+      );
+      if (activeDot) activeDot.classList.add('active');
+
+      titleEl.textContent = titles[bucket] || 'Area';
+      summaryEl.textContent = items.length
+        ? `Eventi registrati in quest’area: ${items.length}.`
+        : 'Nessun evento registrato in quest’area.';
+
+      if (!items.length) {
+        listEl.innerHTML = '<div class="italy-detail-empty">Nessun dettaglio disponibile.</div>';
+        return;
+      }
+
+      listEl.innerHTML = items.slice(0, 6).map(ev => {
+        const place = [ev.ip_city, ev.ip_region].filter(Boolean).join(', ') || 'Area non disponibile';
+        return `<div class="italy-detail-item"><strong style="display:block;color:#223046;font-size:.88rem;">${ev.type || 'Evento'}</strong><div class="muted" style="margin-top:4px;font-size:.82rem;">${place}</div><div class="muted" style="margin-top:4px;font-size:.82rem;">${fmt(ev.at)}</div></div>`;
+      }).join('');
+    }
+
+    function normalizeGeoKey(v){
+      return String(v || '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function getMapPositionForEvent(ev, bucket){
+      const city = normalizeGeoKey(ev?.ip_city);
+      const region = normalizeGeoKey(ev?.ip_region);
+
+      const cityMap = {
+        'milan':   { left: 29.4, top: 16.2 },
+        'milano':  { left: 29.4, top: 16.2 },
+        'rome':    { left: 46.2, top: 46.1 },
+        'roma':    { left: 46.2, top: 46.1 },
+        'naples':  { left: 47.7, top: 58.4 },
+        'napoli':  { left: 47.7, top: 58.4 },
+        'turin':   { left: 25.4, top: 19.0 },
+        'torino':  { left: 25.4, top: 19.0 },
+        'genoa':   { left: 28.0, top: 27.2 },
+        'genova':  { left: 28.0, top: 27.2 },
+        'bologna': { left: 40.7, top: 28.8 },
+        'florence':{ left: 42.7, top: 38.0 },
+        'firenze': { left: 42.7, top: 38.0 },
+        'bari':    { left: 61.0, top: 58.8 },
+        'palermo': { left: 51.8, top: 87.3 },
+        'cagliari':{ left: 21.8, top: 78.7 },
+        'venice':  { left: 49.2, top: 20.5 },
+        'venezia': { left: 49.2, top: 20.5 }
+      };
+
+      const regionMap = {
+        'lombardy':       { left: 36.4, top: 18.4 },
+        'lombardia':      { left: 36.4, top: 18.4 },
+        'lazio':          { left: 46.2, top: 46.1 },
+        'tuscany':        { left: 42.7, top: 38.0 },
+        'toscana':        { left: 42.7, top: 38.0 },
+        'emilia-romagna': { left: 40.7, top: 28.8 },
+        'emilia romagna': { left: 40.7, top: 28.8 },
+        'campania':       { left: 47.7, top: 58.4 },
+        'puglia':         { left: 61.0, top: 58.8 },
+        'sicily':         { left: 51.8, top: 87.3 },
+        'sicilia':        { left: 51.8, top: 87.3 },
+        'sardinia':       { left: 21.8, top: 78.7 },
+        'sardegna':       { left: 21.8, top: 78.7 },
+        'piedmont':       { left: 25.4, top: 19.0 },
+        'piemonte':       { left: 25.4, top: 19.0 },
+        'liguria':        { left: 28.0, top: 27.2 },
+        'veneto':         { left: 49.2, top: 20.5 }
+      };
+
+      if (cityMap[city]) return cityMap[city];
+      if (regionMap[region]) return regionMap[region];
+
+      const fallback = {
+        north:   { left: 37.0, top: 21.0 },
+        center:  { left: 45.8, top: 45.8 },
+        south:   { left: 54.0, top: 69.5 },
+        islands: { left: 39.0, top: 84.0 }
+      };
+      return fallback[bucket] || fallback.center;
+    }
+
+    function renderItalyMapGroups(events){
+      const visualBox = qs('mapVisualBox');
+      const countryValues = (events || []).map(ev => String(ev.ip_country || '').trim()).filter(Boolean);
+      const normalizedCountries = [...new Set(countryValues.map(v => v.toLowerCase()))];
+      const italyAliases = new Set(['italy', 'italia', 'it']);
+      const hasOnlyItaly = normalizedCountries.length === 0 || normalizedCountries.every(v => italyAliases.has(v));
+
+      if (!hasOnlyItaly) {
+        document.querySelectorAll('.italy-dot').forEach(el => {
+          el.style.display = 'none';
+          el.onclick = null;
+          el.classList.remove('active');
+        });
+
+        const countries = [...new Set(countryValues.filter(Boolean))];
+        const mainCountry = countries[0] || 'Estero';
+        qs('lastAreaText').textContent = mainCountry;
+        qs('mapAreaTitle').textContent = mainCountry;
+        qs('mapAreaSummary').textContent = 'Le interazioni registrate per questo QR provengono da fuori Italia.';
+        qs('mapAreaList').innerHTML = countries.length
+          ? countries.map(c => `<div class="italy-detail-item"><strong style="display:block;color:#223046;font-size:.88rem;">Nazione</strong><div class="muted" style="margin-top:4px;font-size:.82rem;">${escapeHtml(c)}</div></div>`).join('')
+          : '<div class="italy-detail-empty">Nessun dettaglio disponibile.</div>';
+
+        if (visualBox) {
+          visualBox.innerHTML = `<div class="country-focus"><div><div class="mini-label">Nazione rilevata</div><div class="country-name">${escapeHtml(mainCountry)}</div><div class="country-copy">Le segnalazioni o aperture registrate per questo QR risultano provenire da fuori Italia.</div></div></div>`;
+        }
+        return;
+      }
+
+      if (visualBox && !visualBox.querySelector('.italy-real-map')) {
+        visualBox.innerHTML = `
+          <div class="italy-map-wrap-real">
+            <img class="italy-real-map" src="/assets/italy-real.svg" alt="Mappa Italia">
+            <button id="mapDotNorth" class="italy-dot dot-north" type="button" aria-label="Nord Italia"></button>
+            <button id="mapDotCenter" class="italy-dot dot-center" type="button" aria-label="Centro Italia"></button>
+            <button id="mapDotSouth" class="italy-dot dot-south" type="button" aria-label="Sud Italia"></button>
+            <button id="mapDotIslands" class="italy-dot dot-islands" type="button" aria-label="Isole"></button>
+          </div>`;
+      }
+
+      const groups = buildAreaGroups(events);
+      const config = {
+        north: { el: qs('mapDotNorth'), count: groups.north.length },
+        center: { el: qs('mapDotCenter'), count: groups.center.length },
+        south: { el: qs('mapDotSouth'), count: groups.south.length },
+        islands: { el: qs('mapDotIslands'), count: groups.islands.length }
+      };
+
+      Object.entries(config).forEach(([key, conf]) => {
+        if (!conf.el) return;
+        if (conf.count > 0) {
+          conf.el.style.display = 'block';
+          const size = Math.min(18, 12 + conf.count);
+          conf.el.style.width = size + 'px';
+          conf.el.style.height = size + 'px';
+
+          const refEvent = (groups[key] && groups[key][0]) ? groups[key][0] : null;
+          const pos = getMapPositionForEvent(refEvent, key);
+          conf.el.style.left = pos.left + '%';
+          conf.el.style.top = pos.top + '%';
+
+          conf.el.onclick = () => renderAreaPointDetails(key, groups);
+        } else {
+          conf.el.style.display = 'none';
+          conf.el.onclick = null;
+        }
+      });
+
+      const firstKey = ['north','center','south','islands'].find(k => groups[k].length > 0);
+      if (firstKey) {
+        renderAreaPointDetails(firstKey, groups);
+        const first = groups[firstKey][0];
+        qs('lastAreaText').textContent = [first.ip_city, first.ip_region].filter(Boolean).join(', ') || 'Italia';
+      } else {
+        qs('lastAreaText').textContent = 'Italia';
+        qs('mapAreaTitle').textContent = 'Seleziona un punto';
+        qs('mapAreaSummary').textContent = 'Qui vedrai città, regione e ultimi accessi registrati per l’area selezionata.';
+        qs('mapAreaList').innerHTML = '<div class="italy-detail-empty">Nessun dettaglio disponibile.</div>';
+      }
+    }
+
+    function snoozeKey(code){
+      return `expiry_snooze_${code}`;
+    }
+
+    function shouldShowBalloon(code, dLeft, planType){
+      if(planType === 'always') return false;
+      if(dLeft === null || dLeft > 15 || dLeft < 0) return false;
+      const until = localStorage.getItem(snoozeKey(code));
+      if(!until) return true;
+      const when = new Date(until);
+      return new Date() > when;
+    }
+
+    function makeICS({title, description, startDate}) {
+      const pad = n => String(n).padStart(2,'0');
+      const dt = new Date(startDate);
+      const y = dt.getUTCFullYear();
+      const m = pad(dt.getUTCMonth()+1);
+      const d = pad(dt.getUTCDate());
+      const hh = '0900';
+      const stamp = `${y}${m}${d}T${hh}00Z`;
+      const end = `${y}${m}${d}T100000Z`;
+      const uid = `qr-reminder-${Date.now()}@adesivo-auto`;
+      return [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Adesivo Auto//QR Reminder//IT',
+        'BEGIN:VEVENT',
+        `UID:${uid}`,
+        `DTSTAMP:${stamp}`,
+        `DTSTART:${stamp}`,
+        `DTEND:${end}`,
+        `SUMMARY:${title}`,
+        `DESCRIPTION:${description.replace(/\n/g, '\\n')}`,
+        'END:VEVENT',
+        'END:VCALENDAR'
+      ].join('\r\n');
+    }
+
+    function downloadICS(filename, content){
+      const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    async function loadSimpleDashboard() {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code') || '';
+      const plate = params.get('plate') || '';
+
+      if (code && plate) {
+        localStorage.setItem('owner_saved_code', code);
+        localStorage.setItem('owner_saved_plate', plate);
+        localStorage.setItem('owner_saved_at', new Date().toISOString());
+      }
+
+      qs('openFullDashboard').href = `/owner-dashboard.html?code=${encodeURIComponent(code)}&plate=${encodeURIComponent(plate)}`;
+
+      const res = await fetch('/api/owner-dashboard', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code, plate })
+      });
+      const data = await res.json();
+
+      if(!res.ok || !data.success){
+        qs('statusPill').textContent = 'Errore';
+        qs('statusPill').className = 'status-pill danger';
+        qs('workingText').textContent = data.error || 'Impossibile caricare i dati.';
+        qs('eventsList').innerHTML = '<div class="muted">Nessun dato disponibile.</div>';
+        return;
+      }
+
+      const d = data.data || {};
+      const events = d.events || [];
+      const views = Number(d.viewsCount || 0);
+      const messages = Number(d.messagesCount || 0);
+      const score = scoreFromData(views, messages);
+      const deg = Math.round((score / 100) * 360);
+      const copy = scoreCopy(score, d.status);
+      const dLeft = daysLeft(d.expires_at);
+
+      qs('renewBtn').href = buildRenewUrl(d.public_id);
+
+      const vehicleModelText = [d.brand, d.vehicle_model].filter(Boolean).join(' ').trim() || 'Veicolo registrato';
+      qs('vehicleHeroModel').textContent = vehicleModelText;
+      qs('vehicleHeroPlate').textContent = d.plate || 'Targa non disponibile';
+
+      const offeredByWrap = qs('offeredByWrap');
+      const offeredByValue = qs('offeredByValue');
+      if (offeredByWrap && offeredByValue) {
+        if (d.offered_by && String(d.offered_by).trim()) {
+          offeredByValue.textContent = String(d.offered_by).trim();
+          offeredByWrap.style.display = 'block';
+        } else {
+          offeredByValue.textContent = '';
+          offeredByWrap.style.display = 'none';
+        }
+      }
+
+      const appTitle = (d.plate || 'Contatto Veicolo').trim();
+      document.title = appTitle;
+
+      const manifestLink = document.getElementById('dynamicManifestLink');
+      if (manifestLink) {
+        const params = new URLSearchParams(window.location.search);
+        const codeParam = params.get('code') || '';
+        const plateParam = d.plate || params.get('plate') || '';
+        manifestLink.setAttribute('href', `/manifest/owner?code=${encodeURIComponent(codeParam)}&plate=${encodeURIComponent(plateParam)}`);
+      }
+      qs('balloonRenew').href = buildRenewUrl(d.public_id);
+
+      qs('ringProgress').style.setProperty('--deg', `${deg}deg`);
+      qs('scoreValue').textContent = `${score}%`;
+      qs('scoreSub').textContent = copy.sub;
+      qs('heroTitle').textContent = copy.title;
+      qs('heroCopy').textContent = copy.copy;
+
+      qs('viewsValue').textContent = String(views);
+      qs('messagesValue').textContent = String(messages);
+
+      const lastActivityEl = qs('lastActivityValue');
+      if (lastActivityEl) {
+        lastActivityEl.textContent = d.lastActivity ? fmt(d.lastActivity) : 'Nessuna attività recente';
+      }
+
+      qs('statusText').textContent = statusLabel(d.status);
+
+      if (d.status === 'used' && (views > 0 || messages > 0)) {
+        qs('workingText').innerHTML = `<span class="good"><strong>Sì, il tuo QR sta registrando attività reali.</strong></span><br>Stai già raccogliendo aperture della pagina e/o tentativi di contatto.`;
+        qs('statusPill').textContent = 'QR ATTIVO';
+        qs('statusPill').className = 'status-pill ok';
+      } else if (d.status === 'used') {
+        qs('workingText').innerHTML = `<span class="warn"><strong>Il tuo QR è attivo.</strong></span><br>Al momento non risultano ancora aperture o contatti, ma il sistema è pronto a registrarli.`;
+        qs('statusPill').textContent = 'PRONTO';
+        qs('statusPill').className = 'status-pill warn';
+      } else {
+        qs('workingText').innerHTML = `<span class="danger"><strong>Il tuo QR non risulta ancora operativo.</strong></span><br>Per farlo lavorare davvero, completa l’attivazione o verifica il suo stato.`;
+        qs('statusPill').textContent = 'NON ATTIVO';
+        qs('statusPill').className = 'status-pill danger';
+      }
+
+      const expiryBadge = qs('expiryBadge');
+      const expiryNote = qs('expiryNote');
+      if (d.plan_type === 'always') {
+        expiryBadge.textContent = 'SEMPRE ATTIVO';
+        expiryBadge.className = 'expiry-badge ok';
+        expiryNote.textContent = 'Questo servizio non ha una scadenza programmata.';
+        qs('openReminderBtn').style.display = 'none';
+      } else if (d.expires_at) {
+        if (dLeft < 0) {
+          expiryBadge.textContent = `SCADUTO DA ${Math.abs(dLeft)} GIORNI`;
+          expiryBadge.className = 'expiry-badge danger';
+          expiryNote.textContent = `Scadenza prevista: ${fmtDateOnly(d.expires_at)}. Ti consigliamo di rinnovare per evitare interruzioni.`;
+        } else if (dLeft <= 15) {
+          expiryBadge.textContent = `SCADE TRA ${dLeft} GIORNI`;
+          expiryBadge.className = 'expiry-badge warn';
+          expiryNote.textContent = `Scadenza prevista: ${fmtDateOnly(d.expires_at)}. Puoi anche salvare un promemoria in agenda.`;
+        } else {
+          expiryBadge.textContent = `${dLeft} GIORNI RESIDUI`;
+          expiryBadge.className = 'expiry-badge ok';
+          expiryNote.textContent = `Scadenza prevista: ${fmtDateOnly(d.expires_at)}. Il servizio è attivo e sotto controllo.`;
+        }
+      } else {
+        expiryBadge.textContent = 'SCADENZA NON DISPONIBILE';
+        expiryBadge.className = 'expiry-badge warn';
+        expiryNote.textContent = 'Non è disponibile una data di scadenza precisa.';
+      }
+
+      renderItalyMapGroups(events);
+
+      if (!events.length) {
+        qs('eventsList').innerHTML = '<div class="muted">Nessun evento registrato fino ad ora.</div>';
+      } else {
+        qs('eventsList').innerHTML = events.slice(0, 8).map(ev => {
+          const areaText = [ev.ip_city, ev.ip_region].filter(Boolean).join(', ') || 'Area non disponibile';
+          return `
+            <div class="event">
+              <strong>${ev.type || 'Evento'}</strong>
+              <div class="muted">${fmt(ev.at)}</div>
+              <div class="muted">Area indicativa: ${areaText}</div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // Reminder modal
+      if (d.plan_type === 'always' || !d.expires_at) {
+        qs('openReminderBtn').style.display = 'none';
+      } else {
+        qs('openReminderBtn').addEventListener('click', () => {
+          qs('reminderModal').style.display = 'flex';
+        });
+      }
+
+      qs('closeReminderModal').addEventListener('click', () => {
+        qs('reminderModal').style.display = 'none';
+      });
+
+      document.querySelectorAll('.choice-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const offset = Number(btn.dataset.offset || '0');
+          if (!d.expires_at || !offset) return;
+
+          const exp = new Date(d.expires_at);
+          const remind = new Date(exp.getTime() - (offset * 86400000));
+          const ics = makeICS({
+            title: `Rinnovo QR veicolo ${code}`,
+            description: `Promemoria rinnovo del servizio associato al QR veicolo.\nCodice: ${code}\nScadenza prevista: ${fmtDateOnly(d.expires_at)}\nLink rinnovo: ${window.location.origin}${buildRenewUrl(d.public_id)}`,
+            startDate: remind
+          });
+          downloadICS(`promemoria-rinnovo-${code}.ics`, ics);
+          qs('reminderModal').style.display = 'none';
+        });
+      });
+
+      // Balloon scadenza
+      if (shouldShowBalloon(code, dLeft, d.plan_type)) {
+        qs('balloonText').textContent = `Mancano ${dLeft} giorni alla scadenza del tuo QR. Per evitare interruzioni, puoi rinnovarlo adesso oppure farti ricordare più avanti.`;
+        qs('expiryBalloon').style.display = 'block';
+      }
+
+      qs('balloonClose').addEventListener('click', () => {
+        qs('expiryBalloon').style.display = 'none';
+      });
+
+      qs('balloonSnooze').addEventListener('click', () => {
+        const until = new Date(Date.now() + (3 * 86400000));
+        localStorage.setItem(snoozeKey(code), until.toISOString());
+        qs('expiryBalloon').style.display = 'none';
+      });
+    }
+
+    document.getElementById('forgetAccessBtn').addEventListener('click', () => {
+      localStorage.removeItem('owner_saved_code');
+      localStorage.removeItem('owner_saved_plate');
+      localStorage.removeItem('owner_saved_at');
+      window.location.href = '/owner-login.html';
+    });
+
+    async function sendOwnerHeartbeat(){
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get('code') || '';
+        const plate = params.get('plate') || '';
+        if (!code || !plate) return;
+
+        await fetch('/api/owner-heartbeat', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ code, plate })
+        });
+      } catch(e) {}
+    }
+
+    sendOwnerHeartbeat();
+    setInterval(sendOwnerHeartbeat, 15000);
+
+
+    let ownerMessages = [];
+    let selectedMessageIds = new Set();
+    let messagesSelectionMode = false;
+
+    function escapeHtml(str){
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function getOwnerParams(){
+      const params = new URLSearchParams(window.location.search);
+      return {
+        code: params.get('code') || '',
+        plate: params.get('plate') || ''
+      };
+    }
+
+    async function syncAppBadge(unread){
+      try {
+        if ('setAppBadge' in navigator) {
+          if (unread > 0) {
+            await navigator.setAppBadge(unread);
+          } else if ('clearAppBadge' in navigator) {
+            await navigator.clearAppBadge();
+          }
+        }
+
+        if ('serviceWorker' in navigator) {
+          const reg = await navigator.serviceWorker.getRegistration() || await navigator.serviceWorker.ready;
+          if (reg && reg.active) {
+            reg.active.postMessage({ type: 'SET_BADGE', count: unread });
+          }
+        }
+      } catch (e) {}
+    }
+
+    function updateMessagesToolbar(unread){
+      const badge = document.getElementById('messagesUnreadBadge');
+      badge.textContent = `${unread} NUOVI`;
+      badge.className = unread > 0 ? 'expiry-badge warn' : 'expiry-badge ok';
+
+      syncAppBadge(unread);
+
+      document.getElementById('messagesMarkReadBtn').style.display = messagesSelectionMode ? 'inline-flex' : 'none';
+      document.getElementById('messagesDeleteBtn').style.display = messagesSelectionMode ? 'inline-flex' : 'none';
+    }
+
+    function renderMessages(){
+      const list = document.getElementById('messagesList');
+      if (!ownerMessages.length) {
+        list.innerHTML = '<div class="muted">Nessuna segnalazione ricevuta fino ad ora.</div>';
+        updateMessagesToolbar(0);
+        return;
+      }
+
+      const unread = ownerMessages.filter(m => !m.read_at).length;
+      updateMessagesToolbar(unread);
+
+      list.innerHTML = ownerMessages.map(item => {
+        const selected = selectedMessageIds.has(item.id);
+        const isNew = !item.read_at;
+        const mapLink = item.location_shared && item.maps_url
+          ? `<a href="${escapeHtml(item.maps_url)}" target="_blank" rel="noopener noreferrer" style="color:#8ec5ff;font-weight:800;text-decoration:none;">Apri mappa</a>`
+          : '';
+        const preview = String(item.message_text || '')
+          .replace(/^SEGNALAZIONE VEICOLO\n?/i, '')
+          .replace(/^Targa:.*\n?/gim, '')
+          .replace(/^Varie\n?/gim, '')
+          .replace(/^Segnalazione:.*\n?/gim, '')
+          .replace(/^Numero per eventuale richiamo:.*\n?/gim, '')
+          .replace(/^Posizione:.*\n?/gim, '')
+          .replace(/^Mappa:.*\n?/gim, '')
+          .trim()
+          .slice(0, 120);
+        const senderPhone = item.sender_phone
+          ? `<a href="tel:${escapeHtml(String(item.sender_phone).replace(/[^+0-9]/g, ''))}" style="color:#8ec5ff;font-weight:800;text-decoration:none;">${escapeHtml(item.sender_phone)}</a>`
+          : '';
+        return `
+          <div data-message-id="${item.id || ''}" style="border-radius:18px;padding:14px 14px;background:${isNew ? 'rgba(103,176,255,.08)' : 'rgba(255,255,255,.03)'};border:1px solid ${isNew ? 'rgba(103,176,255,.20)' : 'rgba(255,255,255,.06)'};">
+            <div style="display:flex;gap:12px;align-items:flex-start;">
+              ${messagesSelectionMode ? `<input type="checkbox" ${selected ? 'checked' : ''} onchange="toggleMessageSelect(${item.id})" style="margin-top:4px;">` : ''}
+              <div style="flex:1;min-width:0;">
+                <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
+                  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                    <strong style="font-size:1rem;">${escapeHtml(item.reason || 'Segnalazione')}</strong>
+                    <span class="expiry-badge ${isNew ? 'warn' : 'ok'}" style="min-height:30px;padding:0 10px;font-size:.8rem;">${isNew ? 'NUOVO' : 'LETTO'}</span>
+                  </div>
+                  <div class="muted" style="font-size:.9rem;">${fmt(item.created_at)}</div>
+                </div>
+                <div class="muted" style="margin-top:10px;line-height:1.55;font-size:1rem;">${escapeHtml(preview || 'Nessun dettaglio disponibile')}</div>
+                <div class="muted" style="margin-top:8px;font-size:.9rem;display:flex;flex-wrap:wrap;gap:14px;align-items:center;">${mapLink ? mapLink : ''}${senderPhone ? senderPhone : ''}</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+                  <button class="btn btn-secondary" type="button" onclick="openMessageDetail(${item.id})">Apri</button>
+                  ${!item.read_at ? `<button class="btn btn-secondary" type="button" onclick="markMessageRead(${item.id})">Segna come letto</button>` : ''}
+                  <button class="btn btn-secondary" type="button" onclick="deleteMessage(${item.id})">Elimina</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function loadOwnerMessages(){
+      try {
+        const { code, plate } = getOwnerParams();
+        const res = await fetch('/api/owner-messages', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ code, plate })
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          document.getElementById('messagesList').innerHTML = '<div class="danger">Errore caricamento messaggi.</div>';
+          return;
+        }
+
+        ownerMessages = data.items || [];
+        renderMessages();
+
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const messageId = Number(params.get('messageId') || '0');
+          if (messageId) {
+            const target = ownerMessages.find(m => Number(m.id) === messageId);
+            if (target) {
+              setTimeout(() => {
+                window.openMessageDetail(messageId);
+              }, 250);
+            }
+          }
+        } catch (e) {}
+      } catch (e) {
+        document.getElementById('messagesList').innerHTML = '<div class="danger">Errore caricamento messaggi.</div>';
+      }
+    }
+
+    window.toggleMessageSelect = function(id){
+      if (selectedMessageIds.has(id)) selectedMessageIds.delete(id);
+      else selectedMessageIds.add(id);
+    }
+
+    window.markMessageRead = async function(id){
+      const { code, plate } = getOwnerParams();
+      await fetch('/api/owner-messages/read', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code, plate, id })
+      });
+      await loadOwnerMessages();
+    }
+
+    window.deleteMessage = async function(id){
+      const { code, plate } = getOwnerParams();
+      await fetch('/api/owner-messages/delete', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code, plate, id })
+      });
+      await loadOwnerMessages();
+    }
+
+
+    window.closeMessageDetailModal = function(e){
+      const modal = document.getElementById('messageDetailModal');
+      if (!modal) return;
+      if (!e || !e.target || e.target.id === 'messageDetailModal') {
+        modal.style.display = 'none';
+      }
+    };
+
+    window.openMessageDetail = async function(id){
+      const item = ownerMessages.find(m => m.id === id);
+      if (!item) return;
+
+      if (!item.read_at) {
+        await window.markMessageRead(id);
+      }
+
+      const modal = document.getElementById('messageDetailModal');
+      const reasonEl = document.getElementById('msgDetailReason');
+      const dateEl = document.getElementById('msgDetailDate');
+      const textEl = document.getElementById('msgDetailText');
+      const phoneWrap = document.getElementById('msgDetailPhoneWrap');
+      const phoneEl = document.getElementById('msgDetailPhone');
+      const mapWrap = document.getElementById('msgDetailMapWrap');
+      const mapEl = document.getElementById('msgDetailMap');
+      const mapPreviewWrap = document.getElementById('msgDetailMapPreviewWrap');
+      const mapCoordsEl = document.getElementById('msgDetailMapCoords');
+      const copyCoordsBtn = document.getElementById('msgDetailCopyCoords');
+      const abuseResultEl = document.getElementById('msgDetailAbuseResult');
+      const blockIpBtn = document.getElementById('msgBlockIpBtn');
+
+      modal.style.display = 'flex';
+      reasonEl.textContent = item.reason || 'Segnalazione';
+      dateEl.textContent = fmt(item.created_at);
+
+      const rawText = String(item.message_text || '');
+
+      let extractedPhone = '';
+      if (item.sender_phone && String(item.sender_phone).trim()) {
+        extractedPhone = String(item.sender_phone).trim();
+      } else {
+        const phoneMatch = rawText.match(/Numero per eventuale richiamo:\s*([^\n]+)/i);
+        if (phoneMatch && phoneMatch[1]) extractedPhone = phoneMatch[1].trim();
+      }
+
+      let extractedMap = '';
+      if (item.maps_url && String(item.maps_url).trim()) {
+        extractedMap = String(item.maps_url).trim();
+      } else {
+        const mapMatch = rawText.match(/Mappa:\s*(https?:\/\/[^\s]+)/i);
+        if (mapMatch && mapMatch[1]) extractedMap = mapMatch[1].trim();
+      }
+
+      let cleanText = rawText
+        .replace(/^Segnalazione per .*\n?/i, '')
+        .replace(/^Motivo: .*\n?/i, '')
+        .replace(/^Numero per eventuale richiamo: .*\n?/gim, '')
+        .replace(/^Posizione: .*\n?/gim, '')
+        .replace(/^Mappa: .*\n?/gim, '')
+        .trim();
+
+      if (!cleanText) cleanText = rawText.trim();
+
+      textEl.textContent = cleanText || 'Nessun testo disponibile';
+
+      if (extractedPhone) {
+        const telClean = extractedPhone.replace(/[^+0-9]/g, '');
+        phoneEl.textContent = extractedPhone;
+        phoneEl.href = telClean ? ('tel:' + telClean) : '#';
+        phoneWrap.style.display = 'block';
+      } else {
+        phoneWrap.style.display = 'none';
+        phoneEl.textContent = '';
+        phoneEl.href = '#';
+      }
+
+      if (extractedMap) {
+        mapEl.href = extractedMap;
+        mapWrap.style.display = 'block';
+
+        const lat = item.latitude ? Number(item.latitude) : null;
+        const lon = item.longitude ? Number(item.longitude) : null;
+
+        if (Number.isFinite(lat) && Number.isFinite(lon) && mapPreviewWrap && mapCoordsEl) {
+          const coordText = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+          mapCoordsEl.textContent = coordText;
+          mapPreviewWrap.style.display = 'block';
+
+          if (copyCoordsBtn) {
+            copyCoordsBtn.onclick = async () => {
+              try {
+                await navigator.clipboard.writeText(coordText);
+                copyCoordsBtn.textContent = 'Coordinate copiate';
+                setTimeout(() => { copyCoordsBtn.textContent = 'Copia coordinate'; }, 1400);
+              } catch (e) {
+                copyCoordsBtn.textContent = 'Copia non riuscita';
+                setTimeout(() => { copyCoordsBtn.textContent = 'Copia coordinate'; }, 1400);
+              }
+            };
+          }
+        } else if (mapPreviewWrap) {
+          mapPreviewWrap.style.display = 'none';
+          if (mapCoordsEl) mapCoordsEl.textContent = '-';
+        }
+      } else {
+        mapWrap.style.display = 'none';
+        mapEl.href = '#';
+        if (mapPreviewWrap) {
+          mapPreviewWrap.style.display = 'none';
+        }
+        if (mapCoordsEl) mapCoordsEl.textContent = '-';
+      }
+
+      abuseResultEl.textContent = '';
+
+      if (item.ip_address && String(item.ip_address).trim()) {
+        const ipValue = String(item.ip_address).trim();
+        blockIpBtn.style.display = 'inline-flex';
+        blockIpBtn.onclick = async () => {
+          const { code, plate } = getOwnerParams();
+          const res = await fetch('/api/owner/block-abuse', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({
+              code,
+              plate,
+              block_type: 'ip',
+              block_value: ipValue,
+              reason: 'Blocco IP da dettaglio messaggio'
+            })
+          });
+          const data = await res.json();
+          abuseResultEl.textContent = data.success ? 'IP bloccato.' : (data.error || 'Errore blocco IP.');
+        };
+      } else {
+        blockIpBtn.style.display = 'none';
+        blockIpBtn.onclick = null;
+      }
+
+      modal.style.display = 'flex';
+    };
+
+    window.ownerUnblockAbuse = async function(id){
+      const abuseResultEl = document.getElementById('msgDetailAbuseResult');
+      const { code, plate } = getOwnerParams();
+      const res = await fetch('/api/owner/unblock-abuse', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code, plate, id })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        abuseResultEl.textContent = data.error || 'Errore sblocco.';
+        return;
+      }
+      abuseResultEl.textContent = 'Blocco disattivato.';
+    };
+
+    document.getElementById('messagesSelectBtn').addEventListener('click', () => {
+      messagesSelectionMode = !messagesSelectionMode;
+      selectedMessageIds.clear();
+      document.getElementById('messagesSelectBtn').textContent = messagesSelectionMode ? 'Annulla' : 'Seleziona';
+      renderMessages();
+    });
+
+    document.getElementById('messagesMarkReadBtn').addEventListener('click', async () => {
+      const ids = Array.from(selectedMessageIds);
+      if (!ids.length) return;
+      const { code, plate } = getOwnerParams();
+      await fetch('/api/owner-messages/read-many', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code, plate, ids })
+      });
+      selectedMessageIds.clear();
+      messagesSelectionMode = false;
+      document.getElementById('messagesSelectBtn').textContent = 'Seleziona';
+      await loadOwnerMessages();
+    });
+
+    document.getElementById('messagesDeleteBtn').addEventListener('click', async () => {
+      const ids = Array.from(selectedMessageIds);
+      if (!ids.length) return;
+      const { code, plate } = getOwnerParams();
+      await fetch('/api/owner-messages/delete-many', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code, plate, ids })
+      });
+      selectedMessageIds.clear();
+      messagesSelectionMode = false;
+      document.getElementById('messagesSelectBtn').textContent = 'Seleziona';
+      await loadOwnerMessages();
+    });
+    function detectDeviceType(){
+      const ua = navigator.userAgent || '';
+      const isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const isHuawei = /Huawei|HMSCore|HarmonyOS|HUAWEI/i.test(ua);
+      const isAndroid = /Android/i.test(ua);
+      if (isIOS) return 'ios';
+      if (isHuawei) return 'huawei';
+      if (isAndroid) return 'android';
+      return 'other';
+    }
+
+    function isStandaloneMode(){
+      return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    }
+
+    function currentNotificationState(){
+      if (!('Notification' in window)) return 'unsupported';
+      return Notification.permission || 'default';
+    }
+
+    function installVisualIcon(type){
+      if (type === 'ios') return '􀈂';
+      if (type === 'android') return '⌄';
+      if (type === 'huawei') return '⌄';
+      return '•';
+    }
+
+    function installDeviceLabel(type){
+      if (type === 'ios') return 'iPhone / iPad';
+      if (type === 'android') return 'Android';
+      if (type === 'huawei') return 'Huawei';
+      return 'Dispositivo rilevato';
+    }
+
+    async function getCurrentPushSubscription(){
+      try {
+        if (!('serviceWorker' in navigator)) return null;
+
+        let reg = await navigator.serviceWorker.getRegistration();
+        if (!reg) {
+          return null;
+        }
+
+        if (!reg.pushManager) return null;
+        return await reg.pushManager.getSubscription();
+      } catch (e) {
+        return null;
+      }
+    }
+
+    let deferredInstallPrompt = null;
+    let currentInstallMode = 'check';
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+  
+    updateInstallUI();
+    });
+
+    function setInstallBadge(label, cls='warn'){
+      const badge = document.getElementById('installStatusBadge');
+      badge.textContent = label;
+      badge.className = 'expiry-badge';
+
+      if (cls === 'danger') {
+        badge.style.background = 'rgba(255,176,176,.12)';
+        badge.style.border = '1px solid rgba(255,176,176,.20)';
+        badge.style.color = '#ffb0b0';
+      } else {
+        badge.style.background = 'rgba(90,160,255,.12)';
+        badge.style.border = '1px solid rgba(90,160,255,.22)';
+        badge.style.color = '#5aa0ff';
+      }
+    }
+
+    async function updateInstallUI(){
+      const device = detectDeviceType();
+      const installed = isStandaloneMode();
+      const notif = currentNotificationState();
+      const currentSub = await getCurrentPushSubscription();
+      const hasPushSubscription = !!currentSub;
+
+      const compact = document.getElementById('installCompactText');
+      const explain = document.getElementById('installExplainBox');
+      const refreshWrap = document.getElementById('installRefreshWrap');
+      const deviceLabel = document.getElementById('deviceDetectedValue');
+      const instructions = document.getElementById('installInstructionsText');
+      const primaryBtn = document.getElementById('primaryInstallNotifyBtn');
+      const secondaryBtn = document.getElementById('secondaryInstallActionBtn');
+      const resultEl = document.getElementById('installActionResult');
+
+      deviceLabel.innerHTML = `${installVisualIcon(device)} ${installDeviceLabel(device)}`;
+      explain.style.display = 'none';
+      secondaryBtn.style.display = 'none';
+      if (refreshWrap) refreshWrap.style.display = (installed || notif === 'granted') ? 'block' : 'none';
+      resultEl.textContent = '';
+
+      if (!installed) {
+        setInstallBadge('NON INSTALLATA', 'warn');
+
+        if (device === 'ios') {
+          compact.innerHTML = '<strong style="color:#d92d20;">ATTENZIONE:</strong> installa l’App e attiva le notifiche per essere avvisato immediatamente quando qualcuno segnala un problema al tuo veicolo.';
+          primaryBtn.textContent = 'Installa Web App';
+          currentInstallMode = 'ios_install';
+          instructions.innerHTML = 'Su <strong>Safari iPhone/iPad</strong>: tocca <strong>Condividi</strong>, poi <strong>Aggiungi a Home</strong>. Apri sempre questa Web App dalla Home, quindi attiva le notifiche.';
+        } else if (device === 'android') {
+          compact.innerHTML = '<strong style="color:#d92d20;">ATTENZIONE:</strong> installa l’App e attiva le notifiche per essere avvisato immediatamente quando qualcuno segnala un problema al tuo veicolo.';
+          primaryBtn.textContent = 'Installa Web App';
+          currentInstallMode = 'android_install';
+          instructions.innerHTML = 'Su <strong>Android</strong>: usa il pulsante di installazione, oppure il menu del browser con <strong>Installa app</strong> / <strong>Aggiungi a schermata Home</strong>. Dopo l’installazione, riapri la Web App e attiva le notifiche.';
+        } else if (device === 'huawei') {
+          compact.innerHTML = '<strong style="color:#d92d20;">ATTENZIONE:</strong> installa l’App e attiva le notifiche per essere avvisato immediatamente quando qualcuno segnala un problema al tuo veicolo.';
+          primaryBtn.textContent = 'Installa Web App';
+          currentInstallMode = 'android_install';
+          instructions.innerHTML = 'Su <strong>Huawei</strong>: usa il menu del browser con <strong>Aggiungi a schermata Home</strong> o <strong>Installa app</strong>. Dopo il salvataggio, riapri la Web App dal dispositivo e attiva le notifiche.';
+        } else {
+          compact.innerHTML = '<strong style="color:#d92d20;">ATTENZIONE:</strong> installa l’App e attiva le notifiche per essere avvisato immediatamente quando qualcuno segnala un problema al tuo veicolo.';
+          primaryBtn.textContent = 'Installa Web App';
+          currentInstallMode = 'generic_install';
+          instructions.innerHTML = 'Usa le opzioni del browser o del sistema per aggiungere la Web App al dispositivo.';
+        }
+
+        secondaryBtn.textContent = 'Mostra istruzioni';
+        secondaryBtn.style.display = 'inline-flex';
+        return;
+      }
+
+      if (notif === 'granted' && hasPushSubscription) {
+        setInstallBadge('APP INSTALLATA + NOTIFICHE ATTIVE', 'ok');
+        compact.textContent = '';
+        primaryBtn.textContent = 'Disattiva notifiche';
+        currentInstallMode = 'disable_notifications';
+
+        instructions.innerHTML = '';
+        secondaryBtn.style.display = 'none';
+        explain.style.display = 'none';
+        return;
+      }
+
+      if (notif === 'granted' && !hasPushSubscription) {
+        setInstallBadge('INSTALLATA / NOTIFICHE NON ATTIVE', 'warn');
+        compact.textContent = 'La Web App è installata, ma la sottoscrizione notifiche non è ancora attiva.';
+        primaryBtn.textContent = 'Attiva notifiche';
+        currentInstallMode = 'enable_notifications';
+        instructions.innerHTML = 'Il permesso notifiche risulta concesso, ma questo dispositivo non è ancora sottoscritto. Tocca per completare l’attivazione.';
+        secondaryBtn.textContent = 'Mostra dettagli';
+        secondaryBtn.style.display = 'inline-flex';
+        return;
+      }
+
+      if (notif === 'denied') {
+        setInstallBadge('INSTALLATA / NOTIFICHE BLOCCATE', 'danger');
+        compact.textContent = 'La Web App è installata, ma le notifiche sono bloccate nelle impostazioni del dispositivo o del browser.';
+        primaryBtn.textContent = 'Verifica notifiche';
+        currentInstallMode = 'active';
+        instructions.innerHTML = device === 'ios'
+          ? 'Su iPhone/iPad devi riattivare le notifiche dalle impostazioni di Safari o della Web App salvata.'
+          : 'Riattiva le notifiche dalle impostazioni del browser o del dispositivo, poi torna qui per completare la sottoscrizione.';
+        secondaryBtn.textContent = 'Mostra dettagli';
+        secondaryBtn.style.display = 'inline-flex';
+        return;
+      }
+
+      setInstallBadge('INSTALLATA / NOTIFICHE DA ATTIVARE', 'ok');
+      compact.textContent = 'La Web App è installata. Ora puoi attivare le notifiche su questo dispositivo.';
+      primaryBtn.textContent = 'Attiva notifiche';
+      currentInstallMode = 'enable_notifications';
+
+      if (device === 'ios') {
+        instructions.innerHTML = 'Apri questa Web App dalla <strong>Home</strong> del tuo iPhone/iPad e attiva le notifiche da qui.';
+      } else if (device === 'android') {
+        instructions.innerHTML = 'La Web App risulta installata. Tocca ora per attivare le notifiche.';
+      } else if (device === 'huawei') {
+        instructions.innerHTML = 'La Web App risulta installata. Tocca ora per attivare le notifiche, se supportate dal browser del dispositivo.';
+      } else {
+        instructions.innerHTML = 'Attiva ora le notifiche, se supportate dal dispositivo e dal browser.';
+      }
+
+      secondaryBtn.textContent = 'Mostra istruzioni';
+      secondaryBtn.style.display = 'inline-flex';
+    }
+
+    async function tryInstallFlow(){
+      const device = detectDeviceType();
+      const resultEl = document.getElementById('installActionResult');
+      const explain = document.getElementById('installExplainBox');
+
+      if (currentInstallMode === 'ios_install') {
+        explain.style.display = 'block';
+        resultEl.innerHTML = 'Su iPhone le notifiche sul veicolo richiedono prima il salvataggio della Web App sulla Home.';
+        return;
+      }
+
+      if (currentInstallMode === 'android_install' || currentInstallMode === 'generic_install') {
+        if (deferredInstallPrompt) {
+          deferredInstallPrompt.prompt();
+          const choice = await deferredInstallPrompt.userChoice;
+          deferredInstallPrompt = null;
+          resultEl.textContent = choice && choice.outcome === 'accepted'
+            ? 'Installazione avviata. Riapri la Web App e poi attiva le notifiche.'
+            : 'Installazione non completata. Usa il menu del browser per salvare la Web App.';
+          setTimeout(updateInstallUI, 1200);
+          return;
+        }
+        explain.style.display = 'block';
+        resultEl.textContent = device === 'android'
+          ? 'Installazione diretta non disponibile in questo momento. Usa il menu del browser per salvare la Web App.'
+          : 'Usa le opzioni del browser per salvare la Web App sul dispositivo.';
+        return;
+      }
+
+      if (currentInstallMode === 'enable_notifications') {
+        await tryEnableNotifications();
+        return;
+      }
+
+      if (currentInstallMode === 'disable_notifications') {
+        await unregisterPushSubscription();
+        await updateInstallUI();
+        return;
+      }
+    }
+
+
+    function urlBase64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const rawData = atob(base64);
+      return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
+    }
+
+    async function registerPushSubscription(){
+      const resultEl = document.getElementById('installActionResult');
+      try {
+        if (!('serviceWorker' in navigator)) {
+          resultEl.textContent = 'Service worker non supportato.';
+          return false;
+        }
+
+        resultEl.textContent = 'Registrazione service worker...';
+        const reg = await navigator.serviceWorker.register('/service-worker.js');
+        await navigator.serviceWorker.ready;
+
+        resultEl.textContent = 'Recupero chiave notifiche...';
+        const keyRes = await fetch('/api/push/public-key');
+        const keyData = await keyRes.json();
+        if (!keyRes.ok || !keyData.success || !keyData.publicKey) {
+          resultEl.textContent = 'Chiave notifiche non disponibile.';
+          return false;
+        }
+
+        resultEl.textContent = 'Verifica subscription...';
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+          resultEl.textContent = 'Creazione subscription push...';
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(keyData.publicKey)
+          });
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get('code') || '';
+        const plate = params.get('plate') || '';
+
+        resultEl.textContent = 'Salvataggio subscription sul server...';
+        const saveRes = await fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ code, plate, subscription: sub.toJSON() })
+        });
+
+        let saveData = {};
+        try { saveData = await saveRes.json(); } catch(e) {}
+
+        if (!saveRes.ok || !saveData.success) {
+          resultEl.textContent = (saveData && saveData.error) ? saveData.error : `Errore registrazione notifiche (${saveRes.status})`;
+          alert(resultEl.textContent);
+          return false;
+        }
+
+        resultEl.textContent = 'Subscription salvata correttamente.';
+        return true;
+      } catch (err) {
+        resultEl.textContent = 'Errore notifiche: ' + (err && err.message ? err.message : err);
+        alert(resultEl.textContent);
+        return false;
+      }
+    }
+
+    async function unregisterPushSubscription(){
+      const resultEl = document.getElementById('installActionResult');
+      try {
+        if (!('serviceWorker' in navigator)) {
+          resultEl.textContent = 'Service worker non supportato.';
+          return false;
+        }
+
+        const reg = await navigator.serviceWorker.getRegistration('/service-worker.js') || await navigator.serviceWorker.ready;
+        if (!reg || !reg.pushManager) {
+          resultEl.textContent = 'Push manager non disponibile.';
+          return false;
+        }
+
+        const sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+          resultEl.textContent = 'Nessuna subscription attiva da disattivare.';
+          return true;
+        }
+
+        try {
+          await fetch('/api/push/unsubscribe', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ endpoint: sub.endpoint })
+          });
+        } catch (e) {}
+
+        await sub.unsubscribe();
+        resultEl.textContent = 'Notifiche push disattivate su questo dispositivo.';
+        return true;
+      } catch (err) {
+        resultEl.textContent = 'Errore disattivazione notifiche: ' + (err && err.message ? err.message : err);
+        return false;
+      }
+    }
+
+    async function tryEnableNotifications(){
+      const resultEl = document.getElementById('installActionResult');
+
+      if (!('Notification' in window)) {
+        resultEl.textContent = 'Questo browser non supporta l’attivazione diretta delle notifiche.';
+        updateInstallUI();
+        return;
+      }
+
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          const ok = await registerPushSubscription();
+          resultEl.textContent = ok
+            ? 'Notifiche attivate correttamente.'
+            : 'Permesso concesso, ma registrazione notifiche non completata.';
+        } else if (permission === 'denied') {
+          resultEl.textContent = 'Permesso notifiche negato. Puoi riattivarlo dalle impostazioni del dispositivo o del browser.';
+        } else {
+          resultEl.textContent = 'Richiesta notifiche non completata.';
+        }
+      } catch (e) {
+        resultEl.textContent = 'Impossibile attivare le notifiche in questo momento.';
+      }
+      updateInstallUI();
+    }
+
+    const refreshOwnerAppBtn = document.getElementById('refreshOwnerAppBtn');
+    if (refreshOwnerAppBtn) {
+      refreshOwnerAppBtn.addEventListener('click', async () => {
+        const resultEl = document.getElementById('installActionResult');
+        resultEl.textContent = 'Aggiornamento in corso...';
+        try {
+          if ('serviceWorker' in navigator) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            for (const reg of regs) {
+              try { await reg.update(); } catch (e) {}
+            }
+          }
+          setTimeout(() => window.location.reload(), 250);
+        } catch (e) {
+          resultEl.textContent = 'Impossibile aggiornare in questo momento.';
+        }
+      });
+    }
+
+    document.getElementById('primaryInstallNotifyBtn').addEventListener('click', tryInstallFlow);
+    document.getElementById('secondaryInstallActionBtn').addEventListener('click', () => {
+      const explain = document.getElementById('installExplainBox');
+      explain.style.display = explain.style.display === 'none' ? 'block' : 'none';
+    });
+
+    updateInstallUI();
+
+    loadOwnerMessages();
+    setInterval(loadOwnerMessages, 15000);
+
+    loadSimpleDashboard();
+
+
+
+  </script>
+
+  <div id="messageDetailModal" onclick="if(event.target.id==='messageDetailModal'){this.style.display='none'}" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(3,8,20,.72);backdrop-filter:blur(6px);padding:20px;align-items:center;justify-content:center;">
+    <div style="width:min(760px,100%);max-height:85vh;overflow:auto;border-radius:24px;background:linear-gradient(180deg,#0b1730 0%, #091224 100%);border:1px solid rgba(255,255,255,.08);box-shadow:0 20px 60px rgba(0,0,0,.45);padding:22px;">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
+        <div>
+          <div id="msgDetailReason" style="font-size:1.15rem;font-weight:900;color:#fff;"></div>
+          <div id="msgDetailDate" style="margin-top:6px;color:rgba(255,255,255,.68);font-size:.95rem;"></div>
+        </div>
+        <button id="msgDetailCloseBtn" type="button" onclick="document.getElementById('messageDetailModal').style.display='none'" style="border:0;border-radius:14px;padding:10px 14px;background:rgba(255,255,255,.08);color:#fff;font-weight:800;cursor:pointer;">Chiudi</button>
+      </div>
+
+      <div style="margin-top:16px;display:grid;gap:12px;">
+        <div id="msgDetailPhoneWrap" style="display:none;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);">
+          <div style="font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.62);">Numero per eventuale richiamo</div>
+          <a id="msgDetailPhone" href="#" style="display:inline-block;margin-top:6px;color:#8ec5ff;font-weight:800;text-decoration:none;"></a>
+        </div>
+
+        <div id="msgDetailMapWrap" style="display:none;padding:14px 15px;border-radius:16px;background:rgba(90,160,255,.08);border:1px solid rgba(90,160,255,.14);">
+          <div style="font-size:.76rem;text-transform:uppercase;letter-spacing:.05em;color:#9fc8ff;font-weight:800;">Posizione segnalata</div>
+          <div style="margin-top:6px;color:rgba(255,255,255,.74);line-height:1.45;font-size:.88rem;">La posizione condivisa dal segnalante è disponibile per una verifica rapida.</div>
+          <div id="msgDetailMapPreviewWrap" style="display:none;margin-top:10px;padding:12px 13px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);">
+            <div style="font-size:.74rem;text-transform:uppercase;letter-spacing:.05em;color:#9fc8ff;font-weight:800;">Coordinate segnalate</div>
+            <div id="msgDetailMapCoords" style="margin-top:8px;color:#fff;font-weight:800;font-size:.96rem;word-break:break-all;">-</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+              <a id="msgDetailMap" href="#" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 12px;border-radius:10px;background:#5aa0ff;color:#fff;font-weight:800;text-decoration:none;font-size:.84rem;">Apri mappa</a>
+              <button id="msgDetailCopyCoords" type="button" style="display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 12px;border-radius:10px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.05);color:#fff;font-weight:800;font-size:.84rem;cursor:pointer;">Copia coordinate</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding:16px 18px;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);">
+          <div style="font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.62);">Messaggio</div>
+          <div id="msgDetailText" style="margin-top:8px;color:#fff;line-height:1.7;white-space:pre-wrap;font-size:1.08rem;word-break:break-word;"></div>
+        </div>
+
+<div id="msgDetailAbuseWrap" style="padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);display:grid;gap:10px;">
+          <div style="font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.62);">Protezione abuso</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button id="msgBlockIpBtn" type="button" class="btn btn-secondary" style="display:none;">Blocca IP</button>
+          </div>
+          <div id="msgDetailAbuseResult" class="muted"></div>
+        </div>
+
+        
+      </div>
+    </div>
+  </div>
+
+
+
+
+
+
+<style id="owner-fix-refresh-status">
+.owner-top-refresh-bar{
+  width:100%;
+  display:flex;
+  justify-content:flex-end;
+  align-items:flex-start;
+  margin:22px 0 18px 0;
+  padding:0 22px;
+  box-sizing:border-box;
+}
+.owner-top-refresh-bar .top-refresh-btn{
+  display:inline-flex !important;
+  margin:0 !important;
+}
+
+
+</style>
+
+<script id="owner-fix-refresh-status-script">
+document.addEventListener('DOMContentLoaded', function () {
+  const nodes = Array.from(document.querySelectorAll('button, a, div, span, p, strong'));
+
+  nodes.forEach(el => {
+    const raw = (el.innerHTML || '').trim();
+    const txt = (el.textContent || '').replace(/\s+/g,' ').trim();
+
+    if (
+      raw.includes('&lt;span class="installed-notify-status"&gt;APP INSTALLATA + NOTIFICHE ATTIVE&lt;/span&gt;') ||
+      txt === '<span class="installed-notify-status">APP INSTALLATA + NOTIFICHE ATTIVE</span>'
+    ) {
+      el.textContent = 'APP INSTALLATA + NOTIFICHE ATTIVE';
+    }
+  });
+
+  const refreshEl = Array.from(document.querySelectorAll('button, a, div, span'))
+    .find(el => (el.textContent || '').replace(/\s+/g,' ').trim() === 'Refresh');
+
+  const statusEl = Array.from(document.querySelectorAll('button, a, div, span, p, strong'))
+    .find(el => (el.textContent || '').replace(/\s+/g,' ').trim() === 'APP INSTALLATA + NOTIFICHE ATTIVE');
+
+  const disableEl = Array.from(document.querySelectorAll('button, a, div, span, p, strong'))
+    .find(el => (el.textContent || '').replace(/\s+/g,' ').trim() === 'Disattiva notifiche');
+
+  if (statusEl) {
+    statusEl.classList.add('owner-status-left');
+    const parent = statusEl.parentElement;
+    if (parent) {
+      parent.classList.add('owner-status-stack');
+    }
+  }
+
+  if (disableEl) {
+    const parent = disableEl.parentElement;
+    if (parent) {
+      parent.classList.add('owner-status-stack');
+    }
+  }
+
+  if (refreshEl) {
+    let anchor = null;
+
+    if (statusEl && statusEl.closest('div')) {
+      anchor = statusEl.closest('div');
+      while (anchor.parentElement && anchor.parentElement.tagName === 'DIV') {
+        const up = anchor.parentElement;
+        if (up.children.length > 1) { anchor = up; break; }
+        anchor = up;
+      }
+    } else if (disableEl && disableEl.closest('div')) {
+      anchor = disableEl.closest('div');
+    } else {
+      anchor = document.body;
+    }
+
+    let bar = document.getElementById('owner-top-refresh-bar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'owner-top-refresh-bar';
+      bar.className = 'owner-top-refresh-bar';
+    }
+
+    refreshEl.classList.add('top-refresh-btn');
+
+    if (!bar.contains(refreshEl)) {
+      bar.appendChild(refreshEl);
+    }
+
+    if (anchor && anchor.parentNode) {
+      anchor.parentNode.insertBefore(bar, anchor);
+    } else {
+      document.body.insertBefore(bar, document.body.firstChild);
+    }
+  }
+});
+</script>
+
+
+
+
+<script id="install-status-center-fix">
+document.addEventListener('DOMContentLoaded', function () {
+  const badge = document.getElementById('installStatusBadge');
+  const row = document.getElementById('installStatusRow');
+  if (!badge || !row) return;
+
+  function syncInstallBadgeLayout() {
+    const t = (badge.textContent || '').replace(/\s+/g, ' ').trim();
+
+    if (t === 'APP INSTALLATA + NOTIFICHE ATTIVE') {
+      row.style.display = 'flex';
+      row.style.flexDirection = 'column';
+      row.style.justifyContent = 'center';
+      row.style.alignItems = 'center';
+      row.style.textAlign = 'center';
+
+      badge.style.display = 'inline-flex';
+      badge.style.alignSelf = 'center';
+      badge.style.margin = '8px auto 0 auto';
+      badge.style.textAlign = 'center';
+      badge.style.width = 'fit-content';
+      badge.style.maxWidth = 'calc(100% - 20px)';
+    } else {
+      row.style.display = 'flex';
+      row.style.flexDirection = 'row';
+      row.style.justifyContent = 'space-between';
+      row.style.alignItems = 'center';
+      row.style.textAlign = '';
+
+      badge.style.display = 'inline-flex';
+      badge.style.alignSelf = '';
+      badge.style.margin = '';
+      badge.style.textAlign = 'center';
+      badge.style.width = '';
+      badge.style.maxWidth = '';
+    }
+  }
+
+  syncInstallBadgeLayout();
+  new MutationObserver(syncInstallBadgeLayout).observe(badge, {
+    childList: true,
+    subtree: true,
+    characterData: true
+  });
+});
+</script>
+
+</body>
+</html>
