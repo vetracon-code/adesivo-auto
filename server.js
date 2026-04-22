@@ -5,6 +5,7 @@ const express = require('express');
 const Stripe = require('stripe');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const webpush = require('web-push');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
@@ -405,6 +406,35 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
   } catch (err) {
     console.error('Stripe webhook processing error:', err);
     return res.status(500).send('Webhook processing failed.');
+  }
+});
+
+
+app.get('/owner-app.html', async (req, res) => {
+  try {
+    const code = String(req.query.code || '').trim().toUpperCase();
+    const plate = String(req.query.plate || '').trim().toUpperCase();
+    const fallbackTitle = 'Contatto Veicolo';
+    const appTitle = plate || fallbackTitle;
+
+    const filePath = path.join(__dirname, 'public', 'owner-simple.html');
+    let html = fs.readFileSync(filePath, 'utf-8');
+
+    html = html.replace(
+      '<meta name="apple-mobile-web-app-title" content="Contatto Veicolo">',
+      `<meta name="apple-mobile-web-app-title" content="${appTitle}">`
+    );
+
+    html = html.replace(
+      '<title>Contatto Veicolo</title>',
+      `<title>${appTitle}</title>`
+    );
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(html);
+  } catch (err) {
+    console.error('owner-app dynamic route error:', err);
+    return res.status(500).send('Errore apertura owner app.');
   }
 });
 
