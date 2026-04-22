@@ -713,6 +713,60 @@
 
 
 
+
+    .system-check{
+      margin:18px 22px 20px;
+      padding:18px 18px 16px;
+      border-radius:22px;
+      background:linear-gradient(180deg, rgba(255,255,255,.88) 0%, rgba(246,250,255,.94) 100%);
+      border:1px solid rgba(63,121,216,.14);
+      box-shadow:0 12px 28px rgba(63,121,216,.08);
+    }
+    .system-check-kicker{
+      font-size:.74rem;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      font-weight:900;
+      color:#3f79d8;
+      margin-bottom:8px;
+    }
+    .system-check-title{
+      font-size:1.04rem;
+      font-weight:900;
+      color:#223046;
+      margin:0 0 8px;
+      line-height:1.25;
+    }
+    .system-check-copy{
+      color:#445266;
+      font-size:.95rem;
+      line-height:1.58;
+      margin:0;
+    }
+    .system-check-copy strong{
+      color:#1f2f46;
+    }
+    .system-check-steps{
+      margin:12px 0 0;
+      padding-left:18px;
+      color:#445266;
+      font-size:.93rem;
+      line-height:1.55;
+    }
+    .system-check-steps li{ margin:0 0 6px; }
+    .system-check-actions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:14px;
+    }
+    .system-check-note{
+      margin-top:12px;
+      font-size:.88rem;
+      line-height:1.5;
+      color:#66758b;
+    }
+
 </style>
 
   <link rel="icon" type="image/x-icon" href="/icons/favicon.ico">
@@ -787,7 +841,7 @@
         </div>
         <div class="actions">
           <button id="printStickerBtn" class="btn btn-primary" type="button">Stampa adesivo</button>
-          <button id="previewStickerBtn" class="btn btn-secondary" type="button" style="background:#4f8df0;color:#fff;border-color:#4f8df0;">Anteprima</button>
+          <button id="previewStickerBtn" class="btn btn-secondary" type="button" style="background:#4f8df0;color:#fff;border-color:#4f8df0;">Prova segnalazione</button>
           <a id="renewBtn" class="btn btn-primary" href="#">Attiva ora</a>
           <button id="forgetAccessBtn" class="btn btn-secondary" type="button" style="display:none !important; pointer-events:none !important;">Esci da questo dispositivo</button>
         </div>
@@ -874,7 +928,20 @@
       </div>
 
 
-      <div class="lower">
+      
+    <div id="systemCheckBox" class="system-check">
+      <div class="system-check-kicker">Verifica il tuo sistema</div>
+      <div id="systemCheckTitle" class="system-check-title">Verifica in corso...</div>
+      <p id="systemCheckCopy" class="system-check-copy">Stiamo controllando stato App, browser e notifiche.</p>
+      <ol id="systemCheckSteps" class="system-check-steps" style="display:none;"></ol>
+      <div class="system-check-actions">
+        <button id="systemCheckPrimaryBtn" class="btn btn-primary" type="button" style="min-height:44px;">Prova segnalazione</button>
+      </div>
+      <div id="systemCheckNote" class="system-check-note"></div>
+    </div>
+
+
+    <div class="lower">
         <div class="area-card">
           <h2 class="section-title">Aree di provenienza</h2>
           <div class="italy-map-wrap">
@@ -1341,6 +1408,12 @@
 
       qs('renewBtn').href = buildRenewUrl(d.public_id);
 
+      const pushActiveInitial =
+        typeof Notification !== 'undefined' &&
+        Notification.permission === 'granted';
+
+      updateSystemCheck(pushActiveInitial);
+
       const printStickerBtn = qs('printStickerBtn');
       const previewStickerBtn = qs('previewStickerBtn');
       const previewTryQrBtn = qs('previewTryQrBtn');
@@ -1362,7 +1435,18 @@
       }
 
       if (previewStickerBtn) {
-        previewStickerBtn.onclick = () => openStickerPreview();
+        previewStickerBtn.onclick = () => {
+          if (!publicQrUrl || publicQrUrl === '#') return;
+          window.open(publicQrUrl, '_blank', 'noopener');
+        };
+      }
+
+      const systemCheckPrimaryBtn = qs('systemCheckPrimaryBtn');
+      if (systemCheckPrimaryBtn) {
+        systemCheckPrimaryBtn.onclick = () => {
+          if (!publicQrUrl || publicQrUrl === '#') return;
+          window.open(publicQrUrl, '_blank', 'noopener');
+        };
       }
 
       if (closeStickerPreviewBtn) {
@@ -1605,6 +1689,139 @@
 
     function buildPublicQrUrl(publicId){
       return publicId ? `/contact/u/${encodeURIComponent(publicId)}?from_owner_preview=1` : '#';
+    }
+
+    function isStandaloneMode(){
+      return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    }
+
+    function detectDeviceInfo(){
+      const ua = navigator.userAgent || '';
+      const isIPhone = /iPhone/i.test(ua);
+      const isIPad = /iPad/i.test(ua) || (/Macintosh/i.test(ua) && 'ontouchend' in document);
+      const isIOS = isIPhone || isIPad;
+      const isAndroid = /Android/i.test(ua);
+      const isWindows = /Windows/i.test(ua);
+      const isMac = !isIOS && /Macintosh|Mac OS X/i.test(ua);
+
+      let platform = 'other';
+      let recommendedBrowser = 'browser consigliato';
+
+      if (isIOS) {
+        platform = 'ios';
+        recommendedBrowser = 'Safari';
+      } else if (isAndroid) {
+        platform = 'android';
+        recommendedBrowser = 'Chrome';
+      } else if (isWindows) {
+        platform = 'windows';
+        recommendedBrowser = 'Edge';
+      } else if (isMac) {
+        platform = 'mac';
+        recommendedBrowser = 'Safari';
+      }
+
+      return { platform, recommendedBrowser };
+    }
+
+    function getInstallSteps(device){
+      if (device.platform === 'ios') {
+        return [
+          'Apri questa pagina in Safari.',
+          'Tocca Condividi.',
+          'Cerca Aggiungi alla schermata Home.',
+          'Se non la vedi subito, scorri verso il basso oppure usa Altro / Modifica per mostrarla.',
+          'Dopo il salvataggio apri la Web App e attiva le notifiche.'
+        ];
+      }
+      if (device.platform === 'android') {
+        return [
+          'Apri questa pagina in Chrome.',
+          'Apri il menu del browser.',
+          'Scegli Aggiungi alla schermata Home oppure Installa app.',
+          'Apri la Web App salvata e attiva le notifiche.'
+        ];
+      }
+      if (device.platform === 'windows') {
+        return [
+          'Apri questa pagina in Edge.',
+          'Usa il menu del browser per installarla come app.',
+          'Apri la Web App installata e attiva le notifiche.'
+        ];
+      }
+      if (device.platform === 'mac') {
+        return [
+          'Apri questa pagina in Safari.',
+          'Aggiungila come app/web app dal browser.',
+          'Apri la Web App installata e attiva le notifiche.'
+        ];
+      }
+      return [
+        'Apri questa pagina nel browser consigliato per il tuo dispositivo.',
+        'Salva o installa la Web App.',
+        'Attiva le notifiche prima di fare una prova.'
+      ];
+    }
+
+    function renderSystemCheckState(opts){
+      const titleEl = qs('systemCheckTitle');
+      const copyEl = qs('systemCheckCopy');
+      const stepsEl = qs('systemCheckSteps');
+      const noteEl = qs('systemCheckNote');
+      const primaryBtn = qs('systemCheckPrimaryBtn');
+
+      if (!titleEl || !copyEl || !stepsEl || !noteEl || !primaryBtn) return;
+
+      titleEl.textContent = opts.title || 'Verifica consigliata';
+      copyEl.innerHTML = opts.copy || '';
+      noteEl.textContent = opts.note || '';
+
+      if (Array.isArray(opts.steps) && opts.steps.length) {
+        stepsEl.style.display = 'block';
+        stepsEl.innerHTML = opts.steps.map(x => `<li>${x}</li>`).join('');
+      } else {
+        stepsEl.style.display = 'none';
+        stepsEl.innerHTML = '';
+      }
+
+      primaryBtn.textContent = opts.buttonLabel || 'Prova segnalazione';
+    }
+
+    function updateSystemCheck(pushActive){
+      const device = detectDeviceInfo();
+      const standalone = isStandaloneMode();
+
+      if (!standalone) {
+        renderSystemCheckState({
+          title: 'Stai usando il browser',
+          copy: device.platform === 'ios'
+            ? 'Per installare correttamente la tua Web App, apri questa pagina in <strong>Safari</strong>. Tocca <strong>Condividi</strong>, poi cerca <strong>Aggiungi alla schermata Home</strong>. Se non la trovi subito, scorri il menu verso il basso oppure usa <strong>Altro / Modifica</strong> per mostrarla. Dopo il salvataggio potrai attivare le notifiche e ricevere gli avvisi dei passanti.'
+            : `Per installare correttamente la tua Web App, usa <strong>${device.recommendedBrowser}</strong>. Dopo il salvataggio potrai attivare le notifiche e ricevere gli avvisi dei passanti.`,
+          steps: getInstallSteps(device),
+          note: 'Dopo l’installazione apri la Web App salvata e poi fai una prova reale della segnalazione.',
+          buttonLabel: 'Prova segnalazione'
+        });
+        return;
+      }
+
+      if (!pushActive) {
+        renderSystemCheckState({
+          title: 'Ti manca solo un passaggio',
+          copy: 'Attiva le notifiche per ricevere subito gli avvisi inviati dai passanti. Senza notifiche, le segnalazioni non ti arriveranno in tempo reale.',
+          steps: [],
+          note: 'Appena le notifiche saranno attive, ti consigliamo di provare anche la posizione condivisa.',
+          buttonLabel: 'Prova segnalazione'
+        });
+        return;
+      }
+
+      renderSystemCheckState({
+        title: 'Sistema pronto',
+        copy: 'Ora puoi fare una prova reale della segnalazione e verificare come ti arriverà l’avviso.',
+        steps: [],
+        note: 'Per una prova completa, ti consigliamo di testare anche la posizione condivisa.',
+        buttonLabel: 'Prova segnalazione'
+      });
     }
 
     function openStickerPreview(){
