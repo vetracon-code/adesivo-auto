@@ -412,7 +412,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
 
 
 
-app.get('/owner-install/:plate/:code?', async (req, res) => {
+app.get('/owner-install/:plate/:code', async (req, res) => {
   try {
     const code = String(req.params.code || '').trim().toUpperCase();
     const plate = String(req.params.plate || '').trim().toUpperCase();
