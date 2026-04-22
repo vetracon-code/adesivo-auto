@@ -1813,6 +1813,90 @@ app.post('/api/owner/list-blocked-attempts', async (req, res) => {
   }
 });
 
+app.post('/api/owner/delete-blocked-attempt', async (req, res) => {
+  try {
+    const { code, plate, id } = req.body || {};
+    if (!code || !plate || !id) {
+      return res.status(400).json({ success: false, error: 'Dati mancanti.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+    const cleanPlate = String(plate).trim().toUpperCase().replace(/\s+/g, '');
+
+    const owner = await pool.query(
+      `SELECT code
+       FROM sticker_codes
+       WHERE code = $1 AND plate = $2
+       LIMIT 1`,
+      [cleanCode, cleanPlate]
+    );
+
+    if (!owner.rows.length) {
+      return res.status(404).json({ success: false, error: 'Record proprietario non trovato.' });
+    }
+
+    const result = await pool.query(
+      `DELETE FROM blocked_attempt_logs
+       WHERE id = $1
+         AND COALESCE(code,'') = COALESCE($2,'')
+         AND COALESCE(plate,'') = COALESCE($3,'')
+       RETURNING id`,
+      [id, cleanCode, cleanPlate]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, error: 'Tentativo bloccato non trovato.' });
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore eliminazione tentativo bloccato.' });
+  }
+});
+
+app.post('/api/owner/delete-blocked-attempts-many', async (req, res) => {
+  try {
+    const { code, plate, ids } = req.body || {};
+    if (!code || !plate || !Array.isArray(ids) || !ids.length) {
+      return res.status(400).json({ success: false, error: 'Dati mancanti.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+    const cleanPlate = String(plate).trim().toUpperCase().replace(/\s+/g, '');
+
+    const owner = await pool.query(
+      `SELECT code
+       FROM sticker_codes
+       WHERE code = $1 AND plate = $2
+       LIMIT 1`,
+      [cleanCode, cleanPlate]
+    );
+
+    if (!owner.rows.length) {
+      return res.status(404).json({ success: false, error: 'Record proprietario non trovato.' });
+    }
+
+    const cleanIds = ids.map(x => Number(x)).filter(Boolean);
+    if (!cleanIds.length) {
+      return res.status(400).json({ success: false, error: 'Nessun ID valido selezionato.' });
+    }
+
+    await pool.query(
+      `DELETE FROM blocked_attempt_logs
+       WHERE id = ANY($1::bigint[])
+         AND COALESCE(code,'') = COALESCE($2,'')
+         AND COALESCE(plate,'') = COALESCE($3,'')`,
+      [cleanIds, cleanCode, cleanPlate]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore eliminazione tentativi bloccati.' });
+  }
+});
+
 app.post('/api/admin/block-abuse', requireAdmin, async (req, res) => {
   try {
     const { code, plate, block_type, block_value, reason } = req.body || {};
