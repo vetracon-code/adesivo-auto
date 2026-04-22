@@ -1459,10 +1459,12 @@ app.post('/api/log-contact-message', async (req, res) => {
           [String(code).trim().toUpperCase()]
         );
 
-        const title = 'Nuova segnalazione ricevuta';
-        const body = plate
-          ? `Controlla il nuovo messaggio per ${plate}`
-          : 'Apri la Web App per leggere il nuovo messaggio.';
+        const cleanPlateForPush = String(plate || '').trim();
+        const cleanReasonForPush = String(reason || 'Segnalazione').trim();
+        const title = cleanPlateForPush
+          ? `${cleanReasonForPush} · ${cleanPlateForPush}`
+          : cleanReasonForPush;
+        const body = 'Segnalazione inviata da un utente. Tocca per leggere il messaggio.';
 
         const targetUrl = `/owner-simple.html?code=${encodeURIComponent(String(code).trim().toUpperCase())}&plate=${encodeURIComponent(String(plate || '').trim())}&focus=messages${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}`;
 
