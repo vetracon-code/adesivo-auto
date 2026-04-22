@@ -31,6 +31,42 @@ if (vapidPublicKey && vapidPrivateKey) {
 
 const ADMIN_COOKIE_NAME = 'admin_session';
 
+async function logBlockedAttempt(data = {}) {
+  try {
+    await pool.query(
+      `INSERT INTO blocked_attempt_logs (
+        code, plate, public_flow, block_id, matched_block_type, matched_block_value, matched_reason,
+        ip_address, ip_city, ip_region, ip_country, sender_phone,
+        reason, message_text, location_shared, latitude, longitude, maps_url, user_agent, created_at
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NOW())`,
+      [
+        data.code || null,
+        data.plate || null,
+        data.public_flow || null,
+        data.block_id || null,
+        data.matched_block_type || null,
+        data.matched_block_value || null,
+        data.matched_reason || null,
+        data.ip_address || null,
+        data.ip_city || null,
+        data.ip_region || null,
+        data.ip_country || null,
+        data.sender_phone || null,
+        data.reason || null,
+        data.message_text || null,
+        !!data.location_shared,
+        data.latitude || null,
+        data.longitude || null,
+        data.maps_url || null,
+        data.user_agent || null
+      ]
+    );
+  } catch (err) {
+    console.error('blocked attempt log error:', err);
+  }
+}
+
 function getAdminUser() {
   return process.env.ADMIN_USER || process.env.ADMIN_USERNAME || process.env.ADMIN_EMAIL || '';
 }
@@ -1270,10 +1306,30 @@ app.post('/api/log-contact-view', async (req, res) => {
     );
 
     if (blocked.rows.length) {
+      const block = blocked.rows[0];
+
+      await logBlockedAttempt({
+        code: cleanCode,
+        plate: cleanPlate,
+        public_flow: 'log-contact-view',
+        block_id: block.id || null,
+        matched_block_type: block.block_type || null,
+        matched_block_value: block.block_value || null,
+        matched_reason: block.reason || null,
+        ip_address: ip || null,
+        ip_city: area.city || null,
+        ip_region: area.region || null,
+        ip_country: area.country || null,
+        user_agent: userAgent || null,
+        reason: 'QR Visualizzato',
+        message_text: `Data e ora: ${new Date().toLocaleString('it-IT')}`,
+        location_shared: false
+      });
+
       return res.status(429).json({
         success: false,
         blocked: true,
-        error: 'Questo accesso è stato bloccato per uso improprio del servizio. I dati tecnici dell’evento sono stati registrati e potranno essere segnalati alle autorità competenti.'
+        error: 'Impossibile completare l’invio. Riprova più tardi.'
       });
     }
 
@@ -1417,10 +1473,34 @@ app.post('/api/log-contact-message', async (req, res) => {
     );
 
     if (blocked.rows.length) {
+      const block = blocked.rows[0];
+
+      await logBlockedAttempt({
+        code: cleanCode,
+        plate: cleanPlate,
+        public_flow: 'log-contact-message',
+        block_id: block.id || null,
+        matched_block_type: block.block_type || null,
+        matched_block_value: block.block_value || null,
+        matched_reason: block.reason || null,
+        ip_address: ip || null,
+        ip_city: area.city || null,
+        ip_region: area.region || null,
+        ip_country: area.country || null,
+        sender_phone: cleanPhone || null,
+        user_agent: userAgent || null,
+        reason: reason || null,
+        message_text: message_text || null,
+        location_shared: !!location_shared,
+        latitude: latitude || null,
+        longitude: longitude || null,
+        maps_url: maps_url || null
+      });
+
       return res.status(429).json({
         success: false,
         blocked: true,
-        error: 'Questo accesso è stato bloccato per uso improprio del servizio. I dati tecnici dell’evento sono stati registrati e potranno essere segnalati alle autorità competenti.'
+        error: 'Impossibile completare l’invio. Riprova più tardi.'
       });
     }
 
@@ -1689,6 +1769,47 @@ app.post('/api/owner/list-abuse-blocks', async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ success: false, error: 'Errore elenco blocchi proprietario.' });
+  }
+});
+
+app.post('/api/owner/list-blocked-attempts', async (req, res) => {
+  try {
+    const { code, plate } = req.body || {};
+    if (!code || !plate) {
+      return res.status(400).json({ success: false, error: 'Code o plate mancanti.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+    const cleanPlate = String(plate).trim().toUpperCase().replace(/\s+/g, '');
+
+    const owner = await pool.query(
+      `SELECT code
+       FROM sticker_codes
+       WHERE code = $1 AND plate = $2
+       LIMIT 1`,
+      [cleanCode, cleanPlate]
+    );
+
+    if (!owner.rows.length) {
+      return res.status(404).json({ success: false, error: 'Record proprietario non trovato.' });
+    }
+
+    const rows = await pool.query(
+      `SELECT id, code, plate, public_flow, block_id, matched_block_type, matched_block_value, matched_reason,
+              ip_address, ip_city, ip_region, ip_country, sender_phone,
+              reason, message_text, location_shared, latitude, longitude, maps_url, user_agent, created_at
+       FROM blocked_attempt_logs
+       WHERE COALESCE(code,'') = COALESCE($1,'')
+         AND COALESCE(plate,'') = COALESCE($2,'')
+       ORDER BY created_at DESC, id DESC
+       LIMIT 300`,
+      [cleanCode, cleanPlate]
+    );
+
+    return res.json({ success: true, items: rows.rows });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Errore elenco tentativi bloccati.' });
   }
 });
 
@@ -4123,6 +4244,39 @@ async function initDb() {
     console.log('Tabella sticker_codes pronta');
     console.log('Tabella qr_scans pronta');
     console.log('Tabella abuse_blocks pronta');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS blocked_attempt_logs (
+        id BIGSERIAL PRIMARY KEY,
+        code TEXT,
+        plate TEXT,
+        public_flow TEXT,
+        block_id BIGINT,
+        matched_block_type TEXT,
+        matched_block_value TEXT,
+        matched_reason TEXT,
+        ip_address TEXT,
+        ip_city TEXT,
+        ip_region TEXT,
+        ip_country TEXT,
+        sender_phone TEXT,
+        reason TEXT,
+        message_text TEXT,
+        location_shared BOOLEAN DEFAULT FALSE,
+        latitude DOUBLE PRECISION,
+        longitude DOUBLE PRECISION,
+        maps_url TEXT,
+        user_agent TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_blocked_attempt_logs_code_plate_created
+      ON blocked_attempt_logs (code, plate, created_at DESC)
+    `);
+
+    console.log('Tabella blocked_attempt_logs pronta');
     console.log('Tabella push_delivery_logs pronta');
     await pool.query(`
       ALTER TABLE sticker_codes
