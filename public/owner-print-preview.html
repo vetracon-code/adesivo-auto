@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Anteprima stampa adesivo</title>
+  <style>
+    :root{
+      --bg:#eef3fb;
+      --card:#ffffff;
+      --text:#101828;
+      --muted:#667085;
+      --line:#e7ecf3;
+      --blue:#0a84ff;
+      --blue-dark:#0066d6;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;min-height:100%}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      background:linear-gradient(180deg,#edf4ff 0%, #f7f9fc 100%);
+      color:var(--text);
+    }
+    .wrap{
+      max-width:1100px;
+      margin:0 auto;
+      padding:16px 14px 24px;
+    }
+    .panel{
+      background:var(--card);
+      border:1px solid rgba(255,255,255,.92);
+      border-radius:26px;
+      box-shadow:0 16px 40px rgba(16,24,40,.08);
+      overflow:hidden;
+    }
+    .topbar{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:center;
+      padding:14px;
+      border-bottom:1px solid var(--line);
+      background:linear-gradient(180deg,#ffffff 0%, #f9fbff 100%);
+      flex-wrap:wrap;
+    }
+    .title{
+      font-size:1rem;
+      font-weight:900;
+      color:#1d2939;
+    }
+    .sub{
+      font-size:.9rem;
+      color:var(--muted);
+      line-height:1.45;
+    }
+    .actions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .btn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:44px;
+      padding:0 16px;
+      border-radius:14px;
+      border:1px solid var(--line);
+      background:#fff;
+      color:var(--text);
+      font-weight:800;
+      text-decoration:none;
+      cursor:pointer;
+      box-shadow:0 6px 18px rgba(16,24,40,.04);
+    }
+    .btn-primary{
+      background:linear-gradient(135deg,var(--blue) 0%,var(--blue-dark) 100%);
+      color:#fff;
+      border-color:transparent;
+      box-shadow:0 14px 26px rgba(10,132,255,.22);
+    }
+    .viewer-wrap{
+      padding:14px;
+      background:#f6f9ff;
+    }
+    .viewer{
+      width:100%;
+      height:78vh;
+      border:1px solid var(--line);
+      border-radius:18px;
+      background:#fff;
+    }
+    .error{
+      display:none;
+      margin:14px;
+      padding:14px 16px;
+      border-radius:14px;
+      background:#fff4f2;
+      border:1px solid #fecaca;
+      color:#991b1b;
+      font-weight:700;
+    }
+    @media print{
+      .topbar,.wrap>.subprint{display:none !important}
+      .wrap{padding:0;max-width:none}
+      .panel{box-shadow:none;border:0;border-radius:0}
+      .viewer-wrap{padding:0;background:#fff}
+      .viewer{height:100vh;border:0;border-radius:0}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <div class="topbar">
+        <div>
+          <div class="title">Anteprima stampa adesivo</div>
+          <div class="sub">Qui puoi visualizzare il PDF e inviarlo direttamente alla tua stampante.</div>
+        </div>
+        <div class="actions">
+          <button id="closeBtn" class="btn" type="button">Chiudi</button>
+          <button id="printBtn" class="btn btn-primary" type="button">Stampa</button>
+        </div>
+      </div>
+
+      <div id="errorBox" class="error">Impossibile caricare il PDF di stampa.</div>
+
+      <div class="viewer-wrap">
+        <iframe id="pdfFrame" class="viewer" src="about:blank"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const code = String(params.get('code') || '').trim().toUpperCase();
+    const plate = String(params.get('plate') || '').trim().toUpperCase().replace(/\s+/g, '');
+    const returnUrl = `/owner-simple.html?code=${encodeURIComponent(code)}&plate=${encodeURIComponent(plate)}`;
+
+    function buildPdfUrl(){
+      if (!code || !plate) return '';
+      return `/api/owner/sticker-print-pdf?code=${encodeURIComponent(code)}&plate=${encodeURIComponent(plate)}`;
+    }
+
+    function goBackSmart(){
+      if (window.history.length > 1) {
+        window.history.back();
+        return;
+      }
+      window.location.href = returnUrl;
+    }
+
+    const pdfUrl = buildPdfUrl();
+    const frame = document.getElementById('pdfFrame');
+    const errorBox = document.getElementById('errorBox');
+
+    if (!pdfUrl) {
+      errorBox.style.display = 'block';
+    } else {
+      frame.src = pdfUrl;
+    }
+
+    document.getElementById('closeBtn').addEventListener('click', goBackSmart);
+
+    document.getElementById('printBtn').addEventListener('click', () => {
+      try {
+        if (frame.contentWindow) {
+          frame.contentWindow.focus();
+          frame.contentWindow.print();
+          return;
+        }
+      } catch (e) {}
+      window.print();
+    });
+  </script>
+</body>
+</html>
