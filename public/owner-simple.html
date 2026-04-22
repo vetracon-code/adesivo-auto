@@ -1665,6 +1665,7 @@
     let ownerMessages = [];
     let selectedMessageIds = new Set();
     let messagesSelectionMode = false;
+    let autoOpenedMessageId = null;
 
     function escapeHtml(str){
       return String(str || '')
@@ -1962,12 +1963,20 @@
         try {
           const params = new URLSearchParams(window.location.search);
           const messageId = Number(params.get('messageId') || '0');
-          if (messageId) {
+
+          if (messageId && autoOpenedMessageId !== messageId) {
             const target = ownerMessages.find(m => Number(m.id) === messageId);
             if (target) {
+              autoOpenedMessageId = messageId;
+
               setTimeout(() => {
                 window.openMessageDetail(messageId);
               }, 250);
+
+              params.delete('messageId');
+              const newQs = params.toString();
+              const newUrl = `${window.location.pathname}${newQs ? '?' + newQs : ''}`;
+              window.history.replaceState({}, '', newUrl);
             }
           }
         } catch (e) {}
