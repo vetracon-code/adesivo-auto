@@ -1669,11 +1669,11 @@ app.post('/api/owner/block-abuse', async (req, res) => {
       result = await pool.query(
         `UPDATE abuse_blocks
          SET is_active = TRUE,
-             reason = $5,
+             reason = $1,
              updated_at = NOW()
-         WHERE id = $6
+         WHERE id = $2
          RETURNING id, code, plate, block_type, block_value, reason, is_active, updated_at`,
-        [cleanCode, cleanPlate, block_type, cleanValue, cleanReason, existing.rows[0].id]
+        [cleanReason, existing.rows[0].id]
       );
     } else {
       result = await pool.query(
