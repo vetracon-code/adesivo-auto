@@ -1441,8 +1441,40 @@
       }
 
       if (previewStickerBtn) {
-        previewStickerBtn.onclick = () => {
+        previewStickerBtn.onclick = async () => {
           if (!publicQrUrl || publicQrUrl === '#') return;
+
+          const installedNow = isStandaloneMode();
+          const notifNow = currentNotificationState();
+          const currentSubNow = await getCurrentPushSubscription();
+          const hasPushSubscriptionNow = !!currentSubNow;
+
+          const resultEl = document.getElementById('installActionResult');
+          const explain = document.getElementById('installExplainBox');
+          const topSystemBox = document.getElementById('installStatusCard') || document.getElementById('systemCheckCard') || document.getElementById('installSection');
+
+          if (!installedNow) {
+            if (resultEl) {
+              resultEl.textContent = 'Prima salva la Web App e attiva le notifiche. Solo dopo potrai provare correttamente la segnalazione.';
+            }
+            if (explain) explain.style.display = 'block';
+            if (typeof updateInstallUI === 'function') await updateInstallUI();
+            const target = topSystemBox || document.getElementById('installActionResult') || document.body;
+            if (target && target.scrollIntoView) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            return;
+          }
+
+          if (notifNow !== 'granted' || !hasPushSubscriptionNow) {
+            if (resultEl) {
+              resultEl.textContent = 'Per provare la segnalazione devi prima attivare le notifiche. Torna qui appena sono attive.';
+            }
+            if (explain) explain.style.display = 'block';
+            if (typeof updateInstallUI === 'function') await updateInstallUI();
+            const target = topSystemBox || document.getElementById('installActionResult') || document.body;
+            if (target && target.scrollIntoView) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            return;
+          }
+
           window.open(publicQrUrl, '_blank', 'noopener');
         };
       }
