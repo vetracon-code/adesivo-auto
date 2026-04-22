@@ -906,6 +906,38 @@
         </div>
       </div>
 
+      <div id="ownerAbuseBlocksSection" style="padding:0 22px 20px;">
+        <div class="timeline-card" style="padding:22px;border:1px solid rgba(255,179,71,.16);box-shadow:0 0 28px rgba(255,179,71,.05) inset;">
+          <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;">
+            <div>
+              <h2 class="section-title" style="margin-bottom:8px;font-size:.9rem;">Blocchi attivi</h2>
+              <div class="muted" style="line-height:1.45;font-size:.84rem;">Qui trovi gli accessi bloccati. Puoi sbloccarli in qualsiasi momento.</div>
+            </div>
+            <div id="abuseBlocksBadge" class="expiry-badge warn">0 ATTIVI</div>
+          </div>
+
+          <div id="abuseBlocksList" style="display:grid;gap:10px;margin-top:16px;">
+            <div class="muted">Caricamento blocchi...</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="ownerBlockedAttemptsSection" style="padding:0 22px 24px;">
+        <div class="timeline-card" style="padding:22px;border:1px solid rgba(255,255,255,.08);box-shadow:0 0 24px rgba(255,255,255,.03) inset;">
+          <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;">
+            <div>
+              <h2 class="section-title" style="margin-bottom:8px;font-size:.9rem;">Tentativi bloccati</h2>
+              <div class="muted" style="line-height:1.45;font-size:.84rem;">Qui vedi i tentativi fermati dal sistema dopo un blocco attivo.</div>
+            </div>
+            <div id="blockedAttemptsBadge" class="expiry-badge ok">0 EVENTI</div>
+          </div>
+
+          <div id="blockedAttemptsList" style="display:grid;gap:10px;margin-top:16px;">
+            <div class="muted">Caricamento tentativi bloccati...</div>
+          </div>
+        </div>
+      </div>
+
 
       <div class="hero">
         <div class="radar-card">
@@ -1700,6 +1732,8 @@
     let selectedMessageIds = new Set();
     let messagesSelectionMode = false;
     let autoOpenedMessageId = null;
+    let ownerAbuseBlocks = [];
+    let ownerBlockedAttempts = [];
 
     function escapeHtml(str){
       return String(str || '')
@@ -1928,6 +1962,135 @@
 
       document.getElementById('messagesMarkReadBtn').style.display = messagesSelectionMode ? 'inline-flex' : 'none';
       document.getElementById('messagesDeleteBtn').style.display = messagesSelectionMode ? 'inline-flex' : 'none';
+    }
+
+    function renderAbuseBlocks(){
+      const list = document.getElementById('abuseBlocksList');
+      const badge = document.getElementById('abuseBlocksBadge');
+      if (!list || !badge) return;
+
+      const active = ownerAbuseBlocks.filter(x => x.is_active);
+      badge.textContent = `${active.length} ATTIVI`;
+      badge.className = active.length > 0 ? 'expiry-badge warn' : 'expiry-badge ok';
+      if (active.length > 0) {
+        badge.style.background = '#fff4cc';
+        badge.style.border = '1px solid #f2d27a';
+        badge.style.color = '#8a5a00';
+      } else {
+        badge.style.background = '#dcfce7';
+        badge.style.border = '1px solid #86efac';
+        badge.style.color = '#166534';
+      }
+
+      if (!ownerAbuseBlocks.length) {
+        list.innerHTML = '<div class="muted">Nessun blocco registrato fino ad ora.</div>';
+        return;
+      }
+
+      list.innerHTML = ownerAbuseBlocks.map(item => {
+        const isActive = !!item.is_active;
+        const typeLabel = item.block_type === 'ip' ? 'IP' : (item.block_type === 'phone' ? 'Telefono' : 'Valore');
+        return `
+          <div style="border-radius:18px;padding:14px;background:${isActive ? 'rgba(255,244,204,.08)' : 'rgba(255,255,255,.03)'};border:1px solid ${isActive ? 'rgba(242,210,122,.32)' : 'rgba(255,255,255,.06)'};">
+            <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <strong style="font-size:1rem;">${typeLabel}: ${escapeHtml(item.block_value || '-')}</strong>
+                <span class="expiry-badge" style="min-height:30px;padding:0 10px;font-size:.8rem;${isActive ? 'background:#fff4cc;border:1px solid #f2d27a;color:#8a5a00;' : 'background:#dcfce7;border:1px solid #86efac;color:#166534;'}">${isActive ? 'ATTIVO' : 'SBLOCCATO'}</span>
+              </div>
+              <div class="muted" style="font-size:.9rem;">${fmt(item.updated_at || item.created_at)}</div>
+            </div>
+            <div class="muted" style="margin-top:10px;line-height:1.55;font-size:.95rem;">${escapeHtml(item.reason || 'Uso improprio del servizio')}</div>
+            <div class="muted" style="margin-top:8px;font-size:.86rem;">Creato: ${fmt(item.created_at)}</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+              ${isActive ? `<button class="btn btn-secondary" type="button" onclick="ownerUnblockAbuse(${item.id})">Sblocca</button>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderBlockedAttempts(){
+      const list = document.getElementById('blockedAttemptsList');
+      const badge = document.getElementById('blockedAttemptsBadge');
+      if (!list || !badge) return;
+
+      badge.textContent = `${ownerBlockedAttempts.length} EVENTI`;
+      badge.className = ownerBlockedAttempts.length > 0 ? 'expiry-badge warn' : 'expiry-badge ok';
+      if (ownerBlockedAttempts.length > 0) {
+        badge.style.background = '#eef2ff';
+        badge.style.border = '1px solid #c7d2fe';
+        badge.style.color = '#4338ca';
+      } else {
+        badge.style.background = '#dcfce7';
+        badge.style.border = '1px solid #86efac';
+        badge.style.color = '#166534';
+      }
+
+      if (!ownerBlockedAttempts.length) {
+        list.innerHTML = '<div class="muted">Nessun tentativo bloccato registrato fino ad ora.</div>';
+        return;
+      }
+
+      list.innerHTML = ownerBlockedAttempts.map(item => {
+        const place = [item.ip_city, item.ip_region, item.ip_country].filter(Boolean).join(', ') || 'Area non disponibile';
+        const details = [
+          item.reason ? `Motivo: ${item.reason}` : '',
+          item.sender_phone ? `Telefono: ${item.sender_phone}` : '',
+          item.matched_block_type ? `Blocco: ${item.matched_block_type}` : '',
+          item.matched_block_value ? `Valore: ${item.matched_block_value}` : ''
+        ].filter(Boolean).join(' · ');
+
+        return `
+          <div style="border-radius:18px;padding:14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);">
+            <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
+              <strong style="font-size:1rem;">${escapeHtml(item.public_flow === 'log-contact-view' ? 'QR visualizzato bloccato' : 'Segnalazione bloccata')}</strong>
+              <div class="muted" style="font-size:.9rem;">${fmt(item.created_at)}</div>
+            </div>
+            <div class="muted" style="margin-top:10px;line-height:1.55;font-size:.95rem;">${escapeHtml(details || 'Tentativo bloccato registrato.')}</div>
+            <div class="muted" style="margin-top:8px;font-size:.86rem;">Area indicativa: ${escapeHtml(place)}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function loadOwnerAbuseBlocks(){
+      try {
+        const { code, plate } = getOwnerParams();
+        const res = await fetch('/api/owner/list-abuse-blocks', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ code, plate })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          document.getElementById('abuseBlocksList').innerHTML = '<div class="danger">Errore caricamento blocchi.</div>';
+          return;
+        }
+        ownerAbuseBlocks = data.items || [];
+        renderAbuseBlocks();
+      } catch (e) {
+        document.getElementById('abuseBlocksList').innerHTML = '<div class="danger">Errore caricamento blocchi.</div>';
+      }
+    }
+
+    async function loadBlockedAttempts(){
+      try {
+        const { code, plate } = getOwnerParams();
+        const res = await fetch('/api/owner/list-blocked-attempts', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ code, plate })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          document.getElementById('blockedAttemptsList').innerHTML = '<div class="danger">Errore caricamento tentativi bloccati.</div>';
+          return;
+        }
+        ownerBlockedAttempts = data.items || [];
+        renderBlockedAttempts();
+      } catch (e) {
+        document.getElementById('blockedAttemptsList').innerHTML = '<div class="danger">Errore caricamento tentativi bloccati.</div>';
+      }
     }
 
     function renderMessages(){
@@ -2206,10 +2369,11 @@
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        abuseResultEl.textContent = data.error || 'Errore sblocco.';
+        if (abuseResultEl) abuseResultEl.textContent = data.error || 'Errore sblocco.';
         return;
       }
-      abuseResultEl.textContent = 'Blocco disattivato.';
+      if (abuseResultEl) abuseResultEl.textContent = 'Blocco disattivato.';
+      await loadOwnerAbuseBlocks();
     };
 
     document.getElementById('messagesSelectBtn').addEventListener('click', () => {
@@ -2729,7 +2893,11 @@
     updateInstallUI();
 
     loadOwnerMessages();
+    loadOwnerAbuseBlocks();
+    loadBlockedAttempts();
     setInterval(loadOwnerMessages, 15000);
+    setInterval(loadOwnerAbuseBlocks, 30000);
+    setInterval(loadBlockedAttempts, 30000);
 
     (function(){
       try {
