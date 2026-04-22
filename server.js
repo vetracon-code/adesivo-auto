@@ -411,6 +411,142 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
 
 
 
+
+app.get('/owner-install/:plate/:code?', async (req, res) => {
+  try {
+    const code = String(req.params.code || '').trim().toUpperCase();
+    const plate = String(req.params.plate || '').trim().toUpperCase();
+    const fallbackTitle = 'Contatto Veicolo';
+    const appTitle = plate || fallbackTitle;
+    const ownerUrl = `/owner-app.html?code=${encodeURIComponent(code)}&plate=${encodeURIComponent(plate)}`;
+
+    const html = `<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>${appTitle}</title>
+  <style>
+    :root{
+      --bg:#eef3fb;
+      --card:#ffffff;
+      --text:#101828;
+      --muted:#667085;
+      --line:#e7ecf3;
+      --blue:#0a84ff;
+      --blue-dark:#0066d6;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;min-height:100%}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      background:linear-gradient(180deg,#edf4ff 0%, #f7f9fc 100%);
+      color:var(--text);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+    }
+    .card{
+      width:min(680px,100%);
+      background:var(--card);
+      border:1px solid rgba(255,255,255,.92);
+      border-radius:28px;
+      box-shadow:0 16px 40px rgba(16,24,40,.08);
+      padding:24px 20px;
+      text-align:center;
+    }
+    .kicker{
+      font-size:.78rem;
+      font-weight:900;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      color:var(--blue);
+      margin-bottom:8px;
+    }
+    h1{
+      margin:0;
+      font-size:clamp(1.8rem,4vw,2.6rem);
+      line-height:1.03;
+      letter-spacing:-.04em;
+      font-weight:900;
+    }
+    .plate{
+      margin-top:8px;
+      font-size:1.1rem;
+      font-weight:800;
+      color:#31445d;
+    }
+    .copy{
+      margin:14px auto 0;
+      max-width:520px;
+      color:var(--muted);
+      line-height:1.6;
+      font-size:.98rem;
+    }
+    .actions{
+      display:flex;
+      justify-content:center;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:18px;
+    }
+    .btn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:46px;
+      padding:0 18px;
+      border-radius:14px;
+      border:1px solid var(--line);
+      background:#fff;
+      color:var(--text);
+      text-decoration:none;
+      font-weight:800;
+      cursor:pointer;
+      box-shadow:0 6px 18px rgba(16,24,40,.04);
+    }
+    .btn-primary{
+      background:linear-gradient(135deg,var(--blue) 0%,var(--blue-dark) 100%);
+      color:#fff;
+      border-color:transparent;
+      box-shadow:0 14px 26px rgba(10,132,255,.22);
+    }
+    .note{
+      margin-top:14px;
+      color:#66758b;
+      font-size:.88rem;
+      line-height:1.55;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="kicker">Web App personale</div>
+    <h1>Salva la tua App</h1>
+    <div class="plate">${appTitle}</div>
+    <div class="copy">
+      Se desideri salvare questa Web App sul tuo iPhone, usa <strong>Condividi</strong> e poi <strong>Aggiungi alla schermata Home</strong>.
+      Prima di confermare, verifica il nome proposto. Se necessario, sostituiscilo con la targa.
+    </div>
+
+    <div class="actions">
+      <a class="btn btn-primary" href="${ownerUrl}">Apri la tua App</a>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(html);
+  } catch (err) {
+    console.error('owner-install path route error:', err);
+    return res.status(500).send('Errore apertura pagina di installazione.');
+  }
+});
+
+
 app.get('/owner-install.html', async (req, res) => {
   try {
     const code = String(req.query.code || '').trim().toUpperCase();
@@ -425,7 +561,6 @@ app.get('/owner-install.html', async (req, res) => {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="${appTitle}">
   <title>${appTitle}</title>
   <style>
     :root{
@@ -566,11 +701,6 @@ app.get('/owner-app.html', async (req, res) => {
 
     const filePath = path.join(__dirname, 'public', 'owner-simple.html');
     let html = fs.readFileSync(filePath, 'utf-8');
-
-    html = html.replace(
-      '<meta name="apple-mobile-web-app-title" content="Contatto Veicolo">',
-      `<meta name="apple-mobile-web-app-title" content="${appTitle}">`
-    );
 
     html = html.replace(
       '<title>Contatto Veicolo</title>',
