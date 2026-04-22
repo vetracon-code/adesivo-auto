@@ -552,7 +552,7 @@
     }
 
     async function logInternalMessage(finalMessage, locationData = {}) {
-      await fetch('/api/log-contact-message', {
+      const res = await fetch('/api/log-contact-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -570,6 +570,19 @@
           maps_url: locationData.maps_url || null
         })
       });
+
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (e) {
+        data = {};
+      }
+
+      if (!res.ok || !data.success) {
+        throw new Error((data && data.error) ? data.error : 'Impossibile completare l’invio. Riprova più tardi.');
+      }
+
+      return data;
     }
 
     function showSuccessScreen(){
@@ -588,8 +601,12 @@
     async function sendSignal(){
       errorBox.style.display = 'none';
       successBox.style.display = 'none';
+      sendBtn.disabled = true;
+      sendBtn.textContent = 'INVIO IN CORSO...';
 
       if (!selectedReason) {
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'INVIA SEGNALAZIONE';
         errorBox.textContent = 'Seleziona il motivo della segnalazione per poter avvisare il proprietario.';
         errorBox.style.display = 'block';
 
@@ -616,43 +633,54 @@
 
       const baseMessage = buildMessage();
 
-      if (!shareLocationField.checked) {
-        await logInternalMessage(baseMessage);
-        showSuccessScreen();
-        return;
-      }
-
-      if (!navigator.geolocation) {
-        await logInternalMessage(baseMessage);
-        showSuccessScreen();
-        return;
-      }
-
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const lat = position.coords.latitude.toFixed(6);
-          const lng = position.coords.longitude.toFixed(6);
-          const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
-          const extraLocation = `Posizione: ${lat}, ${lng}\nMappa: ${mapsUrl}\n`;
-          const finalMessage = buildMessage(extraLocation);
-
-          await logInternalMessage(finalMessage, {
-            location_shared: true,
-            latitude: lat,
-            longitude: lng,
-            maps_url: mapsUrl
-          });
-
-          showSuccessScreen();
-        },
-        async () => {
+      try {
+        if (!shareLocationField.checked) {
           await logInternalMessage(baseMessage);
           showSuccessScreen();
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      );
-    }
+          return;
+        }
 
+        if (!navigator.geolocation) {
+          await logInternalMessage(baseMessage);
+          showSuccessScreen();
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            try {
+              const lat = position.coords.latitude.toFixed(6);
+              const lng = position.coords.longitude.toFixed(6);
+              const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
+              const extraLocation = `Posizione: ${lat}, ${lng}\nMappa: ${mapsUrl}\n`;
+              const finalMessage = buildMessage(extraLocation);
+
+              await logInternalMessage(finalMessage, {
+                location_shared: true,
+                latitude: lat,
+                longitude: lng,
+                maps_url: mapsUrl
+              });
+
+              showSuccessScreen();
+            } catch (err) {
+              showError(err && err.message ? err.message : 'Impossibile completare l’invio. Riprova più tardi.');
+            }
+          },
+          async () => {
+            try {
+              await logInternalMessage(baseMessage);
+              showSuccessScreen();
+            } catch (err) {
+              showError(err && err.message ? err.message : 'Impossibile completare l’invio. Riprova più tardi.');
+            }
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      } catch (err) {
+        showError(err && err.message ? err.message : 'Impossibile completare l’invio. Riprova più tardi.');
+      }
+    }
     sendBtn.addEventListener('click', sendSignal);
     document.getElementById('closeSuccessScreenBtn').addEventListener('click', closeSuccessScreen);
 
