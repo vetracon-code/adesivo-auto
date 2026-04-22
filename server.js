@@ -1464,7 +1464,7 @@ app.post('/api/log-contact-message', async (req, res) => {
           ? `Controlla il nuovo messaggio per ${plate}`
           : 'Apri la Web App per leggere il nuovo messaggio.';
 
-        const targetUrl = `/owner-simple.html?code=${encodeURIComponent(String(code).trim().toUpperCase())}&plate=${encodeURIComponent(String(plate || '').trim())}${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}`;
+        const targetUrl = `/owner-simple.html?code=${encodeURIComponent(String(code).trim().toUpperCase())}&plate=${encodeURIComponent(String(plate || '').trim())}&focus=messages${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}`;
 
         const unreadRes = await pool.query(
           `SELECT COUNT(*)::int AS unread_count
@@ -1482,7 +1482,13 @@ app.post('/api/log-contact-message', async (req, res) => {
             title,
             body,
             url: targetUrl,
-            unreadCount
+            targetUrl,
+            unreadCount,
+            messageId: insertedMessageId || null,
+            channel: 'user-message-alert',
+            requireInteraction: true,
+            renotify: true,
+            tag: `user-message-${String(code).trim().toUpperCase()}`
           });
 
           const channel = String(sub.endpoint || '').includes('web.push.apple.com')

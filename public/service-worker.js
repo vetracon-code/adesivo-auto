@@ -31,10 +31,18 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'Nuova segnalazione ricevuta';
   const options = {
     body: data.body || 'Apri la Web App per leggere il messaggio.',
-    icon: '/icons/android-chrome-192x192.png',
-    badge: '/icons/android-chrome-192x192.png',
+    icon: data.icon || '/icons/android-chrome-192x192.png',
+    badge: data.badge || '/icons/android-chrome-192x192.png',
+    tag: data.tag || undefined,
+    renotify: !!data.renotify,
+    requireInteraction: !!data.requireInteraction,
     data: {
-      url: data.url || '/owner-login.html'
+      url: data.url || '/owner-login.html',
+      targetUrl: data.targetUrl || data.url || '/owner-login.html',
+      messageId: data.messageId || null,
+      channel: data.channel || null,
+      broadcastNotificationId: data.broadcastNotificationId || null,
+      broadcastRecipientId: data.broadcastRecipientId || null
     }
   };
 
