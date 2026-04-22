@@ -2201,6 +2201,25 @@
       return 'Dispositivo rilevato';
     }
 
+    function detectBrowserInfo(){
+      const ua = navigator.userAgent || '';
+      const isIOS = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && 'ontouchend' in document);
+      const isCriOS = /CriOS/i.test(ua);
+      const isFxiOS = /FxiOS/i.test(ua);
+      const isEdgiOS = /EdgiOS/i.test(ua);
+      const isSafari = isIOS
+        ? /Safari/i.test(ua) && !isCriOS && !isFxiOS && !isEdgiOS
+        : /Safari/i.test(ua) && !/Chrome|Chromium|Edg/i.test(ua);
+
+      return {
+        isIOS,
+        isSafari,
+        isCriOS,
+        isFxiOS,
+        isEdgiOS
+      };
+    }
+
     async function getCurrentPushSubscription(){
       try {
         if (!('serviceWorker' in navigator)) return null;
@@ -2245,6 +2264,7 @@
 
     async function updateInstallUI(){
       const device = detectDeviceType();
+      const browser = detectBrowserInfo();
       const installed = isStandaloneMode();
       const notif = currentNotificationState();
       const currentSub = await getCurrentPushSubscription();
@@ -2267,21 +2287,26 @@
 
       if (!installed) {
         setInstallBadge('STAI USANDO IL BROWSER', 'warn');
-        compact.innerHTML = 'Per installare correttamente la tua Web App, usa il browser consigliato per il tuo dispositivo. Dopo il salvataggio potrai attivare le notifiche e ricevere gli avvisi dei passanti.';
-        primaryBtn.textContent = 'Prova segnalazione';
+        compact.innerHTML = '<strong style="color:#d92d20;">ATTENZIONE:</strong> salva correttamente la Web App e poi attiva le notifiche per ricevere gli avvisi dei passanti.';
+        primaryBtn.textContent = 'Installa Web App';
 
         if (device === 'ios') {
           currentInstallMode = 'ios_install';
-          instructions.innerHTML = 'Per installare correttamente la tua Web App, apri questa pagina in <strong>Safari</strong>. Tocca <strong>Condividi</strong>, poi cerca <strong>Aggiungi alla schermata Home</strong>. Se non la trovi subito, scorri il menu verso il basso oppure usa <strong>Altro / Modifica</strong> per mostrarla. Dopo il salvataggio potrai attivare le notifiche e ricevere gli avvisi dei passanti.';
+
+          if (!browser.isSafari) {
+            instructions.innerHTML = 'Per installare correttamente la tua Web App su <strong>iPhone</strong>, apri questa pagina in <strong>Safari</strong>. Poi tocca <strong>Condividi</strong>, cerca <strong>Aggiungi alla schermata Home</strong> e, se non la trovi subito, scorri verso il basso oppure usa <strong>Altro / Modifica</strong> per mostrarla.';
+          } else {
+            instructions.innerHTML = 'Per installare correttamente la tua Web App, apri questa pagina in <strong>Safari</strong>. Tocca <strong>Condividi</strong>, poi cerca <strong>Aggiungi alla schermata Home</strong>. Se non la trovi subito, scorri il menu verso il basso oppure usa <strong>Altro / Modifica</strong> per mostrarla. Dopo il salvataggio potrai attivare le notifiche e ricevere gli avvisi dei passanti.';
+          }
         } else if (device === 'android') {
           currentInstallMode = 'android_install';
           instructions.innerHTML = 'Per installare correttamente la tua Web App, usa <strong>Chrome</strong>. Apri il menu del browser e scegli <strong>Aggiungi alla schermata Home</strong> oppure <strong>Installa app</strong>. Dopo il salvataggio, riapri la Web App e attiva le notifiche.';
         } else if (device === 'huawei') {
           currentInstallMode = 'android_install';
-          instructions.innerHTML = 'Per installare correttamente la tua Web App sul dispositivo, usa il browser che supporta meglio il salvataggio sulla Home e poi riapri la Web App per attivare le notifiche.';
+          instructions.innerHTML = 'Usa il browser che supporta meglio il salvataggio sulla Home e poi riapri la Web App per attivare le notifiche.';
         } else {
           currentInstallMode = 'generic_install';
-          instructions.innerHTML = 'Per installare correttamente la tua Web App, usa il browser consigliato per il tuo dispositivo e aggiungila come app o alla schermata Home. Dopo il salvataggio, attiva le notifiche.';
+          instructions.innerHTML = 'Usa il browser consigliato per il tuo dispositivo e aggiungi questa Web App come app o alla schermata Home. Dopo il salvataggio, attiva le notifiche.';
         }
 
         secondaryBtn.textContent = 'Mostra istruzioni';
@@ -2291,10 +2316,10 @@
 
       if (notif === 'granted' && hasPushSubscription) {
         setInstallBadge('SISTEMA PRONTO', 'ok');
-        compact.innerHTML = 'Ora puoi fare una prova reale della segnalazione e verificare come ti arriverà l’avviso.';
-        primaryBtn.textContent = 'Prova segnalazione';
-        currentInstallMode = 'preview_signal';
-        instructions.innerHTML = 'Per una prova completa, ti consigliamo di testare anche la posizione condivisa.';
+        compact.innerHTML = 'Le notifiche risultano attive. Ora il tuo sistema può ricevere subito gli avvisi dei passanti.';
+        primaryBtn.textContent = 'Disattiva notifiche';
+        currentInstallMode = 'disable_notifications';
+        instructions.innerHTML = 'Per una prova completa, usa il pulsante <strong>Prova segnalazione</strong> qui sotto accanto a <strong>Stampa adesivo</strong>. Ti consigliamo di testare anche la posizione condivisa.';
         secondaryBtn.textContent = 'Mostra istruzioni';
         secondaryBtn.style.display = 'inline-flex';
         return;
@@ -2302,10 +2327,10 @@
 
       if (notif === 'granted' && !hasPushSubscription) {
         setInstallBadge('TI MANCA SOLO UN PASSAGGIO', 'warn');
-        compact.innerHTML = 'Attiva le notifiche per ricevere subito gli avvisi inviati dai passanti. Senza notifiche, le segnalazioni non ti arriveranno in tempo reale.';
+        compact.innerHTML = 'Il permesso notifiche risulta concesso, ma questo dispositivo non è ancora sottoscritto correttamente.';
         primaryBtn.textContent = 'Attiva notifiche';
         currentInstallMode = 'enable_notifications';
-        instructions.innerHTML = 'Il permesso notifiche risulta concesso, ma questo dispositivo non è ancora sottoscritto. Tocca per completare l’attivazione.';
+        instructions.innerHTML = 'Tocca per completare l’attivazione delle notifiche su questo dispositivo.';
         secondaryBtn.textContent = 'Mostra istruzioni';
         secondaryBtn.style.display = 'inline-flex';
         return;
@@ -2313,7 +2338,7 @@
 
       if (notif === 'denied') {
         setInstallBadge('NOTIFICHE BLOCCATE', 'danger');
-        compact.innerHTML = 'Le notifiche risultano bloccate nelle impostazioni del dispositivo o del browser. Senza notifiche, le segnalazioni non ti arriveranno in tempo reale.';
+        compact.innerHTML = 'Le notifiche risultano bloccate nelle impostazioni del dispositivo o del browser.';
         primaryBtn.textContent = 'Verifica notifiche';
         currentInstallMode = 'active';
         instructions.innerHTML = device === 'ios'
@@ -2325,7 +2350,7 @@
       }
 
       setInstallBadge('TI MANCA SOLO UN PASSAGGIO', 'warn');
-      compact.innerHTML = 'Attiva le notifiche per ricevere subito gli avvisi inviati dai passanti. Senza notifiche, le segnalazioni non ti arriveranno in tempo reale.';
+      compact.innerHTML = 'La Web App è salvata. Ora devi solo attivare le notifiche per ricevere subito gli avvisi dei passanti.';
       primaryBtn.textContent = 'Attiva notifiche';
       currentInstallMode = 'enable_notifications';
 
