@@ -1056,6 +1056,47 @@
 
 </head>
 <body>
+
+<script id="ownerEmergencyAccessBootstrap">
+(function(){
+  try {
+    const params = new URLSearchParams(window.location.search);
+
+    const urlCode = params.get('code') || '';
+    const urlPlate = params.get('plate') || '';
+    const urlToken = params.get('ownerToken') || '';
+
+    if (urlCode && urlPlate) {
+      try {
+        localStorage.setItem('owner_saved_code', urlCode);
+        localStorage.setItem('owner_saved_plate', urlPlate);
+        if (urlToken) localStorage.setItem('owner_access_token', urlToken);
+      } catch(e) {}
+      return;
+    }
+
+    const savedCode = localStorage.getItem('owner_saved_code') || '';
+    const savedPlate = localStorage.getItem('owner_saved_plate') || '';
+    const savedToken = localStorage.getItem('owner_access_token') || '';
+
+    if (savedCode && savedPlate) {
+      params.set('code', savedCode);
+      params.set('plate', savedPlate);
+      window.location.replace(window.location.pathname + '?' + params.toString());
+      return;
+    }
+
+    if (savedToken) {
+      window.location.replace('/owner-access/' + encodeURIComponent(savedToken));
+      return;
+    }
+
+    // Ultima difesa: non lasciare mai owner-simple vuota.
+    window.location.replace('/owner-login.html');
+  } catch(e) {}
+})();
+</script>
+
   
 <div class="wrap">
   <div class="brand-top-banner">
@@ -1771,9 +1812,12 @@
       const data = await res.json();
 
       if(!res.ok || !data.success){
-        qs('statusPill').textContent = 'Errore';
+        const card = document.getElementById('qrStatusWorkingCard');
+        if (card) card.style.display = 'flex';
+
+        qs('statusPill').textContent = 'ERRORE';
         qs('statusPill').className = 'status-pill danger';
-        qs('workingText').textContent = data.error || 'Impossibile caricare i dati.';
+        qs('workingText').innerHTML = '<strong>Impossibile caricare la tua App.</strong><br>Chiudi e riapri dal link personale oppure accedi di nuovo.';
         qs('eventsList').innerHTML = '<div class="muted">Nessun dato disponibile.</div>';
         return;
       }
