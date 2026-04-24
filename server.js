@@ -1691,6 +1691,61 @@ app.post('/api/owner/block-abuse', async (req, res) => {
   }
 });
 
+
+app.post('/api/owner/delete-abuse-blocks-many', async (req, res) => {
+  try {
+    const { code, plate, ids } = req.body || {};
+
+    if (!code || !plate || !Array.isArray(ids) || !ids.length) {
+      return res.status(400).json({ success: false, error: 'Dati mancanti.' });
+    }
+
+    const cleanCode = String(code).trim().toUpperCase();
+    const cleanPlate = String(plate).trim().toUpperCase().replace(/\s+/g, '');
+    const cleanIds = ids.map(id => Number(id)).filter(id => Number.isFinite(id) && id > 0);
+
+    if (!cleanIds.length) {
+      return res.status(400).json({ success: false, error: 'Nessun blocco valido da eliminare.' });
+    }
+
+    const vehicleRes = await pool.query(
+      `SELECT plate
+       FROM sticker_codes
+       WHERE code = $1
+       LIMIT 1`,
+      [cleanCode]
+    );
+
+    if (!vehicleRes.rows.length) {
+      return res.status(404).json({ success: false, error: 'Codice non trovato.' });
+    }
+
+    const dbPlate = String(vehicleRes.rows[0].plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    if (dbPlate !== cleanPlate) {
+      return res.status(401).json({ success: false, error: 'Targa non corrispondente.' });
+    }
+
+    const deleted = await pool.query(
+      `DELETE FROM owner_abuse_blocks
+       WHERE code = $1
+         AND id = ANY($2::int[])
+         AND COALESCE(is_active, false) = false
+       RETURNING id`,
+      [cleanCode, cleanIds]
+    );
+
+    return res.json({
+      success: true,
+      deleted_count: deleted.rowCount || 0
+    });
+  } catch (err) {
+    console.error('owner delete-abuse-blocks-many error:', err);
+    return res.status(500).json({ success: false, error: 'Errore eliminazione blocchi rimossi.' });
+  }
+});
+
+
 app.post('/api/owner/unblock-abuse', async (req, res) => {
   try {
     const { code, plate, id } = req.body || {};

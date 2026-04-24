@@ -1189,6 +1189,9 @@
                 <button id="abuseBlocksSelectBtn" class="btn btn-secondary" type="button" style="display:none;">Seleziona</button>
                 <button id="abuseBlocksSelectAllBtn" class="btn btn-secondary" type="button" style="display:none;">Seleziona tutti</button>
                 <button id="abuseBlocksDeleteBtn" class="btn btn-secondary" type="button" style="display:none;">Elimina</button>
+                <button id="abuseBlocksRemovedSelectBtn" class="btn btn-secondary" type="button" style="display:none;">Seleziona rimossi</button>
+                <button id="abuseBlocksRemovedSelectAllBtn" class="btn btn-secondary" type="button" style="display:none;">Seleziona tutti</button>
+                <button id="abuseBlocksRemovedDeleteBtn" class="btn btn-secondary" type="button" style="display:none;">Elimina</button>
               </div>
                 
                 
@@ -2058,6 +2061,8 @@
     let ownerAbuseBlocks = [];
     let abuseBlocksSelectionMode = false;
     const selectedAbuseBlockIds = new Set();
+    let removedAbuseBlocksSelectionMode = false;
+    const selectedRemovedAbuseBlockIds = new Set();
     let ownerBlockedAttempts = [];
     let selectedBlockedAttemptIds = new Set();
     let blockedAttemptsSelectionMode = false;
@@ -2322,10 +2327,15 @@ function getOwnerParams(){
       const selectBtn = document.getElementById('abuseBlocksSelectBtn');
       const selectAllBtn = document.getElementById('abuseBlocksSelectAllBtn');
       const deleteBtn = document.getElementById('abuseBlocksDeleteBtn');
+      const removedSelectBtn = document.getElementById('abuseBlocksRemovedSelectBtn');
+      const removedSelectAllBtn = document.getElementById('abuseBlocksRemovedSelectAllBtn');
+      const removedDeleteBtn = document.getElementById('abuseBlocksRemovedDeleteBtn');
 
       if (!list || !badge) return;
 
       const active = ownerAbuseBlocks.filter(x => x.is_active);
+      const removed = ownerAbuseBlocks.filter(x => !x.is_active);
+
       badge.textContent = `${active.length} ATTIVI`;
       badge.className = 'expiry-badge ok';
       badge.style.background = '#dcfce7';
@@ -2335,6 +2345,11 @@ function getOwnerParams(){
       if (active.length === 0) {
         abuseBlocksSelectionMode = false;
         selectedAbuseBlockIds.clear();
+      }
+
+      if (removed.length === 0) {
+        removedAbuseBlocksSelectionMode = false;
+        selectedRemovedAbuseBlockIds.clear();
       }
 
       if (selectBtn) {
@@ -2352,14 +2367,31 @@ function getOwnerParams(){
         deleteBtn.style.display = (abuseBlocksSelectionMode && active.length > 0) ? 'inline-flex' : 'none';
       }
 
+      if (removedSelectBtn) {
+        removedSelectBtn.style.display = removed.length > 0 ? 'inline-flex' : 'none';
+        removedSelectBtn.textContent = removedAbuseBlocksSelectionMode ? 'Annulla' : 'Seleziona rimossi';
+      }
+
+      if (removedSelectAllBtn) {
+        removedSelectAllBtn.style.display = (removedAbuseBlocksSelectionMode && removed.length > 0) ? 'inline-flex' : 'none';
+        const allRemovedSelected = removed.length > 0 && removed.every(item => selectedRemovedAbuseBlockIds.has(item.id));
+        removedSelectAllBtn.textContent = allRemovedSelected ? 'Deseleziona tutti' : 'Seleziona tutti';
+      }
+
+      if (removedDeleteBtn) {
+        removedDeleteBtn.style.display = (removedAbuseBlocksSelectionMode && removed.length > 0) ? 'inline-flex' : 'none';
+      }
+
       if (!ownerAbuseBlocks.length) {
-        list.innerHTML = '<div class="muted">Nessun blocco attivo fino ad ora.</div>';
+        list.innerHTML = '<div class="muted">Nessun blocco registrato fino ad ora.</div>';
         return;
       }
 
       list.innerHTML = ownerAbuseBlocks.map(item => {
         const isActive = !!item.is_active;
-        const selected = selectedAbuseBlockIds.has(item.id);
+        const selected = isActive
+          ? selectedAbuseBlockIds.has(item.id)
+          : selectedRemovedAbuseBlockIds.has(item.id);
 
         const typeLabel = item.block_type === 'ip'
           ? 'IP'
@@ -2369,11 +2401,13 @@ function getOwnerParams(){
         const reason = item.reason || '';
         const createdAt = item.created_at ? fmt(item.created_at) : '';
         const statusLabel = isActive ? 'ATTIVO' : 'RIMOSSO';
+        const showCheckbox = isActive ? abuseBlocksSelectionMode : removedAbuseBlocksSelectionMode;
+        const toggleFn = isActive ? 'toggleAbuseBlockSelect' : 'toggleRemovedAbuseBlockSelect';
 
         return `
           <div style="border-radius:8px;padding:14px;background:${isActive ? 'rgba(255,179,71,.07)' : 'rgba(255,255,255,.03)'};border:1px solid ${isActive ? 'rgba(255,179,71,.18)' : 'rgba(255,255,255,.06)'};">
             <div style="display:flex;gap:12px;align-items:flex-start;">
-              ${abuseBlocksSelectionMode && isActive ? `<input type="checkbox" ${selected ? 'checked' : ''} onchange="toggleAbuseBlockSelect(${item.id})" style="margin-top:4px;">` : ''}
+              ${showCheckbox ? `<input type="checkbox" ${selected ? 'checked' : ''} onchange="${toggleFn}(${item.id})" style="margin-top:4px;">` : ''}
               <div style="flex:1;min-width:0;">
                 <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
                   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -2802,6 +2836,13 @@ function getOwnerParams(){
       renderAbuseBlocks();
     };
 
+    window.toggleRemovedAbuseBlockSelect = function(id){
+      if (selectedRemovedAbuseBlockIds.has(id)) selectedRemovedAbuseBlockIds.delete(id);
+      else selectedRemovedAbuseBlockIds.add(id);
+      renderAbuseBlocks();
+    };
+
+
     window.ownerUnblockAbuse = async function(id){
       const abuseResultEl = document.getElementById('msgDetailAbuseResult');
       const { code, plate } = getOwnerParams();
@@ -2977,6 +3018,53 @@ function getOwnerParams(){
 
       selectedAbuseBlockIds.clear();
       abuseBlocksSelectionMode = false;
+      await loadOwnerAbuseBlocks();
+    });
+
+    document.getElementById('abuseBlocksRemovedSelectBtn').addEventListener('click', () => {
+      removedAbuseBlocksSelectionMode = !removedAbuseBlocksSelectionMode;
+      selectedRemovedAbuseBlockIds.clear();
+
+      // Evita doppie modalità contemporanee.
+      abuseBlocksSelectionMode = false;
+      selectedAbuseBlockIds.clear();
+
+      renderAbuseBlocks();
+    });
+
+    document.getElementById('abuseBlocksRemovedSelectAllBtn').addEventListener('click', () => {
+      if (!removedAbuseBlocksSelectionMode) return;
+
+      const removedIds = (ownerAbuseBlocks || [])
+        .filter(item => !item.is_active)
+        .map(item => item.id)
+        .filter(Boolean);
+
+      const allSelected = removedIds.length > 0 && removedIds.every(id => selectedRemovedAbuseBlockIds.has(id));
+
+      if (allSelected) {
+        selectedRemovedAbuseBlockIds.clear();
+      } else {
+        removedIds.forEach(id => selectedRemovedAbuseBlockIds.add(id));
+      }
+
+      renderAbuseBlocks();
+    });
+
+    document.getElementById('abuseBlocksRemovedDeleteBtn').addEventListener('click', async () => {
+      const ids = Array.from(selectedRemovedAbuseBlockIds);
+      if (!ids.length) return;
+
+      const { code, plate } = getOwnerParams();
+
+      await fetch('/api/owner/delete-abuse-blocks-many', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code, plate, ids })
+      });
+
+      selectedRemovedAbuseBlockIds.clear();
+      removedAbuseBlocksSelectionMode = false;
       await loadOwnerAbuseBlocks();
     });
 
