@@ -984,12 +984,17 @@ app.post('/api/push/subscribe', async (req, res) => {
     // Ruolo dispositivo/veicolo: permette allo stesso endpoint di gestire più veicoli.
     try {
       const primaryRoleCheck = await pool.query(
-        `SELECT id
-         FROM owner_device_vehicle_roles
-         WHERE code = $1
-           AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
-           AND COALESCE(is_active, TRUE) = TRUE
-           AND COALESCE(is_primary, FALSE) = TRUE
+        `SELECT r.id
+         FROM owner_device_vehicle_roles r
+         INNER JOIN push_subscriptions ps
+           ON ps.endpoint = r.endpoint
+          AND ps.code = r.code
+          AND REPLACE(UPPER(COALESCE(ps.plate,'')), ' ', '') = REPLACE(UPPER(COALESCE(r.plate,'')), ' ', '')
+          AND COALESCE(ps.is_active, TRUE) = TRUE
+         WHERE r.code = $1
+           AND REPLACE(UPPER(COALESCE(r.plate,'')), ' ', '') = $2
+           AND COALESCE(r.is_active, TRUE) = TRUE
+           AND COALESCE(r.is_primary, FALSE) = TRUE
          LIMIT 1`,
         [cleanCode, cleanPlateNorm]
       );
@@ -1088,15 +1093,21 @@ async function requirePrimaryOwnerDevice({ code, plate, endpoint }) {
     [cleanCode, cleanPlateNorm, cleanEndpoint]
   );
 
-  // Se non esiste ruolo per questa vettura, crealo automaticamente SOLO se non esiste già un proprietario principale.
+  // Se non esiste ruolo per questa vettura, crealo automaticamente SOLO se non esiste già
+  // un proprietario principale con subscription push ancora realmente attiva.
   if (!role.rows.length) {
     const primaryCheck = await pool.query(
-      `SELECT id
-       FROM owner_device_vehicle_roles
-       WHERE code = $1
-         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
-         AND COALESCE(is_active, TRUE) = TRUE
-         AND COALESCE(is_primary, FALSE) = TRUE
+      `SELECT r.id
+       FROM owner_device_vehicle_roles r
+       INNER JOIN push_subscriptions ps
+         ON ps.endpoint = r.endpoint
+        AND ps.code = r.code
+        AND REPLACE(UPPER(COALESCE(ps.plate,'')), ' ', '') = REPLACE(UPPER(COALESCE(r.plate,'')), ' ', '')
+        AND COALESCE(ps.is_active, TRUE) = TRUE
+       WHERE r.code = $1
+         AND REPLACE(UPPER(COALESCE(r.plate,'')), ' ', '') = $2
+         AND COALESCE(r.is_active, TRUE) = TRUE
+         AND COALESCE(r.is_primary, FALSE) = TRUE
        LIMIT 1`,
       [cleanCode, cleanPlateNorm]
     );
@@ -4971,6 +4982,126 @@ app.post('/api/admin/scan-stats', requireAdmin, async (req, res) => {
   }
 });
 
+
+
+
+app.post('/api/debug-fix-owner-device-roles-by-record', async (req, res) => {
+  try {
+    const { code, public_id, plate, phone } = req.body || {};
+
+    const cleanCode = String(code || '').trim().toUpperCase();
+    const cleanPublicId = String(public_id || '').trim();
+    const cleanPlateNorm = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
+    const cleanPhoneDigits = String(phone || '').replace(/\D/g, '');
+
+    if (!cleanCode || !cleanPublicId || !cleanPlateNorm || !cleanPhoneDigits) {
+      return res.status(400).json({ success: false, error: 'Dati record mancanti.' });
+    }
+
+    const vehicle = await pool.query(
+      `SELECT code, public_id, plate, phone
+       FROM sticker_codes
+       WHERE code = $1
+         AND public_id = $2
+         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $3
+         AND REGEXP_REPLACE(COALESCE(phone,''), '[^0-9]', '', 'g') = $4
+       LIMIT 1`,
+      [cleanCode, cleanPublicId, cleanPlateNorm, cleanPhoneDigits]
+    );
+
+    if (!vehicle.rows.length) {
+      return res.status(404).json({ success: false, error: 'Record non trovato.' });
+    }
+
+    // Disattiva ruoli il cui endpoint non esiste più tra le push subscription attive.
+    const ghostCleanup = await pool.query(
+      `UPDATE owner_device_vehicle_roles r
+       SET is_active = FALSE,
+           is_primary = FALSE,
+           updated_at = NOW()
+       WHERE r.code = $1
+         AND REPLACE(UPPER(COALESCE(r.plate,'')), ' ', '') = $2
+         AND NOT EXISTS (
+           SELECT 1
+           FROM push_subscriptions ps
+           WHERE ps.endpoint = r.endpoint
+             AND ps.code = r.code
+             AND REPLACE(UPPER(COALESCE(ps.plate,'')), ' ', '') = REPLACE(UPPER(COALESCE(r.plate,'')), ' ', '')
+             AND COALESCE(ps.is_active, TRUE) = TRUE
+         )
+       RETURNING id`,
+      [cleanCode, cleanPlateNorm]
+    );
+
+    // Prende la subscription attiva più recente non invitata.
+    const latestSub = await pool.query(
+      `SELECT id, code, plate, endpoint
+       FROM push_subscriptions
+       WHERE code = $1
+         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
+         AND COALESCE(is_active, TRUE) = TRUE
+         AND invite_token IS NULL
+       ORDER BY updated_at DESC NULLS LAST, id DESC
+       LIMIT 1`,
+      [cleanCode, cleanPlateNorm]
+    );
+
+    if (!latestSub.rows.length) {
+      return res.status(404).json({
+        success: false,
+        error: 'Nessuna push subscription attiva trovata da promuovere.',
+        ghost_roles_disabled: ghostCleanup.rowCount || 0
+      });
+    }
+
+    const sub = latestSub.rows[0];
+
+    // Azzera altri primary attivi per quel veicolo.
+    await pool.query(
+      `UPDATE owner_device_vehicle_roles
+       SET is_primary = FALSE,
+           updated_at = NOW()
+       WHERE code = $1
+         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2`,
+      [cleanCode, cleanPlateNorm]
+    );
+
+    // Promuove il ruolo del nuovo endpoint.
+    const role = await pool.query(
+      `INSERT INTO owner_device_vehicle_roles
+       (code, plate, endpoint, is_primary, invite_token, is_active, created_at, updated_at)
+       VALUES ($1, $2, $3, TRUE, NULL, TRUE, NOW(), NOW())
+       ON CONFLICT (code, plate, endpoint)
+       DO UPDATE SET
+         is_primary = TRUE,
+         invite_token = NULL,
+         is_active = TRUE,
+         updated_at = NOW()
+       RETURNING id, code, plate, LEFT(endpoint, 80) AS endpoint_short, is_primary, is_active`,
+      [cleanCode, cleanPlateNorm, sub.endpoint]
+    );
+
+    await pool.query(
+      `UPDATE push_subscriptions
+       SET is_primary = TRUE,
+           receive_admin_alerts = TRUE,
+           receive_passenger_alerts = TRUE,
+           updated_at = NOW()
+       WHERE endpoint = $1`,
+      [sub.endpoint]
+    );
+
+    return res.json({
+      success: true,
+      ghost_roles_disabled: ghostCleanup.rowCount || 0,
+      promoted_subscription_id: sub.id,
+      promoted_role: role.rows[0]
+    });
+  } catch (err) {
+    console.error('debug-fix-owner-device-roles-by-record error:', err);
+    return res.status(500).json({ success: false, error: 'Errore fix ruoli record.' });
+  }
+});
 
 
 app.post('/api/debug-owner-device-roles-by-record', async (req, res) => {
