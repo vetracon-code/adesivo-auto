@@ -1222,7 +1222,12 @@ Il link è personale e può essere usato una sola volta.`;
     });
   } catch (err) {
     console.error('owner create-invite error:', err);
-    return res.status(500).json({ success: false, error: 'Errore creazione invito.' });
+    return res.status(500).json({
+      success: false,
+      error: 'Errore creazione invito.',
+      detail: err && err.message ? err.message : String(err),
+      code: err && err.code ? err.code : null
+    });
   }
 });
 
