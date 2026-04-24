@@ -4972,6 +4972,97 @@ app.post('/api/admin/scan-stats', requireAdmin, async (req, res) => {
 });
 
 
+
+app.post('/api/debug-owner-device-roles-by-record', async (req, res) => {
+  try {
+    const { code, public_id, plate, phone } = req.body || {};
+
+    const cleanCode = String(code || '').trim().toUpperCase();
+    const cleanPublicId = String(public_id || '').trim();
+    const cleanPlateNorm = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
+    const cleanPhoneDigits = String(phone || '').replace(/\D/g, '');
+
+    if (!cleanCode || !cleanPublicId || !cleanPlateNorm || !cleanPhoneDigits) {
+      return res.status(400).json({ success: false, error: 'Dati record mancanti.' });
+    }
+
+    const vehicle = await pool.query(
+      `SELECT code, public_id, plate, phone, brand, vehicle_model, status
+       FROM sticker_codes
+       WHERE code = $1
+         AND public_id = $2
+         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $3
+         AND REGEXP_REPLACE(COALESCE(phone,''), '[^0-9]', '', 'g') = $4
+       LIMIT 1`,
+      [cleanCode, cleanPublicId, cleanPlateNorm, cleanPhoneDigits]
+    );
+
+    if (!vehicle.rows.length) {
+      return res.status(404).json({
+        success: false,
+        error: 'Record non trovato con code/public_id/targa/telefono indicati.'
+      });
+    }
+
+    const codes = vehicle.rows.map(r => r.code);
+
+    const pushSubs = await pool.query(
+      `SELECT id, code, plate,
+              LEFT(endpoint, 80) AS endpoint_short,
+              is_primary,
+              receive_admin_alerts,
+              receive_passenger_alerts,
+              is_active,
+              invite_token,
+              updated_at,
+              last_seen_at
+       FROM push_subscriptions
+       WHERE code = ANY($1::text[])
+       ORDER BY code, id DESC
+       LIMIT 100`,
+      [codes]
+    );
+
+    const roles = await pool.query(
+      `SELECT id, code, plate,
+              LEFT(endpoint, 80) AS endpoint_short,
+              is_primary,
+              invite_token,
+              is_active,
+              created_at,
+              updated_at
+       FROM owner_device_vehicle_roles
+       WHERE code = ANY($1::text[])
+       ORDER BY code, is_primary DESC, is_active DESC, updated_at DESC, id DESC
+       LIMIT 100`,
+      [codes]
+    );
+
+    const invites = await pool.query(
+      `SELECT id, code, plate, invite_token, status,
+              created_at, sent_at, opened_at, used_at, revoked_at, expires_at,
+              LEFT(used_endpoint, 80) AS used_endpoint_short
+       FROM owner_invites
+       WHERE code = ANY($1::text[])
+       ORDER BY created_at DESC
+       LIMIT 100`,
+      [codes]
+    );
+
+    return res.json({
+      success: true,
+      vehicle: vehicle.rows,
+      push_subscriptions: pushSubs.rows,
+      owner_device_vehicle_roles: roles.rows,
+      owner_invites: invites.rows
+    });
+  } catch (err) {
+    console.error('debug-owner-device-roles-by-record error:', err);
+    return res.status(500).json({ success: false, error: 'Errore diagnostica record.' });
+  }
+});
+
+
 app.post('/api/admin/debug-owner-device-roles', requireAdmin, async (req, res) => {
   try {
     const { code, plate } = req.body || {};
