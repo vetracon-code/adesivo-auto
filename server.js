@@ -981,6 +981,36 @@ app.post('/api/push/subscribe', async (req, res) => {
       );
     }
 
+    // Ruolo dispositivo/veicolo: permette allo stesso endpoint di gestire più veicoli.
+    try {
+      const primaryRoleCheck = await pool.query(
+        `SELECT id
+         FROM owner_device_vehicle_roles
+         WHERE code = $1
+           AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
+           AND COALESCE(is_active, TRUE) = TRUE
+           AND COALESCE(is_primary, FALSE) = TRUE
+         LIMIT 1`,
+        [cleanCode, cleanPlateNorm]
+      );
+
+      const roleIsPrimary = inviteRow ? false : primaryRoleCheck.rows.length === 0;
+
+      await pool.query(
+        `INSERT INTO owner_device_vehicle_roles
+         (code, plate, endpoint, is_primary, invite_token, is_active, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, TRUE, NOW(), NOW())
+         ON CONFLICT (code, plate, endpoint)
+         DO UPDATE SET
+           is_active = TRUE,
+           invite_token = COALESCE(EXCLUDED.invite_token, owner_device_vehicle_roles.invite_token),
+           updated_at = NOW()`,
+        [cleanCode, cleanPlateNorm, subscription.endpoint, roleIsPrimary, cleanInviteToken || null]
+      );
+    } catch(e) {
+      console.error('owner_device_vehicle_roles upsert error:', e);
+    }
+
     return res.json({
       success: true,
       is_primary: saveAsPrimary,
@@ -1024,75 +1054,75 @@ async function requirePrimaryOwnerDevice({ code, plate, endpoint }) {
     return { ok: false, status: 400, error: 'Dati mancanti.' };
   }
 
-  const current = await pool.query(
-    `SELECT
-       id,
-       endpoint,
-       COALESCE(is_primary, FALSE) AS is_primary,
-       COALESCE(receive_admin_alerts, FALSE) AS receive_admin_alerts,
-       COALESCE(receive_passenger_alerts, FALSE) AS receive_passenger_alerts,
-       COALESCE(is_active, FALSE) AS is_active,
-       invite_token
+  // Prima verifichiamo che l'endpoint sia davvero una subscription attiva del dispositivo.
+  const endpointCheck = await pool.query(
+    `SELECT endpoint, invite_token
      FROM push_subscriptions
+     WHERE endpoint = $1
+       AND COALESCE(is_active, TRUE) = TRUE
+     LIMIT 1`,
+    [cleanEndpoint]
+  );
+
+  if (!endpointCheck.rows.length) {
+    return { ok: false, status: 403, error: 'Dispositivo non riconosciuto.' };
+  }
+
+  // Recupera eventuale ruolo specifico endpoint + veicolo.
+  let role = await pool.query(
+    `SELECT id, is_primary, invite_token, is_active
+     FROM owner_device_vehicle_roles
      WHERE code = $1
        AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
        AND endpoint = $3
-       AND COALESCE(is_active, TRUE) = TRUE
      LIMIT 1`,
     [cleanCode, cleanPlateNorm, cleanEndpoint]
   );
 
-  if (!current.rows.length) {
-    return { ok: false, status: 403, error: 'Dispositivo non riconosciuto per questo veicolo.' };
+  // Se non esiste ruolo per questa vettura, crealo automaticamente SOLO se non esiste già un proprietario principale.
+  if (!role.rows.length) {
+    const primaryCheck = await pool.query(
+      `SELECT id
+       FROM owner_device_vehicle_roles
+       WHERE code = $1
+         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
+         AND COALESCE(is_active, TRUE) = TRUE
+         AND COALESCE(is_primary, FALSE) = TRUE
+       LIMIT 1`,
+      [cleanCode, cleanPlateNorm]
+    );
+
+    const makePrimary = primaryCheck.rows.length === 0;
+
+    const inserted = await pool.query(
+      `INSERT INTO owner_device_vehicle_roles
+       (code, plate, endpoint, is_primary, invite_token, is_active, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, NULL, TRUE, NOW(), NOW())
+       ON CONFLICT (code, plate, endpoint)
+       DO UPDATE SET
+         updated_at = NOW()
+       RETURNING id, is_primary, invite_token, is_active`,
+      [cleanCode, cleanPlateNorm, cleanEndpoint, makePrimary]
+    );
+
+    role = inserted;
   }
 
-  const row = current.rows[0];
+  const row = role.rows[0];
 
-  // Gli utenti invitati non possono creare altri inviti.
+  if (!row || row.is_active === false) {
+    return { ok: false, status: 403, error: 'Accesso non attivo.' };
+  }
+
   if (row.invite_token) {
     return { ok: false, status: 403, error: 'Funzione disponibile solo dal dispositivo principale.' };
   }
 
-  // Caso normale: dispositivo già primario o abilitato agli avvisi admin.
-  if (row.is_primary === true || row.receive_admin_alerts === true) {
+  if (row.is_primary === true) {
     return {
       ok: true,
       code: cleanCode,
-      plate: cleanPlate,
-      plateNorm: cleanPlateNorm,
-      endpoint: cleanEndpoint
-    };
-  }
-
-  // Fallback per veicoli già attivati prima della nuova logica:
-  // se non esiste nessun altro dispositivo principale attivo,
-  // promuoviamo questo dispositivo non invitato a principale.
-  const primaryCheck = await pool.query(
-    `SELECT id
-     FROM push_subscriptions
-     WHERE code = $1
-       AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
-       AND COALESCE(is_active, TRUE) = TRUE
-       AND COALESCE(is_primary, FALSE) = TRUE
-     LIMIT 1`,
-    [cleanCode, cleanPlateNorm]
-  );
-
-  if (!primaryCheck.rows.length) {
-    await pool.query(
-      `UPDATE push_subscriptions
-       SET is_primary = TRUE,
-           receive_admin_alerts = TRUE,
-           receive_passenger_alerts = TRUE,
-           updated_at = NOW()
-       WHERE id = $1`,
-      [row.id]
-    );
-
-    return {
-      ok: true,
-      code: cleanCode,
-      plate: cleanPlate,
+      plate: cleanPlateNorm,
       plateNorm: cleanPlateNorm,
       endpoint: cleanEndpoint
     };
@@ -5123,6 +5153,29 @@ async function initDb() {
     await pool.query("ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS app_saved_detected BOOLEAN DEFAULT FALSE");
     await pool.query("ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS app_saved_detected_at TIMESTAMPTZ");
     await pool.query("ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ");
+
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS owner_device_vehicle_roles (
+        id BIGSERIAL PRIMARY KEY,
+        code TEXT NOT NULL,
+        plate TEXT NOT NULL,
+        endpoint TEXT NOT NULL,
+        is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+        invite_token TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(code, plate, endpoint)
+      )
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_owner_device_vehicle_roles_code_plate
+      ON owner_device_vehicle_roles (code, plate, is_active)
+    `);
+
+    console.log('Tabella owner_device_vehicle_roles pronta');
 
     console.log('Tabella owner_invites pronta');
 
