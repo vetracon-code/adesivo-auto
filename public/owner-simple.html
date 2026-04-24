@@ -4026,11 +4026,27 @@ function getOwnerParams(){
 
         const { code, plate } = getOwnerParams();
 
+        const inviteToken = (() => {
+          try {
+            const params = new URLSearchParams(window.location.search);
+            const token = params.get('inviteToken') || params.get('invite_token') || localStorage.getItem('owner_invite_token') || '';
+            if (token) localStorage.setItem('owner_invite_token', token);
+            return token;
+          } catch(e) {
+            return '';
+          }
+        })();
+
         resultEl.textContent = 'Salvataggio subscription sul server...';
         const saveRes = await fetch('/api/push/subscribe', {
           method: 'POST',
           headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ code, plate, subscription: sub.toJSON() })
+          body: JSON.stringify({
+            code,
+            plate,
+            subscription: sub.toJSON(),
+            invite_token: inviteToken
+          })
         });
 
         let saveData = {};
