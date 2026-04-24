@@ -3864,6 +3864,7 @@ app.get('/api/public-contact/:public_id', async (req, res) => {
 
 
 
+
 app.get('/owner-login-access/:token', async (req, res) => {
   try {
     const token = String(req.params.token || '').trim();
@@ -3887,14 +3888,37 @@ app.get('/owner-login-access/:token', async (req, res) => {
 
     const row = result.rows[0];
 
-    const qs = new URLSearchParams();
-    if (row.code) qs.set('code', row.code);
-    if (row.plate) qs.set('plate', row.plate);
-    if (row.phone) qs.set('phone', row.phone);
+    const escapeAttr = (value) => String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
 
-    return res.redirect(302, `/owner-login.html?${qs.toString()}`);
+    const loginPath = path.join(__dirname, 'public', 'owner-login.html');
+    let html = fs.readFileSync(loginPath, 'utf8');
+
+    const phoneValue = escapeAttr(row.phone || '');
+    const plateValue = escapeAttr(row.plate || '');
+
+    html = html.replace(
+      /<input id="ownerPhone"([^>]*)>/,
+      `<input id="ownerPhone"$1 value="${phoneValue}">`
+    );
+
+    html = html.replace(
+      /<input id="ownerPlate"([^>]*)>/,
+      `<input id="ownerPlate"$1 value="${plateValue}">`
+    );
+
+    html = html.replace(
+      '<div id="ownerLoginResult"></div>',
+      '<div id="ownerLoginResult">Dati veicolo recuperati. Controlla e conferma l’accesso.</div>'
+    );
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(html);
   } catch (err) {
-    console.error('owner-login-access error:', err);
+    console.error('owner-login-access render error:', err);
     return res.redirect(302, '/owner-login.html');
   }
 });
