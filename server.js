@@ -1162,7 +1162,7 @@ function buildPublicBaseUrl(req) {
 }
 
 function createInviteToken() {
-  return crypto.randomBytes(24).toString('hex');
+  return require('node:crypto').randomBytes(24).toString('hex');
 }
 
 app.post('/api/owner/create-invite', async (req, res) => {
