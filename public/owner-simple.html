@@ -1158,6 +1158,7 @@
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
               <div id="messagesUnreadBadge" class="expiry-badge warn">0 NUOVI</div>
               <button id="messagesSelectBtn" class="btn btn-secondary" type="button">Seleziona</button>
+              <button id="messagesSelectAllBtn" class="btn btn-secondary" type="button" style="display:none;">Seleziona tutti</button>
               <button id="messagesMarkReadBtn" class="btn btn-secondary" type="button" style="display:none;">Segna letti</button>
               <button id="messagesDeleteBtn" class="btn btn-secondary" type="button" style="display:none;">Elimina</button>
             </div>
@@ -2738,6 +2739,28 @@ function getOwnerParams(){
       messagesSelectionMode = !messagesSelectionMode;
       selectedMessageIds.clear();
       document.getElementById('messagesSelectBtn').textContent = messagesSelectionMode ? 'Annulla' : 'Seleziona';
+      const selectAllBtn = document.getElementById('messagesSelectAllBtn');
+      if (selectAllBtn) {
+        selectAllBtn.style.display = messagesSelectionMode ? 'inline-flex' : 'none';
+        selectAllBtn.textContent = 'Seleziona tutti';
+      }
+      renderMessages();
+    });
+
+    document.getElementById('messagesSelectAllBtn').addEventListener('click', () => {
+      if (!messagesSelectionMode) return;
+
+      const allIds = (ownerMessages || []).map(item => item.id).filter(Boolean);
+      const allSelected = allIds.length > 0 && allIds.every(id => selectedMessageIds.has(id));
+
+      if (allSelected) {
+        selectedMessageIds.clear();
+        document.getElementById('messagesSelectAllBtn').textContent = 'Seleziona tutti';
+      } else {
+        allIds.forEach(id => selectedMessageIds.add(id));
+        document.getElementById('messagesSelectAllBtn').textContent = 'Deseleziona tutti';
+      }
+
       renderMessages();
     });
 
@@ -2753,6 +2776,11 @@ function getOwnerParams(){
       selectedMessageIds.clear();
       messagesSelectionMode = false;
       document.getElementById('messagesSelectBtn').textContent = 'Seleziona';
+      const selectAllBtn = document.getElementById('messagesSelectAllBtn');
+      if (selectAllBtn) {
+        selectAllBtn.style.display = 'none';
+        selectAllBtn.textContent = 'Seleziona tutti';
+      }
       await loadOwnerMessages();
     });
 
@@ -2768,6 +2796,11 @@ function getOwnerParams(){
       selectedMessageIds.clear();
       messagesSelectionMode = false;
       document.getElementById('messagesSelectBtn').textContent = 'Seleziona';
+      const selectAllBtn = document.getElementById('messagesSelectAllBtn');
+      if (selectAllBtn) {
+        selectAllBtn.style.display = 'none';
+        selectAllBtn.textContent = 'Seleziona tutti';
+      }
       await loadOwnerMessages();
     });
 
