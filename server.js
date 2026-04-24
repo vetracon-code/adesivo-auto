@@ -2527,6 +2527,24 @@ app.post('/api/owner-dashboard', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Targa non corrispondente al codice.' });
     }
 
+    let ownerDashboardPhone = row.phone || null;
+
+    if (!ownerDashboardPhone && row.owner_access_token) {
+      try {
+        const trialPhoneRes = await pool.query(
+          `SELECT phone
+           FROM trial_requests
+           WHERE owner_access_token = $1
+           LIMIT 1`,
+          [row.owner_access_token]
+        );
+
+        if (trialPhoneRes.rows.length && trialPhoneRes.rows[0].phone) {
+          ownerDashboardPhone = trialPhoneRes.rows[0].phone;
+        }
+      } catch (e) {}
+    }
+
     let viewsCount = 0;
     let messagesCount = 0;
     let locationsCount = 0;
@@ -2610,7 +2628,7 @@ app.post('/api/owner-dashboard', async (req, res) => {
         vehicle_model: row.vehicle_model,
         color: row.color,
         plate: row.plate,
-        phone: row.phone || null,
+        phone: ownerDashboardPhone || null,
         offered_by: row.offered_by || null,
         qr_url: row.qr_url,
         public_id: row.public_id,
@@ -3803,9 +3821,14 @@ app.get('/owner-access/:token', async (req, res) => {
     const token = String(req.params.token || '').trim();
 
     const result = await pool.query(
-      `SELECT code, plate, phone
-       FROM sticker_codes
-       WHERE owner_access_token = $1
+      `SELECT
+         sc.code,
+         sc.plate,
+         COALESCE(NULLIF(sc.phone, ''), NULLIF(tr.phone, '')) AS phone
+       FROM sticker_codes sc
+       LEFT JOIN trial_requests tr
+         ON tr.owner_access_token = sc.owner_access_token
+       WHERE sc.owner_access_token = $1
        LIMIT 1`,
       [token]
     );
