@@ -3315,5 +3315,95 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 
+
+<script id="directDeviceStatusScript">
+(function(){
+  function isOwnerStandalone(){
+    return window.matchMedia('(display-mode: standalone)').matches ||
+           window.navigator.standalone === true ||
+           document.referrer.startsWith('android-app://');
+  }
+
+  function getNotificationPermission(){
+    if (!('Notification' in window)) return 'unsupported';
+    return Notification.permission || 'default';
+  }
+
+  function setDirectDeviceStatus(){
+    const section = document.getElementById('installAppSection');
+    const textEl = document.getElementById('installCompactText');
+    const badgeEl = document.getElementById('installStatusBadge');
+    const refreshBtn = document.getElementById('refreshOwnerAppBtn');
+
+    if (!section || !textEl) return;
+
+    const installed = isOwnerStandalone();
+    const permission = getNotificationPermission();
+
+    let color = 'red';
+    let message = 'Installa l’App per ricevere gli avvisi del tuo veicolo.';
+
+    if (installed && permission === 'granted') {
+      color = 'green';
+      message = 'App e notifiche attive: riceverai gli avvisi su questo dispositivo.';
+    } else if (installed && permission !== 'granted') {
+      color = 'yellow';
+      message = 'Attiva le notifiche per ricevere gli avvisi in tempo reale.';
+    }
+
+    textEl.innerHTML =
+      '<div class="direct-device-status">' +
+        '<span class="direct-device-dot ' + color + '"></span>' +
+        '<span>' + message + '</span>' +
+      '</div>';
+
+    if (badgeEl) badgeEl.style.display = 'none';
+
+    if (refreshBtn) {
+      refreshBtn.textContent = 'Aggiorna App';
+      refreshBtn.setAttribute('aria-label', 'Aggiorna App');
+    }
+
+    const buttons = section.querySelectorAll('button');
+    buttons.forEach(btn => {
+      const label = (btn.textContent || '').trim().toLowerCase();
+
+      if (label === 'refresh') {
+        btn.textContent = 'Aggiorna App';
+      }
+
+      if (label.includes('disattiva notifiche')) {
+        btn.style.background = '#f3f6fb';
+        btn.style.color = '#475569';
+        btn.style.border = '1px solid rgba(71,85,105,.18)';
+        btn.style.boxShadow = 'none';
+      }
+    });
+  }
+
+  window.setDirectDeviceStatus = setDirectDeviceStatus;
+
+  window.addEventListener('load', function(){
+    setDirectDeviceStatus();
+    setTimeout(setDirectDeviceStatus, 500);
+    setTimeout(setDirectDeviceStatus, 1500);
+    setTimeout(setDirectDeviceStatus, 3000);
+  });
+
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden) setDirectDeviceStatus();
+  });
+
+  const observerTarget = document.getElementById('installAppSection');
+  if (observerTarget) {
+    const observer = new MutationObserver(function(){
+      clearTimeout(window.__directDeviceStatusTimer);
+      window.__directDeviceStatusTimer = setTimeout(setDirectDeviceStatus, 120);
+    });
+    observer.observe(observerTarget, { childList:true, subtree:true, characterData:true, attributes:true });
+  }
+})();
+</script>
+
 </body>
 </html>
