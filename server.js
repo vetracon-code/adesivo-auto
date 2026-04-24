@@ -866,13 +866,55 @@ app.get('/api/push/public-key', (req, res) => {
 
 app.post('/api/push/subscribe', async (req, res) => {
   try {
-    const { code, plate, subscription } = req.body || {};
+    const { code, plate, subscription, invite_token } = req.body || {};
+
     if (!code || !subscription || !subscription.endpoint || !subscription.keys?.p256dh || !subscription.keys?.auth) {
       return res.status(400).json({ success: false, error: 'Dati subscription mancanti.' });
     }
 
     const cleanCode = String(code).trim().toUpperCase();
     const cleanPlate = plate || null;
+    const cleanPlateNorm = String(cleanPlate || '').trim().toUpperCase().replace(/\s+/g, '');
+    const cleanInviteToken = invite_token ? String(invite_token).trim() : '';
+
+    let inviteRow = null;
+
+    if (cleanInviteToken) {
+      const inviteRes = await pool.query(
+        `SELECT id, code, plate, invite_token, status, expires_at, created_by_endpoint
+         FROM owner_invites
+         WHERE invite_token = $1
+         LIMIT 1`,
+        [cleanInviteToken]
+      );
+
+      inviteRow = inviteRes.rows[0] || null;
+
+      if (!inviteRow) {
+        return res.status(404).json({ success: false, error: 'Invito non valido.' });
+      }
+
+      const inviteCode = String(inviteRow.code || '').trim().toUpperCase();
+      const invitePlateNorm = String(inviteRow.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+      if (inviteCode !== cleanCode || invitePlateNorm !== cleanPlateNorm) {
+        return res.status(401).json({ success: false, error: 'Invito non corrispondente al veicolo.' });
+      }
+
+      if (inviteRow.status === 'revoked') {
+        return res.status(410).json({ success: false, error: 'Invito revocato.' });
+      }
+
+      if (inviteRow.expires_at && new Date(inviteRow.expires_at) < new Date()) {
+        await pool.query(
+          `UPDATE owner_invites
+           SET status = 'expired'
+           WHERE id = $1 AND status <> 'used'`,
+          [inviteRow.id]
+        );
+        return res.status(410).json({ success: false, error: 'Invito scaduto.' });
+      }
+    }
 
     const existing = await pool.query(
       `SELECT id
@@ -885,12 +927,19 @@ app.post('/api/push/subscribe', async (req, res) => {
       [cleanCode, cleanPlate, subscription.endpoint]
     );
 
-    const isFirstDevice = existing.rows.length === 0;
+    const isInviteDevice = !!inviteRow;
+    const isFirstDevice = !isInviteDevice && existing.rows.length === 0;
+    const saveAsPrimary = isInviteDevice ? false : isFirstDevice;
+    const receiveAdminAlerts = isInviteDevice ? false : isFirstDevice;
 
     await pool.query(
       `INSERT INTO push_subscriptions
-       (code, plate, endpoint, p256dh, auth, user_agent, updated_at, is_primary, receive_admin_alerts, receive_passenger_alerts, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, TRUE, TRUE)
+       (code, plate, endpoint, p256dh, auth, user_agent, updated_at,
+        is_primary, receive_admin_alerts, receive_passenger_alerts, is_active,
+        invite_token, invited_by_endpoint, last_seen_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(),
+        $7, $8, TRUE, TRUE,
+        $9, $10, NOW())
        ON CONFLICT (endpoint)
        DO UPDATE SET
          code = EXCLUDED.code,
@@ -898,7 +947,14 @@ app.post('/api/push/subscribe', async (req, res) => {
          p256dh = EXCLUDED.p256dh,
          auth = EXCLUDED.auth,
          user_agent = EXCLUDED.user_agent,
-         updated_at = NOW()`,
+         updated_at = NOW(),
+         is_primary = EXCLUDED.is_primary,
+         receive_admin_alerts = EXCLUDED.receive_admin_alerts,
+         receive_passenger_alerts = TRUE,
+         is_active = TRUE,
+         invite_token = COALESCE(EXCLUDED.invite_token, push_subscriptions.invite_token),
+         invited_by_endpoint = COALESCE(EXCLUDED.invited_by_endpoint, push_subscriptions.invited_by_endpoint),
+         last_seen_at = NOW()`,
       [
         cleanCode,
         cleanPlate,
@@ -906,17 +962,36 @@ app.post('/api/push/subscribe', async (req, res) => {
         subscription.keys.p256dh,
         subscription.keys.auth,
         req.headers['user-agent'] || null,
-        isFirstDevice,
-        isFirstDevice
+        saveAsPrimary,
+        receiveAdminAlerts,
+        cleanInviteToken || null,
+        inviteRow?.created_by_endpoint || null
       ]
     );
 
-    return res.json({ success: true, is_primary: isFirstDevice });
+    if (inviteRow) {
+      await pool.query(
+        `UPDATE owner_invites
+         SET status = 'used',
+             used_at = COALESCE(used_at, NOW()),
+             used_endpoint = $2,
+             user_agent = $3
+         WHERE id = $1`,
+        [inviteRow.id, subscription.endpoint, req.headers['user-agent'] || null]
+      );
+    }
+
+    return res.json({
+      success: true,
+      is_primary: saveAsPrimary,
+      invited: isInviteDevice
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ success: false, error: 'Errore salvataggio subscription.' });
   }
 });
+
 
 app.post('/api/push/unsubscribe', async (req, res) => {
   try {
@@ -930,6 +1005,275 @@ app.post('/api/push/unsubscribe', async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ success: false, error: 'Errore unsubscribe.' });
+  }
+});
+
+
+
+function normalizeOwnerPlate(value) {
+  return String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+}
+
+async function requirePrimaryOwnerDevice({ code, plate, endpoint }) {
+  const cleanCode = String(code || '').trim().toUpperCase();
+  const cleanPlate = String(plate || '').trim();
+  const cleanPlateNorm = normalizeOwnerPlate(cleanPlate);
+  const cleanEndpoint = String(endpoint || '').trim();
+
+  if (!cleanCode || !cleanPlate || !cleanEndpoint) {
+    return { ok: false, status: 400, error: 'Dati mancanti.' };
+  }
+
+  const owner = await pool.query(
+    `SELECT id, endpoint
+     FROM push_subscriptions
+     WHERE code = $1
+       AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
+       AND endpoint = $3
+       AND is_active = TRUE
+       AND is_primary = TRUE
+     LIMIT 1`,
+    [cleanCode, cleanPlateNorm, cleanEndpoint]
+  );
+
+  if (!owner.rows.length) {
+    return { ok: false, status: 403, error: 'Funzione disponibile solo dal dispositivo principale.' };
+  }
+
+  return {
+    ok: true,
+    code: cleanCode,
+    plate: cleanPlate,
+    plateNorm: cleanPlateNorm,
+    endpoint: cleanEndpoint
+  };
+}
+
+function buildPublicBaseUrl(req) {
+  const envBase = process.env.PUBLIC_BASE_URL || '';
+  if (envBase) return envBase.replace(/\/$/, '');
+  const host = req.get('host');
+  const isRenderHost = /onrender\.com$/i.test(host || '');
+  return isRenderHost ? `https://${host}` : `${req.protocol}://${host}`;
+}
+
+function createInviteToken() {
+  return crypto.randomBytes(24).toString('hex');
+}
+
+app.post('/api/owner/create-invite', async (req, res) => {
+  try {
+    const { code, plate, endpoint } = req.body || {};
+    const owner = await requirePrimaryOwnerDevice({ code, plate, endpoint });
+
+    if (!owner.ok) {
+      return res.status(owner.status).json({ success: false, error: owner.error });
+    }
+
+    let inviteToken = null;
+
+    for (let i = 0; i < 10; i++) {
+      const candidate = createInviteToken();
+      const exists = await pool.query(
+        `SELECT 1 FROM owner_invites WHERE invite_token = $1 LIMIT 1`,
+        [candidate]
+      );
+
+      if (!exists.rows.length) {
+        inviteToken = candidate;
+        break;
+      }
+    }
+
+    if (!inviteToken) {
+      return res.status(500).json({ success: false, error: 'Impossibile generare invito univoco.' });
+    }
+
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    const inserted = await pool.query(
+      `INSERT INTO owner_invites
+       (code, plate, invite_token, status, created_by_endpoint, created_at, sent_at, expires_at)
+       VALUES ($1, $2, $3, 'pending', $4, NOW(), NOW(), $5)
+       RETURNING id, code, plate, invite_token, status, created_at, sent_at, opened_at, used_at, revoked_at, expires_at`,
+      [owner.code, owner.plate, inviteToken, owner.endpoint, expiresAt]
+    );
+
+    const baseUrl = buildPublicBaseUrl(req);
+    const inviteUrl = `${baseUrl}/owner-invite/${inviteToken}`;
+
+    const shareText =
+`Ciao, ti invio l’accesso agli avvisi del mio veicolo.
+
+Apri questo link dal telefono, salva la Web App e attiva le notifiche:
+
+${inviteUrl}
+
+Il link è personale e può essere usato una sola volta.`;
+
+    return res.json({
+      success: true,
+      invite: inserted.rows[0],
+      invite_url: inviteUrl,
+      share_text: shareText
+    });
+  } catch (err) {
+    console.error('owner create-invite error:', err);
+    return res.status(500).json({ success: false, error: 'Errore creazione invito.' });
+  }
+});
+
+app.post('/api/owner/list-invites', async (req, res) => {
+  try {
+    const { code, plate, endpoint } = req.body || {};
+    const owner = await requirePrimaryOwnerDevice({ code, plate, endpoint });
+
+    if (!owner.ok) {
+      return res.status(owner.status).json({ success: false, error: owner.error });
+    }
+
+    const rows = await pool.query(
+      `SELECT
+         oi.id,
+         oi.code,
+         oi.plate,
+         oi.invite_token,
+         oi.status,
+         oi.created_at,
+         oi.sent_at,
+         oi.opened_at,
+         oi.used_at,
+         oi.revoked_at,
+         oi.expires_at,
+         oi.used_endpoint,
+         ps.is_active AS notification_active,
+         ps.receive_passenger_alerts,
+         ps.receive_admin_alerts,
+         ps.is_primary,
+         ps.app_saved_detected,
+         ps.app_saved_detected_at,
+         ps.last_seen_at
+       FROM owner_invites oi
+       LEFT JOIN push_subscriptions ps
+         ON ps.endpoint = oi.used_endpoint
+       WHERE oi.code = $1
+         AND REPLACE(UPPER(COALESCE(oi.plate,'')), ' ', '') = $2
+       ORDER BY oi.created_at DESC, oi.id DESC
+       LIMIT 100`,
+      [owner.code, owner.plateNorm]
+    );
+
+    return res.json({ success: true, items: rows.rows || [] });
+  } catch (err) {
+    console.error('owner list-invites error:', err);
+    return res.status(500).json({ success: false, error: 'Errore elenco inviti.' });
+  }
+});
+
+app.post('/api/owner/revoke-invite', async (req, res) => {
+  try {
+    const { code, plate, endpoint, invite_id } = req.body || {};
+    const owner = await requirePrimaryOwnerDevice({ code, plate, endpoint });
+
+    if (!owner.ok) {
+      return res.status(owner.status).json({ success: false, error: owner.error });
+    }
+
+    const inviteId = Number(invite_id);
+
+    if (!Number.isFinite(inviteId) || inviteId <= 0) {
+      return res.status(400).json({ success: false, error: 'ID invito non valido.' });
+    }
+
+    const found = await pool.query(
+      `SELECT id, used_endpoint
+       FROM owner_invites
+       WHERE id = $1
+         AND code = $2
+         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $3
+       LIMIT 1`,
+      [inviteId, owner.code, owner.plateNorm]
+    );
+
+    if (!found.rows.length) {
+      return res.status(404).json({ success: false, error: 'Invito non trovato.' });
+    }
+
+    const invite = found.rows[0];
+
+    await pool.query(
+      `UPDATE owner_invites
+       SET status = 'revoked',
+           revoked_at = NOW()
+       WHERE id = $1`,
+      [inviteId]
+    );
+
+    if (invite.used_endpoint) {
+      await pool.query(
+        `UPDATE push_subscriptions
+         SET is_active = FALSE,
+             receive_admin_alerts = FALSE,
+             receive_passenger_alerts = FALSE,
+             updated_at = NOW()
+         WHERE endpoint = $1`,
+        [invite.used_endpoint]
+      );
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('owner revoke-invite error:', err);
+    return res.status(500).json({ success: false, error: 'Errore revoca invito.' });
+  }
+});
+
+app.get('/owner-invite/:invite_token', async (req, res) => {
+  try {
+    const inviteToken = String(req.params.invite_token || '').trim();
+
+    const result = await pool.query(
+      `SELECT id, code, plate, status, expires_at
+       FROM owner_invites
+       WHERE invite_token = $1
+       LIMIT 1`,
+      [inviteToken]
+    );
+
+    const invite = result.rows[0];
+
+    if (!invite) {
+      return res.status(404).send('Invito non valido.');
+    }
+
+    if (invite.status === 'revoked') {
+      return res.status(410).send('Invito revocato.');
+    }
+
+    if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
+      await pool.query(
+        `UPDATE owner_invites
+         SET status = 'expired'
+         WHERE id = $1 AND status <> 'used'`,
+        [invite.id]
+      );
+      return res.status(410).send('Invito scaduto.');
+    }
+
+    await pool.query(
+      `UPDATE owner_invites
+       SET opened_at = COALESCE(opened_at, NOW())
+       WHERE id = $1`,
+      [invite.id]
+    );
+
+    return res.redirect(
+      302,
+      `/owner-simple.html?code=${encodeURIComponent(invite.code)}&plate=${encodeURIComponent(invite.plate || '')}&inviteToken=${encodeURIComponent(inviteToken)}`
+    );
+  } catch (err) {
+    console.error('owner-invite error:', err);
+    return res.status(500).send('Errore apertura invito.');
   }
 });
 
