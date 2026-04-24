@@ -3318,7 +3318,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
-
 <script id="directDeviceStatusScript">
 (function(){
   const EVER_ENABLED_KEY = 'owner_notifications_ever_enabled';
@@ -3329,36 +3328,36 @@ document.addEventListener('DOMContentLoaded', function () {
            document.referrer.startsWith('android-app://');
   }
 
-  function isVisible(el){
-    if (!el) return false;
-    const style = window.getComputedStyle(el);
-    const rect = el.getBoundingClientRect();
-    return style.display !== 'none' &&
-           style.visibility !== 'hidden' &&
-           style.opacity !== '0' &&
-           rect.width > 0 &&
-           rect.height > 0;
+  function originalUiSaysInstalled(){
+    const section = document.getElementById('installAppSection');
+    if (!section) return false;
+
+    const txt = (section.textContent || '').toLowerCase();
+
+    return (
+      txt.includes('già installata') ||
+      txt.includes('gia installata') ||
+      txt.includes('app installata') ||
+      txt.includes('web app installata')
+    );
+  }
+
+  function originalUiSaysNotInstalled(){
+    const section = document.getElementById('installAppSection');
+    if (!section) return false;
+
+    const txt = (section.textContent || '').toLowerCase();
+
+    return (
+      txt.includes('installa') &&
+      !txt.includes('già installata') &&
+      !txt.includes('gia installata') &&
+      !txt.includes('app installata')
+    );
   }
 
   function isAppSavedOrInstalled(){
-    const refreshWrap = document.getElementById('installRefreshWrap');
-    const refreshBtn = document.getElementById('refreshOwnerAppBtn');
-    const section = document.getElementById('installAppSection');
-
-    const standalone = isOwnerStandalone();
-    const refreshVisible = isVisible(refreshWrap) || isVisible(refreshBtn);
-
-    let textSaysInstalled = false;
-    if (section) {
-      const txt = (section.textContent || '').toLowerCase();
-      textSaysInstalled =
-        txt.includes('già installata') ||
-        txt.includes('gia installata') ||
-        txt.includes('app installata') ||
-        txt.includes('web app installata');
-    }
-
-    return standalone || refreshVisible || textSaysInstalled;
+    return isOwnerStandalone() || originalUiSaysInstalled();
   }
 
   function getNotificationPermission(){
@@ -3411,6 +3410,9 @@ document.addEventListener('DOMContentLoaded', function () {
       } else {
         message = 'Attiva le notifiche per ricevere gli avvisi del tuo veicolo.';
       }
+    } else {
+      color = 'red';
+      message = 'Installa l’App per ricevere gli avvisi del tuo veicolo.';
     }
 
     textEl.innerHTML =
@@ -3425,37 +3427,28 @@ document.addEventListener('DOMContentLoaded', function () {
       refreshBtn.textContent = 'Aggiorna App';
       refreshBtn.setAttribute('aria-label', 'Aggiorna App');
     }
-
-    try {
-      document.documentElement.setAttribute('data-owner-installed', installed ? '1' : '0');
-      document.documentElement.setAttribute('data-owner-notification-permission', permission);
-      document.documentElement.setAttribute('data-owner-push-subscription', activeSubscription ? '1' : '0');
-      document.documentElement.setAttribute('data-owner-status-color', color);
-    } catch(e) {}
   }
 
   window.setDirectDeviceStatus = setDirectDeviceStatus;
 
   window.addEventListener('load', function(){
     setDirectDeviceStatus();
-    setTimeout(setDirectDeviceStatus, 300);
-    setTimeout(setDirectDeviceStatus, 900);
-    setTimeout(setDirectDeviceStatus, 1800);
-    setTimeout(setDirectDeviceStatus, 3500);
-    setTimeout(setDirectDeviceStatus, 6000);
+    setTimeout(setDirectDeviceStatus, 400);
+    setTimeout(setDirectDeviceStatus, 1000);
+    setTimeout(setDirectDeviceStatus, 2200);
+    setTimeout(setDirectDeviceStatus, 4000);
   });
 
   document.addEventListener('visibilitychange', function(){
     if (!document.hidden) {
       setDirectDeviceStatus();
-      setTimeout(setDirectDeviceStatus, 700);
-      setTimeout(setDirectDeviceStatus, 1600);
+      setTimeout(setDirectDeviceStatus, 800);
     }
   });
 
   window.addEventListener('focus', function(){
     setDirectDeviceStatus();
-    setTimeout(setDirectDeviceStatus, 700);
+    setTimeout(setDirectDeviceStatus, 800);
   });
 
   document.addEventListener('click', function(e){
@@ -3471,10 +3464,9 @@ document.addEventListener('DOMContentLoaded', function () {
       label.includes('aggiorna app') ||
       label.includes('mostra istruzioni')
     ) {
-      setTimeout(setDirectDeviceStatus, 300);
-      setTimeout(setDirectDeviceStatus, 900);
-      setTimeout(setDirectDeviceStatus, 1800);
-      setTimeout(setDirectDeviceStatus, 3200);
+      setTimeout(setDirectDeviceStatus, 400);
+      setTimeout(setDirectDeviceStatus, 1200);
+      setTimeout(setDirectDeviceStatus, 2500);
     }
   });
 
@@ -3482,13 +3474,12 @@ document.addEventListener('DOMContentLoaded', function () {
   if (observerTarget) {
     const observer = new MutationObserver(function(){
       clearTimeout(window.__directDeviceStatusTimer);
-      window.__directDeviceStatusTimer = setTimeout(setDirectDeviceStatus, 260);
+      window.__directDeviceStatusTimer = setTimeout(setDirectDeviceStatus, 220);
     });
-    observer.observe(observerTarget, { childList:true, subtree:true, characterData:true, attributes:true, attributeFilter:['style','class'] });
+    observer.observe(observerTarget, { childList:true, subtree:true, characterData:true, attributes:true });
   }
 })();
 </script>
-
 
 
 
