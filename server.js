@@ -4971,6 +4971,78 @@ app.post('/api/admin/scan-stats', requireAdmin, async (req, res) => {
   }
 });
 
+
+app.post('/api/admin/debug-owner-device-roles', requireAdmin, async (req, res) => {
+  try {
+    const { code, plate } = req.body || {};
+    const cleanCode = String(code || '').trim().toUpperCase();
+    const cleanPlateNorm = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    if (!cleanCode && !cleanPlateNorm) {
+      return res.status(400).json({ success: false, error: 'Inserisci code o plate.' });
+    }
+
+    const vehicle = await pool.query(
+      `SELECT code, plate, brand, vehicle_model, status
+       FROM sticker_codes
+       WHERE ($1 = '' OR code = $1)
+         AND ($2 = '' OR REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2)
+       ORDER BY id DESC
+       LIMIT 10`,
+      [cleanCode, cleanPlateNorm]
+    );
+
+    const codes = vehicle.rows.map(r => r.code);
+
+    const pushSubs = codes.length ? await pool.query(
+      `SELECT id, code, plate, endpoint,
+              is_primary, receive_admin_alerts, receive_passenger_alerts,
+              is_active, invite_token, updated_at, last_seen_at,
+              LEFT(endpoint, 70) AS endpoint_short
+       FROM push_subscriptions
+       WHERE code = ANY($1::text[])
+       ORDER BY code, id DESC
+       LIMIT 100`,
+      [codes]
+    ) : { rows: [] };
+
+    const roles = codes.length ? await pool.query(
+      `SELECT id, code, plate, endpoint,
+              is_primary, invite_token, is_active,
+              created_at, updated_at,
+              LEFT(endpoint, 70) AS endpoint_short
+       FROM owner_device_vehicle_roles
+       WHERE code = ANY($1::text[])
+       ORDER BY code, is_primary DESC, is_active DESC, updated_at DESC, id DESC
+       LIMIT 100`,
+      [codes]
+    ) : { rows: [] };
+
+    const invites = codes.length ? await pool.query(
+      `SELECT id, code, plate, invite_token, status,
+              created_at, sent_at, opened_at, used_at, revoked_at, expires_at,
+              LEFT(used_endpoint, 70) AS used_endpoint_short
+       FROM owner_invites
+       WHERE code = ANY($1::text[])
+       ORDER BY created_at DESC
+       LIMIT 100`,
+      [codes]
+    ) : { rows: [] };
+
+    return res.json({
+      success: true,
+      vehicle: vehicle.rows,
+      push_subscriptions: pushSubs.rows,
+      owner_device_vehicle_roles: roles.rows,
+      owner_invites: invites.rows
+    });
+  } catch (err) {
+    console.error('debug-owner-device-roles error:', err);
+    return res.status(500).json({ success: false, error: 'Errore diagnostica ruoli.' });
+  }
+});
+
+
 app.post('/api/admin/reactivate-code', requireAdmin, async (req, res) => {
   try {
     const { email, password, code } = req.body;
