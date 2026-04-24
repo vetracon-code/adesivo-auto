@@ -1024,30 +1024,83 @@ async function requirePrimaryOwnerDevice({ code, plate, endpoint }) {
     return { ok: false, status: 400, error: 'Dati mancanti.' };
   }
 
-  const owner = await pool.query(
-    `SELECT id, endpoint
+  const current = await pool.query(
+    `SELECT
+       id,
+       endpoint,
+       COALESCE(is_primary, FALSE) AS is_primary,
+       COALESCE(receive_admin_alerts, FALSE) AS receive_admin_alerts,
+       COALESCE(receive_passenger_alerts, FALSE) AS receive_passenger_alerts,
+       COALESCE(is_active, FALSE) AS is_active,
+       invite_token
      FROM push_subscriptions
      WHERE code = $1
        AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
        AND endpoint = $3
-       AND is_active = TRUE
-       AND is_primary = TRUE
+       AND COALESCE(is_active, TRUE) = TRUE
      LIMIT 1`,
     [cleanCode, cleanPlateNorm, cleanEndpoint]
   );
 
-  if (!owner.rows.length) {
+  if (!current.rows.length) {
+    return { ok: false, status: 403, error: 'Dispositivo non riconosciuto per questo veicolo.' };
+  }
+
+  const row = current.rows[0];
+
+  // Gli utenti invitati non possono creare altri inviti.
+  if (row.invite_token) {
     return { ok: false, status: 403, error: 'Funzione disponibile solo dal dispositivo principale.' };
   }
 
-  return {
-    ok: true,
-    code: cleanCode,
-    plate: cleanPlate,
-    plateNorm: cleanPlateNorm,
-    endpoint: cleanEndpoint
-  };
+  // Caso normale: dispositivo già primario o abilitato agli avvisi admin.
+  if (row.is_primary === true || row.receive_admin_alerts === true) {
+    return {
+      ok: true,
+      code: cleanCode,
+      plate: cleanPlate,
+      plateNorm: cleanPlateNorm,
+      endpoint: cleanEndpoint
+    };
+  }
+
+  // Fallback per veicoli già attivati prima della nuova logica:
+  // se non esiste nessun altro dispositivo principale attivo,
+  // promuoviamo questo dispositivo non invitato a principale.
+  const primaryCheck = await pool.query(
+    `SELECT id
+     FROM push_subscriptions
+     WHERE code = $1
+       AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
+       AND COALESCE(is_active, TRUE) = TRUE
+       AND COALESCE(is_primary, FALSE) = TRUE
+     LIMIT 1`,
+    [cleanCode, cleanPlateNorm]
+  );
+
+  if (!primaryCheck.rows.length) {
+    await pool.query(
+      `UPDATE push_subscriptions
+       SET is_primary = TRUE,
+           receive_admin_alerts = TRUE,
+           receive_passenger_alerts = TRUE,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [row.id]
+    );
+
+    return {
+      ok: true,
+      code: cleanCode,
+      plate: cleanPlate,
+      plateNorm: cleanPlateNorm,
+      endpoint: cleanEndpoint
+    };
+  }
+
+  return { ok: false, status: 403, error: 'Funzione disponibile solo dal dispositivo principale.' };
 }
+
 
 function buildPublicBaseUrl(req) {
   const envBase = process.env.PUBLIC_BASE_URL || '';
