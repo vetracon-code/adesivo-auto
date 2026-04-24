@@ -1056,47 +1056,6 @@
 
 </head>
 <body>
-
-<script id="ownerEmergencyAccessBootstrap">
-(function(){
-  try {
-    const params = new URLSearchParams(window.location.search);
-
-    const urlCode = params.get('code') || '';
-    const urlPlate = params.get('plate') || '';
-    const urlToken = params.get('ownerToken') || '';
-
-    if (urlCode && urlPlate) {
-      try {
-        localStorage.setItem('owner_saved_code', urlCode);
-        localStorage.setItem('owner_saved_plate', urlPlate);
-        if (urlToken) localStorage.setItem('owner_access_token', urlToken);
-      } catch(e) {}
-      return;
-    }
-
-    const savedCode = localStorage.getItem('owner_saved_code') || '';
-    const savedPlate = localStorage.getItem('owner_saved_plate') || '';
-    const savedToken = localStorage.getItem('owner_access_token') || '';
-
-    if (savedCode && savedPlate) {
-      params.set('code', savedCode);
-      params.set('plate', savedPlate);
-      window.location.replace(window.location.pathname + '?' + params.toString());
-      return;
-    }
-
-    if (savedToken) {
-      window.location.replace('/owner-access/' + encodeURIComponent(savedToken));
-      return;
-    }
-
-    // Ultima difesa: non lasciare mai owner-simple vuota.
-    window.location.replace('/owner-login.html');
-  } catch(e) {}
-})();
-</script>
-
   
 <div class="wrap">
   <div class="brand-top-banner">
@@ -1316,50 +1275,6 @@
         </div>
 
 
-    <div class="lower">
-        <div class="area-card">
-          <h2 class="section-title">Aree di provenienza</h2>
-          <div class="italy-map-wrap">
-            <div class="italy-map-box">
-              <div class="italy-map-head">
-                <div>
-                  <div class="mini-label">Area geografica</div>
-                  <div class="italy-map-note">In Italia i punti mostrano le aree aggregate da cui sono arrivate aperture o segnalazioni. Se l’accesso proviene dall’estero, qui vedrai direttamente la nazione.</div>
-                </div>
-                <div id="lastAreaText" class="map-country-badge">Italia</div>
-              </div>
-
-              <div id="mapVisualBox">
-                <div class="italy-map-wrap-real">
-                  <img class="italy-real-map" src="/assets/italy-real.svg" alt="Mappa Italia"> <!-- marker-tune-20260416-1339 -->
-                  <button id="mapDotNorth" class="italy-dot dot-north" type="button" aria-label="Nord Italia"></button>
-                  <button id="mapDotCenter" class="italy-dot dot-center" type="button" aria-label="Centro Italia"></button>
-                  <button id="mapDotSouth" class="italy-dot dot-south" type="button" aria-label="Sud Italia"></button>
-                  <button id="mapDotIslands" class="italy-dot dot-islands" type="button" aria-label="Isole"></button>
-                </div>
-              </div>
-            </div>
-
-            <div class="italy-detail">
-              <div class="italy-detail-title">Dettaglio area</div>
-              <div id="mapAreaTitle" class="italy-detail-big">Seleziona un punto</div>
-              <div id="mapAreaSummary" class="muted" style="font-size:.9rem;line-height:1.5;">Qui vedrai città, regione e ultimi accessi registrati per l’area selezionata.</div>
-              <div id="mapAreaList" class="italy-detail-list">
-                <div class="italy-detail-empty">Nessun dettaglio disponibile.</div>
-              </div>
-              <div class="area-box" style="margin-top:auto;">
-                <div class="mini-label">Stato del servizio</div>
-                <div id="statusText" class="big">-</div>
-                <div style="margin-top:10px;">
-                  <span id="expiryBadge" class="expiry-badge">-</span>
-                </div>
-                <div id="expiryNote" class="muted" style="margin-top:10px; line-height:1.45;">Caricamento...</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-
       <div class="hero">
         <div class="radar-card">
           <div class="radar-wrap">
@@ -1399,7 +1314,6 @@
           </div>
         </div>
       </div>
-
 
         <div class="timeline-card" style="display:none;">
           <h2 class="section-title">Ultimi segnali registrati</h2>
@@ -1785,9 +1699,9 @@
 
     async function loadSimpleDashboard() {
       const params = new URLSearchParams(window.location.search);
-      const code = params.get('code') || localStorage.getItem('owner_saved_code') || '';
-      const plate = params.get('plate') || localStorage.getItem('owner_saved_plate') || '';
-      const ownerToken = params.get('ownerToken') || localStorage.getItem('owner_access_token') || '';
+      const code = params.get('code') || '';
+      const plate = params.get('plate') || '';
+      const ownerToken = params.get('ownerToken') || '';
 
       if (ownerToken) {
         try { localStorage.setItem('owner_access_token', ownerToken); } catch(e) {}
@@ -1812,12 +1726,9 @@
       const data = await res.json();
 
       if(!res.ok || !data.success){
-        const card = document.getElementById('qrStatusWorkingCard');
-        if (card) card.style.display = 'flex';
-
-        qs('statusPill').textContent = 'ERRORE';
+        qs('statusPill').textContent = 'Errore';
         qs('statusPill').className = 'status-pill danger';
-        qs('workingText').innerHTML = '<strong>Impossibile caricare la tua App.</strong><br>Chiudi e riapri dal link personale oppure accedi di nuovo.';
+        qs('workingText').textContent = data.error || 'Impossibile caricare i dati.';
         qs('eventsList').innerHTML = '<div class="muted">Nessun dato disponibile.</div>';
         return;
       }
@@ -2195,8 +2106,8 @@ function buildOwnerLoginUrlWithContext(){
 function getOwnerParams(){
       const params = new URLSearchParams(window.location.search);
       return {
-        code: params.get('code') || localStorage.getItem('owner_saved_code') || '',
-        plate: params.get('plate') || localStorage.getItem('owner_saved_plate') || ''
+        code: params.get('code') || '',
+        plate: params.get('plate') || ''
       };
     }
 
