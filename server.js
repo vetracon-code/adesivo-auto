@@ -3863,6 +3863,43 @@ app.get('/api/public-contact/:public_id', async (req, res) => {
 
 
 
+
+app.get('/owner-login-access/:token', async (req, res) => {
+  try {
+    const token = String(req.params.token || '').trim();
+
+    const result = await pool.query(
+      `SELECT
+         sc.code,
+         sc.plate,
+         COALESCE(NULLIF(sc.phone, ''), NULLIF(tr.phone, '')) AS phone
+       FROM sticker_codes sc
+       LEFT JOIN trial_requests tr
+         ON tr.owner_access_token = sc.owner_access_token
+       WHERE sc.owner_access_token = $1
+       LIMIT 1`,
+      [token]
+    );
+
+    if (!result.rows.length) {
+      return res.redirect(302, '/owner-login.html');
+    }
+
+    const row = result.rows[0];
+
+    const qs = new URLSearchParams();
+    if (row.code) qs.set('code', row.code);
+    if (row.plate) qs.set('plate', row.plate);
+    if (row.phone) qs.set('phone', row.phone);
+
+    return res.redirect(302, `/owner-login.html?${qs.toString()}`);
+  } catch (err) {
+    console.error('owner-login-access error:', err);
+    return res.redirect(302, '/owner-login.html');
+  }
+});
+
+
 app.get('/owner-access/:token', async (req, res) => {
   try {
     const token = String(req.params.token || '').trim();
@@ -3896,7 +3933,7 @@ app.get('/owner-access/:token', async (req, res) => {
     res.cookie('owner_saved_plate', String(row.plate || ''), cookieOptions);
     res.cookie('owner_saved_code', String(row.code || ''), cookieOptions);
 
-    return res.redirect(302, `/owner-simple.html?code=${encodeURIComponent(row.code)}&plate=${encodeURIComponent(row.plate || '')}`);
+    return res.redirect(302, `/owner-simple.html?code=${encodeURIComponent(row.code)}&plate=${encodeURIComponent(row.plate || '')}&ownerToken=${encodeURIComponent(token)}`);
   } catch (err) {
     console.error(err);
     return res.status(500).send('Errore di comunicazione con il server.');
