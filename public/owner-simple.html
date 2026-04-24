@@ -972,7 +972,7 @@
       <div class="top">
       <div id="installAppSection" style="padding:0 14px 10px;position:sticky;top:8px;z-index:30;">
         <div style="display:flex;justify-content: flex-end;margin-bottom:8px;">
-          <div id="installAggiorna AppWrap" style="display:none;">
+          <div id="installRefreshWrap" style="display:none;">
             <button id="refreshOwnerAppBtn" type="button" style="min-height:30px;padding:0 11px;border-radius:10px;border:0;background:#5aa0ff;color:#fff;font-size:.78rem;font-weight:800;cursor:pointer;box-shadow:0 8px 18px rgba(90,160,255,.18);">
               Aggiorna App
             </button>
@@ -2751,7 +2751,7 @@
 
       const compact = document.getElementById('installCompactText');
       const explain = document.getElementById('installExplainBox');
-      const refreshWrap = document.getElementById('installAggiorna AppWrap');
+      const refreshWrap = document.getElementById('installRefreshWrap');
       const deviceLabel = document.getElementById('deviceDetectedValue');
       const instructions = document.getElementById('installInstructionsText');
       const primaryBtn = document.getElementById('primaryInstallNotifyBtn');
@@ -3351,6 +3351,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
+
 <script id="directDeviceStatusScript">
 (function(){
   const EVER_ENABLED_KEY = 'owner_notifications_ever_enabled';
@@ -3359,38 +3360,6 @@ document.addEventListener('DOMContentLoaded', function () {
     return window.matchMedia('(display-mode: standalone)').matches ||
            window.navigator.standalone === true ||
            document.referrer.startsWith('android-app://');
-  }
-
-  function isVisible(el){
-    if (!el) return false;
-    const style = window.getComputedStyle(el);
-    const rect = el.getBoundingClientRect();
-    return style.display !== 'none' &&
-           style.visibility !== 'hidden' &&
-           style.opacity !== '0' &&
-           rect.width > 0 &&
-           rect.height > 0;
-  }
-
-  function isAppSavedOrInstalled(){
-    const refreshWrap = document.getElementById('installRefreshWrap');
-    const refreshBtn = document.getElementById('refreshOwnerAppBtn');
-    const section = document.getElementById('installAppSection');
-
-    const standalone = isOwnerStandalone();
-    const refreshVisible = isVisible(refreshWrap) || isVisible(refreshBtn);
-
-    let textSaysInstalled = false;
-    if (section) {
-      const txt = (section.textContent || '').toLowerCase();
-      textSaysInstalled =
-        txt.includes('già installata') ||
-        txt.includes('gia installata') ||
-        txt.includes('app installata') ||
-        txt.includes('web app installata');
-    }
-
-    return standalone || refreshVisible || textSaysInstalled;
   }
 
   function getNotificationPermission(){
@@ -3414,19 +3383,18 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   async function setDirectDeviceStatus(){
-    const section = document.getElementById('installAppSection');
     const textEl = document.getElementById('installCompactText');
     const badgeEl = document.getElementById('installStatusBadge');
     const refreshBtn = document.getElementById('refreshOwnerAppBtn');
 
-    if (!section || !textEl) return;
+    if (!textEl) return;
 
-    const installed = isAppSavedOrInstalled();
+    const installed = isOwnerStandalone();
     const permission = getNotificationPermission();
     const activeSubscription = await hasActivePushSubscription();
 
     let color = 'red';
-    let message = 'Installa l’App per ricevere gli avvisi del tuo veicolo.';
+    let message = 'Salva l’App sul telefono prima di attivare le notifiche.';
 
     if (installed && permission === 'granted' && activeSubscription) {
       color = 'green';
@@ -3457,37 +3425,27 @@ document.addEventListener('DOMContentLoaded', function () {
       refreshBtn.textContent = 'Aggiorna App';
       refreshBtn.setAttribute('aria-label', 'Aggiorna App');
     }
-
-    try {
-      document.documentElement.setAttribute('data-owner-installed', installed ? '1' : '0');
-      document.documentElement.setAttribute('data-owner-notification-permission', permission);
-      document.documentElement.setAttribute('data-owner-push-subscription', activeSubscription ? '1' : '0');
-      document.documentElement.setAttribute('data-owner-status-color', color);
-    } catch(e) {}
   }
 
   window.setDirectDeviceStatus = setDirectDeviceStatus;
 
   window.addEventListener('load', function(){
     setDirectDeviceStatus();
-    setTimeout(setDirectDeviceStatus, 300);
-    setTimeout(setDirectDeviceStatus, 900);
+    setTimeout(setDirectDeviceStatus, 600);
     setTimeout(setDirectDeviceStatus, 1800);
     setTimeout(setDirectDeviceStatus, 3500);
-    setTimeout(setDirectDeviceStatus, 6000);
   });
 
   document.addEventListener('visibilitychange', function(){
     if (!document.hidden) {
       setDirectDeviceStatus();
-      setTimeout(setDirectDeviceStatus, 700);
-      setTimeout(setDirectDeviceStatus, 1600);
+      setTimeout(setDirectDeviceStatus, 800);
     }
   });
 
   window.addEventListener('focus', function(){
     setDirectDeviceStatus();
-    setTimeout(setDirectDeviceStatus, 700);
+    setTimeout(setDirectDeviceStatus, 800);
   });
 
   document.addEventListener('click', function(e){
@@ -3500,26 +3458,16 @@ document.addEventListener('DOMContentLoaded', function () {
       label.includes('attiva notifiche') ||
       label.includes('disattiva notifiche') ||
       label.includes('riattiva notifiche') ||
-      label.includes('aggiorna app') ||
-      label.includes('mostra istruzioni')
+      label.includes('aggiorna app')
     ) {
-      setTimeout(setDirectDeviceStatus, 300);
-      setTimeout(setDirectDeviceStatus, 900);
-      setTimeout(setDirectDeviceStatus, 1800);
-      setTimeout(setDirectDeviceStatus, 3200);
+      setTimeout(setDirectDeviceStatus, 500);
+      setTimeout(setDirectDeviceStatus, 1400);
+      setTimeout(setDirectDeviceStatus, 2800);
     }
   });
-
-  const observerTarget = document.getElementById('installAppSection');
-  if (observerTarget) {
-    const observer = new MutationObserver(function(){
-      clearTimeout(window.__directDeviceStatusTimer);
-      window.__directDeviceStatusTimer = setTimeout(setDirectDeviceStatus, 260);
-    });
-    observer.observe(observerTarget, { childList:true, subtree:true, characterData:true, attributes:true, attributeFilter:['style','class'] });
-  }
 })();
 </script>
+
 
 
 
