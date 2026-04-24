@@ -1219,7 +1219,8 @@
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
               <div id="blockedAttemptsBadge" class="expiry-badge ok">0 EVENTI</div>
               <button id="blockedAttemptsSelectBtn" class="btn btn-secondary" type="button">Seleziona</button>
-              <button id="blockedAttemptsDeleteBtn" class="btn btn-secondary" type="button" style="display:none;">Elimina selezionati</button>
+              <button id="blockedAttemptsSelectAllBtn" class="btn btn-secondary" type="button" style="display:none;">Seleziona tutti</button>
+              <button id="blockedAttemptsDeleteBtn" class="btn btn-secondary" type="button" style="display:none;">Elimina</button>
             </div>
           </div>
 
@@ -2452,8 +2453,17 @@ function getOwnerParams(){
         badge.style.color = '#166534';
       }
 
+      const selectAllBtn = document.getElementById('blockedAttemptsSelectAllBtn');
+
+      if (selectAllBtn) {
+        selectAllBtn.style.display = (blockedAttemptsSelectionMode && ownerBlockedAttempts.length > 0) ? 'inline-flex' : 'none';
+        const allSelected = ownerBlockedAttempts.length > 0 && ownerBlockedAttempts.every(item => selectedBlockedAttemptIds.has(item.id));
+        selectAllBtn.textContent = allSelected ? 'Deseleziona tutti' : 'Seleziona tutti';
+      }
+
       if (deleteBtn) {
-        deleteBtn.style.display = blockedAttemptsSelectionMode ? 'inline-flex' : 'none';
+        deleteBtn.style.display = (blockedAttemptsSelectionMode && ownerBlockedAttempts.length > 0) ? 'inline-flex' : 'none';
+        deleteBtn.textContent = 'Elimina';
       }
 
       if (!ownerBlockedAttempts.length) {
@@ -3084,6 +3094,31 @@ function getOwnerParams(){
       blockedAttemptsSelectionMode = !blockedAttemptsSelectionMode;
       selectedBlockedAttemptIds.clear();
       document.getElementById('blockedAttemptsSelectBtn').textContent = blockedAttemptsSelectionMode ? 'Annulla' : 'Seleziona';
+
+      const selectAllBtn = document.getElementById('blockedAttemptsSelectAllBtn');
+      if (selectAllBtn) {
+        selectAllBtn.style.display = (blockedAttemptsSelectionMode && ownerBlockedAttempts.length > 0) ? 'inline-flex' : 'none';
+        selectAllBtn.textContent = 'Seleziona tutti';
+      }
+
+      renderBlockedAttempts();
+    });
+
+    document.getElementById('blockedAttemptsSelectAllBtn').addEventListener('click', () => {
+      if (!blockedAttemptsSelectionMode) return;
+
+      const allIds = (ownerBlockedAttempts || [])
+        .map(item => item.id)
+        .filter(Boolean);
+
+      const allSelected = allIds.length > 0 && allIds.every(id => selectedBlockedAttemptIds.has(id));
+
+      if (allSelected) {
+        selectedBlockedAttemptIds.clear();
+      } else {
+        allIds.forEach(id => selectedBlockedAttemptIds.add(id));
+      }
+
       renderBlockedAttempts();
     });
 
@@ -3099,6 +3134,13 @@ function getOwnerParams(){
       selectedBlockedAttemptIds.clear();
       blockedAttemptsSelectionMode = false;
       document.getElementById('blockedAttemptsSelectBtn').textContent = 'Seleziona';
+
+      const selectAllBtn = document.getElementById('blockedAttemptsSelectAllBtn');
+      if (selectAllBtn) {
+        selectAllBtn.style.display = 'none';
+        selectAllBtn.textContent = 'Seleziona tutti';
+      }
+
       await loadBlockedAttempts();
     });
     function detectDeviceType(){
