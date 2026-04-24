@@ -3431,6 +3431,53 @@ app.post('/api/owner-disable', async (req, res) => {
 
 
 
+
+app.get('/api/owner-prefill', async (req, res) => {
+  try {
+    const code = String(req.query.code || '').trim().toUpperCase();
+    const plate = String(req.query.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    if (!code || !plate) {
+      return res.status(400).json({ success: false, error: 'Codice e targa obbligatori.' });
+    }
+
+    const result = await pool.query(
+      `SELECT
+         sc.code,
+         sc.plate,
+         COALESCE(NULLIF(sc.phone, ''), NULLIF(tr.phone, '')) AS phone
+       FROM sticker_codes sc
+       LEFT JOIN trial_requests tr
+         ON tr.owner_access_token = sc.owner_access_token
+       WHERE sc.code = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, error: 'Codice non trovato.' });
+    }
+
+    const row = result.rows[0];
+    const dbPlate = String(row.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    if (dbPlate !== plate) {
+      return res.status(401).json({ success: false, error: 'Targa non corrispondente.' });
+    }
+
+    return res.json({
+      success: true,
+      code: row.code,
+      plate: row.plate || '',
+      phone: row.phone || ''
+    });
+  } catch (err) {
+    console.error('owner-prefill error:', err);
+    return res.status(500).json({ success: false, error: 'Errore recupero dati accesso.' });
+  }
+});
+
+
 app.post('/api/owner-login-phone-plate', async (req, res) => {
   try {
     const phoneInput = req.body?.phone || '';
