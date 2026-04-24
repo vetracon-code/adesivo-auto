@@ -3619,6 +3619,37 @@ function getOwnerParams(){
       }
     }
 
+
+    window.deleteOwnerInvite = async function(inviteId){
+      try {
+        const { code, plate } = getOwnerParams();
+        const endpoint = await getCurrentPushEndpoint();
+
+        if (!inviteId || !code || !plate || !endpoint) return;
+
+        const ok = confirm('Vuoi cancellare questo invito dal pannello? Se era già attivo, l’accesso verrà disattivato.');
+        if (!ok) return;
+
+        const res = await fetch('/api/owner/delete-invite', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ code, plate, endpoint, invite_id: inviteId })
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.success) {
+          alert(data.error || 'Errore cancellazione invito.');
+          return;
+        }
+
+        await loadOwnerInvitesPanel();
+      } catch(e) {
+        alert('Errore cancellazione invito.');
+      }
+    };
+
+
     window.revokeOwnerInvite = async function(inviteId){
       try {
         const { code, plate } = getOwnerParams();

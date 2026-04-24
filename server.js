@@ -1279,6 +1279,83 @@ app.post('/api/owner/list-invites', async (req, res) => {
   }
 });
 
+
+app.post('/api/owner/delete-invite', async (req, res) => {
+  try {
+    const { code, plate, endpoint, invite_id } = req.body || {};
+
+    const owner = await requirePrimaryOwnerDevice({ code, plate, endpoint });
+    if (!owner.ok) {
+      return res.status(owner.status || 403).json({ success: false, error: owner.error || 'Non autorizzato.' });
+    }
+
+    const inviteId = Number(invite_id);
+    if (!inviteId || !Number.isFinite(inviteId)) {
+      return res.status(400).json({ success: false, error: 'ID invito mancante.' });
+    }
+
+    const inviteRes = await pool.query(
+      `SELECT id, code, plate, invite_token, used_endpoint
+       FROM owner_invites
+       WHERE id = $1
+         AND code = $2
+         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $3
+       LIMIT 1`,
+      [inviteId, owner.code, owner.plateNorm]
+    );
+
+    if (!inviteRes.rows.length) {
+      return res.status(404).json({ success: false, error: 'Invito non trovato.' });
+    }
+
+    const invite = inviteRes.rows[0];
+
+    // Se l’invito aveva già prodotto un accesso, lo disattiviamo prima di cancellare la riga.
+    if (invite.invite_token) {
+      await pool.query(
+        `UPDATE owner_device_vehicle_roles
+         SET is_active = FALSE,
+             is_primary = FALSE,
+             updated_at = NOW()
+         WHERE code = $1
+           AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
+           AND invite_token = $3`,
+        [owner.code, owner.plateNorm, invite.invite_token]
+      );
+
+      await pool.query(
+        `UPDATE push_subscriptions
+         SET is_active = FALSE,
+             receive_admin_alerts = FALSE,
+             receive_passenger_alerts = FALSE,
+             updated_at = NOW()
+         WHERE code = $1
+           AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
+           AND invite_token = $3`,
+        [owner.code, owner.plateNorm, invite.invite_token]
+      );
+    }
+
+    await pool.query(
+      `DELETE FROM owner_invites
+       WHERE id = $1
+         AND code = $2
+         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $3`,
+      [inviteId, owner.code, owner.plateNorm]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('owner delete-invite error:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Errore cancellazione invito.',
+      detail: err && err.message ? err.message : String(err)
+    });
+  }
+});
+
+
 app.post('/api/owner/revoke-invite', async (req, res) => {
   try {
     const { code, plate, endpoint, invite_id } = req.body || {};
