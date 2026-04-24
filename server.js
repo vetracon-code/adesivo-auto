@@ -95,6 +95,7 @@ function parseCookies(req) {
 
 function signAdminSession(value) {
   const crypto = require('crypto');
+const nodeCrypto = require('node:crypto');
   const sig = crypto.createHmac('sha256', getAdminSecret()).update(value).digest('hex');
   return `${value}.${sig}`;
 }
