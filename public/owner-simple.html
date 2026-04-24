@@ -3353,9 +3353,25 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
+
 <script id="directDeviceStatusScript">
 (function(){
-  function setDirectDeviceStatus(){
+  async function hasActivePushSubscription(){
+    try {
+      if (!('serviceWorker' in navigator)) return false;
+      if (!('PushManager' in window)) return false;
+
+      const reg = await navigator.serviceWorker.ready;
+      if (!reg || !reg.pushManager) return false;
+
+      const sub = await reg.pushManager.getSubscription();
+      return !!sub;
+    } catch(e) {
+      return false;
+    }
+  }
+
+  async function setDirectDeviceStatus(){
     const textEl = document.getElementById('installCompactText');
     const badgeEl = document.getElementById('installStatusBadge');
     const refreshBtn = document.getElementById('refreshOwnerAppBtn');
@@ -3364,17 +3380,24 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!textEl || !primaryBtn) return;
 
     const primaryLabel = (primaryBtn.textContent || '').trim().toLowerCase();
+    const permission = ('Notification' in window) ? Notification.permission : 'unsupported';
+    const activeSubscription = await hasActivePushSubscription();
 
     let color = 'red';
     let message = 'Salva l’App sul telefono prima di attivare le notifiche.';
 
-    if (primaryLabel.includes('installa') || primaryLabel.includes('copia link')) {
+    // Prima priorità: stato reale delle notifiche push
+    if (permission === 'granted' && activeSubscription) {
+      color = 'green';
+      message = 'App e notifiche attive: riceverai gli avvisi su questo dispositivo.';
+    } else if (primaryLabel.includes('installa') || primaryLabel.includes('copia link')) {
       color = 'red';
       message = 'Salva l’App sul telefono prima di attivare le notifiche.';
     } else if (primaryLabel.includes('attiva notifiche')) {
       color = 'yellow';
       message = 'Attiva le notifiche per ricevere gli avvisi del tuo veicolo.';
     } else if (primaryLabel.includes('disattiva notifiche')) {
+      // Fallback: se il pulsante originale dice disattiva, consideriamo il sistema operativo.
       color = 'green';
       message = 'App e notifiche attive: riceverai gli avvisi su questo dispositivo.';
     } else if (primaryLabel.includes('verifica notifiche')) {
@@ -3434,6 +3457,7 @@ document.addEventListener('DOMContentLoaded', function () {
       setTimeout(setDirectDeviceStatus, 500);
       setTimeout(setDirectDeviceStatus, 1400);
       setTimeout(setDirectDeviceStatus, 2800);
+      setTimeout(setDirectDeviceStatus, 4500);
     }
   });
 
@@ -3441,12 +3465,13 @@ document.addEventListener('DOMContentLoaded', function () {
   if (target) {
     const observer = new MutationObserver(function(){
       clearTimeout(window.__directDeviceStatusTimer);
-      window.__directDeviceStatusTimer = setTimeout(setDirectDeviceStatus, 220);
+      window.__directDeviceStatusTimer = setTimeout(setDirectDeviceStatus, 250);
     });
     observer.observe(target, { childList:true, subtree:true, characterData:true, attributes:true });
   }
 })();
 </script>
+
 
 
 
