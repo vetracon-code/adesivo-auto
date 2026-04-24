@@ -1178,7 +1178,12 @@
               <div class="muted" style="line-height:1.45;font-size:.84rem;">Qui trovi gli accessi bloccati. Puoi sbloccarli in qualsiasi momento.</div>
             </div>
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
                 <div id="abuseBlocksBadge" class="expiry-badge warn">0 ATTIVI</div>
+                <button id="abuseBlocksSelectBtn" class="btn btn-secondary" type="button">Seleziona</button>
+                <button id="abuseBlocksSelectAllBtn" class="btn btn-secondary" type="button" style="display:none;">Seleziona tutti</button>
+                <button id="abuseBlocksDeleteBtn" class="btn btn-secondary" type="button" style="display:none;">Elimina</button>
+              </div>
                 <button id="abuseBlocksSelectBtn" class="btn btn-secondary" type="button">Seleziona</button>
                 <button id="abuseBlocksSelectAllBtn" class="btn btn-secondary" type="button" style="display:none;">Seleziona tutti</button>
                 <button id="abuseBlocksDeleteBtn" class="btn btn-secondary" type="button" style="display:none;">Elimina</button>
@@ -2846,6 +2851,52 @@ function getOwnerParams(){
         selectAllBtn.textContent = 'Seleziona tutti';
       }
       await loadOwnerMessages();
+    });
+
+    document.getElementById('abuseBlocksSelectBtn').addEventListener('click', () => {
+      abuseBlocksSelectionMode = !abuseBlocksSelectionMode;
+      selectedAbuseBlockIds.clear();
+      renderAbuseBlocks();
+    });
+
+    document.getElementById('abuseBlocksSelectAllBtn').addEventListener('click', () => {
+      if (!abuseBlocksSelectionMode) return;
+
+      const activeIds = (ownerAbuseBlocks || [])
+        .filter(item => item.is_active)
+        .map(item => item.id)
+        .filter(Boolean);
+
+      const allSelected = activeIds.length > 0 && activeIds.every(id => selectedAbuseBlockIds.has(id));
+
+      if (allSelected) {
+        selectedAbuseBlockIds.clear();
+      } else {
+        activeIds.forEach(id => selectedAbuseBlockIds.add(id));
+      }
+
+      renderAbuseBlocks();
+    });
+
+    document.getElementById('abuseBlocksDeleteBtn').addEventListener('click', async () => {
+      const ids = Array.from(selectedAbuseBlockIds);
+      if (!ids.length) return;
+
+      const { code, plate } = getOwnerParams();
+
+      for (const id of ids) {
+        try {
+          await fetch('/api/owner/unblock-abuse', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ code, plate, id })
+          });
+        } catch(e) {}
+      }
+
+      selectedAbuseBlockIds.clear();
+      abuseBlocksSelectionMode = false;
+      await loadOwnerAbuseBlocks();
     });
 
     document.getElementById('abuseBlocksSelectBtn').addEventListener('click', () => {
