@@ -4696,6 +4696,39 @@ async function initDb() {
     `);
 
     console.log('Tabella blocked_attempt_logs pronta');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS owner_invites (
+        id BIGSERIAL PRIMARY KEY,
+        code TEXT NOT NULL,
+        plate TEXT NOT NULL,
+        invite_token TEXT UNIQUE NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_by_endpoint TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        sent_at TIMESTAMPTZ,
+        opened_at TIMESTAMPTZ,
+        used_at TIMESTAMPTZ,
+        revoked_at TIMESTAMPTZ,
+        expires_at TIMESTAMPTZ,
+        used_endpoint TEXT,
+        user_agent TEXT
+      )
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_owner_invites_code_plate_created
+      ON owner_invites (code, plate, created_at DESC)
+    `);
+
+    await pool.query("ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS invite_token TEXT");
+    await pool.query("ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS invited_by_endpoint TEXT");
+    await pool.query("ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS app_saved_detected BOOLEAN DEFAULT FALSE");
+    await pool.query("ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS app_saved_detected_at TIMESTAMPTZ");
+    await pool.query("ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ");
+
+    console.log('Tabella owner_invites pronta');
+
     console.log('Tabella push_delivery_logs pronta');
     await pool.query(`
       ALTER TABLE sticker_codes
