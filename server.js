@@ -3803,7 +3803,7 @@ app.get('/owner-access/:token', async (req, res) => {
     const token = String(req.params.token || '').trim();
 
     const result = await pool.query(
-      `SELECT code, plate
+      `SELECT code, plate, phone
        FROM sticker_codes
        WHERE owner_access_token = $1
        LIMIT 1`,
@@ -3815,6 +3815,17 @@ app.get('/owner-access/:token', async (req, res) => {
     }
 
     const row = result.rows[0];
+
+    const cookieOptions = {
+      maxAge: 1000 * 60 * 60 * 24 * 30,
+      sameSite: 'Lax',
+      secure: true
+    };
+
+    res.cookie('owner_saved_phone', String(row.phone || ''), cookieOptions);
+    res.cookie('owner_saved_plate', String(row.plate || ''), cookieOptions);
+    res.cookie('owner_saved_code', String(row.code || ''), cookieOptions);
+
     return res.redirect(302, `/owner-simple.html?code=${encodeURIComponent(row.code)}&plate=${encodeURIComponent(row.plate || '')}`);
   } catch (err) {
     console.error(err);
