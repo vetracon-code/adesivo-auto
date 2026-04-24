@@ -922,6 +922,38 @@
 
 
 
+
+<script id="preventNotificationBeforeInstall">
+(function(){
+  function isOwnerStandalone(){
+    return window.matchMedia('(display-mode: standalone)').matches ||
+           window.navigator.standalone === true ||
+           document.referrer.startsWith('android-app://');
+  }
+
+  if ('Notification' in window && Notification.requestPermission && !window.__originalNotificationRequestPermission) {
+    window.__originalNotificationRequestPermission = Notification.requestPermission.bind(Notification);
+
+    Notification.requestPermission = function(callback){
+      if (!isOwnerStandalone()) {
+        console.warn('Richiesta notifiche bloccata: installare prima la Web App.');
+        const result = Promise.resolve(Notification.permission || 'default');
+        if (typeof callback === 'function') {
+          result.then(callback);
+        }
+        return result;
+      }
+
+      return window.__originalNotificationRequestPermission(callback);
+    };
+  }
+
+  window.ownerCanAskNotifications = function(){
+    return isOwnerStandalone();
+  };
+})();
+</script>
+
 </head>
 <body>
   
