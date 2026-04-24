@@ -3057,11 +3057,23 @@ function getOwnerParams(){
 
       const { code, plate } = getOwnerParams();
 
-      await fetch('/api/owner/delete-abuse-blocks-many', {
+      const res = await fetch('/api/owner/delete-abuse-blocks-many', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ code, plate, ids })
       });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        alert(data.error || 'Errore eliminazione blocchi rimossi.');
+        return;
+      }
+
+      if ((data.deleted_count || 0) === 0) {
+        alert('Nessun blocco rimosso eliminato. Ricarica l’App e riprova.');
+        return;
+      }
 
       selectedRemovedAbuseBlockIds.clear();
       removedAbuseBlocksSelectionMode = false;

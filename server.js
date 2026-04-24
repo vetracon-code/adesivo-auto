@@ -1727,12 +1727,13 @@ app.post('/api/owner/delete-abuse-blocks-many', async (req, res) => {
     }
 
     const deleted = await pool.query(
-      `DELETE FROM owner_abuse_blocks
-       WHERE code = $1
-         AND id = ANY($2::int[])
+      `DELETE FROM abuse_blocks
+       WHERE COALESCE(code,'') = COALESCE($1,'')
+         AND COALESCE(plate,'') = COALESCE($2,'')
+         AND id = ANY($3::int[])
          AND COALESCE(is_active, false) = false
        RETURNING id`,
-      [cleanCode, cleanIds]
+      [cleanCode, cleanPlate, cleanIds]
     );
 
     return res.json({
