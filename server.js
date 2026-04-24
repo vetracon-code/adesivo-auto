@@ -2610,6 +2610,7 @@ app.post('/api/owner-dashboard', async (req, res) => {
         vehicle_model: row.vehicle_model,
         color: row.color,
         plate: row.plate,
+        phone: row.phone || null,
         offered_by: row.offered_by || null,
         qr_url: row.qr_url,
         public_id: row.public_id,
