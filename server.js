@@ -1031,6 +1031,15 @@ app.post('/api/push/unsubscribe', async (req, res) => {
     }
 
     await pool.query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [endpoint]);
+
+    await pool.query(
+      `UPDATE owner_device_vehicle_roles
+       SET is_active = FALSE,
+           updated_at = NOW()
+       WHERE endpoint = $1`,
+      [endpoint]
+    );
+
     return res.json({ success: true });
   } catch (err) {
     console.error(err);
