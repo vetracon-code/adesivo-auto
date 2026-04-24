@@ -3352,65 +3352,34 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
+
 <script id="directDeviceStatusScript">
 (function(){
-  const EVER_ENABLED_KEY = 'owner_notifications_ever_enabled';
-
-  function isOwnerStandalone(){
-    return window.matchMedia('(display-mode: standalone)').matches ||
-           window.navigator.standalone === true ||
-           document.referrer.startsWith('android-app://');
-  }
-
-  function getNotificationPermission(){
-    if (!('Notification' in window)) return 'unsupported';
-    return Notification.permission || 'default';
-  }
-
-  async function hasActivePushSubscription(){
-    try {
-      if (!('serviceWorker' in navigator)) return false;
-      if (!('PushManager' in window)) return false;
-
-      const reg = await navigator.serviceWorker.ready;
-      if (!reg || !reg.pushManager) return false;
-
-      const sub = await reg.pushManager.getSubscription();
-      return !!sub;
-    } catch(e) {
-      return false;
-    }
-  }
-
-  async function setDirectDeviceStatus(){
+  function setDirectDeviceStatus(){
     const textEl = document.getElementById('installCompactText');
     const badgeEl = document.getElementById('installStatusBadge');
     const refreshBtn = document.getElementById('refreshOwnerAppBtn');
+    const primaryBtn = document.getElementById('primaryInstallNotifyBtn');
 
-    if (!textEl) return;
+    if (!textEl || !primaryBtn) return;
 
-    const installed = isOwnerStandalone();
-    const permission = getNotificationPermission();
-    const activeSubscription = await hasActivePushSubscription();
+    const primaryLabel = (primaryBtn.textContent || '').trim().toLowerCase();
 
     let color = 'red';
     let message = 'Salva l’App sul telefono prima di attivare le notifiche.';
 
-    if (installed && permission === 'granted' && activeSubscription) {
+    if (primaryLabel.includes('installa') || primaryLabel.includes('copia link')) {
+      color = 'red';
+      message = 'Salva l’App sul telefono prima di attivare le notifiche.';
+    } else if (primaryLabel.includes('attiva notifiche')) {
+      color = 'yellow';
+      message = 'Attiva le notifiche per ricevere gli avvisi del tuo veicolo.';
+    } else if (primaryLabel.includes('disattiva notifiche')) {
       color = 'green';
       message = 'App e notifiche attive: riceverai gli avvisi su questo dispositivo.';
-      try { localStorage.setItem(EVER_ENABLED_KEY, '1'); } catch(e) {}
-    } else if (installed) {
+    } else if (primaryLabel.includes('verifica notifiche')) {
       color = 'yellow';
-
-      let everEnabled = false;
-      try { everEnabled = localStorage.getItem(EVER_ENABLED_KEY) === '1'; } catch(e) {}
-
-      if (everEnabled) {
-        message = 'Notifiche disattivate: riattivale per ricevere gli avvisi del tuo veicolo.';
-      } else {
-        message = 'Attiva le notifiche per ricevere gli avvisi del tuo veicolo.';
-      }
+      message = 'Notifiche bloccate: riattivale dalle impostazioni per ricevere gli avvisi.';
     }
 
     textEl.innerHTML =
@@ -3430,22 +3399,22 @@ document.addEventListener('DOMContentLoaded', function () {
   window.setDirectDeviceStatus = setDirectDeviceStatus;
 
   window.addEventListener('load', function(){
-    setDirectDeviceStatus();
-    setTimeout(setDirectDeviceStatus, 600);
+    setTimeout(setDirectDeviceStatus, 300);
+    setTimeout(setDirectDeviceStatus, 900);
     setTimeout(setDirectDeviceStatus, 1800);
     setTimeout(setDirectDeviceStatus, 3500);
   });
 
   document.addEventListener('visibilitychange', function(){
     if (!document.hidden) {
-      setDirectDeviceStatus();
-      setTimeout(setDirectDeviceStatus, 800);
+      setTimeout(setDirectDeviceStatus, 300);
+      setTimeout(setDirectDeviceStatus, 1200);
     }
   });
 
   window.addEventListener('focus', function(){
-    setDirectDeviceStatus();
-    setTimeout(setDirectDeviceStatus, 800);
+    setTimeout(setDirectDeviceStatus, 300);
+    setTimeout(setDirectDeviceStatus, 1200);
   });
 
   document.addEventListener('click', function(e){
@@ -3455,18 +3424,30 @@ document.addEventListener('DOMContentLoaded', function () {
     const label = (btn.textContent || '').trim().toLowerCase();
 
     if (
+      label.includes('installa') ||
       label.includes('attiva notifiche') ||
       label.includes('disattiva notifiche') ||
-      label.includes('riattiva notifiche') ||
-      label.includes('aggiorna app')
+      label.includes('verifica notifiche') ||
+      label.includes('aggiorna app') ||
+      label.includes('mostra istruzioni')
     ) {
       setTimeout(setDirectDeviceStatus, 500);
       setTimeout(setDirectDeviceStatus, 1400);
       setTimeout(setDirectDeviceStatus, 2800);
     }
   });
+
+  const target = document.getElementById('installAppSection');
+  if (target) {
+    const observer = new MutationObserver(function(){
+      clearTimeout(window.__directDeviceStatusTimer);
+      window.__directDeviceStatusTimer = setTimeout(setDirectDeviceStatus, 220);
+    });
+    observer.observe(target, { childList:true, subtree:true, characterData:true, attributes:true });
+  }
 })();
 </script>
+
 
 
 
