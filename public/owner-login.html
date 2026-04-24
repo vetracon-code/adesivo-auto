@@ -169,6 +169,35 @@
       // del login con cellulare e targa.
     })();
 
+
+(function prefillOwnerLoginFields(){
+  try {
+    const params = new URLSearchParams(window.location.search);
+
+    const phoneInput = document.getElementById('ownerPhone');
+    const plateInput = document.getElementById('ownerPlate');
+
+    const savedPhone = localStorage.getItem('owner_saved_phone') || '';
+    const savedPlate = localStorage.getItem('owner_saved_plate') || '';
+
+    const urlPhone = params.get('phone') || params.get('telefono') || '';
+    const urlPlate = params.get('plate') || params.get('targa') || '';
+
+    if (phoneInput) {
+      phoneInput.value = (urlPhone || savedPhone || '').trim();
+    }
+
+    if (plateInput) {
+      plateInput.value = (urlPlate || savedPlate || '').trim().toUpperCase();
+    }
+
+    const result = document.getElementById('ownerLoginResult');
+    if (result && (phoneInput?.value || plateInput?.value)) {
+      result.textContent = 'Dati veicolo recuperati. Controlla e conferma l’accesso.';
+    }
+  } catch (e) {}
+})();
+
 document.getElementById('ownerLoginBtn').addEventListener('click', async () => {
       const phone = document.getElementById('ownerPhone').value.trim();
       const plate = document.getElementById('ownerPlate').value.trim();
@@ -204,6 +233,12 @@ document.getElementById('ownerLoginBtn').addEventListener('click', async () => {
         if (tokenMatch && tokenMatch[1]) {
           localStorage.setItem('owner_access_token', tokenMatch[1]);
         }
+
+        try {
+          localStorage.setItem('owner_saved_phone', phone);
+          localStorage.setItem('owner_saved_plate', plate.toUpperCase().replace(/\s+/g, ''));
+          localStorage.setItem('owner_login_saved_at', new Date().toISOString());
+        } catch (e) {}
 
         result.className = 'ok';
         result.textContent = 'Accesso riconosciuto. Reindirizzamento...';
