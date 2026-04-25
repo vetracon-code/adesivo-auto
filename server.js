@@ -1994,7 +1994,10 @@ app.get('/owner-print-sign.html', async (req, res) => {
     return res.send(html);
   } catch (err) {
     console.error('owner-print-sign error:', err);
-    return res.status(500).send('Errore generazione cartello.');
+    return res.status(500).send(
+      'Errore generazione cartello.\\n\\n' +
+      'Dettaglio: ' + (err && err.message ? err.message : String(err))
+    );
   }
 });
 
