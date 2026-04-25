@@ -1516,6 +1516,489 @@ app.get('/api/debug-owner-quick-access', requireAdmin, (req, res) => {
 
 
 
+
+app.get('/owner-print-sign.html', async (req, res) => {
+  try {
+    const cleanCode = String(req.query.code || '').trim().toUpperCase();
+    const cleanPlate = String(req.query.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    if (!cleanCode || !cleanPlate) {
+      return res.status(400).send('Codice e targa obbligatori.');
+    }
+
+    const found = await pool.query(
+      `SELECT code, public_id, qr_url, plate, brand, vehicle_model
+       FROM sticker_codes
+       WHERE code = $1
+       LIMIT 1`,
+      [cleanCode]
+    );
+
+    if (!found.rows.length) {
+      return res.status(404).send('Codice non trovato.');
+    }
+
+    const row = found.rows[0];
+    const dbPlate = String(row.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    if (dbPlate !== cleanPlate) {
+      return res.status(401).send('Targa non corrispondente al codice.');
+    }
+
+    let qrValue = '';
+    if (row.qr_url && String(row.qr_url).trim()) {
+      qrValue = String(row.qr_url).trim();
+    } else if (row.public_id && String(row.public_id).trim()) {
+      const baseUrl = (process.env.PUBLIC_BASE_URL || 'https://adesivo-auto.onrender.com').replace(/\/$/, '');
+      qrValue = `${baseUrl}/contact/u/${encodeURIComponent(String(row.public_id).trim())}`;
+    } else {
+      return res.status(400).send('QR URL o public_id mancante.');
+    }
+
+    const QRCode = require('qrcode');
+    const qrDataUrl = await QRCode.toDataURL(qrValue, {
+      errorCorrectionLevel: 'H',
+      margin: 1,
+      width: 900,
+      color: {
+        dark: '#000000',
+        light: '#ffffff'
+      }
+    });
+
+    const vehicleLabel = [row.brand, row.vehicle_model].filter(Boolean).join(' ') || 'Veicolo';
+
+    const html = `<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cartello Contatto Veicolo - ${escapeHtml(row.plate || '')}</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    @media print {
+      html, body {
+        width: 210mm;
+        height: 297mm;
+        margin: 0;
+        background: #fff !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .no-print { display: none !important; }
+      .a4-page {
+        margin: 0 !important;
+        box-shadow: none !important;
+        border: none !important;
+        width: 210mm !important;
+        height: 297mm !important;
+      }
+    }
+
+    :root {
+      --yellow: #ffea00;
+      --black: #050505;
+      --soft-grey: #cbd5e1;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: #eef2f7;
+      font-family: Arial, Helvetica, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: var(--black);
+    }
+
+    .no-print {
+      width: 100%;
+      background: #0f172a;
+      color: white;
+      padding: 14px 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 18px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 12px 30px rgba(0,0,0,.22);
+    }
+
+    .no-print strong {
+      display: block;
+      color: #ffea00;
+      font-size: 15px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .no-print span {
+      display: block;
+      opacity: .72;
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+    .print-btn {
+      border: 0;
+      background: #ffea00;
+      color: #000;
+      padding: 12px 24px;
+      border-radius: 999px;
+      font-weight: 900;
+      cursor: pointer;
+      letter-spacing: .04em;
+    }
+
+    .a4-page {
+      width: 210mm;
+      height: 297mm;
+      background: #fff;
+      margin: 20px auto;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(15,23,42,.16);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .cut-guide-main {
+      position: absolute;
+      top: 8mm;
+      left: 4mm;
+      width: 202mm;
+      height: 202mm;
+      border: 1.4px dashed var(--soft-grey);
+      border-radius: 42px;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .cut-guide-extension {
+      position: absolute;
+      left: 8mm;
+      right: 8mm;
+      top: 207mm;
+      height: 74mm;
+      border: 1.4px dashed var(--soft-grey);
+      border-radius: 36px;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .scissor {
+      position: absolute;
+      color: #94a3b8;
+      font-size: 14px;
+      font-weight: 900;
+      background: #fff;
+      padding: 0 4px;
+      line-height: 1;
+    }
+
+    .scissor.main-left { left: -5px; top: 58mm; transform: rotate(-90deg); }
+    .scissor.main-top { left: 98mm; top: -8px; }
+    .scissor.ext-left { left: -5px; top: 34mm; transform: rotate(-90deg); }
+
+    .top-tab {
+      width: 45mm;
+      height: 61mm;
+      background: var(--yellow);
+      border-radius: 26px 26px 0 0;
+      margin-top: 13mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 12mm;
+      z-index: 2;
+      position: relative;
+    }
+
+    .slot-cut {
+      width: 32mm;
+      height: 7px;
+      background: #000;
+      border-radius: 3px;
+      border: 2px solid #fff;
+      margin: 4mm auto;
+    }
+
+    .slot-note {
+      font-size: 6pt;
+      font-weight: 900;
+      color: rgba(0,0,0,.42);
+      text-align: center;
+      text-transform: uppercase;
+      margin-top: 2mm;
+      line-height: 1.15;
+    }
+
+    .main-sign {
+      width: 190mm;
+      height: 130mm;
+      background: var(--yellow);
+      border-radius: 34px;
+      z-index: 3;
+      position: relative;
+      margin-top: -1px;
+      padding: 8mm 11mm 9mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .headline {
+      margin: 0;
+      font-family: Impact, "Arial Black", Arial, sans-serif;
+      font-size: 30pt;
+      line-height: .92;
+      letter-spacing: -.045em;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .qr-box {
+      width: 68mm;
+      height: 68mm;
+      background: #fff;
+      border: 9px solid #000;
+      border-radius: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 18px 28px rgba(0,0,0,.20);
+      overflow: hidden;
+      padding: 5mm;
+    }
+
+    .qr-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .cta {
+      text-align: center;
+      width: 100%;
+    }
+
+    .cta-main {
+      font-family: Impact, "Arial Black", Arial, sans-serif;
+      font-size: 22pt;
+      text-transform: uppercase;
+      letter-spacing: -.025em;
+      line-height: .95;
+    }
+
+    .cta-sub {
+      margin-top: 3mm;
+      padding-top: 2.2mm;
+      border-top: 4px solid rgba(0,0,0,.20);
+      font-size: 11.3pt;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: -.035em;
+      line-height: 1.05;
+    }
+
+    .extension-wrap {
+      width: 198mm;
+      height: 75mm;
+      margin-top: 12mm;
+      position: relative;
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      padding: 0 6mm;
+    }
+
+    .arrow {
+      width: 0;
+      height: 0;
+      border-top: 28mm solid transparent;
+      border-bottom: 28mm solid transparent;
+      border-right: 38mm solid #000;
+      position: relative;
+      flex: 0 0 auto;
+    }
+
+    .arrow:after {
+      content: "";
+      position: absolute;
+      top: -24.7mm;
+      left: 3px;
+      width: 0;
+      height: 0;
+      border-top: 24.7mm solid transparent;
+      border-bottom: 24.7mm solid transparent;
+      border-right: 33.5mm solid var(--yellow);
+    }
+
+    .neck {
+      width: 30mm;
+      height: 32mm;
+      background: var(--yellow);
+      border-top: 6px solid #000;
+      border-bottom: 6px solid #000;
+      flex: 0 0 auto;
+    }
+
+    .slider {
+      height: 32mm;
+      background: var(--yellow);
+      border-top: 6px solid #000;
+      border-bottom: 6px solid #000;
+      flex: 1 1 auto;
+      min-width: 25mm;
+    }
+
+    .driver-box {
+      width: 75mm;
+      height: 75mm;
+      background: var(--yellow);
+      border: 6px solid #000;
+      border-left: 0;
+      border-radius: 0 35px 35px 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex: 0 0 auto;
+    }
+
+    .driver-text {
+      transform: rotate(-90deg);
+      width: 75mm;
+      height: 75mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+    }
+
+    .arrow-up {
+      font-size: 48pt;
+      font-weight: 900;
+      line-height: .65;
+      margin-bottom: 7mm;
+    }
+
+    .driver-big {
+      font-family: Impact, "Arial Black", Arial, sans-serif;
+      font-size: 26pt;
+      text-transform: uppercase;
+      letter-spacing: -.035em;
+      line-height: .9;
+    }
+
+    .driver-small {
+      font-size: 16pt;
+      font-weight: 900;
+      text-transform: uppercase;
+      color: rgba(0,0,0,.50);
+      letter-spacing: .38em;
+      margin: 4mm 0;
+    }
+
+    .footer {
+      position: absolute;
+      bottom: 6mm;
+      left: 12mm;
+      right: 12mm;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      opacity: .30;
+      color: #64748b;
+      font-size: 8pt;
+      font-weight: 900;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .brand {
+      font-family: Impact, "Arial Black", Arial, sans-serif;
+      font-size: 12pt;
+      letter-spacing: .10em;
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <div>
+      <strong>Contatto Veicolo — Cartello dinamico</strong>
+      <span>${escapeHtml(vehicleLabel)} · ${escapeHtml(row.plate || '')} · QR reale collegato a ${escapeHtml(qrValue)}</span>
+    </div>
+    <button class="print-btn" onclick="window.print()">STAMPA / SALVA PDF</button>
+  </div>
+
+  <main class="a4-page">
+    <div class="cut-guide-main">
+      <span class="scissor main-left">✂</span>
+      <span class="scissor main-top">✂</span>
+    </div>
+
+    <div class="cut-guide-extension">
+      <span class="scissor ext-left">✂</span>
+    </div>
+
+    <section class="top-tab">
+      <div class="slot-cut"></div>
+      <div class="slot-cut"></div>
+      <div class="slot-note">Incidere<br>i tagli neri</div>
+    </section>
+
+    <section class="main-sign">
+      <h1 class="headline">PROBLEMA CON QUESTO MEZZO?</h1>
+
+      <div class="qr-box">
+        <img src="${qrDataUrl}" alt="QR Code Contatto Veicolo">
+      </div>
+
+      <div class="cta">
+        <div class="cta-main">Avvisa subito il proprietario</div>
+        <div class="cta-sub">Non invia il tuo numero • Nessuna chiamata necessaria</div>
+      </div>
+    </section>
+
+    <section class="extension-wrap">
+      <div class="arrow"></div>
+      <div class="neck"></div>
+      <div class="slider"></div>
+      <div class="driver-box">
+        <div class="driver-text">
+          <div class="arrow-up">↑</div>
+          <div class="driver-big">Abbassami</div>
+          <div class="driver-small">Quando</div>
+          <div class="driver-big">Parcheggi</div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="brand">Contatto Veicolo</div>
+      <div>Print ready A4 format</div>
+    </footer>
+  </main>
+</body>
+</html>`;
+
+    return res.send(html);
+  } catch (err) {
+    console.error('owner-print-sign error:', err);
+    return res.status(500).send('Errore generazione cartello.');
+  }
+});
+
+
 app.get('/api/owner/sticker-print-pdf', async (req, res) => {
   try {
     const cleanCode = String(req.query.code || '').trim().toUpperCase();
