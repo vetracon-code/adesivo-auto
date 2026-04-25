@@ -1517,6 +1517,16 @@ app.get('/api/debug-owner-quick-access', requireAdmin, (req, res) => {
 
 
 
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 app.get('/owner-print-sign.html', async (req, res) => {
   try {
     const cleanCode = String(req.query.code || '').trim().toUpperCase();
