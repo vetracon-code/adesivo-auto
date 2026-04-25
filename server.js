@@ -1529,6 +1529,12 @@ function escapeHtml(value) {
 
 app.get('/owner-print-sign.html', async (req, res) => {
   try {
+    const escHtml = (value) => String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
     const cleanCode = String(req.query.code || '').trim().toUpperCase();
     const cleanPlate = String(req.query.plate || '').trim().toUpperCase().replace(/\s+/g, '');
 
@@ -1583,7 +1589,7 @@ app.get('/owner-print-sign.html', async (req, res) => {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cartello Contatto Veicolo - ${escapeHtml(row.plate || '')}</title>
+  <title>Cartello Contatto Veicolo - ${escHtml(row.plate || '')}</title>
   <style>
     @page { size: A4; margin: 0; }
     @media print {
@@ -1945,7 +1951,7 @@ app.get('/owner-print-sign.html', async (req, res) => {
   <div class="no-print">
     <div>
       <strong>Contatto Veicolo — Cartello dinamico</strong>
-      <span>${escapeHtml(vehicleLabel)} · ${escapeHtml(row.plate || '')} · QR reale collegato a ${escapeHtml(qrValue)}</span>
+      <span>${escHtml(vehicleLabel)} · ${escHtml(row.plate || '')} · QR reale collegato a ${escHtml(qrValue)}</span>
     </div>
     <button class="print-btn" onclick="window.print()">STAMPA / SALVA PDF</button>
   </div>
