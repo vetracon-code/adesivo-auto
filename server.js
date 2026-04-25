@@ -1527,6 +1527,7 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+
 app.get('/owner-print-sign.html', async (req, res) => {
   try {
     const escHtml = (value) => String(value || '')
@@ -1535,29 +1536,43 @@ app.get('/owner-print-sign.html', async (req, res) => {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+
     const cleanCode = String(req.query.code || '').trim().toUpperCase();
     const cleanPlate = String(req.query.plate || '').trim().toUpperCase().replace(/\s+/g, '');
 
-    if (!cleanCode || !cleanPlate) {
-      return res.status(400).send('Codice e targa obbligatori.');
+    if (!cleanCode && !cleanPlate) {
+      return res.status(400).send('Inserisci almeno codice o targa.');
     }
 
-    const found = await pool.query(
-      `SELECT code, public_id, qr_url, plate, brand, vehicle_model
-       FROM sticker_codes
-       WHERE code = $1
-       LIMIT 1`,
-      [cleanCode]
-    );
+    let found;
+
+    if (cleanCode) {
+      found = await pool.query(
+        `SELECT code, public_id, qr_url, plate, brand, vehicle_model
+         FROM sticker_codes
+         WHERE code = $1
+         LIMIT 1`,
+        [cleanCode]
+      );
+    } else {
+      found = await pool.query(
+        `SELECT code, public_id, qr_url, plate, brand, vehicle_model
+         FROM sticker_codes
+         WHERE REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $1
+         ORDER BY activated_at DESC NULLS LAST, id DESC
+         LIMIT 1`,
+        [cleanPlate]
+      );
+    }
 
     if (!found.rows.length) {
-      return res.status(404).send('Codice non trovato.');
+      return res.status(404).send('Record non trovato.');
     }
 
     const row = found.rows[0];
     const dbPlate = String(row.plate || '').trim().toUpperCase().replace(/\s+/g, '');
 
-    if (dbPlate !== cleanPlate) {
+    if (cleanPlate && dbPlate !== cleanPlate) {
       return res.status(401).send('Targa non corrispondente al codice.');
     }
 
@@ -1587,210 +1602,211 @@ app.get('/owner-print-sign.html', async (req, res) => {
     const html = `<!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cartello Contatto Veicolo - ${escHtml(row.plate || '')}</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contatto Veicolo - Cartello V15 - ${escHtml(row.plate || '')}</title>
   <style>
     @page { size: A4; margin: 0; }
+
     @media print {
       html, body {
         width: 210mm;
         height: 297mm;
         margin: 0;
-        background: #fff !important;
+        background: white !important;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
       }
+
       .no-print { display: none !important; }
+
       .a4-page {
         margin: 0 !important;
-        box-shadow: none !important;
         border: none !important;
+        box-shadow: none !important;
         width: 210mm !important;
         height: 297mm !important;
       }
     }
 
-    :root {
-      --yellow: #ffea00;
-      --black: #050505;
-      --soft-grey: #cbd5e1;
-    }
-
-    * { box-sizing: border-box; }
-
     body {
-      margin: 0;
-      background: #eef2f7;
+      background-color: #f1f5f9;
       font-family: Arial, Helvetica, sans-serif;
+      margin: 0;
       display: flex;
       flex-direction: column;
       align-items: center;
-      color: var(--black);
     }
 
     .no-print {
       width: 100%;
+      padding: 14px 22px;
       background: #0f172a;
       color: white;
-      padding: 14px 22px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 18px;
+      box-shadow: 0 12px 28px rgba(0,0,0,.22);
       position: sticky;
       top: 0;
       z-index: 100;
-      box-shadow: 0 12px 30px rgba(0,0,0,.22);
+      box-sizing: border-box;
     }
 
-    .no-print strong {
-      display: block;
-      color: #ffea00;
-      font-size: 15px;
-      letter-spacing: .08em;
+    .no-print-title {
+      font-size: 18px;
+      font-weight: 900;
       text-transform: uppercase;
+      letter-spacing: .08em;
+      color: #ffea00;
     }
 
-    .no-print span {
-      display: block;
-      opacity: .72;
+    .no-print-sub {
       font-size: 12px;
+      opacity: .72;
       margin-top: 3px;
     }
 
     .print-btn {
-      border: 0;
       background: #ffea00;
       color: #000;
+      border: 0;
       padding: 12px 24px;
       border-radius: 999px;
       font-weight: 900;
       cursor: pointer;
-      letter-spacing: .04em;
     }
 
     .a4-page {
       width: 210mm;
       height: 297mm;
-      background: #fff;
+      background: white;
       margin: 20px auto;
       position: relative;
+      box-sizing: border-box;
       overflow: hidden;
-      box-shadow: 0 20px 50px rgba(15,23,42,.16);
       display: flex;
       flex-direction: column;
       align-items: center;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
     }
 
-    .cut-guide-main {
-      position: absolute;
-      top: 8mm;
-      left: 4mm;
-      width: 202mm;
-      height: 202mm;
-      border: 1.4px dashed var(--soft-grey);
-      border-radius: 42px;
-      pointer-events: none;
-      z-index: 1;
-    }
+    .safety-yellow { background-color: #ffea00 !important; }
 
-    .cut-guide-extension {
-      position: absolute;
-      left: 8mm;
-      right: 8mm;
-      top: 207mm;
-      height: 74mm;
-      border: 1.4px dashed var(--soft-grey);
-      border-radius: 36px;
-      pointer-events: none;
-      z-index: 1;
-    }
-
-    .scissor {
-      position: absolute;
-      color: #94a3b8;
-      font-size: 14px;
+    .archivo-extra {
+      font-family: Impact, "Arial Black", Arial, sans-serif;
       font-weight: 900;
-      background: #fff;
-      padding: 0 4px;
-      line-height: 1;
-    }
-
-    .scissor.main-left { left: -5px; top: 58mm; transform: rotate(-90deg); }
-    .scissor.main-top { left: 98mm; top: -8px; }
-    .scissor.ext-left { left: -5px; top: 34mm; transform: rotate(-90deg); }
-
-    .top-tab {
-      width: 45mm;
-      height: 61mm;
-      background: var(--yellow);
-      border-radius: 26px 26px 0 0;
-      margin-top: 13mm;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding-top: 12mm;
-      z-index: 2;
-      position: relative;
+      letter-spacing: -0.04em;
     }
 
     .slot-cut {
       width: 32mm;
-      height: 7px;
-      background: #000;
-      border-radius: 3px;
-      border: 2px solid #fff;
-      margin: 4mm auto;
+      height: 6px;
+      background: black !important;
+      margin: 8mm auto;
+      border-radius: 2px;
+      border: 1.5px solid white;
     }
 
-    .slot-note {
-      font-size: 6pt;
-      font-weight: 900;
-      color: rgba(0,0,0,.42);
-      text-align: center;
-      text-transform: uppercase;
-      margin-top: 2mm;
-      line-height: 1.15;
+    .driver-text-container {
+      transform: rotate(90deg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 80mm;
+      height: 60mm;
+    }
+
+    .tongue-shape {
+      height: 32mm;
+      background-color: #ffea00;
+      border: 5px solid black;
+      border-left: none;
+      clip-path: polygon(0% 0%, 80% 0%, 100% 50%, 80% 100%, 0% 100%);
+      width: 130mm;
+      position: relative;
+      z-index: 20;
+    }
+
+    .qr-border-slim { border: 6px solid black; }
+
+    .top-block {
+      position: relative;
+      width: 190mm;
+      margin-top: 10mm;
+    }
+
+    .cut-guide-main {
+      position: absolute;
+      top: -6mm;
+      left: -6mm;
+      width: 202mm;
+      height: 170mm;
+      border: 1.5px dashed #cbd5e1;
+      border-radius: 40px;
+      pointer-events: none;
+    }
+
+    .receiver-tab {
+      width: 52mm;
+      height: 60mm;
+      margin: 0 auto;
+      border-radius: 24px 24px 0 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 4mm;
+      border-left: 1px solid rgba(0,0,0,.05);
+      border-right: 1px solid rgba(0,0,0,.05);
+      box-sizing: border-box;
     }
 
     .main-sign {
       width: 190mm;
-      height: 130mm;
-      background: var(--yellow);
-      border-radius: 34px;
-      z-index: 3;
-      position: relative;
-      margin-top: -1px;
-      padding: 8mm 11mm 9mm;
+      height: 100mm;
+      border-radius: 30px;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: space-between;
+      padding: 6mm;
+      position: relative;
+      z-index: 10;
+      box-shadow: 0 2px 8px rgba(0,0,0,.05);
+      border-top: 1px solid rgba(0,0,0,.10);
+      box-sizing: border-box;
     }
 
     .headline {
-      margin: 0;
-      font-family: Impact, "Arial Black", Arial, sans-serif;
-      font-size: 30pt;
+      font-size: 28pt;
       line-height: .92;
-      letter-spacing: -.045em;
-      text-align: center;
+      color: #000;
       text-transform: uppercase;
+      text-align: center;
+      letter-spacing: -0.045em;
+      margin: 2mm 0 0 0;
+    }
+
+    .center-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4mm;
     }
 
     .qr-box {
-      width: 68mm;
-      height: 68mm;
+      width: 52mm;
+      height: 52mm;
       background: #fff;
-      border: 9px solid #000;
-      border-radius: 28px;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 18px 28px rgba(0,0,0,.20);
+      border-radius: 30px;
+      box-shadow: 0 14px 28px rgba(0,0,0,.22);
+      padding: 4mm;
+      box-sizing: border-box;
       overflow: hidden;
-      padding: 5mm;
     }
 
     .qr-box img {
@@ -1800,210 +1816,194 @@ app.get('/owner-print-sign.html', async (req, res) => {
       display: block;
     }
 
-    .cta {
-      text-align: center;
-      width: 100%;
-    }
-
     .cta-main {
-      font-family: Impact, "Arial Black", Arial, sans-serif;
-      font-size: 22pt;
+      font-size: 24pt;
+      color: #000;
       text-transform: uppercase;
-      letter-spacing: -.025em;
-      line-height: .95;
+      line-height: .9;
+      letter-spacing: -0.04em;
+      margin: 0;
+      text-align: center;
     }
 
-    .cta-sub {
-      margin-top: 3mm;
-      padding-top: 2.2mm;
-      border-top: 4px solid rgba(0,0,0,.20);
-      font-size: 11.3pt;
+    .bottom-claim {
+      width: 100%;
+      border-top: 3px solid rgba(0,0,0,.10);
+      padding-top: 2mm;
+      text-align: center;
+      margin-bottom: 2mm;
+    }
+
+    .bottom-claim p {
+      margin: 0;
+      font-size: 11pt;
       font-weight: 900;
+      color: #000;
       text-transform: uppercase;
-      letter-spacing: -.035em;
-      line-height: 1.05;
+      letter-spacing: .20em;
+      opacity: .80;
     }
 
-    .extension-wrap {
-      width: 198mm;
-      height: 75mm;
-      margin-top: 12mm;
+    .separator { height: 10mm; }
+
+    .extension-area {
       position: relative;
-      z-index: 3;
+      width: 100%;
+      padding: 0 6mm;
+      display: flex;
+      justify-content: center;
+      margin-top: 12mm;
+      box-sizing: border-box;
+    }
+
+    .extension-inner {
       display: flex;
       align-items: center;
-      padding: 0 6mm;
-    }
-
-    .arrow {
-      width: 0;
-      height: 0;
-      border-top: 28mm solid transparent;
-      border-bottom: 28mm solid transparent;
-      border-right: 38mm solid #000;
+      justify-content: center;
       position: relative;
-      flex: 0 0 auto;
+      height: 85mm;
     }
 
-    .arrow:after {
-      content: "";
-      position: absolute;
-      top: -24.7mm;
-      left: 3px;
-      width: 0;
-      height: 0;
-      border-top: 24.7mm solid transparent;
-      border-bottom: 24.7mm solid transparent;
-      border-right: 33.5mm solid var(--yellow);
-    }
-
-    .neck {
-      width: 30mm;
-      height: 32mm;
-      background: var(--yellow);
-      border-top: 6px solid #000;
-      border-bottom: 6px solid #000;
-      flex: 0 0 auto;
-    }
-
-    .slider {
-      height: 32mm;
-      background: var(--yellow);
-      border-top: 6px solid #000;
-      border-bottom: 6px solid #000;
-      flex: 1 1 auto;
-      min-width: 25mm;
-    }
-
-    .driver-box {
-      width: 75mm;
-      height: 75mm;
-      background: var(--yellow);
-      border: 6px solid #000;
-      border-left: 0;
-      border-radius: 0 35px 35px 0;
+    .driver-handle {
+      width: 60mm;
+      height: 85mm;
+      border: 6px solid black;
+      border-radius: 40px 0 0 40px;
       display: flex;
       align-items: center;
       justify-content: center;
       overflow: hidden;
-      flex: 0 0 auto;
+      box-shadow: 0 2px 10px rgba(0,0,0,.15);
+      position: relative;
+      z-index: 30;
+      box-sizing: border-box;
     }
 
-    .driver-text {
-      transform: rotate(-90deg);
-      width: 75mm;
-      height: 75mm;
+    .driver-arrow {
+      width: 16mm;
+      height: 16mm;
+      margin-bottom: 4mm;
+    }
+
+    .driver-stack {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      white-space: nowrap;
-    }
-
-    .arrow-up {
-      font-size: 48pt;
-      font-weight: 900;
-      line-height: .65;
-      margin-bottom: 7mm;
+      gap: 1mm;
     }
 
     .driver-big {
-      font-family: Impact, "Arial Black", Arial, sans-serif;
-      font-size: 26pt;
+      font-size: 22pt;
+      color: #000;
       text-transform: uppercase;
-      letter-spacing: -.035em;
       line-height: .9;
     }
 
     .driver-small {
-      font-size: 16pt;
+      font-size: 10pt;
       font-weight: 900;
+      color: rgba(0,0,0,.40);
       text-transform: uppercase;
-      color: rgba(0,0,0,.50);
-      letter-spacing: .38em;
-      margin: 4mm 0;
+      letter-spacing: .20em;
+    }
+
+    .guide-extension {
+      position: absolute;
+      top: -12mm;
+      left: 4mm;
+      right: 4mm;
+      height: 110mm;
+      border: 1.5px dashed #cbd5e1;
+      border-radius: 45px;
+      pointer-events: none;
+      z-index: 0;
     }
 
     .footer {
       position: absolute;
-      bottom: 6mm;
-      left: 12mm;
-      right: 12mm;
+      bottom: 8mm;
+      width: 100%;
+      padding: 0 12mm;
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      opacity: .30;
-      color: #64748b;
-      font-size: 8pt;
-      font-weight: 900;
-      letter-spacing: .08em;
-      text-transform: uppercase;
+      align-items: flex-end;
+      opacity: .20;
+      box-sizing: border-box;
     }
 
-    .brand {
-      font-family: Impact, "Arial Black", Arial, sans-serif;
-      font-size: 12pt;
-      letter-spacing: .10em;
+    .footer div {
+      font-size: 8pt;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: #000;
     }
   </style>
 </head>
 <body>
   <div class="no-print">
     <div>
-      <strong>Contatto Veicolo — Cartello dinamico</strong>
-      <span>${escHtml(vehicleLabel)} · ${escHtml(row.plate || '')} · QR reale collegato a ${escHtml(qrValue)}</span>
+      <div class="no-print-title">Contatto Veicolo — Cartello V15</div>
+      <div class="no-print-sub">${escHtml(vehicleLabel)} · ${escHtml(row.plate || '')} · QR reale: ${escHtml(qrValue)}</div>
     </div>
-    <button class="print-btn" onclick="window.print()">STAMPA / SALVA PDF</button>
+    <button class="print-btn" onclick="window.print()">STAMPA PDF HD</button>
   </div>
 
-  <main class="a4-page">
-    <div class="cut-guide-main">
-      <span class="scissor main-left">✂</span>
-      <span class="scissor main-top">✂</span>
-    </div>
+  <div class="a4-page">
+    <div class="top-block">
+      <div class="cut-guide-main"></div>
 
-    <div class="cut-guide-extension">
-      <span class="scissor ext-left">✂</span>
-    </div>
-
-    <section class="top-tab">
-      <div class="slot-cut"></div>
-      <div class="slot-cut"></div>
-      <div class="slot-note">Incidere<br>i tagli neri</div>
-    </section>
-
-    <section class="main-sign">
-      <h1 class="headline">PROBLEMA CON QUESTO MEZZO?</h1>
-
-      <div class="qr-box">
-        <img src="${qrDataUrl}" alt="QR Code Contatto Veicolo">
+      <div class="receiver-tab safety-yellow">
+        <div class="slot-cut"></div>
+        <div class="slot-cut"></div>
       </div>
 
-      <div class="cta">
-        <div class="cta-main">Avvisa subito il proprietario</div>
-        <div class="cta-sub">Non invia il tuo numero • Nessuna chiamata necessaria</div>
-      </div>
-    </section>
+      <div class="main-sign safety-yellow">
+        <h2 class="headline archivo-extra">PROBLEMA CON QUESTO MEZZO?</h2>
 
-    <section class="extension-wrap">
-      <div class="arrow"></div>
-      <div class="neck"></div>
-      <div class="slider"></div>
-      <div class="driver-box">
-        <div class="driver-text">
-          <div class="arrow-up">↑</div>
-          <div class="driver-big">Abbassami</div>
-          <div class="driver-small">Quando</div>
-          <div class="driver-big">Parcheggi</div>
+        <div class="center-content">
+          <div class="qr-box qr-border-slim">
+            <img src="${qrDataUrl}" alt="QR Code Contatto Veicolo">
+          </div>
+
+          <p class="cta-main archivo-extra">Avvisa subito il proprietario</p>
+        </div>
+
+        <div class="bottom-claim">
+          <p>ANONIMO • SICURO • IMMEDIATO</p>
         </div>
       </div>
-    </section>
+    </div>
 
-    <footer class="footer">
-      <div class="brand">Contatto Veicolo</div>
-      <div>Print ready A4 format</div>
-    </footer>
-  </main>
+    <div class="separator"></div>
+
+    <div class="extension-area">
+      <div class="extension-inner">
+        <div class="driver-handle safety-yellow">
+          <div class="driver-text-container">
+            <svg xmlns="http://www.w3.org/2000/svg" class="driver-arrow" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="6">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+            </svg>
+
+            <div class="driver-stack">
+              <h3 class="driver-big archivo-extra">ABBASSAMI</h3>
+              <div class="driver-small">quando</div>
+              <h3 class="driver-big archivo-extra">PARCHEGGI</h3>
+            </div>
+          </div>
+        </div>
+
+        <div class="tongue-shape"></div>
+      </div>
+
+      <div class="guide-extension"></div>
+    </div>
+
+    <div class="footer">
+      <div>Contatto Veicolo System • Driver Perspective Optimized</div>
+      <div>v15 Test Layout</div>
+    </div>
+  </div>
 </body>
 </html>`;
 
@@ -2016,6 +2016,9 @@ app.get('/owner-print-sign.html', async (req, res) => {
     );
   }
 });
+
+
+
 
 
 app.get('/api/owner/sticker-print-pdf', async (req, res) => {
