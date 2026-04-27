@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Contatto Veicolo</title>
+  <meta name="apple-mobile-web-app-title" content="TARGA">
+  <link id="ownerDynamicManifest" rel="manifest" href="/owner-manifest.json">
+
   <script>
     (function(){
       try {
@@ -1275,6 +1278,53 @@
   window.ownerCanAskNotifications = function(){
     return isOwnerStandalone();
   };
+})();
+</script>
+
+
+<script id="dynamicOwnerAppNameEarly">
+(function(){
+  try {
+    var params = new URLSearchParams(window.location.search);
+    var code = (params.get('code') || '').trim();
+    var plate = (params.get('plate') || '').trim().toUpperCase();
+
+    if (!plate) {
+      try {
+        plate = (localStorage.getItem('owner_plate') || localStorage.getItem('ownerPlate') || '').trim().toUpperCase();
+      } catch(e) {}
+    }
+
+    // Nome Web App: SOLO TARGA
+    var appName = plate || 'TARGA';
+
+    document.title = appName;
+
+    var appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+    if (appleTitle) {
+      appleTitle.setAttribute('content', appName);
+    } else {
+      appleTitle = document.createElement('meta');
+      appleTitle.setAttribute('name', 'apple-mobile-web-app-title');
+      appleTitle.setAttribute('content', appName);
+      document.head.appendChild(appleTitle);
+    }
+
+    var manifest = document.getElementById('ownerDynamicManifest') || document.querySelector('link[rel="manifest"]');
+    if (!manifest) {
+      manifest = document.createElement('link');
+      manifest.rel = 'manifest';
+      manifest.id = 'ownerDynamicManifest';
+      document.head.appendChild(manifest);
+    }
+
+    manifest.href = '/owner-manifest.json?code=' + encodeURIComponent(code) + '&plate=' + encodeURIComponent(appName) + '&v=' + Date.now();
+
+    try {
+      if (plate) localStorage.setItem('owner_plate', plate);
+      if (code) localStorage.setItem('owner_code', code);
+    } catch(e) {}
+  } catch(e) {}
 })();
 </script>
 

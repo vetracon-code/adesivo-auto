@@ -1547,6 +1547,66 @@ app.get('/api/admin/feedbacks', requireAdmin, async (req, res) => {
 });
 
 
+
+app.get('/owner-manifest.json', async (req, res) => {
+  try {
+    const code = String(req.query.code || '').trim();
+    const plateFromQuery = String(req.query.plate || '').trim().toUpperCase();
+
+    let appName = plateFromQuery || 'TARGA';
+
+    if ((!plateFromQuery || plateFromQuery === 'TARGA') && code) {
+      try {
+        const result = await pool.query(
+          `SELECT plate FROM vehicles WHERE code = $1 LIMIT 1`,
+          [code]
+        );
+        if (result.rows && result.rows[0] && result.rows[0].plate) {
+          appName = String(result.rows[0].plate).trim().toUpperCase();
+        }
+      } catch (e) {}
+    }
+
+    // Nome Web App: SOLO TARGA
+    appName = String(appName || 'TARGA').trim().toUpperCase();
+
+    res.setHeader('Content-Type', 'application/manifest+json');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+
+    return res.json({
+      name: appName,
+      short_name: appName,
+      description: 'Contatto Veicolo',
+      start_url: `/owner-simple.html?code=${encodeURIComponent(code)}&plate=${encodeURIComponent(appName)}`,
+      scope: '/',
+      display: 'standalone',
+      background_color: '#07111c',
+      theme_color: '#07111c',
+      icons: [
+        {
+          src: '/icons/icon-192x192.png',
+          sizes: '192x192',
+          type: 'image/png'
+        },
+        {
+          src: '/icons/icon-512x512.png',
+          sizes: '512x512',
+          type: 'image/png'
+        },
+        {
+          src: '/apple-touch-icon.png',
+          sizes: '180x180',
+          type: 'image/png'
+        }
+      ]
+    });
+  } catch (err) {
+    console.error('owner-manifest error:', err);
+    return res.status(500).json({ error: 'manifest error' });
+  }
+});
+
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
