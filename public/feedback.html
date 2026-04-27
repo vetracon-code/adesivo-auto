@@ -302,9 +302,55 @@
       .card{border-radius:28px}
     }
   </style>
+
+<style id="feedback-back-suggestions-style">
+  .feedback-back-row {
+    display:flex;
+    justify-content:flex-start;
+    margin-bottom:14px;
+  }
+
+  .back-btn {
+    border:1px solid rgba(34,48,70,.12);
+    background:rgba(255,255,255,.82);
+    color:#2f5fad;
+    min-height:42px;
+    padding:0 14px;
+    border-radius:999px;
+    font-weight:900;
+    cursor:pointer;
+    box-shadow:0 10px 24px rgba(34,48,70,.07);
+  }
+
+  .suggestion-box {
+    margin-top:18px;
+    padding:16px;
+    border:1px solid var(--line);
+    background:#f8fbff;
+    border-radius:22px;
+  }
+
+  .suggestion-title {
+    font-size:.86rem;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    font-weight:950;
+    color:#44546a;
+    margin-bottom:8px;
+  }
+
+  .suggestion-copy {
+    color:var(--muted);
+    font-size:.94rem;
+    line-height:1.45;
+    margin-bottom:10px;
+  }
+</style>
+
 </head>
 <body>
   <div class="wrap">
+    <div class="feedback-back-row"><button id="feedbackBackBtn" class="back-btn" type="button">← Torna indietro</button></div>
     <div class="card">
       <header class="hero">
         <div class="eyebrow">Contatto Veicolo</div>
@@ -339,6 +385,15 @@
         </div>
 
         <textarea id="details" placeholder="Vuoi aggiungere qualcosa? Scrivi qui il tuo commento, anche breve."></textarea>
+
+        
+        <div class="suggestion-box">
+          <div class="suggestion-title">Suggerimenti per migliorare il servizio</div>
+          <div class="suggestion-copy">
+            Hai un’idea, una funzione utile o qualcosa che renderebbe Contatto Veicolo più chiaro, pratico o convincente?
+          </div>
+          <textarea id="suggestions" placeholder="Scrivi qui un suggerimento, anche breve."></textarea>
+        </div>
 
         <label class="consent">
           <input type="checkbox" id="contactPermission">
@@ -426,6 +481,7 @@
           sentiment: selectedSentiment,
           reason: selectedReason,
           details: document.getElementById("details").value.trim(),
+          suggestions: document.getElementById("suggestions") ? document.getElementById("suggestions").value.trim() : "",
           contact_permission: document.getElementById("contactPermission").checked
         };
 
@@ -453,5 +509,44 @@
     sendBtn.addEventListener("click", sendFeedback);
     loadVehicle();
   </script>
+
+<script id="feedback-back-logic">
+  document.addEventListener("DOMContentLoaded", function(){
+    const backBtn = document.getElementById("feedbackBackBtn");
+    if (!backBtn) return;
+
+    backBtn.addEventListener("click", function(){
+      const params = new URLSearchParams(window.location.search);
+
+      const returnUrl = params.get("return") || params.get("back") || params.get("returnUrl");
+      if (returnUrl) {
+        try {
+          const decoded = decodeURIComponent(returnUrl);
+          if (decoded.startsWith("/") || decoded.startsWith(window.location.origin)) {
+            window.location.href = decoded;
+            return;
+          }
+        } catch(e) {}
+      }
+
+      const code = params.get("code");
+      const plate = params.get("plate");
+      const fromApp = params.get("from") === "app" || params.get("app") === "1" || params.get("source") === "owner";
+
+      if (fromApp && code && plate) {
+        window.location.href = "/owner-simple.html?code=" + encodeURIComponent(code) + "&plate=" + encodeURIComponent(plate);
+        return;
+      }
+
+      if (document.referrer && document.referrer.startsWith(window.location.origin)) {
+        history.back();
+        return;
+      }
+
+      window.location.href = "/scopri-servizio";
+    });
+  });
+</script>
+
 </body>
 </html>

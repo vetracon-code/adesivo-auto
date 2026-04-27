@@ -1482,10 +1482,12 @@ async function ensureCustomerFeedbacksTable() {
       sentiment TEXT,
       reason TEXT,
       details TEXT,
+      suggestions TEXT,
       contact_permission BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await pool.query("ALTER TABLE customer_feedbacks ADD COLUMN IF NOT EXISTS suggestions TEXT");
 }
 
 app.get('/feedback/u/:public_id', (req, res) => {
@@ -1505,6 +1507,7 @@ app.post('/api/feedback', async (req, res) => {
     const sentiment = String(body.sentiment || '').trim() || 'neutral';
     const reason = String(body.reason || '').trim();
     const details = String(body.details || '').trim();
+    const suggestions = String(body.suggestions || '').trim();
     const contactPermission = !!body.contact_permission;
 
     if (!reason) {
@@ -1513,9 +1516,9 @@ app.post('/api/feedback', async (req, res) => {
 
     await pool.query(
       `INSERT INTO customer_feedbacks
-       (public_id, code, plate, brand, vehicle_model, sentiment, reason, details, contact_permission, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())`,
-      [publicId, code, plate, brand, vehicleModel, sentiment, reason, details, contactPermission]
+       (public_id, code, plate, brand, vehicle_model, sentiment, reason, details, suggestions, contact_permission, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())`,
+      [publicId, code, plate, brand, vehicleModel, sentiment, reason, details, suggestions, contactPermission]
     );
 
     return res.json({ success: true });
@@ -1530,7 +1533,7 @@ app.get('/api/admin/feedbacks', requireAdmin, async (req, res) => {
     await ensureCustomerFeedbacksTable();
 
     const result = await pool.query(
-      `SELECT id, public_id, code, plate, brand, vehicle_model, sentiment, reason, details, contact_permission, created_at
+      `SELECT id, public_id, code, plate, brand, vehicle_model, sentiment, reason, details, suggestions, contact_permission, created_at
        FROM customer_feedbacks
        ORDER BY created_at DESC
        LIMIT 200`
