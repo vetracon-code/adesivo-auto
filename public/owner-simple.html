@@ -1328,6 +1328,18 @@
 })();
 </script>
 
+
+<style id="map-dots-visibility-fix">
+  .italy-dot.active,
+  .italy-dot.has-events,
+  .italy-dot[data-count]:not([data-count="0"]) {
+    opacity: 1 !important;
+    visibility: visible !important;
+    display: block !important;
+    filter: none !important;
+  }
+</style>
+
 </head>
 <body>
   
@@ -1754,7 +1766,37 @@
       return publicId ? `/renew/u/${encodeURIComponent(publicId)}` : '#';
     }
 
-    function areaBucket(city, region){
+    
+function forceRenderAreaMapFromDashboard(data){
+  try {
+    const events = Array.isArray(data?.events) ? data.events : [];
+
+    // Salvo lo storico tecnico degli eventi, separato dai messaggi cancellabili.
+    window.__OWNER_AREA_EVENTS__ = events;
+
+    if (typeof renderAreaMap === 'function') {
+      renderAreaMap(events);
+      return;
+    }
+
+    if (typeof updateAreaMap === 'function') {
+      updateAreaMap(events);
+      return;
+    }
+
+    if (typeof renderMap === 'function') {
+      renderMap(events);
+      return;
+    }
+
+    console.warn('Nessuna funzione mappa trovata, eventi area disponibili:', events);
+  } catch(e) {
+    console.warn('Errore forceRenderAreaMapFromDashboard:', e);
+  }
+}
+
+
+function areaBucket(city, region){
       const value = `${city || ''} ${region || ''}`.toLowerCase();
       if (/(sicilia|sardegna|palermo|catania|cagliari|sassari|trapani|siracusa)/.test(value)) return 'islands';
       if (/(calabria|puglia|basilicata|campania|molise|abruzzo|napoli|bari|lecce|taranto|catanzaro|reggio calabria|potenza|salerno)/.test(value)) return 'south';
@@ -2050,7 +2092,9 @@
       });
       const data = await res.json();
 
-      if(!res.ok || !data.success){
+      
+        try { forceRenderAreaMapFromDashboard(data.data || data); } catch(e) {}
+if(!res.ok || !data.success){
         qs('statusPill').textContent = 'Errore';
         qs('statusPill').className = 'status-pill danger';
         qs('workingText').textContent = data.error || 'Impossibile caricare i dati.';
