@@ -1468,6 +1468,82 @@ app.get('/scopri-servizio', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'scopri-servizio.html'));
 });
 
+
+
+async function ensureCustomerFeedbacksTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customer_feedbacks (
+      id BIGSERIAL PRIMARY KEY,
+      public_id TEXT,
+      code TEXT,
+      plate TEXT,
+      brand TEXT,
+      vehicle_model TEXT,
+      sentiment TEXT,
+      reason TEXT,
+      details TEXT,
+      contact_permission BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+}
+
+app.get('/feedback/u/:public_id', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'feedback.html'));
+});
+
+app.post('/api/feedback', async (req, res) => {
+  try {
+    await ensureCustomerFeedbacksTable();
+
+    const body = req.body || {};
+    const publicId = String(body.public_id || '').trim().toUpperCase() || null;
+    const code = String(body.code || '').trim() || null;
+    const plate = String(body.plate || '').trim().toUpperCase() || null;
+    const brand = String(body.brand || '').trim() || null;
+    const vehicleModel = String(body.vehicle_model || '').trim() || null;
+    const sentiment = String(body.sentiment || '').trim() || 'neutral';
+    const reason = String(body.reason || '').trim();
+    const details = String(body.details || '').trim();
+    const contactPermission = !!body.contact_permission;
+
+    if (!reason) {
+      return res.status(400).json({ success: false, error: 'Motivazione mancante.' });
+    }
+
+    await pool.query(
+      `INSERT INTO customer_feedbacks
+       (public_id, code, plate, brand, vehicle_model, sentiment, reason, details, contact_permission, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())`,
+      [publicId, code, plate, brand, vehicleModel, sentiment, reason, details, contactPermission]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('api feedback error:', err);
+    return res.status(500).json({ success: false, error: 'Errore salvataggio feedback.' });
+  }
+});
+
+app.get('/api/admin/feedbacks', requireAdmin, async (req, res) => {
+  try {
+    await ensureCustomerFeedbacksTable();
+
+    const result = await pool.query(
+      `SELECT id, public_id, code, plate, brand, vehicle_model, sentiment, reason, details, contact_permission, created_at
+       FROM customer_feedbacks
+       ORDER BY created_at DESC
+       LIMIT 200`
+    );
+
+    return res.json({ success: true, feedbacks: result.rows });
+  } catch (err) {
+    console.error('api admin feedbacks error:', err);
+    return res.status(500).json({ success: false, error: 'Errore lettura feedback.' });
+  }
+});
+
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {

@@ -1844,5 +1844,162 @@ window.fixQrUrl = async function(code){
 })();
 </script>
 
+
+<script id="feedbackAdminPanelInjected">
+(function(){
+  function esc(v){
+    return String(v == null ? '' : v)
+      .replaceAll('&','&amp;')
+      .replaceAll('<','&lt;')
+      .replaceAll('>','&gt;')
+      .replaceAll('"','&quot;')
+      .replaceAll("'","&#039;");
+  }
+
+  function fmt(v){
+    if(!v) return '-';
+    try { return new Date(v).toLocaleString('it-IT'); } catch(e){ return v; }
+  }
+
+  const css = document.createElement('style');
+  css.textContent = `
+    #feedbackAdminFab{
+      position:fixed;right:18px;bottom:18px;z-index:9999;
+      border:0;border-radius:999px;padding:13px 18px;
+      background:linear-gradient(180deg,#3f79d8,#2f5fad);
+      color:#fff;font-weight:900;box-shadow:0 18px 42px rgba(0,0,0,.28);
+      cursor:pointer;
+    }
+    #feedbackAdminOverlay{
+      display:none;position:fixed;inset:0;z-index:99999;
+      background:rgba(4,10,18,.72);backdrop-filter:blur(8px);
+      padding:20px;overflow:auto;
+    }
+    #feedbackAdminBox{
+      width:min(1100px,100%);margin:30px auto;background:#101927;color:#fff;
+      border:1px solid rgba(255,255,255,.12);border-radius:26px;
+      box-shadow:0 24px 70px rgba(0,0,0,.4);padding:20px;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+    }
+    #feedbackAdminHead{
+      display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px;
+    }
+    #feedbackAdminHead h2{margin:0;font-size:1.35rem;}
+    #feedbackAdminClose{
+      border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);
+      color:#fff;border-radius:14px;padding:10px 14px;cursor:pointer;font-weight:800;
+    }
+    .feedback-admin-row{
+      display:grid;grid-template-columns:150px 120px 1fr 1.3fr 90px;gap:10px;
+      padding:13px;border:1px solid rgba(255,255,255,.10);border-radius:18px;
+      background:rgba(255,255,255,.045);margin-bottom:10px;align-items:start;
+    }
+    .feedback-admin-muted{color:rgba(255,255,255,.62);font-size:.86rem;line-height:1.35;}
+    .feedback-admin-main{font-weight:900;color:#fff;line-height:1.35;}
+    .feedback-admin-positive{color:#9ff0bf;font-weight:900;}
+    .feedback-admin-critical{color:#ffd0d0;font-weight:900;}
+    .feedback-admin-neutral{color:#dbe7ff;font-weight:900;}
+    @media(max-width:850px){
+      .feedback-admin-row{grid-template-columns:1fr;}
+      #feedbackAdminFab{left:18px;right:auto;}
+    }
+  `;
+  document.head.appendChild(css);
+
+  const btn = document.createElement('button');
+  btn.id = 'feedbackAdminFab';
+  btn.type = 'button';
+  btn.textContent = 'Feedback rinnovi';
+  document.body.appendChild(btn);
+
+  const overlay = document.createElement('div');
+  overlay.id = 'feedbackAdminOverlay';
+  overlay.innerHTML = `
+    <div id="feedbackAdminBox">
+      <div id="feedbackAdminHead">
+        <div>
+          <h2>Feedback rinnovi</h2>
+          <div class="feedback-admin-muted">Qui leggi le motivazioni lasciate dagli utenti dalla pagina “Lascia un feedback”.</div>
+        </div>
+        <button id="feedbackAdminClose" type="button">Chiudi</button>
+      </div>
+      <div id="feedbackAdminList" class="feedback-admin-muted">Caricamento...</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  async function loadFeedbacks(){
+    const list = document.getElementById('feedbackAdminList');
+    list.textContent = 'Caricamento...';
+
+    try{
+      const res = await fetch('/api/admin/feedbacks');
+      const data = await res.json();
+
+      if(!res.ok || !data.success){
+        list.textContent = data.error || 'Errore lettura feedback.';
+        return;
+      }
+
+      const rows = data.feedbacks || [];
+      if(!rows.length){
+        list.textContent = 'Nessun feedback ricevuto.';
+        return;
+      }
+
+      list.innerHTML = rows.map(item => {
+        const sentimentClass = item.sentiment === 'positive'
+          ? 'feedback-admin-positive'
+          : item.sentiment === 'critical'
+            ? 'feedback-admin-critical'
+            : 'feedback-admin-neutral';
+
+        const vehicle = [item.brand, item.vehicle_model].filter(Boolean).join(' ').trim() || 'Veicolo';
+        const plate = item.plate ? item.plate : '-';
+
+        return `
+          <div class="feedback-admin-row">
+            <div>
+              <div class="feedback-admin-main">${esc(plate)}</div>
+              <div class="feedback-admin-muted">${esc(vehicle)}</div>
+              <div class="feedback-admin-muted">${esc(item.public_id || '')}</div>
+            </div>
+            <div>
+              <div class="${sentimentClass}">${esc(item.sentiment || 'neutral')}</div>
+              <div class="feedback-admin-muted">${fmt(item.created_at)}</div>
+            </div>
+            <div>
+              <div class="feedback-admin-main">${esc(item.reason || '-')}</div>
+            </div>
+            <div>
+              <div class="feedback-admin-muted">${esc(item.details || 'Nessun commento aggiuntivo.')}</div>
+            </div>
+            <div>
+              <div class="feedback-admin-muted">${item.contact_permission ? 'Ricontattabile' : 'No contatto'}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }catch(e){
+      list.textContent = 'Errore caricamento feedback.';
+    }
+  }
+
+  btn.addEventListener('click', function(){
+    overlay.style.display = 'block';
+    loadFeedbacks();
+  });
+
+  document.addEventListener('click', function(e){
+    if(e.target && e.target.id === 'feedbackAdminClose'){
+      overlay.style.display = 'none';
+    }
+    if(e.target && e.target.id === 'feedbackAdminOverlay'){
+      overlay.style.display = 'none';
+    }
+  });
+})();
+</script>
+
 </body>
 </html>
