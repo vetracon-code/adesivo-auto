@@ -1464,6 +1464,10 @@ app.get('/owner-invite/:invite_token', async (req, res) => {
 });
 
 
+app.get('/scopri-servizio', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'scopri-servizio.html'));
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
