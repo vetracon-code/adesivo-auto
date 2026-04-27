@@ -1677,6 +1677,109 @@ app.get('/owner-app/:code/:plate', async (req, res) => {
 });
 
 
+
+app.get('/owner-simple.html', async (req, res, next) => {
+  try {
+    const code = String(req.query.code || '').trim();
+    let plate = String(req.query.plate || '').trim().toUpperCase();
+
+    // Se non ci sono code/plate, lascia servire il file statico normale.
+    if (!code && !plate) {
+      return next();
+    }
+
+    // Se ho il codice ma la targa manca, provo a leggerla dal DB.
+    if (code && !plate) {
+      try {
+        const result = await pool.query(
+          `SELECT plate FROM vehicles WHERE code = $1 LIMIT 1`,
+          [code]
+        );
+        if (result.rows && result.rows[0] && result.rows[0].plate) {
+          plate = String(result.rows[0].plate).trim().toUpperCase();
+        }
+      } catch (e) {}
+    }
+
+    const appName = plate || 'TARGA';
+
+    const filePath = path.join(__dirname, 'public', 'owner-simple.html');
+    let html = fs.readFileSync(filePath, 'utf8');
+
+    const safeName = String(appName).replace(/[&<>"']/g, c => ({
+      '&':'&amp;',
+      '<':'&lt;',
+      '>':'&gt;',
+      '"':'&quot;',
+      "'":'&#039;'
+    }[c]));
+
+    const safeCode = String(code).replace(/"/g, '');
+    const safePlate = String(appName).replace(/"/g, '');
+
+    const manifestHref = `/owner-manifest.json?code=${encodeURIComponent(code)}&plate=${encodeURIComponent(appName)}&v=${Date.now()}`;
+
+    html = html.replace(/<title>.*?<\/title>/is, `<title>${safeName}</title>`);
+
+    if (/<meta\s+name=["']apple-mobile-web-app-title["'][^>]*>/i.test(html)) {
+      html = html.replace(
+        /<meta\s+name=["']apple-mobile-web-app-title["'][^>]*>/i,
+        `<meta name="apple-mobile-web-app-title" content="${safeName}">`
+      );
+    } else {
+      html = html.replace(
+        '</title>',
+        `</title>\n  <meta name="apple-mobile-web-app-title" content="${safeName}">`
+      );
+    }
+
+    if (/<link\s+id=["']ownerDynamicManifest["'][^>]*>/i.test(html)) {
+      html = html.replace(
+        /<link\s+id=["']ownerDynamicManifest["'][^>]*>/i,
+        `<link id="ownerDynamicManifest" rel="manifest" href="${manifestHref}">`
+      );
+    } else if (/<link\s+rel=["']manifest["'][^>]*>/i.test(html)) {
+      html = html.replace(
+        /<link\s+rel=["']manifest["'][^>]*>/i,
+        `<link id="ownerDynamicManifest" rel="manifest" href="${manifestHref}">`
+      );
+    } else {
+      html = html.replace(
+        '</title>',
+        `</title>\n  <link id="ownerDynamicManifest" rel="manifest" href="${manifestHref}">`
+      );
+    }
+
+    html = html.replace(
+      /<body([^>]*)>/i,
+      `<body$1 data-owner-code="${safeCode}" data-owner-plate="${safePlate}">`
+    );
+
+    if (!html.includes('window.__OWNER_CODE__')) {
+      html = html.replace(
+        '</head>',
+        `<script>
+(function(){
+  try {
+    window.__OWNER_CODE__ = ${JSON.stringify(code)};
+    window.__OWNER_PLATE__ = ${JSON.stringify(appName)};
+    document.title = ${JSON.stringify(appName)};
+  } catch(e) {}
+})();
+</script>
+</head>`
+      );
+    }
+
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    return res.send(html);
+  } catch (err) {
+    console.error('dynamic owner-simple error:', err);
+    return next();
+  }
+});
+
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
