@@ -2794,7 +2794,7 @@ app.post('/api/log-contact-message', async (req, res) => {
           : cleanReasonForPush;
         const body = 'Segnalazione inviata da un utente. Tocca per leggere il messaggio.';
 
-        const targetUrl = `/owner-simple.html?code=${encodeURIComponent(String(code).trim().toUpperCase())}&plate=${encodeURIComponent(String(plate || '').trim())}&focus=messages${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}`;
+        const targetUrl = `/owner-app/${encodeURIComponent(String(code).trim().toUpperCase())}/${encodeURIComponent(String(plate || '').trim().toUpperCase())}?focus=messages${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}`;
 
         const unreadRes = await pool.query(
           `SELECT COUNT(*)::int AS unread_count
