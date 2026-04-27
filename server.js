@@ -1607,6 +1607,76 @@ app.get('/owner-manifest.json', async (req, res) => {
 });
 
 
+
+app.get('/owner-app/:code/:plate', async (req, res) => {
+  try {
+    const code = String(req.params.code || '').trim();
+    const plate = String(req.params.plate || '').trim().toUpperCase();
+
+    if (!code || !plate) {
+      return res.redirect('/owner-login.html');
+    }
+
+    const filePath = path.join(__dirname, 'public', 'owner-simple.html');
+    let html = fs.readFileSync(filePath, 'utf8');
+
+    const safePlate = plate.replace(/[&<>"']/g, c => ({
+      '&':'&amp;',
+      '<':'&lt;',
+      '>':'&gt;',
+      '"':'&quot;',
+      "'":'&#039;'
+    }[c]));
+
+    const manifestHref = `/owner-manifest.json?code=${encodeURIComponent(code)}&plate=${encodeURIComponent(plate)}&v=${Date.now()}`;
+
+    html = html.replace(/<title>.*?<\/title>/is, `<title>${safePlate}</title>`);
+
+    html = html.replace(
+      /<meta\s+name=["']apple-mobile-web-app-title["'][^>]*>/i,
+      `<meta name="apple-mobile-web-app-title" content="${safePlate}">`
+    );
+
+    html = html.replace(
+      /<link\s+id=["']ownerDynamicManifest["']\s+rel=["']manifest["'][^>]*>/i,
+      `<link id="ownerDynamicManifest" rel="manifest" href="${manifestHref}">`
+    );
+
+    html = html.replace(
+      /<link\s+rel=["']manifest["'][^>]*>/i,
+      `<link id="ownerDynamicManifest" rel="manifest" href="${manifestHref}">`
+    );
+
+    html = html.replace(
+      /<body([^>]*)>/i,
+      `<body$1 data-owner-code="${code.replace(/"/g,'')}" data-owner-plate="${safePlate}">`
+    );
+
+    // Se qualche script legge la querystring, garantiamo anche il redirect logico interno
+    // senza cambiare URL visibile.
+    html = html.replace(
+      '</head>',
+      `<script>
+(function(){
+  try {
+    window.__OWNER_CODE__ = ${JSON.stringify(code)};
+    window.__OWNER_PLATE__ = ${JSON.stringify(plate)};
+    document.title = ${JSON.stringify(plate)};
+  } catch(e) {}
+})();
+</script>
+</head>`
+    );
+
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.send(html);
+  } catch (err) {
+    console.error('owner-app plate route error:', err);
+    return res.status(500).send('Errore apertura App proprietario.');
+  }
+});
+
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
