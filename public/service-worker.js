@@ -1,3 +1,4 @@
+const ANDROID_FIX_VERSION = '20260428140657';
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });

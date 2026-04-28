@@ -1340,6 +1340,54 @@
   }
 </style>
 
+
+<style id="android-install-push-fix-style">
+  .android-install-box {
+    display:none;
+    margin:14px 0;
+    padding:14px;
+    border-radius:18px;
+    background:rgba(63,121,216,.08);
+    border:1px solid rgba(63,121,216,.18);
+  }
+  .android-install-box.show {
+    display:block;
+  }
+  .android-install-title {
+    font-weight:900;
+    color:#223046;
+    margin-bottom:6px;
+  }
+  .android-install-copy {
+    color:#5b6980;
+    line-height:1.45;
+    font-size:.94rem;
+    margin-bottom:10px;
+  }
+  .android-install-actions {
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .android-mini-btn {
+    border:0;
+    border-radius:14px;
+    min-height:44px;
+    padding:0 14px;
+    font-weight:900;
+    cursor:pointer;
+    background:#3f79d8;
+    color:#fff;
+    box-shadow:0 10px 24px rgba(63,121,216,.20);
+  }
+  .android-mini-btn.secondary {
+    background:#eef3fa;
+    color:#223046;
+    border:1px solid rgba(34,48,70,.12);
+    box-shadow:none;
+  }
+</style>
+
 </head>
 <body>
   
@@ -1386,7 +1434,19 @@
             <button id="secondaryInstallActionBtn" class="btn btn-secondary" type="button" style="display:none;min-height:34px;padding:0 12px;font-size:.8rem;">Dettagli</button>
           </div>
 
-          <div id="installActionResult" class="muted" style="margin-top:8px;line-height:1.42;font-size:.84rem;"></div>
+          
+<div id="androidInstallBox" class="android-install-box">
+  <div class="android-install-title">Installazione Android</div>
+  <div id="androidInstallCopy" class="android-install-copy">
+    Su Android usa Chrome: installa la Web App, poi attiva le notifiche.
+  </div>
+  <div class="android-install-actions">
+    <button id="androidInstallBtn" class="android-mini-btn" type="button">Installa App</button>
+    <button id="androidEnablePushBtn" class="android-mini-btn secondary" type="button">Attiva notifiche</button>
+  </div>
+</div>
+
+<div id="installActionResult" class="muted" style="margin-top:8px;line-height:1.42;font-size:.84rem;"></div>
         </div>
       </div>
 
@@ -4692,6 +4752,212 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
+
+
+<script id="android-install-push-fix">
+(function(){
+  let androidDeferredPrompt = null;
+
+  function isAndroidChrome(){
+    const ua = navigator.userAgent || '';
+    return /Android/i.test(ua) && /Chrome/i.test(ua) && !/EdgA|OPR|SamsungBrowser/i.test(ua);
+  }
+
+  function isStandaloneMode(){
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  }
+
+  function getOwnerParamsSafe(){
+    try {
+      if (typeof getOwnerParams === 'function') return getOwnerParams();
+
+      const params = new URLSearchParams(window.location.search);
+      let code = (params.get('code') || window.__OWNER_CODE__ || document.body?.dataset?.ownerCode || '').trim();
+      let plate = (params.get('plate') || window.__OWNER_PLATE__ || document.body?.dataset?.ownerPlate || '').trim().toUpperCase();
+
+      if ((!code || !plate) && window.location.pathname) {
+        const m = window.location.pathname.match(/\/owner-app\/([^\/?#]+)\/([^\/?#]+)/i);
+        if (m) {
+          if (!code) code = decodeURIComponent(m[1] || '').trim();
+          if (!plate) plate = decodeURIComponent(m[2] || '').trim().toUpperCase();
+        }
+      }
+
+      return { code, plate };
+    } catch(e) {
+      return { code:'', plate:'' };
+    }
+  }
+
+  function showAndroidBox(message){
+    try {
+      const box = document.getElementById('androidInstallBox');
+      const copy = document.getElementById('androidInstallCopy');
+      if (!box) return;
+      if (isAndroidChrome()) {
+        box.classList.add('show');
+        if (message && copy) copy.textContent = message;
+      }
+    } catch(e) {}
+  }
+
+  function setInstallResult(message){
+    try {
+      const el = document.getElementById('installActionResult');
+      if (el && message) el.textContent = message;
+    } catch(e) {}
+  }
+
+  async function androidRegisterServiceWorker(){
+    if (!('serviceWorker' in navigator)) {
+      throw new Error('Service worker non supportato su questo browser.');
+    }
+
+    const reg = await navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
+    await navigator.serviceWorker.ready;
+    return reg;
+  }
+
+  async function androidEnablePush(){
+    try {
+      if (!('Notification' in window)) {
+        setInstallResult('Questo browser non supporta le notifiche.');
+        return false;
+      }
+
+      if (!('PushManager' in window)) {
+        setInstallResult('Push Manager non disponibile su questo browser.');
+        return false;
+      }
+
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        setInstallResult('Permesso notifiche non concesso.');
+        return false;
+      }
+
+      let ok = false;
+
+      // Usa la funzione già esistente se presente.
+      if (typeof registerPushSubscription === 'function') {
+        ok = await registerPushSubscription();
+      } else {
+        const reg = await androidRegisterServiceWorker();
+
+        const keyRes = await fetch('/api/push/public-key', { cache:'no-store' });
+        const keyData = await keyRes.json();
+        if (!keyRes.ok || !keyData.success || !keyData.publicKey) {
+          throw new Error('Chiave notifiche non disponibile.');
+        }
+
+        function urlBase64ToUint8Array(base64String) {
+          const padding = '='.repeat((4 - base64String.length % 4) % 4);
+          const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+          const rawData = window.atob(base64);
+          return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
+        }
+
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(keyData.publicKey)
+          });
+        }
+
+        const { code, plate } = getOwnerParamsSafe();
+
+        const saveRes = await fetch('/api/push/subscribe', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({ code, plate, subscription: sub.toJSON() })
+        });
+
+        const saveData = await saveRes.json().catch(() => ({}));
+        if (!saveRes.ok || !saveData.success) {
+          throw new Error(saveData.error || 'Errore salvataggio notifiche.');
+        }
+
+        ok = true;
+      }
+
+      if (ok) {
+        setInstallResult('Notifiche attivate correttamente su Android.');
+        showAndroidBox('Notifiche attive. Ora puoi ricevere gli avvisi su questo dispositivo.');
+      } else {
+        setInstallResult('Registrazione notifiche non completata.');
+      }
+
+      return ok;
+    } catch(err) {
+      console.error('androidEnablePush error:', err);
+      setInstallResult('Errore notifiche Android: ' + (err && err.message ? err.message : err));
+      return false;
+    }
+  }
+
+  async function androidInstallApp(){
+    try {
+      if (!androidDeferredPrompt) {
+        showAndroidBox('Se non appare il pulsante installazione, apri il menu ⋮ di Chrome e scegli “Aggiungi alla schermata Home” o “Installa app”.');
+        setInstallResult('Su Android apri il menu ⋮ di Chrome e scegli “Aggiungi alla schermata Home” o “Installa app”.');
+        return;
+      }
+
+      androidDeferredPrompt.prompt();
+      const choice = await androidDeferredPrompt.userChoice;
+      androidDeferredPrompt = null;
+
+      if (choice && choice.outcome === 'accepted') {
+        setInstallResult('App installata. Ora attiva le notifiche.');
+        showAndroidBox('App installata. Ora tocca “Attiva notifiche”.');
+      } else {
+        setInstallResult('Installazione non completata.');
+      }
+    } catch(err) {
+      console.error('androidInstallApp error:', err);
+      setInstallResult('Installazione Android non completata.');
+    }
+  }
+
+  window.addEventListener('beforeinstallprompt', function(e){
+    if (!isAndroidChrome()) return;
+    e.preventDefault();
+    androidDeferredPrompt = e;
+    showAndroidBox('Puoi installare la Web App su Android e poi attivare le notifiche.');
+  });
+
+  window.addEventListener('appinstalled', function(){
+    setInstallResult('App installata correttamente. Ora attiva le notifiche.');
+    showAndroidBox('App installata correttamente. Ora attiva le notifiche.');
+  });
+
+  document.addEventListener('DOMContentLoaded', function(){
+    try {
+      if (!isAndroidChrome()) return;
+
+      showAndroidBox(
+        isStandaloneMode()
+          ? 'Web App aperta dalla schermata Home. Ora attiva le notifiche.'
+          : 'Su Android installa la Web App con Chrome, poi attiva le notifiche.'
+      );
+
+      const installBtn = document.getElementById('androidInstallBtn');
+      const pushBtn = document.getElementById('androidEnablePushBtn');
+
+      if (installBtn) installBtn.addEventListener('click', androidInstallApp);
+      if (pushBtn) pushBtn.addEventListener('click', androidEnablePush);
+
+      androidRegisterServiceWorker().catch(function(err){
+        console.warn('Android SW registration warning:', err);
+      });
+    } catch(e) {}
+  });
+
+  window.androidEnablePush = androidEnablePush;
+  window.androidInstallApp = androidInstallApp;
+})();
+</script>
 
 </body>
 </html>
