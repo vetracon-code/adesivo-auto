@@ -1401,6 +1401,45 @@
   }
 </style>
 
+
+<style id="definitive-area-map-fix-style">
+  .italy-dot.has-events,
+  .italy-dot.active,
+  .italy-dot[data-count]:not([data-count="0"]) {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: scale(1.08);
+  }
+
+  .italy-dot.has-events::after,
+  .italy-dot.active::after {
+    content: attr(data-count);
+    position: absolute;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: #223046;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    top: -10px;
+    right: -10px;
+    box-shadow: 0 6px 14px rgba(34,48,70,.22);
+  }
+
+  .italy-detail-empty.area-ok {
+    background: rgba(63,121,216,.07);
+    border: 1px solid rgba(63,121,216,.12);
+    color: #223046;
+  }
+</style>
+
 </head>
 <body>
   
@@ -1869,6 +1908,206 @@ function forceRenderAreaMapFromDashboard(data){
 }
 
 
+
+function normalizeAreaEvent(ev){
+  ev = ev || {};
+  return {
+    type: ev.type || ev.reason || ev.event_type || 'Evento QR',
+    at: ev.at || ev.created_at || ev.viewed_at || ev.scanned_at || null,
+    ip_city: ev.ip_city || ev.city || '',
+    ip_region: ev.ip_region || ev.region || '',
+    ip_country: ev.ip_country || ev.country || '',
+    location_shared: !!ev.location_shared
+  };
+}
+
+function getAreaBucketFromEvent(ev){
+  const city = String(ev?.ip_city || '').toLowerCase();
+  const region = String(ev?.ip_region || '').toLowerCase();
+  const value = `${city} ${region}`;
+
+  if (
+    value.includes('lombard') || value.includes('milan') || value.includes('milano') ||
+    value.includes('monza') || value.includes('bergamo') || value.includes('brescia') ||
+    value.includes('piemonte') || value.includes('torino') || value.includes('liguria') ||
+    value.includes('genova') || value.includes('veneto') || value.includes('verona') ||
+    value.includes('padova') || value.includes('friuli') || value.includes('trentino') ||
+    value.includes('alto adige') || value.includes('emilia') || value.includes('bologna')
+  ) return 'north';
+
+  if (
+    value.includes('toscana') || value.includes('firenze') || value.includes('lazio') ||
+    value.includes('roma') || value.includes('umbria') || value.includes('marche') ||
+    value.includes('abruzzo')
+  ) return 'center';
+
+  if (
+    value.includes('campania') || value.includes('napoli') || value.includes('puglia') ||
+    value.includes('bari') || value.includes('calabria') || value.includes('basilicata') ||
+    value.includes('molise')
+  ) return 'south';
+
+  if (
+    value.includes('sicilia') || value.includes('palermo') || value.includes('catania') ||
+    value.includes('sardegna') || value.includes('cagliari')
+  ) return 'islands';
+
+  // Fallback prudente: se Italia ma regione non riconosciuta, metto centro.
+  const country = String(ev?.ip_country || '').toLowerCase();
+  if (country === 'it' || country === 'italia' || country === 'italy') return 'center';
+
+  return 'unknown';
+}
+
+function renderAreaMapDefinitive(rawEvents){
+  try {
+    const events = Array.isArray(rawEvents)
+      ? rawEvents.map(normalizeAreaEvent).filter(ev => ev.ip_city || ev.ip_region || ev.ip_country)
+      : [];
+
+    window.__OWNER_AREA_EVENTS__ = events;
+
+    const visualBox = document.getElementById('mapVisualBox');
+    const lastAreaText = document.getElementById('lastAreaText');
+    const titleEl = document.getElementById('mapAreaTitle');
+    const summaryEl = document.getElementById('mapAreaSummary');
+    const listEl = document.getElementById('mapAreaList');
+
+    if (!visualBox || !titleEl || !summaryEl || !listEl) return;
+
+    if (!visualBox.querySelector('.italy-real-map')) {
+      visualBox.innerHTML = `
+        <div class="italy-map-wrap-real">
+          <img class="italy-real-map" src="/assets/italy-real.svg" alt="Mappa Italia">
+          <button id="mapDotNorth" class="italy-dot dot-north" type="button" aria-label="Nord Italia"></button>
+          <button id="mapDotCenter" class="italy-dot dot-center" type="button" aria-label="Centro Italia"></button>
+          <button id="mapDotSouth" class="italy-dot dot-south" type="button" aria-label="Sud Italia"></button>
+          <button id="mapDotIslands" class="italy-dot dot-islands" type="button" aria-label="Isole"></button>
+        </div>
+      `;
+    }
+
+    const groups = {
+      north: [],
+      center: [],
+      south: [],
+      islands: [],
+      unknown: []
+    };
+
+    events.forEach(ev => {
+      const bucket = getAreaBucketFromEvent(ev);
+      if (!groups[bucket]) groups.unknown.push(ev);
+      else groups[bucket].push(ev);
+    });
+
+    const dots = {
+      north: document.getElementById('mapDotNorth'),
+      center: document.getElementById('mapDotCenter'),
+      south: document.getElementById('mapDotSouth'),
+      islands: document.getElementById('mapDotIslands')
+    };
+
+    Object.entries(dots).forEach(([bucket, el]) => {
+      if (!el) return;
+      const count = groups[bucket].length;
+      el.dataset.count = String(count);
+      el.classList.toggle('has-events', count > 0);
+      el.classList.toggle('active', false);
+      el.style.display = count > 0 ? 'block' : '';
+      el.onclick = () => showAreaBucketDetailsDefinitive(bucket, groups[bucket]);
+    });
+
+    const first = events[0];
+
+    if (first) {
+      const place = [first.ip_city, first.ip_region].filter(Boolean).join(', ') || first.ip_country || 'Area indicativa disponibile';
+      if (lastAreaText) lastAreaText.textContent = place;
+
+      const preferredBucket =
+        groups.north.length ? 'north' :
+        groups.center.length ? 'center' :
+        groups.south.length ? 'south' :
+        groups.islands.length ? 'islands' :
+        'unknown';
+
+      if (preferredBucket !== 'unknown') {
+        const dot = dots[preferredBucket];
+        if (dot) dot.classList.add('active');
+        showAreaBucketDetailsDefinitive(preferredBucket, groups[preferredBucket]);
+      } else {
+        titleEl.textContent = first.ip_country || 'Area indicativa';
+        summaryEl.textContent = 'Sono presenti accessi o segnalazioni, ma l’area italiana non è classificabile.';
+        listEl.innerHTML = events.slice(0, 10).map(ev => areaEventHtmlDefinitive(ev)).join('');
+      }
+
+      return;
+    }
+
+    if (lastAreaText) lastAreaText.textContent = 'Italia';
+    titleEl.textContent = 'Nessuna area disponibile';
+    summaryEl.textContent = 'Quando il QR verrà visualizzato, qui resterà memorizzata l’area indicativa di accesso.';
+    listEl.innerHTML = '<div class="italy-detail-empty">Nessun accesso registrato con area indicativa.</div>';
+
+  } catch(e) {
+    console.warn('renderAreaMapDefinitive error:', e);
+  }
+}
+
+function areaEventHtmlDefinitive(ev){
+  const place = [ev.ip_city, ev.ip_region].filter(Boolean).join(', ') || ev.ip_country || 'Area non disponibile';
+  let when = '-';
+  try {
+    if (ev.at) when = new Date(ev.at).toLocaleString('it-IT');
+  } catch(e) {}
+
+  return `
+    <div class="italy-detail-item">
+      <strong style="display:block;color:#223046;font-size:.9rem;">${escapeHtml(place)}</strong>
+      <div class="muted" style="margin-top:4px;font-size:.82rem;">${escapeHtml(ev.type || 'Evento QR')} · ${escapeHtml(when)}</div>
+    </div>
+  `;
+}
+
+function showAreaBucketDetailsDefinitive(bucket, items){
+  try {
+    const titleEl = document.getElementById('mapAreaTitle');
+    const summaryEl = document.getElementById('mapAreaSummary');
+    const listEl = document.getElementById('mapAreaList');
+
+    if (!titleEl || !summaryEl || !listEl) return;
+
+    const titles = {
+      north: 'Nord Italia',
+      center: 'Centro Italia',
+      south: 'Sud Italia',
+      islands: 'Isole'
+    };
+
+    document.querySelectorAll('.italy-dot').forEach(x => x.classList.remove('active'));
+    const dotId =
+      bucket === 'north' ? 'mapDotNorth' :
+      bucket === 'center' ? 'mapDotCenter' :
+      bucket === 'south' ? 'mapDotSouth' :
+      bucket === 'islands' ? 'mapDotIslands' : '';
+
+    const dot = dotId ? document.getElementById(dotId) : null;
+    if (dot) dot.classList.add('active');
+
+    titleEl.textContent = titles[bucket] || 'Area indicativa';
+    summaryEl.textContent = items && items.length
+      ? `${items.length} evento/i registrato/i in questa area.`
+      : 'Nessun dettaglio disponibile per questa area.';
+
+    listEl.innerHTML = items && items.length
+      ? items.slice(0, 10).map(ev => areaEventHtmlDefinitive(ev)).join('')
+      : '<div class="italy-detail-empty">Nessun dettaglio disponibile.</div>';
+  } catch(e) {
+    console.warn('showAreaBucketDetailsDefinitive error:', e);
+  }
+}
+
+
 function areaBucket(city, region){
       const value = `${city || ''} ${region || ''}`.toLowerCase();
       if (/(sicilia|sardegna|palermo|catania|cagliari|sassari|trapani|siracusa)/.test(value)) return 'islands';
@@ -2166,7 +2405,9 @@ function areaBucket(city, region){
       const data = await res.json();
 
       
-        try { forceRenderAreaMapFromDashboard(data.data || data); } catch(e) {}
+        
+        try { renderAreaMapDefinitive(((data.data || data) && (data.data || data).events) || []); } catch(e) {}
+try { forceRenderAreaMapFromDashboard(data.data || data); } catch(e) {}
 if(!res.ok || !data.success){
         qs('statusPill').textContent = 'Errore';
         qs('statusPill').className = 'status-pill danger';
