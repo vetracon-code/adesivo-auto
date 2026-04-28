@@ -3551,6 +3551,189 @@ app.get('/api/public-owner-status/:public_id', async (req, res) => {
 
 
 
+
+// FIX ROBUSTO: risolve sempre il record proprietario da code/targa prima di leggere dashboard o messaggi.
+// Serve a evitare disallineamenti quando la Web App salvata conserva un vecchio code ma mostra la targa corretta.
+async function resolveOwnerVehicleRecord(inputCode, inputPlate) {
+  const code = String(inputCode || '').trim().toUpperCase();
+  const plate = String(inputPlate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+  if (!code && !plate) return null;
+
+  const result = await pool.query(
+    `SELECT *
+     FROM vehicles
+     WHERE ($1 <> '' AND UPPER(code) = $1)
+        OR ($2 <> '' AND UPPER(REPLACE(COALESCE(plate,''), ' ', '')) = $2)
+     ORDER BY
+       CASE WHEN $1 <> '' AND UPPER(code) = $1 THEN 0 ELSE 1 END,
+       activated_at DESC NULLS LAST,
+       id DESC
+     LIMIT 1`,
+    [code, plate]
+  );
+
+  return result.rows[0] || null;
+}
+
+app.post('/api/owner-messages', async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const vehicle = await resolveOwnerVehicleRecord(body.code, body.plate);
+
+    if (!vehicle || !vehicle.code) {
+      return res.status(404).json({
+        success: false,
+        error: 'Record veicolo non trovato per questa targa o codice.',
+        received: {
+          code: body.code || null,
+          plate: body.plate || null
+        }
+      });
+    }
+
+    const messages = await pool.query(
+      `SELECT
+         id,
+         code,
+         plate,
+         brand,
+         vehicle_model,
+         color,
+         reason,
+         message_text,
+         location_shared,
+         latitude,
+         longitude,
+         maps_url,
+         sender_phone,
+         ip_address,
+         created_at,
+         read_at
+       FROM contact_message_logs
+       WHERE code = $1
+       ORDER BY created_at DESC
+       LIMIT 80`,
+      [vehicle.code]
+    );
+
+    const unread = messages.rows.filter(x => !x.read_at).length;
+
+    return res.json({
+      success: true,
+      resolved: {
+        code: vehicle.code,
+        plate: vehicle.plate,
+        public_id: vehicle.public_id
+      },
+      unread_count: unread,
+      items: messages.rows
+    });
+  } catch (err) {
+    console.error('robust owner-messages error:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Errore caricamento messaggi.',
+      detail: err.message
+    });
+  }
+});
+
+app.post('/api/owner-dashboard', async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const vehicle = await resolveOwnerVehicleRecord(body.code, body.plate);
+
+    if (!vehicle || !vehicle.code) {
+      return res.status(404).json({
+        success: false,
+        error: 'Record veicolo non trovato per questa targa o codice.',
+        received: {
+          code: body.code || null,
+          plate: body.plate || null
+        }
+      });
+    }
+
+    const views = await pool.query(
+      `SELECT COUNT(*)::int AS total
+       FROM contact_message_logs
+       WHERE code = $1
+         AND reason IN ('QR Visualizzato', 'Visualizzazione pagina')`,
+      [vehicle.code]
+    );
+
+    const messagesCount = await pool.query(
+      `SELECT COUNT(*)::int AS total
+       FROM contact_message_logs
+       WHERE code = $1`,
+      [vehicle.code]
+    );
+
+    const locations = await pool.query(
+      `SELECT COUNT(*)::int AS total
+       FROM contact_message_logs
+       WHERE code = $1 AND location_shared = TRUE`,
+      [vehicle.code]
+    );
+
+    const last = await pool.query(
+      `SELECT MAX(created_at) AS last_activity
+       FROM contact_message_logs
+       WHERE code = $1`,
+      [vehicle.code]
+    );
+
+    const events = await pool.query(
+      `SELECT
+         reason AS type,
+         created_at AS at,
+         COALESCE(ip_city, '') AS ip_city,
+         COALESCE(ip_region, '') AS ip_region,
+         COALESCE(ip_country, '') AS ip_country,
+         COALESCE(location_shared, FALSE) AS location_shared
+       FROM contact_message_logs
+       WHERE code = $1
+       ORDER BY created_at DESC
+       LIMIT 80`,
+      [vehicle.code]
+    );
+
+    return res.json({
+      success: true,
+      data: {
+        code: vehicle.code,
+        status: vehicle.status,
+        brand: vehicle.brand,
+        vehicle_model: vehicle.vehicle_model,
+        color: vehicle.color,
+        plate: vehicle.plate,
+        phone: vehicle.phone,
+        offered_by: vehicle.offered_by,
+        qr_url: vehicle.qr_url,
+        public_id: vehicle.public_id,
+        plan_type: vehicle.plan_type,
+        expires_at: vehicle.expires_at,
+        activated_at: vehicle.activated_at,
+        viewsCount: views.rows[0]?.total || 0,
+        messagesCount: messagesCount.rows[0]?.total || 0,
+        locationsCount: locations.rows[0]?.total || 0,
+        lastActivity: last.rows[0]?.last_activity || null,
+        events: events.rows
+      }
+    });
+  } catch (err) {
+    console.error('robust owner-dashboard error:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Errore caricamento dashboard.',
+      detail: err.message
+    });
+  }
+});
+
+
+
 app.post('/api/owner-messages', async (req, res) => {
   try {
     const { code, plate } = req.body || {};
