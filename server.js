@@ -3612,6 +3612,7 @@ app.post('/api/owner-messages', async (req, res, next) => {
          read_at
        FROM contact_message_logs
        WHERE code = $1
+         AND deleted_at IS NULL
        ORDER BY created_at DESC
        LIMIT 80`,
       [vehicle.code]
