@@ -1388,6 +1388,19 @@
   }
 </style>
 
+
+<style id="android-ready-hide-install-style">
+  .android-install-box.android-ready #androidInstallBtn,
+  .android-install-box.android-ready #androidEnablePushBtn {
+    display: none !important;
+  }
+
+  .android-install-box.android-ready {
+    background: rgba(41,168,107,.08) !important;
+    border-color: rgba(41,168,107,.22) !important;
+  }
+</style>
+
 </head>
 <body>
   
@@ -4789,7 +4802,63 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  function showAndroidBox(message){
+  
+  function updateAndroidInstallPushUI(){
+    try {
+      const box = document.getElementById('androidInstallBox');
+      const installBtn = document.getElementById('androidInstallBtn');
+      const pushBtn = document.getElementById('androidEnablePushBtn');
+      const copy = document.getElementById('androidInstallCopy');
+
+      if (!box || !isAndroidChrome()) return;
+
+      const standalone = isStandaloneMode();
+      const notificationGranted = ('Notification' in window) && Notification.permission === 'granted';
+
+      box.classList.add('show');
+
+      if (standalone && notificationGranted) {
+        box.classList.add('android-ready');
+
+        if (installBtn) installBtn.style.display = 'none';
+        if (pushBtn) pushBtn.style.display = 'none';
+
+        if (copy) {
+          copy.textContent = 'App installata e notifiche attive su questo dispositivo.';
+        }
+
+        // Se esiste il pulsante globale Disattiva notifiche, lo lasciamo visibile.
+        const disableBtn =
+          document.getElementById('disableNotificationsBtn') ||
+          document.getElementById('unsubscribePushBtn') ||
+          document.querySelector('[data-action="disable-notifications"]');
+
+        if (disableBtn) {
+          disableBtn.style.display = '';
+        }
+
+        return;
+      }
+
+      box.classList.remove('android-ready');
+
+      if (standalone && !notificationGranted) {
+        if (installBtn) installBtn.style.display = 'none';
+        if (pushBtn) pushBtn.style.display = '';
+        if (copy) copy.textContent = 'Web App installata. Ora attiva le notifiche per ricevere gli avvisi.';
+        return;
+      }
+
+      if (!standalone) {
+        if (installBtn) installBtn.style.display = '';
+        if (pushBtn) pushBtn.style.display = '';
+        if (copy) copy.textContent = 'Su Android installa la Web App con Chrome, poi attiva le notifiche.';
+      }
+    } catch(e) {}
+  }
+
+
+function showAndroidBox(message){
     try {
       const box = document.getElementById('androidInstallBox');
       const copy = document.getElementById('androidInstallCopy');
@@ -4883,7 +4952,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
       if (ok) {
         setInstallResult('Notifiche attivate correttamente su Android.');
+        updateAndroidInstallPushUI();
         showAndroidBox('Notifiche attive. Ora puoi ricevere gli avvisi su questo dispositivo.');
+        updateAndroidInstallPushUI();
       } else {
         setInstallResult('Registrazione notifiche non completata.');
       }
@@ -4930,6 +5001,8 @@ document.addEventListener('DOMContentLoaded', function () {
   window.addEventListener('appinstalled', function(){
     setInstallResult('App installata correttamente. Ora attiva le notifiche.');
     showAndroidBox('App installata correttamente. Ora attiva le notifiche.');
+    setTimeout(updateAndroidInstallPushUI, 300);
+    setTimeout(updateAndroidInstallPushUI, 1200);
   });
 
   document.addEventListener('DOMContentLoaded', function(){
@@ -4948,12 +5021,17 @@ document.addEventListener('DOMContentLoaded', function () {
       if (installBtn) installBtn.addEventListener('click', androidInstallApp);
       if (pushBtn) pushBtn.addEventListener('click', androidEnablePush);
 
+      updateAndroidInstallPushUI();
+      setTimeout(updateAndroidInstallPushUI, 800);
+      setTimeout(updateAndroidInstallPushUI, 1800);
+
       androidRegisterServiceWorker().catch(function(err){
         console.warn('Android SW registration warning:', err);
       });
     } catch(e) {}
   });
 
+  window.updateAndroidInstallPushUI = updateAndroidInstallPushUI;
   window.androidEnablePush = androidEnablePush;
   window.androidInstallApp = androidInstallApp;
 })();
