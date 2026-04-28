@@ -1810,7 +1810,6 @@ app.get('/api/temp-debug-plate/:plate', async (req, res) => {
 
     const subscriptions = codes.length ? await pool.query(
       `SELECT id, code, plate, endpoint, is_active, is_primary,
-              receive_passenger_alerts, receive_admin_alerts,
               app_saved_detected, app_saved_detected_at,
               last_seen_at, created_at, updated_at
        FROM push_subscriptions
@@ -1823,7 +1822,6 @@ app.get('/api/temp-debug-plate/:plate', async (req, res) => {
 
     const roles = codes.length ? await pool.query(
       `SELECT id, code, plate, endpoint, is_primary, is_active,
-              receive_passenger_alerts, receive_admin_alerts,
               created_at, updated_at
        FROM owner_device_vehicle_roles
        WHERE code = ANY($1)
