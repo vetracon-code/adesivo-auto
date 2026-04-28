@@ -4180,6 +4180,47 @@ function getOwnerParams(){
       return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
     }
 
+
+    function pushSubscriptionToServerPayload(sub){
+      if (!sub) return null;
+
+      let json = {};
+      try {
+        json = typeof sub.toJSON === 'function' ? sub.toJSON() : {};
+      } catch(e) {
+        json = {};
+      }
+
+      const payload = {
+        endpoint: json.endpoint || sub.endpoint || '',
+        keys: {
+          p256dh: json.keys && json.keys.p256dh ? json.keys.p256dh : '',
+          auth: json.keys && json.keys.auth ? json.keys.auth : ''
+        }
+      };
+
+      try {
+        if ((!payload.keys.p256dh || !payload.keys.auth) && typeof sub.getKey === 'function') {
+          const encodeKey = (keyName) => {
+            const key = sub.getKey(keyName);
+            if (!key) return '';
+            const bytes = new Uint8Array(key);
+            let binary = '';
+            bytes.forEach(b => binary += String.fromCharCode(b));
+            return btoa(binary)
+              .replace(/\+/g, '-')
+              .replace(/\//g, '_')
+              .replace(/=+$/g, '');
+          };
+
+          if (!payload.keys.p256dh) payload.keys.p256dh = encodeKey('p256dh');
+          if (!payload.keys.auth) payload.keys.auth = encodeKey('auth');
+        }
+      } catch(e) {}
+
+      return payload;
+    }
+
     async function registerPushSubscription(){
       const resultEl = document.getElementById('installActionResult');
       try {
@@ -4230,7 +4271,7 @@ function getOwnerParams(){
           body: JSON.stringify({
             code,
             plate,
-            subscription: sub.toJSON(),
+            subscription: pushSubscriptionToServerPayload(sub),
             invite_token: inviteToken
           })
         });
@@ -4870,7 +4911,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const saveRes = await fetch('/api/push/subscribe', {
           method:'POST',
           headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({ code, plate, subscription: sub.toJSON() })
+          body:JSON.stringify({ code, plate, subscription: pushSubscriptionToServerPayload(sub) })
         });
 
         const saveData = await saveRes.json().catch(() => ({}));
