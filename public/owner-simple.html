@@ -1440,6 +1440,33 @@
   }
 </style>
 
+
+<style id="area-map-milan-position-fix">
+  /*
+    Correzione coordinate visive mappa Italia.
+    Il punto Nord era troppo a destra e Milano risultava circa su Venezia.
+  */
+  .italy-dot.dot-north {
+    left: 38% !important;
+    top: 30% !important;
+  }
+
+  .italy-dot.dot-center {
+    left: 49% !important;
+    top: 51% !important;
+  }
+
+  .italy-dot.dot-south {
+    left: 57% !important;
+    top: 70% !important;
+  }
+
+  .italy-dot.dot-islands {
+    left: 40% !important;
+    top: 82% !important;
+  }
+</style>
+
 </head>
 <body>
   
@@ -5277,6 +5304,209 @@ function showAndroidBox(message){
   window.updateAndroidInstallPushUI = updateAndroidInstallPushUI;
   window.androidEnablePush = androidEnablePush;
   window.androidInstallApp = androidInstallApp;
+})();
+</script>
+
+
+<script id="owner-messages-bulk-delete-fix">
+(function(){
+  function textOf(el){
+    return String(el?.textContent || '').trim().toLowerCase();
+  }
+
+  function getOwnerParamsForBulk(){
+    try {
+      if (typeof getOwnerParams === 'function') return getOwnerParams();
+
+      const params = new URLSearchParams(window.location.search);
+      let code = (
+        params.get('code') ||
+        window.__OWNER_CODE__ ||
+        document.body?.dataset?.ownerCode ||
+        localStorage.getItem('owner_code') ||
+        localStorage.getItem('owner_saved_code') ||
+        ''
+      ).toString().trim();
+
+      let plate = (
+        params.get('plate') ||
+        window.__OWNER_PLATE__ ||
+        document.body?.dataset?.ownerPlate ||
+        localStorage.getItem('owner_plate') ||
+        localStorage.getItem('owner_saved_plate') ||
+        ''
+      ).toString().trim().toUpperCase();
+
+      return { code, plate };
+    } catch(e) {
+      return { code:'', plate:'' };
+    }
+  }
+
+  function findMessageCheckboxes(){
+    return Array.from(document.querySelectorAll(
+      'input[type="checkbox"][data-id], input[type="checkbox"][data-message-id], input[type="checkbox"].message-select, input[type="checkbox"].owner-message-select, input[type="checkbox"][name="messageSelect"], input[type="checkbox"][name="ownerMessageSelect"]'
+    ));
+  }
+
+  function getCheckboxId(cb){
+    return cb?.dataset?.id ||
+           cb?.dataset?.messageId ||
+           cb?.value ||
+           cb?.getAttribute('data-id') ||
+           cb?.getAttribute('data-message-id') ||
+           '';
+  }
+
+  function getSelectedMessageIds(){
+    const ids = findMessageCheckboxes()
+      .filter(cb => cb.checked)
+      .map(getCheckboxId)
+      .map(x => String(x || '').trim())
+      .filter(Boolean);
+
+    // Fallback: se la UI usa una variabile globale ownerMessagesSelected.
+    try {
+      if (!ids.length && Array.isArray(window.ownerMessagesSelected)) {
+        window.ownerMessagesSelected.forEach(x => {
+          if (x) ids.push(String(x));
+        });
+      }
+    } catch(e) {}
+
+    return [...new Set(ids)];
+  }
+
+  function selectAllVisibleMessages(){
+    const boxes = findMessageCheckboxes();
+
+    if (boxes.length) {
+      const shouldSelect = boxes.some(cb => !cb.checked);
+      boxes.forEach(cb => {
+        cb.checked = shouldSelect;
+        cb.dispatchEvent(new Event('change', { bubbles:true }));
+      });
+      return true;
+    }
+
+    // Fallback estremo: se non ci sono checkbox ma esiste ownerMessages,
+    // crea una selezione logica globale.
+    try {
+      if (Array.isArray(window.ownerMessages) && window.ownerMessages.length) {
+        window.ownerMessagesSelected = window.ownerMessages.map(x => x.id).filter(Boolean);
+        return true;
+      }
+    } catch(e) {}
+
+    return false;
+  }
+
+  async function deleteSelectedMessages(){
+    const ids = getSelectedMessageIds();
+
+    if (!ids.length) {
+      alert('Seleziona almeno un messaggio da eliminare.');
+      return;
+    }
+
+    if (!confirm(`Eliminare ${ids.length} messaggio/i selezionato/i?`)) {
+      return;
+    }
+
+    const { code, plate } = getOwnerParamsForBulk();
+
+    if (!code || !plate) {
+      alert('Impossibile eliminare: codice o targa mancanti.');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/owner-messages/delete-many', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, plate, ids })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Eliminazione non riuscita.');
+      }
+
+      // Refresh messaggi/dashboard dopo eliminazione.
+      try {
+        if (typeof loadOwnerMessages === 'function') await loadOwnerMessages();
+        else if (typeof loadMessages === 'function') await loadMessages();
+      } catch(e) {}
+
+      try {
+        if (typeof loadDashboard === 'function') await loadDashboard();
+        else if (typeof loadOwnerDashboard === 'function') await loadOwnerDashboard();
+      } catch(e) {}
+
+      // Fallback semplice se le funzioni non esistono.
+      if (typeof loadOwnerMessages !== 'function' && typeof loadMessages !== 'function') {
+        window.location.reload();
+      }
+
+    } catch(err) {
+      console.error('deleteSelectedMessages fallback error:', err);
+      alert('Errore eliminazione messaggi: ' + (err && err.message ? err.message : err));
+    }
+  }
+
+  function isSelectAllButton(el){
+    const t = textOf(el);
+    const id = String(el?.id || '').toLowerCase();
+    return (
+      id.includes('selectall') ||
+      id.includes('select-all') ||
+      t === 'seleziona tutti' ||
+      t.includes('seleziona tutti')
+    );
+  }
+
+  function isDeleteSelectedButton(el){
+    const t = textOf(el);
+    const id = String(el?.id || '').toLowerCase();
+    return (
+      id.includes('deletemany') ||
+      id.includes('delete-many') ||
+      id.includes('deleteselected') ||
+      id.includes('delete-selected') ||
+      t.includes('elimina selezionati') ||
+      t.includes('elimina selezionate') ||
+      t.includes('elimina tutti gli avvisi') ||
+      t.includes('elimina avvisi selezionati') ||
+      t.includes('elimina messaggi selezionati')
+    );
+  }
+
+  document.addEventListener('click', function(e){
+    const btn = e.target && e.target.closest ? e.target.closest('button, a, [role="button"]') : null;
+    if (!btn) return;
+
+    if (isSelectAllButton(btn)) {
+      const done = selectAllVisibleMessages();
+      if (done) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      return;
+    }
+
+    if (isDeleteSelectedButton(btn)) {
+      e.preventDefault();
+      e.stopPropagation();
+      deleteSelectedMessages();
+    }
+  }, true);
+
+  window.ownerBulkDeleteFix = {
+    selectAllVisibleMessages,
+    deleteSelectedMessages,
+    getSelectedMessageIds
+  };
 })();
 </script>
 
