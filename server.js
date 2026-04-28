@@ -1577,7 +1577,7 @@ app.get('/owner-manifest.json', async (req, res) => {
       name: appName,
       short_name: appName,
       description: 'Contatto Veicolo',
-      start_url: `/owner-simple.html?code=${encodeURIComponent(code)}&plate=${encodeURIComponent(appName)}`,
+      start_url: `/owner-app/${encodeURIComponent(code)}/${encodeURIComponent(appName)}`,
       scope: '/',
       display: 'standalone',
       background_color: '#07111c',
