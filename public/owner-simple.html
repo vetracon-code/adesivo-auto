@@ -5000,5 +5000,135 @@ document.addEventListener('DOMContentLoaded', function () {
 })();
 </script>
 
+
+<script id="android-single-ui-owner-context-fix">
+(function(){
+  function cleanPlateValue(v){
+    return String(v || '').trim().toUpperCase().replace(/\s+/g, '');
+  }
+
+  function deriveOwnerContext(){
+    var code = '';
+    var plate = '';
+
+    try {
+      var params = new URLSearchParams(window.location.search || '');
+      code = params.get('code') || '';
+      plate = params.get('plate') || '';
+    } catch(e) {}
+
+    try {
+      if (!code && window.__OWNER_CODE__) code = window.__OWNER_CODE__;
+      if (!plate && window.__OWNER_PLATE__) plate = window.__OWNER_PLATE__;
+    } catch(e) {}
+
+    try {
+      if (!code && document.body && document.body.dataset) code = document.body.dataset.ownerCode || '';
+      if (!plate && document.body && document.body.dataset) plate = document.body.dataset.ownerPlate || '';
+    } catch(e) {}
+
+    try {
+      var m = String(window.location.pathname || '').match(/\/owner-app\/([^\/?#]+)\/([^\/?#]+)/i);
+      if (m) {
+        if (!code) code = decodeURIComponent(m[1] || '');
+        if (!plate) plate = decodeURIComponent(m[2] || '');
+      }
+    } catch(e) {}
+
+    try {
+      if (!code) code = localStorage.getItem('owner_saved_code') || '';
+      if (!plate) plate = localStorage.getItem('owner_saved_plate') || '';
+    } catch(e) {}
+
+    code = String(code || '').trim().toUpperCase();
+    plate = cleanPlateValue(plate);
+
+    if (code && plate) {
+      try {
+        window.__OWNER_CODE__ = code;
+        window.__OWNER_PLATE__ = plate;
+        if (document.body && document.body.dataset) {
+          document.body.dataset.ownerCode = code;
+          document.body.dataset.ownerPlate = plate;
+        }
+        localStorage.setItem('owner_saved_code', code);
+        localStorage.setItem('owner_saved_plate', plate);
+        sessionStorage.setItem('owner_saved_code', code);
+        sessionStorage.setItem('owner_saved_plate', plate);
+      } catch(e) {}
+    }
+
+    return { code: code, plate: plate };
+  }
+
+  var originalGetOwnerParams = window.getOwnerParams;
+
+  window.getOwnerParams = function(){
+    var base = {};
+    try {
+      if (typeof originalGetOwnerParams === 'function') {
+        base = originalGetOwnerParams() || {};
+      }
+    } catch(e) {}
+
+    var robust = deriveOwnerContext();
+
+    var code = String((base.code || robust.code || '')).trim().toUpperCase();
+    var plate = cleanPlateValue(base.plate || robust.plate || '');
+
+    if (code && plate) {
+      try {
+        window.__OWNER_CODE__ = code;
+        window.__OWNER_PLATE__ = plate;
+        localStorage.setItem('owner_saved_code', code);
+        localStorage.setItem('owner_saved_plate', plate);
+        sessionStorage.setItem('owner_saved_code', code);
+        sessionStorage.setItem('owner_saved_plate', plate);
+      } catch(e) {}
+    }
+
+    return { code: code, plate: plate };
+  };
+
+  window.getOwnerParamsSafe = window.getOwnerParams;
+
+  function hideDuplicatedAndroidBox(){
+    try {
+      var box = document.getElementById('androidInstallBox');
+      if (box) {
+        box.style.display = 'none';
+        box.setAttribute('aria-hidden', 'true');
+      }
+    } catch(e) {}
+  }
+
+  deriveOwnerContext();
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function(){
+      deriveOwnerContext();
+      hideDuplicatedAndroidBox();
+    });
+  } else {
+    deriveOwnerContext();
+    hideDuplicatedAndroidBox();
+  }
+
+  window.addEventListener('load', function(){
+    deriveOwnerContext();
+    hideDuplicatedAndroidBox();
+  });
+
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden) deriveOwnerContext();
+  });
+})();
+</script>
+<style id="android-single-ui-hide-duplicate-box">
+  #androidInstallBox {
+    display: none !important;
+  }
+</style>
+
 </body>
 </html>
