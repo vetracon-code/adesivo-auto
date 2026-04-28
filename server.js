@@ -1558,7 +1558,7 @@ app.get('/owner-manifest.json', async (req, res) => {
     if ((!plateFromQuery || plateFromQuery === 'TARGA') && code) {
       try {
         const result = await pool.query(
-          `SELECT plate FROM vehicles WHERE code = $1 LIMIT 1`,
+          `SELECT plate FROM sticker_codes WHERE code = $1 LIMIT 1`,
           [code]
         );
         if (result.rows && result.rows[0] && result.rows[0].plate) {
@@ -1692,7 +1692,7 @@ app.get('/owner-simple.html', async (req, res, next) => {
     if (code && !plate) {
       try {
         const result = await pool.query(
-          `SELECT plate FROM vehicles WHERE code = $1 LIMIT 1`,
+          `SELECT plate FROM sticker_codes WHERE code = $1 LIMIT 1`,
           [code]
         );
         if (result.rows && result.rows[0] && result.rows[0].plate) {
@@ -1788,7 +1788,7 @@ app.get('/api/temp-debug-plate/:plate', async (req, res) => {
     const records = await pool.query(
       `SELECT id, code, public_id, plate, brand, vehicle_model, color, phone, qr_url,
               status, plan_type, expires_at, activated_at, created_at
-       FROM vehicles
+       FROM sticker_codes
        WHERE UPPER(REPLACE(plate, ' ', '')) = $1
        ORDER BY id DESC`,
       [plate]
@@ -3562,7 +3562,7 @@ async function resolveOwnerVehicleRecord(inputCode, inputPlate) {
 
   const result = await pool.query(
     `SELECT *
-     FROM vehicles
+     FROM sticker_codes
      WHERE ($1 <> '' AND UPPER(code) = $1)
         OR ($2 <> '' AND UPPER(REPLACE(COALESCE(plate,''), ' ', '')) = $2)
      ORDER BY
