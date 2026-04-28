@@ -1388,103 +1388,6 @@
   }
 </style>
 
-
-<style id="android-ready-hide-install-style">
-  .android-install-box.android-ready #androidInstallBtn,
-  .android-install-box.android-ready #androidEnablePushBtn {
-    display: none !important;
-  }
-
-  .android-install-box.android-ready {
-    background: rgba(41,168,107,.08) !important;
-    border-color: rgba(41,168,107,.22) !important;
-  }
-</style>
-
-
-<style id="definitive-area-map-fix-style">
-  .italy-dot.has-events,
-  .italy-dot.active,
-  .italy-dot[data-count]:not([data-count="0"]) {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    transform: scale(1.08);
-  }
-
-  .italy-dot.has-events::after,
-  .italy-dot.active::after {
-    content: attr(data-count);
-    position: absolute;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
-    border-radius: 999px;
-    background: #223046;
-    color: #fff;
-    font-size: 11px;
-    font-weight: 900;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    top: -10px;
-    right: -10px;
-    box-shadow: 0 6px 14px rgba(34,48,70,.22);
-  }
-
-  .italy-detail-empty.area-ok {
-    background: rgba(63,121,216,.07);
-    border: 1px solid rgba(63,121,216,.12);
-    color: #223046;
-  }
-</style>
-
-
-
-<style id="area-map-position-final-v2">
-  .italy-map-wrap-real {
-    position: relative !important;
-  }
-
-  /*
-    Coordinate visive corrette guardando la mappa frontalmente.
-    Nord = area Milano/Lombardia/Piemonte, non Venezia.
-  */
-  .italy-dot.dot-north {
-    left: 30% !important;
-    top: 21% !important;
-  }
-
-  /*
-    Centro = area Roma/Lazio/Toscana/Umbria/Marche.
-    Prima risultava troppo bassa.
-  */
-  .italy-dot.dot-center {
-    left: 46% !important;
-    top: 43% !important;
-  }
-
-  .italy-dot.dot-south {
-    left: 57% !important;
-    top: 64% !important;
-  }
-
-  .italy-dot.dot-islands {
-    left: 38% !important;
-    top: 77% !important;
-  }
-
-  .italy-dot.has-events,
-  .italy-dot.active,
-  .italy-dot[data-count]:not([data-count="0"]) {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-  }
-</style>
-
 </head>
 <body>
   
@@ -1953,206 +1856,6 @@ function forceRenderAreaMapFromDashboard(data){
 }
 
 
-
-function normalizeAreaEvent(ev){
-  ev = ev || {};
-  return {
-    type: ev.type || ev.reason || ev.event_type || 'Evento QR',
-    at: ev.at || ev.created_at || ev.viewed_at || ev.scanned_at || null,
-    ip_city: ev.ip_city || ev.city || '',
-    ip_region: ev.ip_region || ev.region || '',
-    ip_country: ev.ip_country || ev.country || '',
-    location_shared: !!ev.location_shared
-  };
-}
-
-function getAreaBucketFromEvent(ev){
-  const city = String(ev?.ip_city || '').toLowerCase();
-  const region = String(ev?.ip_region || '').toLowerCase();
-  const value = `${city} ${region}`;
-
-  if (
-    value.includes('lombard') || value.includes('milan') || value.includes('milano') ||
-    value.includes('monza') || value.includes('bergamo') || value.includes('brescia') ||
-    value.includes('piemonte') || value.includes('torino') || value.includes('liguria') ||
-    value.includes('genova') || value.includes('veneto') || value.includes('verona') ||
-    value.includes('padova') || value.includes('friuli') || value.includes('trentino') ||
-    value.includes('alto adige') || value.includes('emilia') || value.includes('bologna')
-  ) return 'north';
-
-  if (
-    value.includes('toscana') || value.includes('firenze') || value.includes('lazio') ||
-    value.includes('roma') || value.includes('umbria') || value.includes('marche') ||
-    value.includes('abruzzo')
-  ) return 'center';
-
-  if (
-    value.includes('campania') || value.includes('napoli') || value.includes('puglia') ||
-    value.includes('bari') || value.includes('calabria') || value.includes('basilicata') ||
-    value.includes('molise')
-  ) return 'south';
-
-  if (
-    value.includes('sicilia') || value.includes('palermo') || value.includes('catania') ||
-    value.includes('sardegna') || value.includes('cagliari')
-  ) return 'islands';
-
-  // Fallback prudente: se Italia ma regione non riconosciuta, metto centro.
-  const country = String(ev?.ip_country || '').toLowerCase();
-  if (country === 'it' || country === 'italia' || country === 'italy') return 'center';
-
-  return 'unknown';
-}
-
-function renderAreaMapDefinitive(rawEvents){
-  try {
-    const events = Array.isArray(rawEvents)
-      ? rawEvents.map(normalizeAreaEvent).filter(ev => ev.ip_city || ev.ip_region || ev.ip_country)
-      : [];
-
-    window.__OWNER_AREA_EVENTS__ = events;
-
-    const visualBox = document.getElementById('mapVisualBox');
-    const lastAreaText = document.getElementById('lastAreaText');
-    const titleEl = document.getElementById('mapAreaTitle');
-    const summaryEl = document.getElementById('mapAreaSummary');
-    const listEl = document.getElementById('mapAreaList');
-
-    if (!visualBox || !titleEl || !summaryEl || !listEl) return;
-
-    if (!visualBox.querySelector('.italy-real-map')) {
-      visualBox.innerHTML = `
-        <div class="italy-map-wrap-real">
-          <img class="italy-real-map" src="/assets/italy-real.svg" alt="Mappa Italia">
-          <button id="mapDotNorth" class="italy-dot dot-north" type="button" aria-label="Nord Italia"></button>
-          <button id="mapDotCenter" class="italy-dot dot-center" type="button" aria-label="Centro Italia"></button>
-          <button id="mapDotSouth" class="italy-dot dot-south" type="button" aria-label="Sud Italia"></button>
-          <button id="mapDotIslands" class="italy-dot dot-islands" type="button" aria-label="Isole"></button>
-        </div>
-      `;
-    }
-
-    const groups = {
-      north: [],
-      center: [],
-      south: [],
-      islands: [],
-      unknown: []
-    };
-
-    events.forEach(ev => {
-      const bucket = getAreaBucketFromEvent(ev);
-      if (!groups[bucket]) groups.unknown.push(ev);
-      else groups[bucket].push(ev);
-    });
-
-    const dots = {
-      north: document.getElementById('mapDotNorth'),
-      center: document.getElementById('mapDotCenter'),
-      south: document.getElementById('mapDotSouth'),
-      islands: document.getElementById('mapDotIslands')
-    };
-
-    Object.entries(dots).forEach(([bucket, el]) => {
-      if (!el) return;
-      const count = groups[bucket].length;
-      el.dataset.count = String(count);
-      el.classList.toggle('has-events', count > 0);
-      el.classList.toggle('active', false);
-      el.style.display = count > 0 ? 'block' : '';
-      el.onclick = () => showAreaBucketDetailsDefinitive(bucket, groups[bucket]);
-    });
-
-    const first = events[0];
-
-    if (first) {
-      const place = [first.ip_city, first.ip_region].filter(Boolean).join(', ') || first.ip_country || 'Area indicativa disponibile';
-      if (lastAreaText) lastAreaText.textContent = place;
-
-      const preferredBucket =
-        groups.north.length ? 'north' :
-        groups.center.length ? 'center' :
-        groups.south.length ? 'south' :
-        groups.islands.length ? 'islands' :
-        'unknown';
-
-      if (preferredBucket !== 'unknown') {
-        const dot = dots[preferredBucket];
-        if (dot) dot.classList.add('active');
-        showAreaBucketDetailsDefinitive(preferredBucket, groups[preferredBucket]);
-      } else {
-        titleEl.textContent = first.ip_country || 'Area indicativa';
-        summaryEl.textContent = 'Sono presenti accessi o segnalazioni, ma l’area italiana non è classificabile.';
-        listEl.innerHTML = events.slice(0, 10).map(ev => areaEventHtmlDefinitive(ev)).join('');
-      }
-
-      return;
-    }
-
-    if (lastAreaText) lastAreaText.textContent = 'Italia';
-    titleEl.textContent = 'Nessuna area disponibile';
-    summaryEl.textContent = 'Quando il QR verrà visualizzato, qui resterà memorizzata l’area indicativa di accesso.';
-    listEl.innerHTML = '<div class="italy-detail-empty">Nessun accesso registrato con area indicativa.</div>';
-
-  } catch(e) {
-    console.warn('renderAreaMapDefinitive error:', e);
-  }
-}
-
-function areaEventHtmlDefinitive(ev){
-  const place = [ev.ip_city, ev.ip_region].filter(Boolean).join(', ') || ev.ip_country || 'Area non disponibile';
-  let when = '-';
-  try {
-    if (ev.at) when = new Date(ev.at).toLocaleString('it-IT');
-  } catch(e) {}
-
-  return `
-    <div class="italy-detail-item">
-      <strong style="display:block;color:#223046;font-size:.9rem;">${escapeHtml(place)}</strong>
-      <div class="muted" style="margin-top:4px;font-size:.82rem;">${escapeHtml(ev.type || 'Evento QR')} · ${escapeHtml(when)}</div>
-    </div>
-  `;
-}
-
-function showAreaBucketDetailsDefinitive(bucket, items){
-  try {
-    const titleEl = document.getElementById('mapAreaTitle');
-    const summaryEl = document.getElementById('mapAreaSummary');
-    const listEl = document.getElementById('mapAreaList');
-
-    if (!titleEl || !summaryEl || !listEl) return;
-
-    const titles = {
-      north: 'Nord Italia',
-      center: 'Centro Italia',
-      south: 'Sud Italia',
-      islands: 'Isole'
-    };
-
-    document.querySelectorAll('.italy-dot').forEach(x => x.classList.remove('active'));
-    const dotId =
-      bucket === 'north' ? 'mapDotNorth' :
-      bucket === 'center' ? 'mapDotCenter' :
-      bucket === 'south' ? 'mapDotSouth' :
-      bucket === 'islands' ? 'mapDotIslands' : '';
-
-    const dot = dotId ? document.getElementById(dotId) : null;
-    if (dot) dot.classList.add('active');
-
-    titleEl.textContent = titles[bucket] || 'Area indicativa';
-    summaryEl.textContent = items && items.length
-      ? `${items.length} evento/i registrato/i in questa area.`
-      : 'Nessun dettaglio disponibile per questa area.';
-
-    listEl.innerHTML = items && items.length
-      ? items.slice(0, 10).map(ev => areaEventHtmlDefinitive(ev)).join('')
-      : '<div class="italy-detail-empty">Nessun dettaglio disponibile.</div>';
-  } catch(e) {
-    console.warn('showAreaBucketDetailsDefinitive error:', e);
-  }
-}
-
-
 function areaBucket(city, region){
       const value = `${city || ''} ${region || ''}`.toLowerCase();
       if (/(sicilia|sardegna|palermo|catania|cagliari|sassari|trapani|siracusa)/.test(value)) return 'islands';
@@ -2450,11 +2153,7 @@ function areaBucket(city, region){
       const data = await res.json();
 
       
-        
-        
-        try { renderAreaMapDefinitive(((data.data || data) && (data.data || data).events) || []); } catch(e) {}
-try { renderAreaMapDefinitive(((data.data || data) && (data.data || data).events) || []); } catch(e) {}
-try { forceRenderAreaMapFromDashboard(data.data || data); } catch(e) {}
+        try { forceRenderAreaMapFromDashboard(data.data || data); } catch(e) {}
 if(!res.ok || !data.success){
         qs('statusPill').textContent = 'Errore';
         qs('statusPill').className = 'status-pill danger';
@@ -3404,29 +3103,21 @@ function getOwnerParams(){
 
     window.deleteMessage = async function(id){
       const { code, plate } = getOwnerParams();
-      const cleanId = Number(id);
-
-      if (!code || !plate || !cleanId) {
-        alert('Impossibile eliminare: dati messaggio mancanti.');
-        return;
-      }
-
-      const res = await fetch('/api/owner-messages/delete', {
+      await fetch('/api/owner-messages/delete', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ code, plate, id: cleanId })
+        body: JSON.stringify({ code, plate, id })
       });
-
-      let data = {};
-      try { data = await res.json(); } catch(e) {}
-
-      if (!res.ok || !data.success) {
-        alert(data.error || 'Errore eliminazione avviso.');
-        return;
-      }
-
-      selectedMessageIds.delete(cleanId);
       await loadOwnerMessages();
+    }
+
+
+    window.closeMessageDetailModal = function(e){
+      const modal = document.getElementById('messageDetailModal');
+      if (!modal) return;
+      if (!e || !e.target || e.target.id === 'messageDetailModal') {
+        modal.style.display = 'none';
+      }
     };
 
     window.openMessageDetail = async function(id){
@@ -3624,19 +3315,15 @@ function getOwnerParams(){
     document.getElementById('messagesSelectAllBtn').addEventListener('click', () => {
       if (!messagesSelectionMode) return;
 
-      const allIds = (ownerMessages || []).map(item => Number(item.id)).filter(Boolean);
-      const btn = document.getElementById('messagesSelectAllBtn');
-
-      if (!allIds.length) return;
-
-      const allSelected = allIds.every(id => selectedMessageIds.has(id));
+      const allIds = (ownerMessages || []).map(item => item.id).filter(Boolean);
+      const allSelected = allIds.length > 0 && allIds.every(id => selectedMessageIds.has(id));
 
       if (allSelected) {
         selectedMessageIds.clear();
-        if (btn) btn.textContent = 'Seleziona tutti';
+        document.getElementById('messagesSelectAllBtn').textContent = 'Seleziona tutti';
       } else {
         allIds.forEach(id => selectedMessageIds.add(id));
-        if (btn) btn.textContent = 'Deseleziona tutti';
+        document.getElementById('messagesSelectAllBtn').textContent = 'Deseleziona tutti';
       }
 
       renderMessages();
@@ -3663,44 +3350,14 @@ function getOwnerParams(){
     });
 
     document.getElementById('messagesDeleteBtn').addEventListener('click', async () => {
-      const ids = Array.from(selectedMessageIds).map(Number).filter(Boolean);
+      const ids = Array.from(selectedMessageIds);
       if (!ids.length) return;
-
       const { code, plate } = getOwnerParams();
-
-      if (!code || !plate) {
-        alert('Impossibile eliminare: codice o targa mancanti.');
-        return;
-      }
-
-      const res = await fetch('/api/owner-messages/delete-many', {
+      await fetch('/api/owner-messages/delete-many', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ code, plate, ids })
       });
-
-      let data = {};
-      try { data = await res.json(); } catch(e) {}
-
-      if (!res.ok || !data.success) {
-        alert(data.error || 'Errore eliminazione avvisi selezionati.');
-        return;
-      }
-
-      selectedMessageIds.clear();
-      messagesSelectionMode = false;
-
-      const selectBtn = document.getElementById('messagesSelectBtn');
-      if (selectBtn) selectBtn.textContent = 'Seleziona';
-
-      const selectAllBtn = document.getElementById('messagesSelectAllBtn');
-      if (selectAllBtn) {
-        selectAllBtn.style.display = 'none';
-        selectAllBtn.textContent = 'Seleziona tutti';
-      }
-
-      await loadOwnerMessages();
-    });
       selectedMessageIds.clear();
       messagesSelectionMode = false;
       document.getElementById('messagesSelectBtn').textContent = 'Seleziona';
@@ -5132,63 +4789,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  
-  function updateAndroidInstallPushUI(){
-    try {
-      const box = document.getElementById('androidInstallBox');
-      const installBtn = document.getElementById('androidInstallBtn');
-      const pushBtn = document.getElementById('androidEnablePushBtn');
-      const copy = document.getElementById('androidInstallCopy');
-
-      if (!box || !isAndroidChrome()) return;
-
-      const standalone = isStandaloneMode();
-      const notificationGranted = ('Notification' in window) && Notification.permission === 'granted';
-
-      box.classList.add('show');
-
-      if (standalone && notificationGranted) {
-        box.classList.add('android-ready');
-
-        if (installBtn) installBtn.style.display = 'none';
-        if (pushBtn) pushBtn.style.display = 'none';
-
-        if (copy) {
-          copy.textContent = 'App installata e notifiche attive su questo dispositivo.';
-        }
-
-        // Se esiste il pulsante globale Disattiva notifiche, lo lasciamo visibile.
-        const disableBtn =
-          document.getElementById('disableNotificationsBtn') ||
-          document.getElementById('unsubscribePushBtn') ||
-          document.querySelector('[data-action="disable-notifications"]');
-
-        if (disableBtn) {
-          disableBtn.style.display = '';
-        }
-
-        return;
-      }
-
-      box.classList.remove('android-ready');
-
-      if (standalone && !notificationGranted) {
-        if (installBtn) installBtn.style.display = 'none';
-        if (pushBtn) pushBtn.style.display = '';
-        if (copy) copy.textContent = 'Web App installata. Ora attiva le notifiche per ricevere gli avvisi.';
-        return;
-      }
-
-      if (!standalone) {
-        if (installBtn) installBtn.style.display = '';
-        if (pushBtn) pushBtn.style.display = '';
-        if (copy) copy.textContent = 'Su Android installa la Web App con Chrome, poi attiva le notifiche.';
-      }
-    } catch(e) {}
-  }
-
-
-function showAndroidBox(message){
+  function showAndroidBox(message){
     try {
       const box = document.getElementById('androidInstallBox');
       const copy = document.getElementById('androidInstallCopy');
@@ -5282,9 +4883,7 @@ function showAndroidBox(message){
 
       if (ok) {
         setInstallResult('Notifiche attivate correttamente su Android.');
-        updateAndroidInstallPushUI();
         showAndroidBox('Notifiche attive. Ora puoi ricevere gli avvisi su questo dispositivo.');
-        updateAndroidInstallPushUI();
       } else {
         setInstallResult('Registrazione notifiche non completata.');
       }
@@ -5331,8 +4930,6 @@ function showAndroidBox(message){
   window.addEventListener('appinstalled', function(){
     setInstallResult('App installata correttamente. Ora attiva le notifiche.');
     showAndroidBox('App installata correttamente. Ora attiva le notifiche.');
-    setTimeout(updateAndroidInstallPushUI, 300);
-    setTimeout(updateAndroidInstallPushUI, 1200);
   });
 
   document.addEventListener('DOMContentLoaded', function(){
@@ -5351,23 +4948,16 @@ function showAndroidBox(message){
       if (installBtn) installBtn.addEventListener('click', androidInstallApp);
       if (pushBtn) pushBtn.addEventListener('click', androidEnablePush);
 
-      updateAndroidInstallPushUI();
-      setTimeout(updateAndroidInstallPushUI, 800);
-      setTimeout(updateAndroidInstallPushUI, 1800);
-
       androidRegisterServiceWorker().catch(function(err){
         console.warn('Android SW registration warning:', err);
       });
     } catch(e) {}
   });
 
-  window.updateAndroidInstallPushUI = updateAndroidInstallPushUI;
   window.androidEnablePush = androidEnablePush;
   window.androidInstallApp = androidInstallApp;
 })();
 </script>
-
-
 
 </body>
 </html>
