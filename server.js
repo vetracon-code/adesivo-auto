@@ -1780,6 +1780,82 @@ app.get('/owner-simple.html', async (req, res, next) => {
 });
 
 
+
+app.get('/api/temp-debug-plate/:plate', async (req, res) => {
+  try {
+    const plate = String(req.params.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    const records = await pool.query(
+      `SELECT id, code, public_id, plate, brand, vehicle_model, color, phone, qr_url,
+              status, plan_type, expires_at, activated_at, created_at
+       FROM vehicles
+       WHERE UPPER(REPLACE(plate, ' ', '')) = $1
+       ORDER BY id DESC`,
+      [plate]
+    );
+
+    const codes = records.rows.map(r => r.code).filter(Boolean);
+    const publicIds = records.rows.map(r => r.public_id).filter(Boolean);
+
+    const messages = codes.length ? await pool.query(
+      `SELECT id, code, plate, reason, message_text, location_shared,
+              latitude, longitude, maps_url, ip_city, ip_region, ip_country,
+              created_at, read_at
+       FROM contact_message_logs
+       WHERE code = ANY($1)
+       ORDER BY created_at DESC
+       LIMIT 80`,
+      [codes]
+    ) : { rows: [] };
+
+    const subscriptions = codes.length ? await pool.query(
+      `SELECT id, code, plate, endpoint, is_active, is_primary,
+              receive_passenger_alerts, receive_admin_alerts,
+              app_saved_detected, app_saved_detected_at,
+              last_seen_at, created_at, updated_at
+       FROM push_subscriptions
+       WHERE code = ANY($1)
+          OR UPPER(REPLACE(COALESCE(plate,''), ' ', '')) = $2
+       ORDER BY updated_at DESC NULLS LAST, id DESC
+       LIMIT 80`,
+      [codes, plate]
+    ) : { rows: [] };
+
+    const roles = codes.length ? await pool.query(
+      `SELECT id, code, plate, endpoint, is_primary, is_active,
+              receive_passenger_alerts, receive_admin_alerts,
+              created_at, updated_at
+       FROM owner_device_vehicle_roles
+       WHERE code = ANY($1)
+          OR UPPER(REPLACE(COALESCE(plate,''), ' ', '')) = $2
+       ORDER BY updated_at DESC NULLS LAST, id DESC
+       LIMIT 80`,
+      [codes, plate]
+    ) : { rows: [] };
+
+    return res.json({
+      success: true,
+      plate,
+      records: records.rows,
+      public_ids: publicIds,
+      messages_count: messages.rows.length,
+      latest_messages: messages.rows,
+      push_subscriptions: subscriptions.rows.map(x => ({
+        ...x,
+        endpoint: x.endpoint ? x.endpoint.slice(0, 90) + '...' : null
+      })),
+      owner_device_vehicle_roles: roles.rows.map(x => ({
+        ...x,
+        endpoint: x.endpoint ? x.endpoint.slice(0, 90) + '...' : null
+      }))
+    });
+  } catch (err) {
+    console.error('temp-debug-plate error:', err);
+    return res.status(500).json({ success:false, error: err.message });
+  }
+});
+
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
