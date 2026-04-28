@@ -3404,21 +3404,29 @@ function getOwnerParams(){
 
     window.deleteMessage = async function(id){
       const { code, plate } = getOwnerParams();
-      await fetch('/api/owner-messages/delete', {
+      const cleanId = Number(id);
+
+      if (!code || !plate || !cleanId) {
+        alert('Impossibile eliminare: dati messaggio mancanti.');
+        return;
+      }
+
+      const res = await fetch('/api/owner-messages/delete', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ code, plate, id })
+        body: JSON.stringify({ code, plate, id: cleanId })
       });
-      await loadOwnerMessages();
-    }
 
+      let data = {};
+      try { data = await res.json(); } catch(e) {}
 
-    window.closeMessageDetailModal = function(e){
-      const modal = document.getElementById('messageDetailModal');
-      if (!modal) return;
-      if (!e || !e.target || e.target.id === 'messageDetailModal') {
-        modal.style.display = 'none';
+      if (!res.ok || !data.success) {
+        alert(data.error || 'Errore eliminazione avviso.');
+        return;
       }
+
+      selectedMessageIds.delete(cleanId);
+      await loadOwnerMessages();
     };
 
     window.openMessageDetail = async function(id){
@@ -3616,15 +3624,19 @@ function getOwnerParams(){
     document.getElementById('messagesSelectAllBtn').addEventListener('click', () => {
       if (!messagesSelectionMode) return;
 
-      const allIds = (ownerMessages || []).map(item => item.id).filter(Boolean);
-      const allSelected = allIds.length > 0 && allIds.every(id => selectedMessageIds.has(id));
+      const allIds = (ownerMessages || []).map(item => Number(item.id)).filter(Boolean);
+      const btn = document.getElementById('messagesSelectAllBtn');
+
+      if (!allIds.length) return;
+
+      const allSelected = allIds.every(id => selectedMessageIds.has(id));
 
       if (allSelected) {
         selectedMessageIds.clear();
-        document.getElementById('messagesSelectAllBtn').textContent = 'Seleziona tutti';
+        if (btn) btn.textContent = 'Seleziona tutti';
       } else {
         allIds.forEach(id => selectedMessageIds.add(id));
-        document.getElementById('messagesSelectAllBtn').textContent = 'Deseleziona tutti';
+        if (btn) btn.textContent = 'Deseleziona tutti';
       }
 
       renderMessages();
@@ -3651,14 +3663,44 @@ function getOwnerParams(){
     });
 
     document.getElementById('messagesDeleteBtn').addEventListener('click', async () => {
-      const ids = Array.from(selectedMessageIds);
+      const ids = Array.from(selectedMessageIds).map(Number).filter(Boolean);
       if (!ids.length) return;
+
       const { code, plate } = getOwnerParams();
-      await fetch('/api/owner-messages/delete-many', {
+
+      if (!code || !plate) {
+        alert('Impossibile eliminare: codice o targa mancanti.');
+        return;
+      }
+
+      const res = await fetch('/api/owner-messages/delete-many', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ code, plate, ids })
       });
+
+      let data = {};
+      try { data = await res.json(); } catch(e) {}
+
+      if (!res.ok || !data.success) {
+        alert(data.error || 'Errore eliminazione avvisi selezionati.');
+        return;
+      }
+
+      selectedMessageIds.clear();
+      messagesSelectionMode = false;
+
+      const selectBtn = document.getElementById('messagesSelectBtn');
+      if (selectBtn) selectBtn.textContent = 'Seleziona';
+
+      const selectAllBtn = document.getElementById('messagesSelectAllBtn');
+      if (selectAllBtn) {
+        selectAllBtn.style.display = 'none';
+        selectAllBtn.textContent = 'Seleziona tutti';
+      }
+
+      await loadOwnerMessages();
+    });
       selectedMessageIds.clear();
       messagesSelectionMode = false;
       document.getElementById('messagesSelectBtn').textContent = 'Seleziona';
@@ -5326,353 +5368,6 @@ function showAndroidBox(message){
 </script>
 
 
-
-<script id="owner-messages-delete-final-fix">
-(function(){
-  function txt(el){
-    return String(el?.textContent || '').trim().toLowerCase();
-  }
-
-  function getOwnerParamsFinal(){
-    try {
-      if (typeof getOwnerParams === 'function') return getOwnerParams();
-
-      const params = new URLSearchParams(window.location.search);
-
-      let code = (
-        params.get('code') ||
-        window.__OWNER_CODE__ ||
-        document.body?.dataset?.ownerCode ||
-        localStorage.getItem('owner_code') ||
-        localStorage.getItem('ownerCode') ||
-        localStorage.getItem('owner_saved_code') ||
-        ''
-      ).toString().trim();
-
-      let plate = (
-        params.get('plate') ||
-        window.__OWNER_PLATE__ ||
-        document.body?.dataset?.ownerPlate ||
-        localStorage.getItem('owner_plate') ||
-        localStorage.getItem('ownerPlate') ||
-        localStorage.getItem('owner_saved_plate') ||
-        ''
-      ).toString().trim().toUpperCase();
-
-      if ((!code || !plate) && window.location.pathname) {
-        const m = window.location.pathname.match(/\/owner-app\/([^\/?#]+)\/([^\/?#]+)/i);
-        if (m) {
-          if (!code) code = decodeURIComponent(m[1] || '').trim();
-          if (!plate) plate = decodeURIComponent(m[2] || '').trim().toUpperCase();
-        }
-      }
-
-      return { code, plate };
-    } catch(e) {
-      return { code:'', plate:'' };
-    }
-  }
-
-  function getMessageIdFromElement(el){
-    if (!el) return '';
-
-    let cur = el;
-    for (let i = 0; i < 8 && cur; i++, cur = cur.parentElement) {
-      const id =
-        cur.dataset?.id ||
-        cur.dataset?.messageId ||
-        cur.dataset?.msgId ||
-        cur.getAttribute?.('data-id') ||
-        cur.getAttribute?.('data-message-id') ||
-        cur.getAttribute?.('data-msg-id');
-
-      if (id) return String(id).trim();
-    }
-
-    const direct =
-      el.dataset?.id ||
-      el.dataset?.messageId ||
-      el.dataset?.msgId ||
-      el.getAttribute?.('data-id') ||
-      el.getAttribute?.('data-message-id') ||
-      el.getAttribute?.('data-msg-id') ||
-      '';
-
-    if (direct) return String(direct).trim();
-
-    // Fallback: cerca un checkbox vicino nella stessa card
-    const card = el.closest?.('[data-id], [data-message-id], .owner-message-row, .message-row, .last-push-row, .message-card, .owner-message-card');
-    if (card) {
-      const id =
-        card.dataset?.id ||
-        card.dataset?.messageId ||
-        card.getAttribute?.('data-id') ||
-        card.getAttribute?.('data-message-id');
-      if (id) return String(id).trim();
-
-      const cb = card.querySelector?.('input[type="checkbox"][data-id], input[type="checkbox"][data-message-id], input[type="checkbox"][value]');
-      if (cb) return String(cb.dataset?.id || cb.dataset?.messageId || cb.value || '').trim();
-    }
-
-    return '';
-  }
-
-  function findMessageCheckboxes(){
-    return Array.from(document.querySelectorAll([
-      'input[type="checkbox"][data-id]',
-      'input[type="checkbox"][data-message-id]',
-      'input[type="checkbox"][data-msg-id]',
-      'input[type="checkbox"].message-select',
-      'input[type="checkbox"].owner-message-select',
-      'input[type="checkbox"][name="messageSelect"]',
-      'input[type="checkbox"][name="ownerMessageSelect"]'
-    ].join(',')));
-  }
-
-  function checkboxId(cb){
-    return String(
-      cb?.dataset?.id ||
-      cb?.dataset?.messageId ||
-      cb?.dataset?.msgId ||
-      cb?.value ||
-      ''
-    ).trim();
-  }
-
-  function selectedMessageIds(){
-    const ids = findMessageCheckboxes()
-      .filter(cb => cb.checked)
-      .map(checkboxId)
-      .filter(Boolean);
-
-    try {
-      if (!ids.length && Array.isArray(window.ownerMessagesSelected)) {
-        window.ownerMessagesSelected.forEach(x => {
-          if (x) ids.push(String(x));
-        });
-      }
-    } catch(e) {}
-
-    return [...new Set(ids)];
-  }
-
-  async function reloadAfterDelete(){
-    let reloaded = false;
-
-    try {
-      if (typeof loadOwnerMessages === 'function') {
-        await loadOwnerMessages();
-        reloaded = true;
-      }
-    } catch(e) {}
-
-    try {
-      if (typeof loadMessages === 'function') {
-        await loadMessages();
-        reloaded = true;
-      }
-    } catch(e) {}
-
-    try {
-      if (typeof loadOwnerDashboard === 'function') await loadOwnerDashboard();
-      else if (typeof loadDashboard === 'function') await loadDashboard();
-    } catch(e) {}
-
-    if (!reloaded) {
-      setTimeout(() => window.location.reload(), 250);
-    }
-  }
-
-  async function deleteOneMessageFinal(id){
-    id = String(id || '').trim();
-
-    if (!id) {
-      alert('ID messaggio non trovato.');
-      return;
-    }
-
-    if (!confirm('Eliminare questo avviso?')) return;
-
-    const { code, plate } = getOwnerParamsFinal();
-
-    if (!code || !plate) {
-      alert('Impossibile eliminare: codice o targa mancanti.');
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/owner-messages/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, plate, id })
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Eliminazione non riuscita.');
-      }
-
-      await reloadAfterDelete();
-    } catch(err) {
-      console.error('deleteOneMessageFinal error:', err);
-      alert('Errore eliminazione avviso: ' + (err && err.message ? err.message : err));
-    }
-  }
-
-  async function deleteManyMessagesFinal(ids){
-    ids = (ids || []).map(x => String(x || '').trim()).filter(Boolean);
-    ids = [...new Set(ids)];
-
-    if (!ids.length) {
-      alert('Seleziona almeno un avviso da eliminare.');
-      return;
-    }
-
-    if (!confirm(`Eliminare ${ids.length} avviso/i selezionato/i?`)) return;
-
-    const { code, plate } = getOwnerParamsFinal();
-
-    if (!code || !plate) {
-      alert('Impossibile eliminare: codice o targa mancanti.');
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/owner-messages/delete-many', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, plate, ids })
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Eliminazione multipla non riuscita.');
-      }
-
-      try { window.ownerMessagesSelected = []; } catch(e) {}
-
-      await reloadAfterDelete();
-    } catch(err) {
-      console.error('deleteManyMessagesFinal error:', err);
-      alert('Errore eliminazione avvisi: ' + (err && err.message ? err.message : err));
-    }
-  }
-
-  function selectAllMessagesFinal(){
-    const boxes = findMessageCheckboxes();
-
-    if (boxes.length) {
-      const shouldSelect = boxes.some(cb => !cb.checked);
-      boxes.forEach(cb => {
-        cb.checked = shouldSelect;
-        cb.dispatchEvent(new Event('change', { bubbles:true }));
-      });
-      return true;
-    }
-
-    try {
-      if (Array.isArray(window.ownerMessages) && window.ownerMessages.length) {
-        window.ownerMessagesSelected = window.ownerMessages.map(x => x.id).filter(Boolean);
-        return true;
-      }
-    } catch(e) {}
-
-    alert('Nessun avviso selezionabile trovato.');
-    return false;
-  }
-
-  function isSelectAll(el){
-    const t = txt(el);
-    const id = String(el?.id || '').toLowerCase();
-    const cls = String(el?.className || '').toLowerCase();
-
-    return (
-      id.includes('selectall') ||
-      id.includes('select-all') ||
-      cls.includes('select-all') ||
-      t === 'seleziona tutti' ||
-      t.includes('seleziona tutti')
-    );
-  }
-
-  function isDeleteMany(el){
-    const t = txt(el);
-    const id = String(el?.id || '').toLowerCase();
-    const cls = String(el?.className || '').toLowerCase();
-
-    return (
-      id.includes('deletemany') ||
-      id.includes('delete-many') ||
-      id.includes('deleteselected') ||
-      id.includes('delete-selected') ||
-      cls.includes('delete-many') ||
-      cls.includes('delete-selected') ||
-      t.includes('elimina selezionati') ||
-      t.includes('elimina selezionate') ||
-      t.includes('elimina avvisi selezionati') ||
-      t.includes('elimina messaggi selezionati') ||
-      t.includes('elimina tutti gli avvisi') ||
-      t.includes('elimina tutti i messaggi')
-    );
-  }
-
-  function isDeleteOne(el){
-    const t = txt(el);
-    const id = String(el?.id || '').toLowerCase();
-    const cls = String(el?.className || '').toLowerCase();
-
-    if (isDeleteMany(el)) return false;
-
-    return (
-      id.includes('delete') ||
-      id.includes('elimina') ||
-      cls.includes('delete') ||
-      cls.includes('elimina') ||
-      t === 'elimina' ||
-      t.includes('elimina')
-    );
-  }
-
-  document.addEventListener('click', function(e){
-    const btn = e.target && e.target.closest ? e.target.closest('button, a, [role="button"]') : null;
-    if (!btn) return;
-
-    if (isSelectAll(btn)) {
-      e.preventDefault();
-      e.stopPropagation();
-      selectAllMessagesFinal();
-      return;
-    }
-
-    if (isDeleteMany(btn)) {
-      e.preventDefault();
-      e.stopPropagation();
-      deleteManyMessagesFinal(selectedMessageIds());
-      return;
-    }
-
-    if (isDeleteOne(btn)) {
-      const id = getMessageIdFromElement(btn);
-
-      // Intercetta solo se trova un id messaggio, per non bloccare altri pulsanti "elimina" non pertinenti.
-      if (id) {
-        e.preventDefault();
-        e.stopPropagation();
-        deleteOneMessageFinal(id);
-      }
-    }
-  }, true);
-
-  window.ownerMessagesDeleteFinalFix = {
-    selectAllMessagesFinal,
-    selectedMessageIds,
-    deleteOneMessageFinal,
-    deleteManyMessagesFinal
-  };
-})();
-</script>
 
 </body>
 </html>
