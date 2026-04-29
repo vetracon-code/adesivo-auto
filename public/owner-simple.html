@@ -2422,6 +2422,30 @@ if(!res.ok || !data.success){
 
       renderItalyMapGroups(events);
 
+      // Fix mappa: in alcune Web App i dati area arrivano correttamente dalla dashboard,
+      // ma i punti non compaiono perché il render avviene prima che la mappa sia stabile.
+      // Forziamo quindi il render dei soli eventi geografici con piccoli retry.
+      try {
+        const dashboardMapEvents = (events || []).filter(ev =>
+          ev && (
+            String(ev.ip_city || '').trim() ||
+            String(ev.ip_region || '').trim() ||
+            String(ev.ip_country || '').trim()
+          )
+        );
+
+        window.__OWNER_AREA_EVENTS__ = dashboardMapEvents;
+
+        if (dashboardMapEvents.length && typeof renderItalyMapGroups === 'function') {
+          renderItalyMapGroups(dashboardMapEvents);
+          setTimeout(() => renderItalyMapGroups(dashboardMapEvents), 350);
+          setTimeout(() => renderItalyMapGroups(dashboardMapEvents), 1200);
+          setTimeout(() => renderItalyMapGroups(dashboardMapEvents), 2500);
+        }
+      } catch(e) {
+        console.warn('dashboard map forced render error:', e);
+      }
+
       if (!events.length) {
         qs('eventsList').innerHTML = '<div class="muted">Nessun evento registrato fino ad ora.</div>';
       } else {
