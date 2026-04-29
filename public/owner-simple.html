@@ -5179,5 +5179,155 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 </style>
 
+
+<script id="android-owner-buttons-direct-handler">
+(function(){
+  function isAndroid(){
+    return /Android/i.test(navigator.userAgent || '');
+  }
+
+  function cleanPlate(v){
+    return String(v || '').trim().toUpperCase().replace(/\s+/g, '');
+  }
+
+  function getCtx(){
+    let code = '';
+    let plate = '';
+
+    try {
+      if (typeof getOwnerParams === 'function') {
+        const p = getOwnerParams() || {};
+        code = p.code || '';
+        plate = p.plate || '';
+      }
+    } catch(e) {}
+
+    try {
+      const params = new URLSearchParams(window.location.search || '');
+      if (!code) code = params.get('code') || '';
+      if (!plate) plate = params.get('plate') || '';
+    } catch(e) {}
+
+    try {
+      if (!code && window.__OWNER_CODE__) code = window.__OWNER_CODE__;
+      if (!plate && window.__OWNER_PLATE__) plate = window.__OWNER_PLATE__;
+    } catch(e) {}
+
+    try {
+      if (!code && document.body && document.body.dataset) code = document.body.dataset.ownerCode || '';
+      if (!plate && document.body && document.body.dataset) plate = document.body.dataset.ownerPlate || '';
+    } catch(e) {}
+
+    try {
+      const m = String(window.location.pathname || '').match(/\/owner-app\/([^\/?#]+)\/([^\/?#]+)/i);
+      if (m) {
+        if (!code) code = decodeURIComponent(m[1] || '');
+        if (!plate) plate = decodeURIComponent(m[2] || '');
+      }
+    } catch(e) {}
+
+    try {
+      if (!code) code = localStorage.getItem('owner_saved_code') || '';
+      if (!plate) plate = localStorage.getItem('owner_saved_plate') || '';
+    } catch(e) {}
+
+    code = String(code || '').trim().toUpperCase();
+    plate = cleanPlate(plate);
+
+    if (code && plate) {
+      try {
+        localStorage.setItem('owner_saved_code', code);
+        localStorage.setItem('owner_saved_plate', plate);
+        sessionStorage.setItem('owner_saved_code', code);
+        sessionStorage.setItem('owner_saved_plate', plate);
+        window.__OWNER_CODE__ = code;
+        window.__OWNER_PLATE__ = plate;
+      } catch(e) {}
+    }
+
+    return { code, plate };
+  }
+
+  async function getPublicId(){
+    try {
+      const stored = localStorage.getItem('owner_public_id') || sessionStorage.getItem('owner_public_id') || '';
+      if (stored) return stored;
+    } catch(e) {}
+
+    const ctx = getCtx();
+    if (!ctx.code || !ctx.plate) return '';
+
+    try {
+      const res = await fetch('/api/owner-dashboard', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ code: ctx.code, plate: ctx.plate })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      const publicId = data && data.success && data.data ? (data.data.public_id || '') : '';
+
+      if (publicId) {
+        try {
+          localStorage.setItem('owner_public_id', publicId);
+          sessionStorage.setItem('owner_public_id', publicId);
+        } catch(e) {}
+      }
+
+      return publicId;
+    } catch(e) {
+      return '';
+    }
+  }
+
+  document.addEventListener('click', async function(e){
+    if (!isAndroid()) return;
+
+    const btn = e.target && e.target.closest
+      ? e.target.closest('#printStickerBtn, #previewStickerBtn, #renewBtn')
+      : null;
+
+    if (!btn) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+
+    const ctx = getCtx();
+
+    if (!ctx.code || !ctx.plate) {
+      alert('Dati veicolo non ancora pronti. Premi Aggiorna App e riprova.');
+      return;
+    }
+
+    if (btn.id === 'printStickerBtn') {
+      window.location.href = '/owner-print-sign.html?code=' + encodeURIComponent(ctx.code) + '&plate=' + encodeURIComponent(ctx.plate);
+      return;
+    }
+
+    const publicId = await getPublicId();
+
+    if (!publicId) {
+      alert('Dati QR non ancora disponibili. Attendi qualche secondo e riprova.');
+      return;
+    }
+
+    if (btn.id === 'previewStickerBtn') {
+      const qs = new URLSearchParams();
+      qs.set('from_owner_preview', '1');
+      qs.set('code', ctx.code);
+      qs.set('plate', ctx.plate);
+      window.location.href = '/contact-preview/u/' + encodeURIComponent(publicId) + '?' + qs.toString();
+      return;
+    }
+
+    if (btn.id === 'renewBtn') {
+      window.location.href = '/renew/u/' + encodeURIComponent(publicId);
+      return;
+    }
+  }, true);
+})();
+</script>
+
 </body>
 </html>
