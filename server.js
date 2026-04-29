@@ -209,6 +209,43 @@ function formatEventDateTimeIT(date = new Date()) {
 }
 
 
+
+function normalizeItalianMobileForOtp(input) {
+  const raw = String(input || '').trim();
+  let cleaned = raw.replace(/[^\d+]/g, '');
+
+  if (!cleaned) {
+    return { raw, e164: '', whatsapp: '', isValid: false };
+  }
+
+  if (cleaned.startsWith('00')) {
+    cleaned = '+' + cleaned.slice(2);
+  }
+
+  if (cleaned.startsWith('39') && !cleaned.startsWith('+39') && cleaned.replace(/\D/g, '').length >= 12) {
+    cleaned = '+' + cleaned;
+  }
+
+  const onlyNumbers = cleaned.replace(/\D/g, '');
+
+  if (!cleaned.startsWith('+') && onlyNumbers.startsWith('3') && onlyNumbers.length === 10) {
+    cleaned = '+39' + onlyNumbers;
+  } else if (cleaned.startsWith('+')) {
+    cleaned = '+' + onlyNumbers;
+  }
+
+  const e164 = cleaned;
+  const whatsapp = e164.replace(/\D/g, '');
+  const isValid = /^\+393\d{8,10}$/.test(e164);
+
+  return { raw, e164, whatsapp, isValid };
+}
+
+function generateOtpCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+
 function normalizePhoneForOwnerLogin(value) {
   let raw = String(value || '').trim();
   raw = raw.replace(/\s+/g, '').replace(/[().-]/g, '');
@@ -2699,41 +2736,55 @@ app.get('/health', (req, res) => {
 app.post('/api/trial-request', async (req, res) => {
   try {
     const {
-      full_name, phone, email, plate, brand, vehicle_model, color,
-      notes, privacy_consent, marketing_consent
+      phone, plate, brand, vehicle_model, color,
+      privacy_consent, marketing_consent
     } = req.body || {};
 
-    const cleanName = String(full_name || '').trim();
-    const cleanPhone = String(phone || '').trim();
-    const cleanEmail = String(email || '').trim().toLowerCase();
-    const cleanPlate = String(plate || '').trim().toUpperCase();
+    const phoneNorm = normalizeItalianMobileForOtp(phone);
+    const cleanPhone = phoneNorm.e164;
+    const cleanPhoneWhatsapp = phoneNorm.whatsapp;
+    const cleanPlate = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
     const cleanBrand = String(brand || '').trim();
     const cleanModel = String(vehicle_model || '').trim();
     const cleanColor = String(color || '').trim();
-    const cleanNotes = String(notes || '').trim();
 
-    if (!cleanName || !cleanPhone || !cleanPlate || !cleanBrand || !cleanModel || !privacy_consent) {
-      return res.status(400).json({ success: false, error: 'Compila tutti i campi obbligatori e accetta la privacy.' });
+    if (!cleanPhone || !phoneNorm.isValid || !cleanPlate || !cleanBrand || !cleanModel || !privacy_consent) {
+      return res.status(400).json({
+        success: false,
+        error: 'Inserisci cellulare valido, targa, marca, modello e accetta la privacy.'
+      });
     }
 
-    await pool.query(
+    const otpCode = generateOtpCode();
+    const otpExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    const inserted = await pool.query(
       `INSERT INTO trial_requests
-       (full_name, phone, email, plate, brand, vehicle_model, color, notes, privacy_consent, marketing_consent, source_page, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())`,
+       (full_name, phone, email, plate, brand, vehicle_model, color, notes,
+        privacy_consent, marketing_consent, source_page, created_at,
+        otp_code, otp_expires_at, otp_status, phone_whatsapp)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),$12,$13,$14,$15)
+       RETURNING id`,
       [
-        cleanName,
+        'Cliente',
         cleanPhone,
-        cleanEmail || null,
+        null,
         cleanPlate,
         cleanBrand,
         cleanModel,
         cleanColor || null,
-        cleanNotes || null,
+        null,
         !!privacy_consent,
         !!marketing_consent,
-        '/'
+        '/prova-gratuita.html',
+        otpCode,
+        otpExpiresAt,
+        'pending_otp',
+        cleanPhoneWhatsapp
       ]
     );
+
+    const trialRequestId = inserted.rows?.[0]?.id || null;
 
     try {
       const trialPushCode = 'AMC-E8493C7F';
@@ -2743,15 +2794,14 @@ app.post('/api/trial-request', async (req, res) => {
       let insertedMessageId = null;
       try {
         const msgText = [
-          'Nuovo utente registrato',
+          'Nuova richiesta prova gratuita',
           `Data e ora: ${nowLabel}`,
-          `Nome: ${cleanName}`,
           `Telefono: ${cleanPhone}`,
-          cleanEmail ? `Email: ${cleanEmail}` : null,
           `Targa: ${cleanPlate}`,
           `Veicolo: ${cleanBrand} ${cleanModel}`.trim(),
           cleanColor ? `Colore: ${cleanColor}` : null,
-          cleanNotes ? `Note: ${cleanNotes}` : null
+          `OTP: ${otpCode}`,
+          trialRequestId ? `Richiesta ID: ${trialRequestId}` : null
         ].filter(Boolean).join('\n');
 
         const insertedMsg = await pool.query(
@@ -2759,7 +2809,7 @@ app.post('/api/trial-request', async (req, res) => {
            (code, plate, reason, message_text, location_shared, created_at)
            VALUES ($1, $2, $3, $4, FALSE, NOW())
            RETURNING id`,
-          [trialPushCode, trialPushPlate, 'Nuovo utente registrato', msgText]
+          [trialPushCode, trialPushPlate, 'Nuova richiesta prova gratuita', msgText]
         );
         insertedMessageId = insertedMsg.rows?.[0]?.id || null;
       } catch (msgErr) {
@@ -2776,7 +2826,9 @@ app.post('/api/trial-request', async (req, res) => {
           [trialPushCode, trialPushPlate]
         );
 
-        const targetUrl = `/owner-simple.html?code=${encodeURIComponent(trialPushCode)}&plate=${encodeURIComponent(trialPushPlate)}${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}`;
+        const targetUrl = trialRequestId
+          ? `/admin-otp.html?id=${encodeURIComponent(trialRequestId)}`
+          : `/owner-simple.html?code=${encodeURIComponent(trialPushCode)}&plate=${encodeURIComponent(trialPushPlate)}${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}`;
 
         for (const sub of subs.rows || []) {
           try {
@@ -2789,11 +2841,12 @@ app.post('/api/trial-request', async (req, res) => {
                 }
               },
               JSON.stringify({
-                title: 'Nuovo utente registrato',
-                body: `Data e ora: ${nowLabel}`,
+                title: 'Nuova richiesta prova',
+                body: `${cleanPlate} · ${cleanBrand} ${cleanModel}`.trim(),
                 url: targetUrl,
                 targetUrl,
                 messageId: insertedMessageId,
+                trialRequestId,
                 channel: 'trial-registration-alert'
               })
             );
@@ -2806,10 +2859,20 @@ app.post('/api/trial-request', async (req, res) => {
       console.error('trial registration push block error:', pushBlockErr);
     }
 
-    return res.json({ success: true, message: 'Richiesta ricevuta correttamente.' });
+    return res.json({
+      success: true,
+      message: 'Richiesta ricevuta. Riceverai un codice di verifica sul cellulare indicato.',
+      request_id: trialRequestId
+    });
   } catch (err) {
     console.error('trial-request error:', err);
-    return res.status(500).json({ success: false, error: 'Errore invio richiesta prova gratuita.' });
+    return res.status(500).json({
+      success: false,
+      error: 'Errore invio richiesta prova gratuita.',
+      debug_message: err?.message || null,
+      debug_detail: err?.detail || null,
+      debug_code: err?.code || null
+    });
   }
 });
 
@@ -4764,6 +4827,107 @@ app.get('/api/admin/trial-requests', requireAdmin, async (req, res) => {
     return res.status(500).json({ success: false, error: 'Errore caricamento richieste prova gratuita.' });
   }
 });
+
+
+
+app.get('/api/admin/trial-request/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id || 0);
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'ID richiesta obbligatorio.' });
+    }
+
+    const result = await pool.query(
+      `SELECT *
+       FROM trial_requests
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, error: 'Richiesta non trovata.' });
+    }
+
+    const item = result.rows[0];
+    const phoneNorm = normalizeItalianMobileForOtp(item.phone);
+    const whatsappNumber = item.phone_whatsapp || phoneNorm.whatsapp;
+    const otpCode = item.otp_code || '';
+
+    const whatsappText = `Ciao, per completare l’attivazione della prova gratuita Contatto Veicolo inserisci questo codice: ${otpCode}`;
+    const whatsappUrl = whatsappNumber
+      ? `https://wa.me/${encodeURIComponent(whatsappNumber)}?text=${encodeURIComponent(whatsappText)}`
+      : '';
+
+    return res.json({
+      success: true,
+      item,
+      whatsapp_number: whatsappNumber,
+      whatsapp_text: whatsappText,
+      whatsapp_url: whatsappUrl
+    });
+  } catch (err) {
+    console.error('admin trial-request detail error:', err);
+    return res.status(500).json({ success: false, error: 'Errore caricamento richiesta OTP.' });
+  }
+});
+
+
+app.post('/api/admin/trial-request/:id/mark-otp-sent', requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id || 0);
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'ID richiesta obbligatorio.' });
+    }
+
+    await pool.query(
+      `UPDATE trial_requests
+       SET otp_sent_at = NOW(),
+           otp_status = COALESCE(NULLIF(otp_status,''), 'pending_otp')
+       WHERE id = $1`,
+      [id]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('admin mark otp sent error:', err);
+    return res.status(500).json({ success: false, error: 'Errore aggiornamento invio OTP.' });
+  }
+});
+
+
+app.post('/api/admin/trial-request/:id/regenerate-otp', requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id || 0);
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'ID richiesta obbligatorio.' });
+    }
+
+    const otpCode = generateOtpCode();
+    const otpExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    const updated = await pool.query(
+      `UPDATE trial_requests
+       SET otp_code = $2,
+           otp_expires_at = $3,
+           otp_sent_at = NULL,
+           otp_status = 'pending_otp'
+       WHERE id = $1
+       RETURNING *`,
+      [id, otpCode, otpExpiresAt]
+    );
+
+    if (!updated.rows.length) {
+      return res.status(404).json({ success: false, error: 'Richiesta non trovata.' });
+    }
+
+    return res.json({ success: true, item: updated.rows[0] });
+  } catch (err) {
+    console.error('admin regenerate otp error:', err);
+    return res.status(500).json({ success: false, error: 'Errore rigenerazione OTP.' });
+  }
+});
+
 
 
 app.get('/api/admin/list-stickers', requireAdmin, async (req, res) => {
@@ -6776,6 +6940,12 @@ async function initDb() {
     await pool.query("ALTER TABLE trial_requests ADD COLUMN IF NOT EXISTS public_id TEXT");
     await pool.query("ALTER TABLE trial_requests ADD COLUMN IF NOT EXISTS owner_access_token TEXT");
     await pool.query("ALTER TABLE trial_requests ADD COLUMN IF NOT EXISTS generated_at TIMESTAMP");
+    await pool.query("ALTER TABLE trial_requests ADD COLUMN IF NOT EXISTS otp_code TEXT");
+    await pool.query("ALTER TABLE trial_requests ADD COLUMN IF NOT EXISTS otp_expires_at TIMESTAMP");
+    await pool.query("ALTER TABLE trial_requests ADD COLUMN IF NOT EXISTS otp_sent_at TIMESTAMP");
+    await pool.query("ALTER TABLE trial_requests ADD COLUMN IF NOT EXISTS otp_verified_at TIMESTAMP");
+    await pool.query("ALTER TABLE trial_requests ADD COLUMN IF NOT EXISTS otp_status TEXT");
+    await pool.query("ALTER TABLE trial_requests ADD COLUMN IF NOT EXISTS phone_whatsapp TEXT");
 
     console.log('Tabella sticker_codes pronta');
     console.log('Tabella qr_scans pronta');

@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Admin OTP · Contatto Veicolo</title>
+  <style>
+    :root{--bg:#07111f;--card:#0d1b2f;--text:#f7fbff;--muted:#9fb0c6;--accent:#5aa0ff;--ok:#22c55e;--warn:#f59e0b;--danger:#ef4444}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:radial-gradient(circle at top,#142846 0,#07111f 58%);color:var(--text);padding:18px}
+    .wrap{max-width:760px;margin:0 auto}
+    .top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:18px}
+    h1{font-size:1.45rem;margin:0;letter-spacing:-.03em}
+    .card{background:rgba(13,27,47,.92);border:1px solid rgba(255,255,255,.08);border-radius:22px;padding:18px;box-shadow:0 18px 60px rgba(0,0,0,.28)}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+    .item{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:13px}
+    .label{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:800}
+    .value{margin-top:6px;font-size:1.05rem;font-weight:850;word-break:break-word}
+    .otp{font-size:2.2rem;letter-spacing:.12em;color:#fff}
+    .actions{display:grid;gap:10px;margin-top:18px}
+    .btn{border:0;border-radius:14px;min-height:48px;padding:0 16px;font-weight:900;cursor:pointer;text-decoration:none;display:flex;align-items:center;justify-content:center;color:#fff;background:var(--accent)}
+    .btn.secondary{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.10)}
+    .btn.ok{background:var(--ok);color:#052511}
+    .btn.warn{background:var(--warn);color:#2b1700}
+    .muted{color:var(--muted);line-height:1.45}
+    .result{margin-top:12px;color:var(--muted);min-height:22px}
+    .danger{color:#fecaca}
+    @media(max-width:640px){.grid{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1>Richiesta OTP</h1>
+        <div class="muted">Gestione rapida della prova gratuita</div>
+      </div>
+      <a class="btn secondary" style="width:auto;min-height:40px" href="/admin.html">Admin</a>
+    </div>
+
+    <div class="card">
+      <div id="status" class="muted">Caricamento richiesta...</div>
+
+      <div class="grid" id="dataGrid" style="display:none">
+        <div class="item"><div class="label">Cellulare</div><div class="value" id="phone">-</div></div>
+        <div class="item"><div class="label">WhatsApp</div><div class="value" id="whatsapp">-</div></div>
+        <div class="item"><div class="label">Targa</div><div class="value" id="plate">-</div></div>
+        <div class="item"><div class="label">Veicolo</div><div class="value" id="vehicle">-</div></div>
+        <div class="item"><div class="label">Stato</div><div class="value" id="otpStatus">-</div></div>
+        <div class="item"><div class="label">Codice OTP</div><div class="value otp" id="otp">------</div></div>
+      </div>
+
+      <div class="actions" id="actions" style="display:none">
+        <a id="waBtn" class="btn ok" target="_blank" rel="noopener">Apri WhatsApp con codice</a>
+        <button id="copyBtn" class="btn secondary" type="button">Copia codice</button>
+        <button id="markSentBtn" class="btn warn" type="button">Segna OTP inviato</button>
+        <button id="regenBtn" class="btn secondary" type="button">Rigenera OTP</button>
+      </div>
+
+      <div id="result" class="result"></div>
+    </div>
+  </div>
+
+  <script>
+    const qs = new URLSearchParams(location.search);
+    const id = qs.get('id');
+    let current = null;
+
+    function setResult(msg){ document.getElementById('result').textContent = msg || ''; }
+
+    async function loadRequest(){
+      const status = document.getElementById('status');
+      const grid = document.getElementById('dataGrid');
+      const actions = document.getElementById('actions');
+
+      if(!id){
+        status.innerHTML = '<span class="danger">ID richiesta mancante.</span>';
+        return;
+      }
+
+      const res = await fetch('/api/admin/trial-request/' + encodeURIComponent(id), { cache:'no-store' });
+      const data = await res.json().catch(() => ({}));
+
+      if(!res.ok || !data.success){
+        if(res.status === 401){
+          status.innerHTML = '<span class="danger">Login admin richiesto. Apri /admin.html, accedi e poi torna a questa pagina.</span>';
+          return;
+        }
+        status.innerHTML = '<span class="danger">' + (data.error || 'Errore caricamento richiesta.') + '</span>';
+        return;
+      }
+
+      current = data;
+      const item = data.item || {};
+
+      status.textContent = 'Richiesta caricata.';
+      grid.style.display = 'grid';
+      actions.style.display = 'grid';
+
+      document.getElementById('phone').textContent = item.phone || '-';
+      document.getElementById('whatsapp').textContent = data.whatsapp_number || '-';
+      document.getElementById('plate').textContent = item.plate || '-';
+      document.getElementById('vehicle').textContent = [item.brand, item.vehicle_model].filter(Boolean).join(' ') || '-';
+      document.getElementById('otpStatus').textContent = item.otp_status || 'pending_otp';
+      document.getElementById('otp').textContent = item.otp_code || '------';
+
+      const waBtn = document.getElementById('waBtn');
+      if(data.whatsapp_url){
+        waBtn.href = data.whatsapp_url;
+        waBtn.style.pointerEvents = 'auto';
+        waBtn.style.opacity = '1';
+      } else {
+        waBtn.href = '#';
+        waBtn.style.pointerEvents = 'none';
+        waBtn.style.opacity = '.45';
+      }
+    }
+
+    document.getElementById('copyBtn').addEventListener('click', async () => {
+      const code = current?.item?.otp_code || '';
+      if(!code) return;
+      try{
+        await navigator.clipboard.writeText(code);
+        setResult('Codice copiato.');
+      }catch(e){
+        setResult('Codice OTP: ' + code);
+      }
+    });
+
+    document.getElementById('markSentBtn').addEventListener('click', async () => {
+      setResult('Aggiornamento in corso...');
+      const res = await fetch('/api/admin/trial-request/' + encodeURIComponent(id) + '/mark-otp-sent', { method:'POST' });
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok || !data.success){
+        setResult(data.error || 'Errore aggiornamento.');
+        return;
+      }
+      setResult('OTP segnato come inviato.');
+      loadRequest();
+    });
+
+    document.getElementById('regenBtn').addEventListener('click', async () => {
+      if(!confirm('Rigenerare il codice OTP? Il vecchio codice non sarà più quello da comunicare.')) return;
+      setResult('Rigenerazione in corso...');
+      const res = await fetch('/api/admin/trial-request/' + encodeURIComponent(id) + '/regenerate-otp', { method:'POST' });
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok || !data.success){
+        setResult(data.error || 'Errore rigenerazione.');
+        return;
+      }
+      setResult('Nuovo OTP generato.');
+      loadRequest();
+    });
+
+    loadRequest();
+  </script>
+</body>
+</html>
