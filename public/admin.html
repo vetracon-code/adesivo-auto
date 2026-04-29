@@ -950,13 +950,22 @@
       }
     }
 
-    function detectDeviceLabelFromItem(item){
-      const platform = item.owner_app_platform || '';
-      const browser = item.owner_app_browser || '';
-      const ua = item.push_user_agent || item.owner_app_user_agent || '';
+    function fmtDateShort(value){
+      if(!value) return '-';
+      try {
+        return new Date(value).toLocaleString('it-IT', {
+          day:'2-digit', month:'2-digit', year:'2-digit',
+          hour:'2-digit', minute:'2-digit'
+        });
+      } catch(e) {
+        return '-';
+      }
+    }
 
-      let detectedPlatform = platform;
-      let detectedBrowser = browser;
+    function detectDeviceLabelFromUa(ua, platform='', browser=''){
+      ua = ua || '';
+      let detectedPlatform = platform || '';
+      let detectedBrowser = browser || '';
 
       if(!detectedPlatform){
         if(/iPhone/i.test(ua)) detectedPlatform = 'iPhone';
@@ -980,35 +989,94 @@
         model = androidModel[1].replace(/Build\/.*/i, '').trim();
       }
 
-      return [detectedPlatform, model, detectedBrowser].filter(Boolean).join(' · ') || 'Dispositivo non rilevato';
+      return [detectedPlatform, model, detectedBrowser].filter(Boolean).join(' · ') || 'Dispositivo';
+    }
+
+    function normalizeAppDevices(item){
+      let devices = item.app_devices || [];
+      if(typeof devices === 'string'){
+        try { devices = JSON.parse(devices); } catch(e) { devices = []; }
+      }
+      return Array.isArray(devices) ? devices : [];
     }
 
     function ownerAppStatusHtml(item){
+      const devices = normalizeAppDevices(item);
+      const hiddenOld = Number(item.hidden_old_devices_count || 0);
+
+      if(devices.length){
+        const rows = devices.slice(0, 4).map(dev => {
+          const ua = dev.user_agent || item.push_user_agent || item.owner_app_user_agent || '';
+          const device = detectDeviceLabelFromUa(ua, item.owner_app_platform || '', item.owner_app_browser || '');
+          const pushActive = !!dev.is_active && !!dev.receive_passenger_alerts;
+          const appSeen = !!(dev.app_saved_detected || dev.app_saved_detected_at || dev.last_seen_at || dev.updated_at);
+
+          let color = '#ef4444';
+          let dot = '🔴';
+          let label = 'Non completa';
+
+          if(appSeen && pushActive){
+            color = '#22c55e';
+            dot = '🟢';
+            label = 'Completa';
+          } else if(appSeen && !pushActive){
+            color = '#f59e0b';
+            dot = '🟡';
+            label = 'Push mancanti';
+          }
+
+          const when = fmtDateShort(dev.last_seen_at || dev.updated_at || dev.app_saved_detected_at);
+
+          return `
+            <div style="padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06);">
+              <div style="font-weight:900;color:${color};white-space:nowrap;">${dot} ${label}</div>
+              <div class="muted" style="font-size:.76rem;margin-top:2px;">${device}</div>
+              <div class="muted" style="font-size:.72rem;margin-top:2px;">Ultimo: ${when}</div>
+            </div>
+          `;
+        }).join('');
+
+        const more = devices.length > 4
+          ? `<div class="muted" style="font-size:.72rem;margin-top:5px;">+${devices.length - 4} altri dispositivi recenti</div>`
+          : '';
+
+        const old = hiddenOld > 0
+          ? `<div class="muted" style="font-size:.72rem;margin-top:5px;">+${hiddenOld} non recenti nascosti</div>`
+          : '';
+
+        return `<div style="min-width:190px;line-height:1.25;">${rows}${more}${old}</div>`;
+      }
+
       const appSeen = !!(item.owner_app_detected_at || item.owner_last_seen);
       const pushCount = Number(item.push_active_count || 0);
       const pushActive = pushCount > 0;
 
       let color = '#ef4444';
-      let label = 'Non rilevata';
+      let label = 'Mai rilevata';
       let dot = '🔴';
 
       if(appSeen && pushActive){
         color = '#22c55e';
-        label = 'App + notifiche';
+        label = 'Completa';
         dot = '🟢';
       } else if(appSeen && !pushActive){
         color = '#f59e0b';
-        label = 'App rilevata, notifiche no';
+        label = 'Push mancanti';
         dot = '🟡';
       } else if(!appSeen && pushActive){
         color = '#f59e0b';
-        label = 'Push attiva, App non rilevata';
+        label = 'Push attiva';
         dot = '🟠';
       }
 
-      const device = detectDeviceLabelFromItem(item);
+      const ua = item.push_user_agent || item.owner_app_user_agent || '';
+      const device = detectDeviceLabelFromUa(ua, item.owner_app_platform || '', item.owner_app_browser || '');
       const appDate = fmtDateShort(item.owner_app_detected_at || item.owner_last_seen);
       const pushDate = fmtDateShort(item.push_last_seen_at || item.push_updated_at);
+
+      const old = hiddenOld > 0
+        ? `<div class="muted" style="font-size:.72rem;margin-top:5px;">+${hiddenOld} non recenti nascosti</div>`
+        : '';
 
       return `
         <div style="min-width:170px;line-height:1.35;">
@@ -1016,6 +1084,7 @@
           <div class="muted" style="font-size:.78rem;margin-top:4px;">${device}</div>
           <div class="muted" style="font-size:.76rem;margin-top:4px;">App: ${appDate}</div>
           <div class="muted" style="font-size:.76rem;">Push: ${pushActive ? pushDate : '-'}</div>
+          ${old}
         </div>
       `;
     }

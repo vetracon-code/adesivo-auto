@@ -5231,7 +5231,9 @@ app.get('/api/admin/list-stickers', requireAdmin, async (req, res) => {
            COALESCE(ps.push_active_count, 0) AS push_active_count,
            ps.push_last_seen_at,
            ps.push_updated_at,
-           ps.push_user_agent
+           ps.push_user_agent,
+           COALESCE(ps.app_devices, '[]'::json) AS app_devices,
+           COALESCE(ps.hidden_old_devices_count, 0) AS hidden_old_devices_count
          FROM sticker_codes sc
          LEFT JOIN (
            SELECT
@@ -5240,7 +5242,31 @@ app.get('/api/admin/list-stickers', requireAdmin, async (req, res) => {
              COUNT(*)::int AS push_active_count,
              MAX(last_seen_at) AS push_last_seen_at,
              MAX(updated_at) AS push_updated_at,
-             (ARRAY_AGG(user_agent ORDER BY updated_at DESC NULLS LAST))[1] AS push_user_agent
+             (ARRAY_AGG(user_agent ORDER BY updated_at DESC NULLS LAST))[1] AS push_user_agent,
+             COALESCE(
+               json_agg(
+                 json_build_object(
+                   'endpoint', endpoint,
+                   'is_active', is_active,
+                   'is_primary', is_primary,
+                   'receive_admin_alerts', receive_admin_alerts,
+                   'receive_passenger_alerts', receive_passenger_alerts,
+                   'app_saved_detected', app_saved_detected,
+                   'app_saved_detected_at', app_saved_detected_at,
+                   'last_seen_at', last_seen_at,
+                   'updated_at', updated_at,
+                   'user_agent', user_agent
+                 )
+                 ORDER BY COALESCE(last_seen_at, updated_at) DESC NULLS LAST
+               ) FILTER (
+                 WHERE COALESCE(last_seen_at, updated_at) >= NOW() - INTERVAL '30 days'
+               ),
+               '[]'::json
+             ) AS app_devices,
+             COUNT(*) FILTER (
+               WHERE COALESCE(last_seen_at, updated_at) < NOW() - INTERVAL '30 days'
+                  OR COALESCE(last_seen_at, updated_at) IS NULL
+             )::int AS hidden_old_devices_count
            FROM push_subscriptions
            WHERE COALESCE(is_active, TRUE) = TRUE
              AND COALESCE(receive_passenger_alerts, TRUE) = TRUE
@@ -5266,7 +5292,9 @@ app.get('/api/admin/list-stickers', requireAdmin, async (req, res) => {
            COALESCE(ps.push_active_count, 0) AS push_active_count,
            ps.push_last_seen_at,
            ps.push_updated_at,
-           ps.push_user_agent
+           ps.push_user_agent,
+           COALESCE(ps.app_devices, '[]'::json) AS app_devices,
+           COALESCE(ps.hidden_old_devices_count, 0) AS hidden_old_devices_count
          FROM sticker_codes sc
          LEFT JOIN (
            SELECT
@@ -5275,7 +5303,31 @@ app.get('/api/admin/list-stickers', requireAdmin, async (req, res) => {
              COUNT(*)::int AS push_active_count,
              MAX(last_seen_at) AS push_last_seen_at,
              MAX(updated_at) AS push_updated_at,
-             (ARRAY_AGG(user_agent ORDER BY updated_at DESC NULLS LAST))[1] AS push_user_agent
+             (ARRAY_AGG(user_agent ORDER BY updated_at DESC NULLS LAST))[1] AS push_user_agent,
+             COALESCE(
+               json_agg(
+                 json_build_object(
+                   'endpoint', endpoint,
+                   'is_active', is_active,
+                   'is_primary', is_primary,
+                   'receive_admin_alerts', receive_admin_alerts,
+                   'receive_passenger_alerts', receive_passenger_alerts,
+                   'app_saved_detected', app_saved_detected,
+                   'app_saved_detected_at', app_saved_detected_at,
+                   'last_seen_at', last_seen_at,
+                   'updated_at', updated_at,
+                   'user_agent', user_agent
+                 )
+                 ORDER BY COALESCE(last_seen_at, updated_at) DESC NULLS LAST
+               ) FILTER (
+                 WHERE COALESCE(last_seen_at, updated_at) >= NOW() - INTERVAL '30 days'
+               ),
+               '[]'::json
+             ) AS app_devices,
+             COUNT(*) FILTER (
+               WHERE COALESCE(last_seen_at, updated_at) < NOW() - INTERVAL '30 days'
+                  OR COALESCE(last_seen_at, updated_at) IS NULL
+             )::int AS hidden_old_devices_count
            FROM push_subscriptions
            WHERE COALESCE(is_active, TRUE) = TRUE
              AND COALESCE(receive_passenger_alerts, TRUE) = TRUE
