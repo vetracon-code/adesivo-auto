@@ -2984,6 +2984,19 @@ function getOwnerParams(){
     async function loadOwnerAbuseBlocks(){
       try {
         const { code, plate } = getOwnerParams();
+
+        // Su Android/PWA può servire qualche istante prima che code/plate siano stabili.
+        // In quel caso non mostriamo errore: ritentiamo in modo silenzioso.
+        if (!code || !plate) {
+          const list = document.getElementById('abuseBlocksList');
+          if (list && !list.dataset.waitingOwnerContext) {
+            list.dataset.waitingOwnerContext = '1';
+            list.innerHTML = '<div class="muted">Verifica protezioni in corso...</div>';
+          }
+          setTimeout(loadOwnerAbuseBlocks, 900);
+          return;
+        }
+
         const res = await fetch('/api/owner/list-abuse-blocks', {
           method:'POST',
           headers:{'Content-Type':'application/json'},
@@ -2991,19 +3004,35 @@ function getOwnerParams(){
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
-          document.getElementById('abuseBlocksList').innerHTML = '<div class="danger">Errore caricamento blocchi.</div>';
+          document.getElementById('abuseBlocksList').innerHTML = '<div class="muted">Protezione anti-abuso non disponibile in questo momento.</div>';
           return;
         }
         ownerAbuseBlocks = data.items || [];
+        const list = document.getElementById('abuseBlocksList');
+        if (list) delete list.dataset.waitingOwnerContext;
         renderAbuseBlocks();
       } catch (e) {
-        document.getElementById('abuseBlocksList').innerHTML = '<div class="danger">Errore caricamento blocchi.</div>';
+        const list = document.getElementById('abuseBlocksList');
+        if (list) list.innerHTML = '<div class="muted">Protezione anti-abuso non disponibile in questo momento.</div>';
       }
     }
 
     async function loadBlockedAttempts(){
       try {
         const { code, plate } = getOwnerParams();
+
+        // Su Android/PWA può servire qualche istante prima che code/plate siano stabili.
+        // In quel caso non mostriamo errore: ritentiamo in modo silenzioso.
+        if (!code || !plate) {
+          const list = document.getElementById('blockedAttemptsList');
+          if (list && !list.dataset.waitingOwnerContext) {
+            list.dataset.waitingOwnerContext = '1';
+            list.innerHTML = '<div class="muted">Verifica tentativi bloccati in corso...</div>';
+          }
+          setTimeout(loadBlockedAttempts, 1200);
+          return;
+        }
+
         const res = await fetch('/api/owner/list-blocked-attempts', {
           method:'POST',
           headers:{'Content-Type':'application/json'},
@@ -3011,13 +3040,16 @@ function getOwnerParams(){
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
-          document.getElementById('blockedAttemptsList').innerHTML = '<div class="danger">Errore caricamento tentativi bloccati.</div>';
+          document.getElementById('blockedAttemptsList').innerHTML = '<div class="muted">Tentativi bloccati non disponibili in questo momento.</div>';
           return;
         }
         ownerBlockedAttempts = data.items || [];
+        const list = document.getElementById('blockedAttemptsList');
+        if (list) delete list.dataset.waitingOwnerContext;
         renderBlockedAttempts();
       } catch (e) {
-        document.getElementById('blockedAttemptsList').innerHTML = '<div class="danger">Errore caricamento tentativi bloccati.</div>';
+        const list = document.getElementById('blockedAttemptsList');
+        if (list) list.innerHTML = '<div class="muted">Tentativi bloccati non disponibili in questo momento.</div>';
       }
     }
 
@@ -4440,8 +4472,8 @@ function getOwnerParams(){
 
     loadOwnerMessages();
     setTimeout(loadOwnerInvitesPanel, 1200);
-    loadOwnerAbuseBlocks();
-    loadBlockedAttempts();
+    setTimeout(loadOwnerAbuseBlocks, 1200);
+    setTimeout(loadBlockedAttempts, 1600);
     setInterval(loadOwnerMessages, 15000);
     setInterval(loadOwnerAbuseBlocks, 30000);
     setInterval(loadBlockedAttempts, 30000);
