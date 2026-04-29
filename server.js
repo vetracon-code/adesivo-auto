@@ -1972,11 +1972,27 @@ app.get('/owner-print-sign.html', async (req, res) => {
       return res.status(404).send('Record non trovato.');
     }
 
-    const row = found.rows[0];
-    const dbPlate = String(row.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+    let row = found.rows[0];
+    let dbPlate = String(row.plate || '').trim().toUpperCase().replace(/\s+/g, '');
 
+    // Android/PWA può conservare un vecchio code nel contesto salvato.
+    // Se la targa è presente ma non corrisponde al code, proviamo a risolvere il record dalla targa.
     if (cleanPlate && dbPlate !== cleanPlate) {
-      return res.status(401).send('Targa non corrispondente al codice.');
+      const fallbackByPlate = await pool.query(
+        `SELECT code, public_id, qr_url, plate, brand, vehicle_model
+         FROM sticker_codes
+         WHERE REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $1
+         ORDER BY activated_at DESC NULLS LAST, id DESC
+         LIMIT 1`,
+        [cleanPlate]
+      );
+
+      if (!fallbackByPlate.rows.length) {
+        return res.status(401).send('Targa non corrispondente al codice.');
+      }
+
+      row = fallbackByPlate.rows[0];
+      dbPlate = String(row.plate || '').trim().toUpperCase().replace(/\s+/g, '');
     }
 
     let qrValue = '';
