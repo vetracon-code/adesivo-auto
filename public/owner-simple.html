@@ -3171,12 +3171,35 @@ function getOwnerParams(){
 
     window.deleteMessage = async function(id){
       const { code, plate } = getOwnerParams();
-      await fetch('/api/owner-messages/delete', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ code, plate, id })
-      });
-      await loadOwnerMessages();
+
+      if (!code || !plate || !id) {
+        alert('Dati messaggio non pronti. Premi Aggiorna App e riprova.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/owner-messages/delete', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ code, plate, id })
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.success) {
+          alert(data.error || 'Errore eliminazione messaggio.');
+          return;
+        }
+
+        // Rimozione immediata dalla UI, senza aspettare il refresh Android/PWA.
+        ownerMessages = (ownerMessages || []).filter(m => Number(m.id) !== Number(id));
+        renderMessages();
+
+        // Riallineamento silenzioso col server.
+        setTimeout(loadOwnerMessages, 400);
+      } catch (e) {
+        alert('Errore eliminazione messaggio.');
+      }
     }
 
 
