@@ -2737,7 +2737,7 @@ app.post('/api/trial-request', async (req, res) => {
   try {
     const {
       phone, plate, brand, vehicle_model, color,
-      privacy_consent, marketing_consent
+      privacy_consent, marketing_consent, privacy_version
     } = req.body || {};
 
     const phoneNorm = normalizeItalianMobileForOtp(phone);
@@ -2747,6 +2747,7 @@ app.post('/api/trial-request', async (req, res) => {
     const cleanBrand = String(brand || '').trim();
     const cleanModel = String(vehicle_model || '').trim();
     const cleanColor = String(color || '').trim();
+    const cleanPrivacyVersion = String(privacy_version || 'privacy-contatto-veicolo-2026-04-29').trim();
 
     if (!cleanPhone || !phoneNorm.isValid || !cleanPlate || !cleanBrand || !cleanModel || !privacy_consent) {
       return res.status(400).json({
@@ -2762,8 +2763,8 @@ app.post('/api/trial-request', async (req, res) => {
       `INSERT INTO trial_requests
        (full_name, phone, email, plate, brand, vehicle_model, color, notes,
         privacy_consent, marketing_consent, source_page, created_at,
-        otp_code, otp_expires_at, otp_status, phone_whatsapp)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),$12,$13,$14,$15)
+        otp_code, otp_expires_at, otp_status, phone_whatsapp, privacy_version)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),$12,$13,$14,$15,$16)
        RETURNING id`,
       [
         'Cliente',
@@ -2780,7 +2781,8 @@ app.post('/api/trial-request', async (req, res) => {
         otpCode,
         otpExpiresAt,
         'pending_otp',
-        cleanPhoneWhatsapp
+        cleanPhoneWhatsapp,
+        cleanPrivacyVersion
       ]
     );
 
@@ -7181,6 +7183,7 @@ async function initDb() {
     await pool.query("ALTER TABLE trial_requests ADD COLUMN IF NOT EXISTS otp_verified_at TIMESTAMP");
     await pool.query("ALTER TABLE trial_requests ADD COLUMN IF NOT EXISTS otp_status TEXT");
     await pool.query("ALTER TABLE trial_requests ADD COLUMN IF NOT EXISTS phone_whatsapp TEXT");
+    await pool.query("ALTER TABLE trial_requests ADD COLUMN IF NOT EXISTS privacy_version TEXT");
 
     console.log('Tabella sticker_codes pronta');
     console.log('Tabella qr_scans pronta');
