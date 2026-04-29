@@ -3127,59 +3127,46 @@ function getOwnerParams(){
     async function loadOwnerMessages(){
       try {
         const { code, plate } = getOwnerParams();
+        const list = document.getElementById('messagesList');
+
+        // Android/PWA può impiegare qualche istante a stabilizzare code/plate.
+        // Se mancano, non mostriamo errore e non svuotiamo la lista.
+        if (!code || !plate) {
+          if (list && !ownerMessages.length) {
+            list.innerHTML = '<div class="muted">Caricamento messaggi...</div>';
+          }
+          clearTimeout(window.__ownerMessagesRetryTimer);
+          window.__ownerMessagesRetryTimer = setTimeout(loadOwnerMessages, 900);
+          return;
+        }
+
         const res = await fetch('/api/owner-messages', {
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ code, plate })
         });
-        const data = await res.json();
+
+        const data = await res.json().catch(() => ({}));
 
         if (!res.ok || !data.success) {
-          document.getElementById('messagesList').innerHTML = '<div class="danger">Errore caricamento messaggi.</div>';
+          if (list && !ownerMessages.length) {
+            list.innerHTML = '<div class="muted">Sto recuperando i messaggi ricevuti...</div>';
+          }
+          clearTimeout(window.__ownerMessagesRetryTimer);
+          window.__ownerMessagesRetryTimer = setTimeout(loadOwnerMessages, 1600);
           return;
         }
 
         ownerMessages = data.items || [];
         renderMessages();
-
-        try {
-          const params = new URLSearchParams(window.location.search);
-          const messageId = Number(params.get('messageId') || '0');
-
-          if (messageId && autoOpenedMessageId !== messageId) {
-            const target = ownerMessages.find(m => Number(m.id) === messageId);
-            if (target) {
-              autoOpenedMessageId = messageId;
-
-              setTimeout(() => {
-                window.openMessageDetail(messageId);
-              }, 250);
-
-              params.delete('messageId');
-              const newQs = params.toString();
-              const newUrl = `${window.location.pathname}${newQs ? '?' + newQs : ''}`;
-              window.history.replaceState({}, '', newUrl);
-            }
-          }
-        } catch (e) {}
       } catch (e) {
-        document.getElementById('messagesList').innerHTML = '<div class="danger">Errore caricamento messaggi.</div>';
+        const list = document.getElementById('messagesList');
+        if (list && !ownerMessages.length) {
+          list.innerHTML = '<div class="muted">Sto recuperando i messaggi ricevuti...</div>';
+        }
+        clearTimeout(window.__ownerMessagesRetryTimer);
+        window.__ownerMessagesRetryTimer = setTimeout(loadOwnerMessages, 1800);
       }
-    }
-
-    window.toggleMessageSelect = function(id){
-      if (selectedMessageIds.has(id)) selectedMessageIds.delete(id);
-      else selectedMessageIds.add(id);
-    }
-
-    window.markMessageRead = async function(id){
-      const { code, plate } = getOwnerParams();
-      await fetch('/api/owner-messages/read', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ code, plate, id })
-      });
-      await loadOwnerMessages();
     }
 
     window.deleteMessage = async function(id){
