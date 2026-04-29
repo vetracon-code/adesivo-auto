@@ -1340,6 +1340,34 @@
   }
 </style>
 
+<style id="system-activity-map-dots-fix">
+  .system-activity-dot{
+    position:absolute;
+    transform:translate(-50%,-50%);
+    min-width:26px;
+    height:26px;
+    padding:0 7px;
+    border-radius:999px;
+    border:2px solid #ffffff;
+    background:#2f5fad;
+    color:#ffffff;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    font-size:.68rem;
+    font-weight:900;
+    line-height:1;
+    z-index:80;
+    box-shadow:0 8px 18px rgba(47,95,173,.34);
+    pointer-events:auto;
+  }
+
+  .system-activity-dot.north{ left:36.4%; top:18.4%; }
+  .system-activity-dot.center{ left:46.2%; top:46.1%; }
+  .system-activity-dot.south{ left:54.0%; top:69.5%; }
+  .system-activity-dot.islands{ left:39.0%; top:84.0%; }
+</style>
+
 
 <style id="android-install-push-fix-style">
   .android-install-box {
@@ -2123,7 +2151,138 @@ function areaBucket(city, region){
       return fallback[bucket] || fallback.center;
     }
 
-    function renderItalyMapGroups(events){
+    
+function renderSystemActivityMapDots(events){
+  try {
+    const visualBox = document.getElementById('mapVisualBox');
+    if (!visualBox) return;
+
+    let wrap = visualBox.querySelector('.italy-map-wrap-real');
+    if (!wrap) {
+      visualBox.innerHTML = `
+        <div class="italy-map-wrap-real">
+          <img class="italy-real-map" src="/assets/italy-real.svg" alt="Mappa Italia">
+        </div>`;
+      wrap = visualBox.querySelector('.italy-map-wrap-real');
+    }
+
+    if (!wrap) return;
+
+    wrap.querySelectorAll('.system-activity-dot').forEach(el => el.remove());
+
+    const buckets = { north: 0, center: 0, south: 0, islands: 0 };
+
+    function clean(v){
+      return String(v || '').trim().toLowerCase();
+    }
+
+    function bucket(ev){
+      const city = clean(ev.ip_city);
+      const region = clean(ev.ip_region);
+      const country = clean(ev.ip_country);
+
+      if (country && country !== 'it' && country !== 'italy' && country !== 'italia') {
+        return '';
+      }
+
+      if (
+        city.includes('milan') ||
+        city.includes('milano') ||
+        city.includes('monza') ||
+        region.includes('lombardy') ||
+        region.includes('lombardia') ||
+        region.includes('piedmont') ||
+        region.includes('piemonte') ||
+        region.includes('veneto') ||
+        region.includes('liguria') ||
+        region.includes('emilia') ||
+        region.includes('trentino') ||
+        region.includes('friuli') ||
+        region.includes('aosta')
+      ) return 'north';
+
+      if (
+        city.includes('rome') ||
+        city.includes('roma') ||
+        city.includes('florence') ||
+        city.includes('firenze') ||
+        region.includes('lazio') ||
+        region.includes('tuscany') ||
+        region.includes('toscana') ||
+        region.includes('umbria') ||
+        region.includes('marche') ||
+        region.includes('abruzzo')
+      ) return 'center';
+
+      if (
+        region.includes('sicily') ||
+        region.includes('sicilia') ||
+        region.includes('sardinia') ||
+        region.includes('sardegna')
+      ) return 'islands';
+
+      if (
+        region.includes('campania') ||
+        region.includes('puglia') ||
+        region.includes('apulia') ||
+        region.includes('calabria') ||
+        region.includes('basilicata') ||
+        region.includes('molise')
+      ) return 'south';
+
+      return city || region || country ? 'north' : '';
+    }
+
+    (events || []).forEach(ev => {
+      if (!ev) return;
+      const hasGeo =
+        String(ev.ip_city || '').trim() ||
+        String(ev.ip_region || '').trim() ||
+        String(ev.ip_country || '').trim();
+
+      if (!hasGeo) return;
+
+      const b = bucket(ev);
+      if (b && buckets[b] !== undefined) buckets[b] += 1;
+    });
+
+    Object.entries(buckets).forEach(([key, count]) => {
+      if (!count) return;
+
+      const dot = document.createElement('button');
+      dot.type = 'button';
+      dot.className = 'system-activity-dot ' + key;
+      dot.textContent = String(count);
+      dot.setAttribute('aria-label', 'Attività registrate dal sistema: ' + count);
+      dot.addEventListener('click', function(){
+        if (typeof renderAreaPointDetails === 'function') {
+          const grouped = typeof buildAreaGroups === 'function' ? buildAreaGroups(events) : {};
+          renderAreaPointDetails(key, grouped);
+        }
+      });
+
+      wrap.appendChild(dot);
+    });
+
+    const note = document.querySelector('.italy-map-note');
+    if (note) {
+      note.textContent = 'Attività registrate dal sistema. I punti indicano le aree da cui sono arrivate aperture, prove o segnalazioni.';
+    }
+
+    const lastAreaText = document.getElementById('lastAreaText');
+    const first = (events || []).find(ev => ev && (ev.ip_city || ev.ip_region || ev.ip_country));
+    if (first && lastAreaText) {
+      lastAreaText.textContent = [first.ip_city, first.ip_region].filter(Boolean).join(', ') || 'Italia';
+    }
+
+    window.__SYSTEM_ACTIVITY_MAP_BUCKETS__ = buckets;
+  } catch(e) {
+    console.warn('renderSystemActivityMapDots error:', e);
+  }
+}
+
+
+function renderItalyMapGroups(events){
       const visualBox = qs('mapVisualBox');
       const countryValues = (events || []).map(ev => String(ev.ip_country || '').trim()).filter(Boolean);
       const normalizedCountries = [...new Set(countryValues.map(v => v.toLowerCase()))];
@@ -2399,7 +2558,16 @@ if(!res.ok || !data.success){
           localStorage.setItem('owner_saved_plate', String(d.plate).trim().toUpperCase().replace(/\s+/g, ''));
         }
       } catch (e) {}
-      const events = d.events || [];
+      const events = Array.isArray(d.events) ? d.events : [];
+
+      try {
+        renderSystemActivityMapDots(events);
+        setTimeout(() => renderSystemActivityMapDots(events), 500);
+        setTimeout(() => renderSystemActivityMapDots(events), 1500);
+        setTimeout(() => renderSystemActivityMapDots(events), 3000);
+      } catch(e) {
+        console.warn('system activity map dots init error:', e);
+      }
       const views = Number(d.viewsCount || 0);
       const messages = Number(d.messagesCount || 0);
       const score = scoreFromData(views, messages);
