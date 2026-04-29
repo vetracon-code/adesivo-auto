@@ -2277,11 +2277,74 @@ function areaBucket(city, region){
       URL.revokeObjectURL(url);
     }
 
+    function getDashboardOwnerContext(){
+      let code = '';
+      let plate = '';
+      let ownerToken = '';
+
+      try {
+        const params = new URLSearchParams(window.location.search || '');
+        code = params.get('code') || '';
+        plate = params.get('plate') || '';
+        ownerToken = params.get('ownerToken') || '';
+      } catch(e) {}
+
+      try {
+        if ((!code || !plate) && typeof getOwnerParams === 'function') {
+          const ctx = getOwnerParams() || {};
+          if (!code) code = ctx.code || '';
+          if (!plate) plate = ctx.plate || '';
+        }
+      } catch(e) {}
+
+      try {
+        if (!code && window.__OWNER_CODE__) code = window.__OWNER_CODE__;
+        if (!plate && window.__OWNER_PLATE__) plate = window.__OWNER_PLATE__;
+      } catch(e) {}
+
+      try {
+        if (!code && document.body && document.body.dataset) code = document.body.dataset.ownerCode || '';
+        if (!plate && document.body && document.body.dataset) plate = document.body.dataset.ownerPlate || '';
+      } catch(e) {}
+
+      try {
+        const m = String(window.location.pathname || '').match(/\/owner-app\/([^\/?#]+)\/([^\/?#]+)/i);
+        if (m) {
+          if (!code) code = decodeURIComponent(m[1] || '');
+          if (!plate) plate = decodeURIComponent(m[2] || '');
+        }
+      } catch(e) {}
+
+      try {
+        if (!code) code = localStorage.getItem('owner_saved_code') || localStorage.getItem('owner_code') || '';
+        if (!plate) plate = localStorage.getItem('owner_saved_plate') || localStorage.getItem('owner_plate') || '';
+      } catch(e) {}
+
+      code = String(code || '').trim().toUpperCase();
+      plate = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+      if (code && plate) {
+        try {
+          window.__OWNER_CODE__ = code;
+          window.__OWNER_PLATE__ = plate;
+          if (document.body && document.body.dataset) {
+            document.body.dataset.ownerCode = code;
+            document.body.dataset.ownerPlate = plate;
+          }
+          localStorage.setItem('owner_saved_code', code);
+          localStorage.setItem('owner_saved_plate', plate);
+          localStorage.setItem('owner_saved_at', new Date().toISOString());
+        } catch(e) {}
+      }
+
+      return { code, plate, ownerToken };
+    }
+
     async function loadSimpleDashboard() {
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get('code') || '';
-      const plate = params.get('plate') || '';
-      const ownerToken = params.get('ownerToken') || '';
+      const ownerCtx = getDashboardOwnerContext();
+      const code = ownerCtx.code || '';
+      const plate = ownerCtx.plate || '';
+      const ownerToken = ownerCtx.ownerToken || '';
 
       if (ownerToken) {
         try { localStorage.setItem('owner_access_token', ownerToken); } catch(e) {}
