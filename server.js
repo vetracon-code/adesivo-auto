@@ -4830,6 +4830,228 @@ app.get('/api/admin/trial-requests', requireAdmin, async (req, res) => {
 
 
 
+
+async function generateTrialCodeFromRequestId(req, trialId) {
+  const host = req.get('host');
+  const isRenderHost = /onrender\.com$/i.test(host || '');
+  const baseUrl = isRenderHost ? `https://${host}` : `${req.protocol}://${host}`;
+
+  const trialRes = await pool.query(
+    `SELECT * FROM trial_requests WHERE id = $1 LIMIT 1`,
+    [trialId]
+  );
+
+  const trial = trialRes.rows[0];
+  if (!trial) {
+    const err = new Error('Richiesta non trovata.');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (trial.code && trial.public_id && trial.owner_access_token) {
+    const app_url = `${baseUrl.replace(/\/$/, '')}/owner-access/${trial.owner_access_token}`;
+    return {
+      code: trial.code,
+      public_id: trial.public_id,
+      owner_access_token: trial.owner_access_token,
+      app_url,
+      already_generated: true
+    };
+  }
+
+  let code = null;
+  let publicId = null;
+  let ownerAccessToken = null;
+
+  for (let i = 0; i < 20; i++) {
+    const tryCode = generateCode();
+    const tryPublicId = generatePublicId();
+    const tryToken = generateOwnerAccessToken();
+
+    const existsCode = await pool.query('SELECT 1 FROM sticker_codes WHERE code = $1 LIMIT 1', [tryCode]);
+    const existsPid = await pool.query('SELECT 1 FROM sticker_codes WHERE public_id = $1 LIMIT 1', [tryPublicId]);
+
+    if (!existsCode.rows.length && !existsPid.rows.length) {
+      code = tryCode;
+      publicId = tryPublicId;
+      ownerAccessToken = tryToken;
+      break;
+    }
+  }
+
+  if (!code || !publicId || !ownerAccessToken) {
+    throw new Error('Impossibile generare un codice univoco.');
+  }
+
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  const qrUrl = `${baseUrl.replace(/\/$/, '')}/contact/u/${encodeURIComponent(publicId)}`;
+
+  await pool.query(
+    `INSERT INTO sticker_codes
+     (code, public_id, status, plan_type, expires_at, owner_access_token, qr_url, offered_by,
+      brand, plate, vehicle_model, color, phone, activated_at)
+     VALUES
+     ($1, $2, 'used', '1month', $3, $4, $5, $6,
+      $7, $8, $9, $10, $11, NOW())`,
+    [
+      code,
+      publicId,
+      expiresAt,
+      ownerAccessToken,
+      qrUrl,
+      'Prova gratuita',
+      trial.brand || null,
+      String(trial.plate || '').trim().toUpperCase().replace(/\s+/g, ''),
+      trial.vehicle_model || null,
+      trial.color || null,
+      trial.phone || null
+    ]
+  );
+
+  await pool.query(
+    `UPDATE trial_requests
+     SET code = $2,
+         public_id = $3,
+         owner_access_token = $4,
+         generated_at = NOW(),
+         otp_status = COALESCE(otp_status, 'verified')
+     WHERE id = $1`,
+    [trialId, code, publicId, ownerAccessToken]
+  );
+
+  const app_url = `${baseUrl.replace(/\/$/, '')}/owner-access/${ownerAccessToken}`;
+
+  return {
+    code,
+    public_id: publicId,
+    owner_access_token: ownerAccessToken,
+    app_url,
+    already_generated: false
+  };
+}
+
+
+app.get('/api/trial-request/:id/public', async (req, res) => {
+  try {
+    const id = Number(req.params.id || 0);
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'ID richiesta obbligatorio.' });
+    }
+
+    const result = await pool.query(
+      `SELECT id, plate, brand, vehicle_model, color, otp_status, generated_at, created_at
+       FROM trial_requests
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, error: 'Richiesta non trovata.' });
+    }
+
+    return res.json({ success: true, item: result.rows[0] });
+  } catch (err) {
+    console.error('public trial request detail error:', err);
+    return res.status(500).json({ success: false, error: 'Errore caricamento richiesta.' });
+  }
+});
+
+
+app.post('/api/trial-request/:id/verify-otp', async (req, res) => {
+  try {
+    const id = Number(req.params.id || 0);
+    const otp = String(req.body?.otp || '').trim().replace(/\D/g, '');
+
+    if (!id || !otp) {
+      return res.status(400).json({ success: false, error: 'Inserisci il codice OTP ricevuto.' });
+    }
+
+    const result = await pool.query(
+      `SELECT *
+       FROM trial_requests
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+
+    const trial = result.rows[0];
+
+    if (!trial) {
+      return res.status(404).json({ success: false, error: 'Richiesta non trovata.' });
+    }
+
+    if (trial.code && trial.public_id && trial.owner_access_token) {
+      const generated = await generateTrialCodeFromRequestId(req, id);
+      return res.json({
+        success: true,
+        already_verified: true,
+        already_generated: true,
+        app_url: generated.app_url,
+        code: generated.code,
+        public_id: generated.public_id
+      });
+    }
+
+    if (!trial.otp_code || String(trial.otp_code).trim() !== otp) {
+      return res.status(400).json({ success: false, error: 'Codice OTP non corretto.' });
+    }
+
+    if (trial.otp_expires_at && new Date(trial.otp_expires_at) < new Date()) {
+      return res.status(400).json({ success: false, error: 'Codice OTP scaduto. Richiedi un nuovo codice.' });
+    }
+
+    await pool.query(
+      `UPDATE trial_requests
+       SET otp_verified_at = NOW(),
+           otp_status = 'verified'
+       WHERE id = $1`,
+      [id]
+    );
+
+    const generated = await generateTrialCodeFromRequestId(req, id);
+
+    try {
+      const trialPushCode = 'AMC-E8493C7F';
+      const trialPushPlate = 'GL740CH';
+      const nowLabel = new Date().toLocaleString('it-IT');
+      const msgText = [
+        'Prova gratuita attivata automaticamente con OTP',
+        `Data e ora: ${nowLabel}`,
+        `Targa: ${String(trial.plate || '').trim().toUpperCase()}`,
+        `Veicolo: ${[trial.brand, trial.vehicle_model].filter(Boolean).join(' ')}`,
+        `Codice: ${generated.code}`
+      ].filter(Boolean).join('\n');
+
+      await pool.query(
+        `INSERT INTO contact_message_logs
+         (code, plate, reason, message_text, location_shared, created_at)
+         VALUES ($1,$2,$3,$4,FALSE,NOW())`,
+        [trialPushCode, trialPushPlate, 'Prova attivata con OTP', msgText]
+      );
+    } catch (notifyErr) {
+      console.error('otp auto activation log error:', notifyErr);
+    }
+
+    return res.json({
+      success: true,
+      message: 'OTP verificato. Prova gratuita attivata.',
+      app_url: generated.app_url,
+      code: generated.code,
+      public_id: generated.public_id
+    });
+  } catch (err) {
+    console.error('verify otp trial request error:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Errore verifica OTP.',
+      debug_message: err?.message || null
+    });
+  }
+});
+
+
+
 app.get('/api/admin/trial-request/:id', requireAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id || 0);
@@ -4854,7 +5076,20 @@ app.get('/api/admin/trial-request/:id', requireAdmin, async (req, res) => {
     const whatsappNumber = item.phone_whatsapp || phoneNorm.whatsapp;
     const otpCode = item.otp_code || '';
 
-    const whatsappText = `Ciao, per completare l’attivazione della prova gratuita Contatto Veicolo inserisci questo codice: ${otpCode}`;
+    const host = req.get('host');
+    const isRenderHost = /onrender\.com$/i.test(host || '');
+    const baseUrl = isRenderHost ? `https://${host}` : `${req.protocol}://${host}`;
+    const verifyUrl = `${baseUrl.replace(/\/$/, '')}/verifica-otp.html?id=${encodeURIComponent(item.id)}`;
+
+    const whatsappText = [
+      'Ciao, per completare l’attivazione della prova gratuita Contatto Veicolo inserisci questo codice:',
+      '',
+      otpCode,
+      '',
+      'Apri questa pagina e conferma:',
+      verifyUrl
+    ].join('\n');
+
     const whatsappUrl = whatsappNumber
       ? `https://wa.me/${encodeURIComponent(whatsappNumber)}?text=${encodeURIComponent(whatsappText)}`
       : '';

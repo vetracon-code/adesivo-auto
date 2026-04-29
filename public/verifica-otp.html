@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Verifica OTP · Contatto Veicolo</title>
+  <style>
+    :root{--bg:#07111f;--card:#0d1b2f;--text:#f7fbff;--muted:#9fb0c6;--accent:#5aa0ff;--ok:#22c55e;--danger:#ef4444}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:radial-gradient(circle at top,#16345d 0,#07111f 58%);color:var(--text);padding:18px;display:flex;align-items:center;justify-content:center}
+    .wrap{width:100%;max-width:520px}
+    .card{background:rgba(13,27,47,.94);border:1px solid rgba(255,255,255,.08);border-radius:26px;padding:22px;box-shadow:0 22px 70px rgba(0,0,0,.34)}
+    .kicker{font-size:.76rem;text-transform:uppercase;letter-spacing:.08em;color:#9fc5ff;font-weight:900}
+    h1{font-size:1.7rem;line-height:1.05;margin:10px 0 10px;letter-spacing:-.04em}
+    .muted{color:var(--muted);line-height:1.5}
+    .vehicle{margin:16px 0;padding:14px;border-radius:18px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.07)}
+    .vehicle strong{display:block;font-size:1.1rem;margin-bottom:5px}
+    label{display:block;margin-top:16px;font-size:.82rem;font-weight:850;color:#d9e8ff}
+    input{width:100%;margin-top:7px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#fff;border-radius:16px;min-height:54px;padding:0 16px;font-size:1.45rem;letter-spacing:.18em;text-align:center;font-weight:900}
+    button,.btn{width:100%;min-height:52px;margin-top:14px;border:0;border-radius:16px;background:var(--accent);color:#fff;font-weight:950;font-size:1rem;cursor:pointer;text-decoration:none;display:flex;align-items:center;justify-content:center}
+    .btn.ok,button.ok{background:var(--ok);color:#052511}
+    .result{margin-top:14px;line-height:1.45;color:var(--muted)}
+    .err{color:#fecaca}
+    .successbox{display:none;margin-top:18px;padding:16px;border-radius:18px;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.28)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="kicker">Contatto Veicolo</div>
+      <h1>Verifica il codice ricevuto</h1>
+      <div class="muted">Inserisci il codice OTP che hai ricevuto per attivare automaticamente la prova gratuita.</div>
+
+      <div class="vehicle">
+        <strong id="vehicleTitle">Caricamento richiesta...</strong>
+        <div id="vehicleSub" class="muted">Attendi qualche secondo.</div>
+      </div>
+
+      <form id="otpForm">
+        <label for="otp">Codice OTP</label>
+        <input id="otp" name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="______" required>
+        <button id="submitBtn" type="submit">Verifica e attiva la prova</button>
+      </form>
+
+      <div id="result" class="result"></div>
+
+      <div id="successBox" class="successbox">
+        <strong>Prova attivata correttamente.</strong>
+        <div class="muted" style="margin-top:8px">La tua Web App proprietario è pronta.</div>
+        <a id="openAppBtn" class="btn ok" href="#">Apri la mia App</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const qs = new URLSearchParams(location.search);
+    const id = qs.get('id');
+    const resultEl = document.getElementById('result');
+    const vehicleTitle = document.getElementById('vehicleTitle');
+    const vehicleSub = document.getElementById('vehicleSub');
+    const form = document.getElementById('otpForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const successBox = document.getElementById('successBox');
+    const openAppBtn = document.getElementById('openAppBtn');
+
+    function setResult(msg, isErr){
+      resultEl.textContent = msg || '';
+      resultEl.className = isErr ? 'result err' : 'result';
+    }
+
+    async function loadRequest(){
+      if(!id){
+        vehicleTitle.textContent = 'Richiesta non valida';
+        vehicleSub.textContent = 'ID richiesta mancante.';
+        return;
+      }
+
+      try{
+        const res = await fetch('/api/trial-request/' + encodeURIComponent(id) + '/public', { cache:'no-store' });
+        const data = await res.json().catch(() => ({}));
+
+        if(!res.ok || !data.success){
+          vehicleTitle.textContent = 'Richiesta non trovata';
+          vehicleSub.textContent = data.error || 'Impossibile caricare la richiesta.';
+          return;
+        }
+
+        const item = data.item || {};
+        vehicleTitle.textContent = [item.brand, item.vehicle_model].filter(Boolean).join(' ') || 'Veicolo';
+        vehicleSub.textContent = item.plate ? ('Targa ' + item.plate) : 'Prova gratuita Contatto Veicolo';
+      }catch(e){
+        vehicleTitle.textContent = 'Errore caricamento';
+        vehicleSub.textContent = 'Riprova tra qualche secondo.';
+      }
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      setResult('');
+      successBox.style.display = 'none';
+
+      const otp = document.getElementById('otp').value.trim();
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'VERIFICA IN CORSO...';
+
+      try{
+        const res = await fetch('/api/trial-request/' + encodeURIComponent(id) + '/verify-otp', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ otp })
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if(!res.ok || !data.success){
+          throw new Error(data.error || 'Codice non valido.');
+        }
+
+        setResult(data.message || 'OTP verificato.');
+        if(data.app_url){
+          openAppBtn.href = data.app_url;
+          successBox.style.display = 'block';
+          form.style.display = 'none';
+        }
+      }catch(err){
+        setResult(err.message || 'Errore verifica OTP.', true);
+      }finally{
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Verifica e attiva la prova';
+      }
+    });
+
+    loadRequest();
+  </script>
+</body>
+</html>
