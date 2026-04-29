@@ -3170,7 +3170,28 @@ function getOwnerParams(){
     }
 
     window.deleteMessage = async function(id){
-      const { code, plate } = getOwnerParams();
+      const msg = (ownerMessages || []).find(m => Number(m.id) === Number(id));
+
+      let code = '';
+      let plate = '';
+
+      // Priorità massima: usa i dati reali del messaggio, non il contesto Android/PWA.
+      if (msg) {
+        code = msg.code || '';
+        plate = msg.plate || '';
+      }
+
+      // Fallback solo se il messaggio non è stato trovato in memoria.
+      if (!code || !plate) {
+        try {
+          const ctx = getOwnerParams();
+          code = ctx.code || '';
+          plate = ctx.plate || '';
+        } catch(e) {}
+      }
+
+      code = String(code || '').trim().toUpperCase();
+      plate = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
 
       if (!code || !plate || !id) {
         alert('Dati messaggio non pronti. Premi Aggiorna App e riprova.');
@@ -3191,12 +3212,12 @@ function getOwnerParams(){
           return;
         }
 
-        // Rimozione immediata dalla UI, senza aspettare il refresh Android/PWA.
+        // Rimozione immediata dalla UI.
         ownerMessages = (ownerMessages || []).filter(m => Number(m.id) !== Number(id));
         renderMessages();
 
         // Riallineamento silenzioso col server.
-        setTimeout(loadOwnerMessages, 400);
+        setTimeout(loadOwnerMessages, 500);
       } catch (e) {
         alert('Errore eliminazione messaggio.');
       }
