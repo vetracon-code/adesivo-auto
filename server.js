@@ -1571,6 +1571,12 @@ app.get('/owner-manifest.json', async (req, res) => {
     appName = String(appName || 'TARGA').trim().toUpperCase();
 
     res.setHeader('Content-Type', 'application/manifest+json');
+    if (String(req.query.download || '') === '1') {
+      const filePlate = cleanPlate || 'contatto-veicolo';
+      res.setHeader('Content-Disposition', `attachment; filename="contatto-veicolo-${filePlate}.html"`);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    }
+
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
     return res.json({
@@ -2517,7 +2523,7 @@ app.get('/owner-print-sign.html', async (req, res) => {
     : '/owner-login.html';
 
   var pdfUrl = (code && plate)
-    ? '/api/owner/sticker-print-pdf?code=' + encodeURIComponent(code) + '&plate=' + encodeURIComponent(plate)
+    ? '/owner-print-sign.html?download=1&code=' + encodeURIComponent(code) + '&plate=' + encodeURIComponent(plate)
     : '#';
 
   var backBtn = document.getElementById('ownerPrintBackBtn');
