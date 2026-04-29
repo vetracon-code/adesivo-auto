@@ -2329,8 +2329,107 @@ app.get('/owner-print-sign.html', async (req, res) => {
       color: #000;
     }
   </style>
+
+<style id="owner-print-topbar-v1">
+  .owner-print-topbar{
+    position:fixed;
+    top:0;
+    left:0;
+    right:0;
+    z-index:999999;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+    padding:10px 12px;
+    box-sizing:border-box;
+    background:rgba(7,17,28,.92);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid rgba(255,255,255,.10);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  }
+
+  .owner-print-topbar-left,
+  .owner-print-topbar-right{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+
+  .owner-print-action{
+    min-height:38px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border:0;
+    border-radius:12px;
+    padding:0 13px;
+    font-size:13px;
+    line-height:1;
+    font-weight:850;
+    text-decoration:none;
+    cursor:pointer;
+    white-space:nowrap;
+    color:#ffffff;
+    background:#2b6eea;
+    box-shadow:0 8px 20px rgba(43,110,234,.22);
+  }
+
+  .owner-print-action.secondary{
+    background:rgba(255,255,255,.10);
+    color:#ffffff;
+    border:1px solid rgba(255,255,255,.12);
+    box-shadow:none;
+  }
+
+  .owner-print-action.download{
+    background:#18a058;
+    box-shadow:0 8px 20px rgba(24,160,88,.20);
+  }
+
+  .owner-print-page-offset{
+    height:62px;
+  }
+
+  @media print{
+    .owner-print-topbar,
+    .owner-print-page-offset{
+      display:none !important;
+    }
+  }
+
+  @media(max-width:520px){
+    .owner-print-topbar{
+      align-items:stretch;
+      flex-direction:column;
+    }
+    .owner-print-topbar-left,
+    .owner-print-topbar-right{
+      width:100%;
+      justify-content:space-between;
+    }
+    .owner-print-action{
+      flex:1;
+      padding:0 10px;
+    }
+  }
+</style>
+
 </head>
 <body>
+
+<div class="owner-print-topbar" id="ownerPrintTopbar">
+  <div class="owner-print-topbar-left">
+    <button type="button" class="owner-print-action secondary" id="ownerPrintBackBtn">← Torna all’App</button>
+  </div>
+  <div class="owner-print-topbar-right">
+    <button type="button" class="owner-print-action" id="ownerPrintNowBtn">Stampa</button>
+    <a class="owner-print-action download" id="ownerPrintDownloadBtn" href="#" download>Scarica file</a>
+  </div>
+</div>
+<div class="owner-print-page-offset"></div>
+
   <div class="no-print">
     <div>
       <div class="no-print-title">Contatto Veicolo — Cartello V15</div>
@@ -2394,6 +2493,66 @@ app.get('/owner-print-sign.html', async (req, res) => {
       <div>v15 Test Layout</div>
     </div>
   </div>
+
+<script id="owner-print-topbar-script-v1">
+(function(){
+  function qs(name){
+    try { return new URLSearchParams(window.location.search || '').get(name) || ''; }
+    catch(e){ return ''; }
+  }
+
+  function cleanCode(v){
+    return String(v || '').trim().toUpperCase();
+  }
+
+  function cleanPlate(v){
+    return String(v || '').trim().toUpperCase().replace(/\s+/g, '');
+  }
+
+  var code = cleanCode(qs('code'));
+  var plate = cleanPlate(qs('plate'));
+
+  var ownerAppUrl = (code && plate)
+    ? '/owner-app/' + encodeURIComponent(code) + '/' + encodeURIComponent(plate)
+    : '/owner-login.html';
+
+  var pdfUrl = (code && plate)
+    ? '/api/owner/sticker-print-pdf?code=' + encodeURIComponent(code) + '&plate=' + encodeURIComponent(plate)
+    : '#';
+
+  var backBtn = document.getElementById('ownerPrintBackBtn');
+  var printBtn = document.getElementById('ownerPrintNowBtn');
+  var downloadBtn = document.getElementById('ownerPrintDownloadBtn');
+
+  if (downloadBtn) {
+    downloadBtn.href = pdfUrl;
+    downloadBtn.setAttribute('download', plate ? ('contatto-veicolo-' + plate + '.pdf') : 'contatto-veicolo.pdf');
+  }
+
+  if (printBtn) {
+    printBtn.addEventListener('click', function(){
+      window.print();
+    });
+  }
+
+  if (backBtn) {
+    backBtn.addEventListener('click', function(){
+      try {
+        if (window.history.length > 1 && document.referrer && document.referrer.indexOf(location.origin) === 0) {
+          window.history.back();
+          setTimeout(function(){
+            if (!document.hidden) window.location.href = ownerAppUrl;
+          }, 650);
+          return;
+        }
+      } catch(e) {}
+
+      window.location.href = ownerAppUrl;
+    });
+  }
+})();
+</script>
+
 </body>
 </html>`;
 
