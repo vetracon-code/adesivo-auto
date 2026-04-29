@@ -3159,6 +3159,30 @@ function getOwnerParams(){
 
         ownerMessages = data.items || [];
         renderMessages();
+
+        // Fallback mappa: alcune Web App ricevono correttamente i messaggi,
+        // ma la dashboard non passa sempre eventi alla mappa.
+        // I messaggi contengono già ip_city/ip_region/ip_country, quindi li usiamo
+        // per mostrare i cerchi area su tutte le App.
+        try {
+          const mapEventsFromMessages = (ownerMessages || []).filter(ev =>
+            ev && (
+              String(ev.ip_city || '').trim() ||
+              String(ev.ip_region || '').trim() ||
+              String(ev.ip_country || '').trim()
+            )
+          );
+
+          if (mapEventsFromMessages.length) {
+            if (typeof renderItalyMapGroups === 'function') {
+              renderItalyMapGroups(mapEventsFromMessages);
+            } else if (typeof forceRenderAreaMapFromDashboard === 'function') {
+              forceRenderAreaMapFromDashboard({ events: mapEventsFromMessages });
+            }
+          }
+        } catch(e) {
+          console.warn('map fallback from owner messages error:', e);
+        }
       } catch (e) {
         const list = document.getElementById('messagesList');
         if (list && !ownerMessages.length) {
