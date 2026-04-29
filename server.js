@@ -3863,32 +3863,52 @@ app.post('/api/owner-messages/read-many', async (req, res) => {
 app.post('/api/owner-messages/delete', async (req, res) => {
   try {
     const { code, plate, id } = req.body || {};
-    if (!code || !plate || !id) {
+    const cleanCode = String(code || '').trim().toUpperCase();
+    const cleanPlate = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
+    const cleanId = Number(id);
+
+    if (!cleanCode || !cleanPlate || !Number.isFinite(cleanId)) {
       return res.status(400).json({ success: false, error: 'Dati mancanti.' });
     }
 
     const owner = await pool.query(
-      `SELECT code
+      `SELECT code, plate
        FROM sticker_codes
-       WHERE code = $1 AND plate = $2
+       WHERE code = $1
+         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
        LIMIT 1`,
-      [code, plate]
+      [cleanCode, cleanPlate]
     );
 
     if (!owner.rows.length) {
-      return res.status(404).json({ success: false, error: 'Record proprietario non trovato.' });
+      return res.status(404).json({
+        success: false,
+        error: 'Record proprietario non trovato.',
+        received: { code: cleanCode, plate: cleanPlate }
+      });
     }
 
-    await pool.query(
+    const deleted = await pool.query(
       `UPDATE contact_message_logs
        SET deleted_at = NOW()
-       WHERE id = $1 AND code = $2`,
-      [id, code]
+       WHERE id = $1
+         AND code = $2
+         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $3
+       RETURNING id`,
+      [cleanId, cleanCode, cleanPlate]
     );
 
-    return res.json({ success: true });
+    if (!deleted.rows.length) {
+      return res.status(404).json({
+        success: false,
+        error: 'Messaggio non trovato o già eliminato.',
+        received: { code: cleanCode, plate: cleanPlate, id: cleanId }
+      });
+    }
+
+    return res.json({ success: true, deleted_id: cleanId });
   } catch (err) {
-    console.error(err);
+    console.error('owner-messages/delete error:', err);
     return res.status(500).json({ success: false, error: 'Errore eliminazione messaggio.' });
   }
 });
@@ -3896,33 +3916,50 @@ app.post('/api/owner-messages/delete', async (req, res) => {
 app.post('/api/owner-messages/delete-many', async (req, res) => {
   try {
     const { code, plate, ids } = req.body || {};
-    if (!code || !plate || !Array.isArray(ids) || !ids.length) {
+    const cleanCode = String(code || '').trim().toUpperCase();
+    const cleanPlate = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
+    const cleanIds = Array.isArray(ids)
+      ? ids.map(x => Number(x)).filter(x => Number.isFinite(x))
+      : [];
+
+    if (!cleanCode || !cleanPlate || !cleanIds.length) {
       return res.status(400).json({ success: false, error: 'Dati mancanti.' });
     }
 
     const owner = await pool.query(
-      `SELECT code
+      `SELECT code, plate
        FROM sticker_codes
-       WHERE code = $1 AND plate = $2
+       WHERE code = $1
+         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
        LIMIT 1`,
-      [code, plate]
+      [cleanCode, cleanPlate]
     );
 
     if (!owner.rows.length) {
-      return res.status(404).json({ success: false, error: 'Record proprietario non trovato.' });
+      return res.status(404).json({
+        success: false,
+        error: 'Record proprietario non trovato.',
+        received: { code: cleanCode, plate: cleanPlate }
+      });
     }
 
-    await pool.query(
+    const deleted = await pool.query(
       `UPDATE contact_message_logs
        SET deleted_at = NOW()
        WHERE code = $1
-         AND id = ANY($2::int[])`,
-      [code, ids]
+         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
+         AND id = ANY($3::int[])
+       RETURNING id`,
+      [cleanCode, cleanPlate, cleanIds]
     );
 
-    return res.json({ success: true });
+    return res.json({
+      success: true,
+      deleted_count: deleted.rows.length,
+      deleted_ids: deleted.rows.map(r => r.id)
+    });
   } catch (err) {
-    console.error(err);
+    console.error('owner-messages/delete-many error:', err);
     return res.status(500).json({ success: false, error: 'Errore eliminazione multipla.' });
   }
 });
