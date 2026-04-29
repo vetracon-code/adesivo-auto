@@ -5410,8 +5410,31 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (btn.id === 'printStickerBtn') {
-      // Su Android/PWA il contesto può restare sporco.
-      // Usiamo prima l'URL già calcolato dalla dashboard reale.
+      // Fix solo Android/PWA:
+      // se il contesto salvato è sporco, usiamo code/plate reali dal primo messaggio caricato.
+      let printCode = '';
+      let printPlate = '';
+
+      try {
+        const firstMsg = (typeof ownerMessages !== 'undefined' && Array.isArray(ownerMessages) && ownerMessages.length)
+          ? ownerMessages.find(m => m && m.code && m.plate)
+          : null;
+
+        if (firstMsg) {
+          printCode = firstMsg.code || '';
+          printPlate = firstMsg.plate || '';
+        }
+      } catch(e) {}
+
+      printCode = String(printCode || '').trim().toUpperCase();
+      printPlate = String(printPlate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+      if (printCode && printPlate) {
+        window.location.href = '/owner-print-sign.html?code=' + encodeURIComponent(printCode) + '&plate=' + encodeURIComponent(printPlate);
+        return;
+      }
+
+      // Fallback precedente, solo se i messaggi non sono ancora disponibili.
       const directUrl = btn.dataset && btn.dataset.href ? btn.dataset.href : '';
       if (directUrl && directUrl !== '#') {
         window.location.href = directUrl;
