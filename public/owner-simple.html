@@ -1856,6 +1856,137 @@ function forceRenderAreaMapFromDashboard(data){
 }
 
 
+
+function forceOwnerMapDotsFromEvents(events){
+  try {
+    const buckets = { north: [], center: [], south: [], islands: [] };
+
+    function clean(v){
+      return String(v || '').trim().toLowerCase();
+    }
+
+    function bucketFromEvent(ev){
+      const city = clean(ev && ev.ip_city);
+      const region = clean(ev && ev.ip_region);
+
+      if (
+        city.includes('milan') ||
+        city.includes('milano') ||
+        city.includes('monza') ||
+        region.includes('lombardy') ||
+        region.includes('lombardia') ||
+        region.includes('piedmont') ||
+        region.includes('piemonte') ||
+        region.includes('veneto') ||
+        region.includes('liguria') ||
+        region.includes('emilia') ||
+        region.includes('trentino') ||
+        region.includes('friuli') ||
+        region.includes('aosta')
+      ) return 'north';
+
+      if (
+        city.includes('rome') ||
+        city.includes('roma') ||
+        city.includes('florence') ||
+        city.includes('firenze') ||
+        region.includes('lazio') ||
+        region.includes('tuscany') ||
+        region.includes('toscana') ||
+        region.includes('umbria') ||
+        region.includes('marche') ||
+        region.includes('abruzzo')
+      ) return 'center';
+
+      if (
+        region.includes('sicily') ||
+        region.includes('sicilia') ||
+        region.includes('sardinia') ||
+        region.includes('sardegna')
+      ) return 'islands';
+
+      if (
+        region.includes('campania') ||
+        region.includes('puglia') ||
+        region.includes('apulia') ||
+        region.includes('calabria') ||
+        region.includes('basilicata') ||
+        region.includes('molise')
+      ) return 'south';
+
+      return '';
+    }
+
+    (events || []).forEach(ev => {
+      if (!ev) return;
+      const hasGeo =
+        String(ev.ip_city || '').trim() ||
+        String(ev.ip_region || '').trim() ||
+        String(ev.ip_country || '').trim();
+
+      if (!hasGeo) return;
+
+      const country = clean(ev.ip_country);
+      if (country && country !== 'it' && country !== 'italy' && country !== 'italia') return;
+
+      const b = bucketFromEvent(ev);
+      if (b && buckets[b]) buckets[b].push(ev);
+    });
+
+    const dotMap = {
+      north: document.getElementById('mapDotNorth'),
+      center: document.getElementById('mapDotCenter'),
+      south: document.getElementById('mapDotSouth'),
+      islands: document.getElementById('mapDotIslands')
+    };
+
+    Object.keys(dotMap).forEach(key => {
+      const el = dotMap[key];
+      if (!el) return;
+
+      const count = buckets[key].length;
+
+      if (count > 0) {
+        el.classList.add('has-events');
+        el.dataset.count = String(count);
+        el.textContent = String(count);
+        el.style.display = 'inline-flex';
+        el.style.opacity = '1';
+        el.style.visibility = 'visible';
+        el.style.pointerEvents = 'auto';
+        el.style.transform = 'translate(-50%, -50%) scale(1)';
+        el.style.zIndex = '20';
+
+        el.onclick = function(){
+          if (typeof showAreaDetail === 'function') {
+            showAreaDetail(key, buckets[key]);
+          }
+        };
+      } else {
+        el.classList.remove('has-events');
+        el.dataset.count = '';
+        el.textContent = '';
+        el.style.opacity = '';
+        el.style.visibility = '';
+        el.style.pointerEvents = '';
+      }
+    });
+
+    const firstBucket = Object.keys(buckets).find(k => buckets[k].length > 0);
+    const firstEvent = firstBucket ? buckets[firstBucket][0] : null;
+    const lastAreaText = document.getElementById('lastAreaText');
+
+    if (firstEvent && lastAreaText) {
+      lastAreaText.textContent = [firstEvent.ip_city, firstEvent.ip_region].filter(Boolean).join(', ') || 'Italia';
+    }
+
+    window.__OWNER_FORCED_MAP_BUCKETS__ = buckets;
+  } catch(e) {
+    console.warn('forceOwnerMapDotsFromEvents error:', e);
+  }
+}
+
+
 function areaBucket(city, region){
       const value = `${city || ''} ${region || ''}`.toLowerCase();
       if (/(sicilia|sardegna|palermo|catania|cagliari|sassari|trapani|siracusa)/.test(value)) return 'islands';
@@ -2441,6 +2572,13 @@ if(!res.ok || !data.success){
           setTimeout(() => renderItalyMapGroups(dashboardMapEvents), 350);
           setTimeout(() => renderItalyMapGroups(dashboardMapEvents), 1200);
           setTimeout(() => renderItalyMapGroups(dashboardMapEvents), 2500);
+
+          // Forzatura visiva diretta dei cerchi: evita che alcune Web App
+          // ricevano eventi ma non accendano i marker.
+          forceOwnerMapDotsFromEvents(dashboardMapEvents);
+          setTimeout(() => forceOwnerMapDotsFromEvents(dashboardMapEvents), 500);
+          setTimeout(() => forceOwnerMapDotsFromEvents(dashboardMapEvents), 1500);
+          setTimeout(() => forceOwnerMapDotsFromEvents(dashboardMapEvents), 3000);
         }
       } catch(e) {
         console.warn('dashboard map forced render error:', e);
