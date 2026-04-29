@@ -1577,6 +1577,12 @@ app.get('/owner-manifest.json', async (req, res) => {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
     }
 
+    if (isDownloadFile) {
+      const filePlate = cleanPlate || 'contatto-veicolo';
+      res.setHeader('Content-Disposition', `attachment; filename="contatto-veicolo-${filePlate}.html"`);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    }
+
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
     return res.json({
@@ -1935,6 +1941,7 @@ app.get('/owner-print-sign.html', async (req, res) => {
 
     const cleanCode = String(req.query.code || '').trim().toUpperCase();
     const cleanPlate = String(req.query.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+    const isDownloadFile = String(req.query.download || '') === '1';
 
     if (!cleanCode && !cleanPlate) {
       return res.status(400).send('Inserisci almeno codice o targa.');
@@ -2336,7 +2343,7 @@ app.get('/owner-print-sign.html', async (req, res) => {
     }
   </style>
 
-<style id="owner-print-topbar-v1">
+${isDownloadFile ? `` : `<style id="owner-print-topbar-v1">
   .owner-print-topbar{
     position:fixed;
     top:0;
@@ -2420,12 +2427,12 @@ app.get('/owner-print-sign.html', async (req, res) => {
       padding:0 10px;
     }
   }
-</style>
+</style>`}
 
 </head>
 <body>
 
-<div class="owner-print-topbar" id="ownerPrintTopbar">
+${isDownloadFile ? `` : `<div class="owner-print-topbar" id="ownerPrintTopbar">
   <div class="owner-print-topbar-left">
     <button type="button" class="owner-print-action secondary" id="ownerPrintBackBtn">← Torna all’App</button>
   </div>
@@ -2434,7 +2441,7 @@ app.get('/owner-print-sign.html', async (req, res) => {
     <a class="owner-print-action download" id="ownerPrintDownloadBtn" href="#" download>Scarica file</a>
   </div>
 </div>
-<div class="owner-print-page-offset"></div>
+<div class="owner-print-page-offset"></div>`}
 
   <div class="no-print">
     <div>
@@ -2500,7 +2507,7 @@ app.get('/owner-print-sign.html', async (req, res) => {
     </div>
   </div>
 
-<script id="owner-print-topbar-script-v1">
+${isDownloadFile ? `` : `<script id="owner-print-topbar-script-v1">
 (function(){
   function qs(name){
     try { return new URLSearchParams(window.location.search || '').get(name) || ''; }
@@ -2557,7 +2564,7 @@ app.get('/owner-print-sign.html', async (req, res) => {
     });
   }
 })();
-</script>
+</script>`}
 
 </body>
 </html>`;
