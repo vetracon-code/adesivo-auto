@@ -3462,23 +3462,69 @@ function getOwnerParams(){
     });
 
     document.getElementById('messagesDeleteBtn').addEventListener('click', async () => {
-      const ids = Array.from(selectedMessageIds);
+      const ids = Array.from(selectedMessageIds).map(x => Number(x)).filter(x => Number.isFinite(x));
       if (!ids.length) return;
-      const { code, plate } = getOwnerParams();
-      await fetch('/api/owner-messages/delete-many', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ code, plate, ids })
-      });
-      selectedMessageIds.clear();
-      messagesSelectionMode = false;
-      document.getElementById('messagesSelectBtn').textContent = 'Seleziona';
-      const selectAllBtn = document.getElementById('messagesSelectAllBtn');
-      if (selectAllBtn) {
-        selectAllBtn.style.display = 'none';
-        selectAllBtn.textContent = 'Seleziona tutti';
+
+      // Android/PWA può avere un contesto sporco. Per eliminare in modo sicuro
+      // usiamo code/plate presi dai messaggi realmente selezionati.
+      const selectedMessages = (ownerMessages || []).filter(m => ids.includes(Number(m.id)));
+      const firstMsg = selectedMessages[0] || null;
+
+      let code = firstMsg ? (firstMsg.code || '') : '';
+      let plate = firstMsg ? (firstMsg.plate || '') : '';
+
+      if (!code || !plate) {
+        try {
+          const ctx = getOwnerParams();
+          code = ctx.code || '';
+          plate = ctx.plate || '';
+        } catch(e) {}
       }
-      await loadOwnerMessages();
+
+      code = String(code || '').trim().toUpperCase();
+      plate = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+      if (!code || !plate) {
+        alert('Dati messaggi non pronti. Premi Aggiorna App e riprova.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/owner-messages/delete-many', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ code, plate, ids })
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.success) {
+          alert(data.error || 'Errore eliminazione avvisi selezionati.');
+          return;
+        }
+
+        // Rimozione immediata dalla UI.
+        ownerMessages = (ownerMessages || []).filter(m => !ids.includes(Number(m.id)));
+
+        selectedMessageIds.clear();
+        messagesSelectionMode = false;
+
+        const selectBtn = document.getElementById('messagesSelectBtn');
+        if (selectBtn) selectBtn.textContent = 'Seleziona';
+
+        const selectAllBtn = document.getElementById('messagesSelectAllBtn');
+        if (selectAllBtn) {
+          selectAllBtn.style.display = 'none';
+          selectAllBtn.textContent = 'Seleziona tutti';
+        }
+
+        renderMessages();
+
+        // Riallineamento silenzioso col server.
+        setTimeout(loadOwnerMessages, 500);
+      } catch(e) {
+        alert('Errore eliminazione avvisi selezionati.');
+      }
     });
 
     document.getElementById('abuseBlocksSelectBtn').addEventListener('click', () => {
