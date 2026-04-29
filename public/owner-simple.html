@@ -2906,16 +2906,61 @@ if(!res.ok || !data.success){
       window.location.href = buildOwnerLoginUrlWithContext();
     });
 
+    function detectOwnerDeviceInfo(){
+      const ua = navigator.userAgent || '';
+      let platform = 'Dispositivo';
+      let browser = 'Browser';
+
+      if (/iPhone/i.test(ua)) platform = 'iPhone';
+      else if (/iPad/i.test(ua)) platform = 'iPad';
+      else if (/Android/i.test(ua)) platform = 'Android';
+      else if (/Macintosh|Mac OS X/i.test(ua)) platform = 'Mac';
+      else if (/Windows/i.test(ua)) platform = 'Windows';
+
+      if (/SamsungBrowser/i.test(ua)) browser = 'Samsung Internet';
+      else if (/CriOS|Chrome/i.test(ua) && !/Edg/i.test(ua)) browser = 'Chrome';
+      else if (/Safari/i.test(ua) && !/Chrome|CriOS|Android/i.test(ua)) browser = 'Safari';
+      else if (/Firefox|FxiOS/i.test(ua)) browser = 'Firefox';
+      else if (/Edg/i.test(ua)) browser = 'Edge';
+
+      return { platform, browser };
+    }
+
+    async function getOwnerPushEndpointForHeartbeat(){
+      try {
+        if (!('serviceWorker' in navigator)) return null;
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        return sub && sub.endpoint ? sub.endpoint : null;
+      } catch(e) {
+        return null;
+      }
+    }
+
     async function sendOwnerHeartbeat(){
       try {
-        const params = new URLSearchParams(window.location.search);
         const { code, plate } = getOwnerParams();
         if (!code || !plate) return;
+
+        const info = detectOwnerDeviceInfo();
+        const isStandalone = (typeof isStandaloneMode === 'function' && isStandaloneMode()) ||
+          window.matchMedia('(display-mode: standalone)').matches ||
+          window.navigator.standalone === true;
+
+        const pushEndpoint = await getOwnerPushEndpointForHeartbeat();
 
         await fetch('/api/owner-heartbeat', {
           method:'POST',
           headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ code, plate })
+          body: JSON.stringify({
+            code,
+            plate,
+            is_standalone: !!isStandalone,
+            platform: info.platform,
+            browser: info.browser,
+            notification_permission: (typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'),
+            push_endpoint: pushEndpoint
+          })
         });
       } catch(e) {}
     }

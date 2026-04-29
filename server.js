@@ -3722,21 +3722,62 @@ app.post('/api/admin/list-abuse-blocks', requireAdmin, async (req, res) => {
 
 app.post('/api/owner-heartbeat', async (req, res) => {
   try {
-    const { code, plate } = req.body || {};
+    const {
+      code,
+      plate,
+      is_standalone,
+      platform,
+      browser,
+      push_endpoint,
+      notification_permission
+    } = req.body || {};
+
     if (!code || !plate) {
       return res.status(400).json({ success: false, error: 'Code o plate mancanti.' });
     }
 
+    const cleanCode = String(code || '').trim().toUpperCase();
+    const cleanPlateNorm = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
+    const userAgent = req.headers['user-agent'] || null;
+    const cleanPlatform = platform ? String(platform).slice(0, 80) : null;
+    const cleanBrowser = browser ? String(browser).slice(0, 80) : null;
+    const cleanPushEndpoint = push_endpoint ? String(push_endpoint).trim() : null;
+
     const result = await pool.query(
       `UPDATE sticker_codes
-       SET owner_last_seen = NOW()
-       WHERE code = $1 AND plate = $2
-       RETURNING code, plate, owner_last_seen`,
-      [code, plate]
+       SET owner_last_seen = NOW(),
+           owner_app_detected_at = COALESCE(owner_app_detected_at, NOW()),
+           owner_app_is_standalone = COALESCE(owner_app_is_standalone, FALSE) OR $3,
+           owner_app_user_agent = COALESCE($4, owner_app_user_agent),
+           owner_app_platform = COALESCE($5, owner_app_platform),
+           owner_app_browser = COALESCE($6, owner_app_browser)
+       WHERE code = $1
+         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
+       RETURNING code, plate, owner_last_seen, owner_app_detected_at, owner_app_is_standalone`,
+      [cleanCode, cleanPlateNorm, !!is_standalone, userAgent, cleanPlatform, cleanBrowser]
     );
 
     if (!result.rows.length) {
       return res.status(404).json({ success: false, error: 'Record non trovato.' });
+    }
+
+    try {
+      if (cleanPushEndpoint) {
+        await pool.query(
+          `UPDATE push_subscriptions
+           SET last_seen_at = NOW(),
+               app_saved_detected = COALESCE(app_saved_detected, FALSE) OR $2,
+               app_saved_detected_at = CASE
+                 WHEN $2 = TRUE THEN COALESCE(app_saved_detected_at, NOW())
+                 ELSE app_saved_detected_at
+               END,
+               user_agent = COALESCE($3, user_agent)
+           WHERE endpoint = $1`,
+          [cleanPushEndpoint, !!is_standalone, userAgent]
+        );
+      }
+    } catch (subErr) {
+      console.error('owner-heartbeat push subscription update error:', subErr);
     }
 
     await pool.query(
@@ -3747,15 +3788,21 @@ app.post('/api/owner-heartbeat', async (req, res) => {
          SELECT id
          FROM broadcast_notification_recipients
          WHERE code = $1
-           AND plate = $2
+           AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
            AND status = 'sent'
          ORDER BY id DESC
          LIMIT 1
        )`,
-      [code, plate]
+      [cleanCode, cleanPlateNorm]
     );
 
-    return res.json({ success: true, data: result.rows[0] });
+    return res.json({
+      success: true,
+      data: {
+        ...result.rows[0],
+        notification_permission: notification_permission || null
+      }
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ success: false, error: 'Errore heartbeat proprietario.' });
@@ -5175,24 +5222,68 @@ app.get('/api/admin/list-stickers', requireAdmin, async (req, res) => {
     if (q) {
       result = await pool.query(
         `SELECT
-           code, public_id, plate, brand, vehicle_model, color, offered_by, phone,
-           status, qr_url, plan_type, expires_at, activated_at,
-           invite_sent_to, invite_channel, invite_target, invite_variant, invite_sent_at
-         FROM sticker_codes
-         WHERE UPPER(COALESCE(code,'')) LIKE $1
-            OR UPPER(COALESCE(public_id,'')) LIKE $1
-            OR UPPER(REPLACE(COALESCE(plate,''), ' ', '')) LIKE REPLACE($1, ' ', '')
-         ORDER BY activated_at DESC NULLS LAST, code DESC`,
+           sc.code, sc.public_id, sc.plate, sc.brand, sc.vehicle_model, sc.color, sc.offered_by, sc.phone,
+           sc.status, sc.qr_url, sc.plan_type, sc.expires_at, sc.activated_at,
+           sc.invite_sent_to, sc.invite_channel, sc.invite_target, sc.invite_variant, sc.invite_sent_at,
+           sc.feedback_bonus_used, sc.owner_last_seen,
+           sc.owner_app_detected_at, sc.owner_app_is_standalone, sc.owner_app_user_agent,
+           sc.owner_app_platform, sc.owner_app_browser,
+           COALESCE(ps.push_active_count, 0) AS push_active_count,
+           ps.push_last_seen_at,
+           ps.push_updated_at,
+           ps.push_user_agent
+         FROM sticker_codes sc
+         LEFT JOIN (
+           SELECT
+             code,
+             REPLACE(UPPER(COALESCE(plate,'')), ' ', '') AS plate_norm,
+             COUNT(*)::int AS push_active_count,
+             MAX(last_seen_at) AS push_last_seen_at,
+             MAX(updated_at) AS push_updated_at,
+             (ARRAY_AGG(user_agent ORDER BY updated_at DESC NULLS LAST))[1] AS push_user_agent
+           FROM push_subscriptions
+           WHERE COALESCE(is_active, TRUE) = TRUE
+             AND COALESCE(receive_passenger_alerts, TRUE) = TRUE
+           GROUP BY code, REPLACE(UPPER(COALESCE(plate,'')), ' ', '')
+         ) ps
+           ON ps.code = sc.code
+          AND ps.plate_norm = REPLACE(UPPER(COALESCE(sc.plate,'')), ' ', '')
+         WHERE UPPER(COALESCE(sc.code,'')) LIKE $1
+            OR UPPER(COALESCE(sc.public_id,'')) LIKE $1
+            OR UPPER(REPLACE(COALESCE(sc.plate,''), ' ', '')) LIKE REPLACE($1, ' ', '')
+         ORDER BY sc.activated_at DESC NULLS LAST, sc.code DESC`,
         [`%${q}%`]
       );
     } else {
       result = await pool.query(
         `SELECT
-           code, public_id, plate, brand, vehicle_model, color, offered_by, phone,
-           status, qr_url, plan_type, expires_at, activated_at,
-           invite_sent_to, invite_channel, invite_target, invite_variant, invite_sent_at
-         FROM sticker_codes
-         ORDER BY activated_at DESC NULLS LAST, code DESC
+           sc.code, sc.public_id, sc.plate, sc.brand, sc.vehicle_model, sc.color, sc.offered_by, sc.phone,
+           sc.status, sc.qr_url, sc.plan_type, sc.expires_at, sc.activated_at,
+           sc.invite_sent_to, sc.invite_channel, sc.invite_target, sc.invite_variant, sc.invite_sent_at,
+           sc.feedback_bonus_used, sc.owner_last_seen,
+           sc.owner_app_detected_at, sc.owner_app_is_standalone, sc.owner_app_user_agent,
+           sc.owner_app_platform, sc.owner_app_browser,
+           COALESCE(ps.push_active_count, 0) AS push_active_count,
+           ps.push_last_seen_at,
+           ps.push_updated_at,
+           ps.push_user_agent
+         FROM sticker_codes sc
+         LEFT JOIN (
+           SELECT
+             code,
+             REPLACE(UPPER(COALESCE(plate,'')), ' ', '') AS plate_norm,
+             COUNT(*)::int AS push_active_count,
+             MAX(last_seen_at) AS push_last_seen_at,
+             MAX(updated_at) AS push_updated_at,
+             (ARRAY_AGG(user_agent ORDER BY updated_at DESC NULLS LAST))[1] AS push_user_agent
+           FROM push_subscriptions
+           WHERE COALESCE(is_active, TRUE) = TRUE
+             AND COALESCE(receive_passenger_alerts, TRUE) = TRUE
+           GROUP BY code, REPLACE(UPPER(COALESCE(plate,'')), ' ', '')
+         ) ps
+           ON ps.code = sc.code
+          AND ps.plate_norm = REPLACE(UPPER(COALESCE(sc.plate,'')), ' ', '')
+         ORDER BY sc.activated_at DESC NULLS LAST, sc.code DESC
          LIMIT 300`
       );
     }
@@ -7251,6 +7342,12 @@ async function initDb() {
     await pool.query("ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS app_saved_detected BOOLEAN DEFAULT FALSE");
     await pool.query("ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS app_saved_detected_at TIMESTAMPTZ");
     await pool.query("ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ");
+
+    await pool.query("ALTER TABLE sticker_codes ADD COLUMN IF NOT EXISTS owner_app_detected_at TIMESTAMPTZ");
+    await pool.query("ALTER TABLE sticker_codes ADD COLUMN IF NOT EXISTS owner_app_is_standalone BOOLEAN DEFAULT FALSE");
+    await pool.query("ALTER TABLE sticker_codes ADD COLUMN IF NOT EXISTS owner_app_user_agent TEXT");
+    await pool.query("ALTER TABLE sticker_codes ADD COLUMN IF NOT EXISTS owner_app_platform TEXT");
+    await pool.query("ALTER TABLE sticker_codes ADD COLUMN IF NOT EXISTS owner_app_browser TEXT");
 
 
     await pool.query(`

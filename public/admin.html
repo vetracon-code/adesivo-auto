@@ -601,12 +601,13 @@
               <th>Scadenza</th>
               <th>Bonus</th>
               <th>Consegna</th>
+              <th>Stato App</th>
               <th>QR URL</th>
               <th>Azioni</th>
             </tr>
           </thead>
           <tbody id="adminTableBody">
-            <tr><td colspan="11" class="muted">Caricamento in corso...</td></tr>
+            <tr><td colspan="12" class="muted">Caricamento in corso...</td></tr>
           </tbody>
         </table>
       </div>
@@ -936,15 +937,98 @@
       setText('focusLocalhost', summary.localhost_count ?? 0);
     }
 
+
+    function fmtDateShort(value){
+      if(!value) return '-';
+      try {
+        return new Date(value).toLocaleString('it-IT', {
+          day:'2-digit', month:'2-digit', year:'2-digit',
+          hour:'2-digit', minute:'2-digit'
+        });
+      } catch(e) {
+        return '-';
+      }
+    }
+
+    function detectDeviceLabelFromItem(item){
+      const platform = item.owner_app_platform || '';
+      const browser = item.owner_app_browser || '';
+      const ua = item.push_user_agent || item.owner_app_user_agent || '';
+
+      let detectedPlatform = platform;
+      let detectedBrowser = browser;
+
+      if(!detectedPlatform){
+        if(/iPhone/i.test(ua)) detectedPlatform = 'iPhone';
+        else if(/iPad/i.test(ua)) detectedPlatform = 'iPad';
+        else if(/Android/i.test(ua)) detectedPlatform = 'Android';
+        else if(/Macintosh|Mac OS X/i.test(ua)) detectedPlatform = 'Mac';
+        else if(/Windows/i.test(ua)) detectedPlatform = 'Windows';
+      }
+
+      if(!detectedBrowser){
+        if(/SamsungBrowser/i.test(ua)) detectedBrowser = 'Samsung Internet';
+        else if(/CriOS|Chrome/i.test(ua) && !/Edg/i.test(ua)) detectedBrowser = 'Chrome';
+        else if(/Safari/i.test(ua) && !/Chrome|CriOS|Android/i.test(ua)) detectedBrowser = 'Safari';
+        else if(/Firefox|FxiOS/i.test(ua)) detectedBrowser = 'Firefox';
+        else if(/Edg/i.test(ua)) detectedBrowser = 'Edge';
+      }
+
+      let model = '';
+      const androidModel = ua.match(/Android [^;]+;\s*([^;)]+)\)/i);
+      if(androidModel && androidModel[1]){
+        model = androidModel[1].replace(/Build\/.*/i, '').trim();
+      }
+
+      return [detectedPlatform, model, detectedBrowser].filter(Boolean).join(' · ') || 'Dispositivo non rilevato';
+    }
+
+    function ownerAppStatusHtml(item){
+      const appSeen = !!(item.owner_app_detected_at || item.owner_last_seen);
+      const pushCount = Number(item.push_active_count || 0);
+      const pushActive = pushCount > 0;
+
+      let color = '#ef4444';
+      let label = 'Non rilevata';
+      let dot = '🔴';
+
+      if(appSeen && pushActive){
+        color = '#22c55e';
+        label = 'App + notifiche';
+        dot = '🟢';
+      } else if(appSeen && !pushActive){
+        color = '#f59e0b';
+        label = 'App rilevata, notifiche no';
+        dot = '🟡';
+      } else if(!appSeen && pushActive){
+        color = '#f59e0b';
+        label = 'Push attiva, App non rilevata';
+        dot = '🟠';
+      }
+
+      const device = detectDeviceLabelFromItem(item);
+      const appDate = fmtDateShort(item.owner_app_detected_at || item.owner_last_seen);
+      const pushDate = fmtDateShort(item.push_last_seen_at || item.push_updated_at);
+
+      return `
+        <div style="min-width:170px;line-height:1.35;">
+          <div style="font-weight:900;color:${color};white-space:nowrap;">${dot} ${label}</div>
+          <div class="muted" style="font-size:.78rem;margin-top:4px;">${device}</div>
+          <div class="muted" style="font-size:.76rem;margin-top:4px;">App: ${appDate}</div>
+          <div class="muted" style="font-size:.76rem;">Push: ${pushActive ? pushDate : '-'}</div>
+        </div>
+      `;
+    }
+
     async function loadAdmin(q=''){
       try {
-        bodyEl.innerHTML = '<tr><td colspan="11" class="muted">Caricamento in corso...</td></tr>';
+        bodyEl.innerHTML = '<tr><td colspan="12" class="muted">Caricamento in corso...</td></tr>';
         const url = q ? `/api/admin/list-stickers?q=${encodeURIComponent(q)}` : '/api/admin/list-stickers';
         const res = await fetch(url);
         const data = await res.json();
 
         if(!res.ok || !data.success){
-          bodyEl.innerHTML = `<tr><td colspan="11" class="danger">Errore caricamento: ${data.error || 'risposta non valida'}</td></tr>`;
+          bodyEl.innerHTML = `<tr><td colspan="12" class="danger">Errore caricamento: ${data.error || 'risposta non valida'}</td></tr>`;
           return;
         }
 
@@ -952,7 +1036,7 @@
         setSummary(data.summary || {});
 
         if(!adminItems.length){
-          bodyEl.innerHTML = '<tr><td colspan="11" class="muted">Nessun record trovato.</td></tr>';
+          bodyEl.innerHTML = '<tr><td colspan="12" class="muted">Nessun record trovato.</td></tr>';
           return;
         }
 
@@ -994,7 +1078,7 @@
       }).join('');
       } catch (err) {
         console.error(err);
-        bodyEl.innerHTML = `<tr><td colspan="11" class="danger">Errore rendering admin: ${err.message || err}</td></tr>`;
+        bodyEl.innerHTML = `<tr><td colspan="12" class="danger">Errore rendering admin: ${err.message || err}</td></tr>`;
       }
     }
 
