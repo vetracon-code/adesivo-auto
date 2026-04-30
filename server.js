@@ -3927,6 +3927,11 @@ app.post('/api/owner-messages', async (req, res, next) => {
        FROM contact_message_logs
        WHERE code = $1
          AND deleted_at IS NULL
+         AND NOT (
+           LOWER(COALESCE(reason,'')) LIKE '%aggiorna la tua app%'
+           OR LOWER(COALESCE(message_text,'')) LIKE '%aggiorna app%'
+           OR LOWER(COALESCE(message_text,'')) LIKE '%nuova versione%'
+         )
        ORDER BY created_at DESC
        LIMIT 80`,
       [vehicle.code]
@@ -4130,6 +4135,21 @@ app.post('/api/owner-messages', async (req, res) => {
     if (!owner.rows.length) {
       return res.status(404).json({ success: false, error: 'Record proprietario non trovato.' });
     }
+
+    await pool.query(
+      `UPDATE contact_message_logs
+       SET
+         deleted_at = COALESCE(deleted_at, NOW()),
+         read_at = COALESCE(read_at, NOW())
+       WHERE code = $1
+         AND deleted_at IS NULL
+         AND (
+           LOWER(COALESCE(reason,'')) LIKE '%aggiorna la tua app%'
+           OR LOWER(COALESCE(message_text,'')) LIKE '%aggiorna app%'
+           OR LOWER(COALESCE(message_text,'')) LIKE '%nuova versione%'
+         )`,
+      [code]
+    );
 
     const rows = await pool.query(
       `SELECT
