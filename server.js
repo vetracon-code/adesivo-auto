@@ -3102,6 +3102,7 @@ app.post('/api/log-contact-view', async (req, res) => {
                 url: targetUrl,
                 targetUrl,
                 messageId: insertedMessageId,
+                unreadCount,
                 channel: 'qr-view-alert'
               })
             );
@@ -6645,6 +6646,17 @@ app.get('/contact/u/:public_id', async (req, res) => {
 
       const insertedMessageId = insertedMessage.rows?.[0]?.id || null;
 
+      const unreadRes = await pool.query(
+        `SELECT COUNT(*)::int AS unread_count
+         FROM contact_message_logs
+         WHERE code = $1
+           AND deleted_at IS NULL
+           AND read_at IS NULL`,
+        [String(row.code || '').trim().toUpperCase()]
+      );
+
+      const unreadCount = unreadRes.rows[0]?.unread_count || 0;
+
       if (vapidPublicKey && vapidPrivateKey && row.code) {
         const subs = await pool.query(
           `SELECT endpoint, p256dh, auth
@@ -6673,6 +6685,7 @@ app.get('/contact/u/:public_id', async (req, res) => {
                 url: targetUrl,
                 targetUrl,
                 messageId: insertedMessageId,
+                unreadCount,
                 channel: 'qr-view-alert'
               })
             );
@@ -6780,6 +6793,17 @@ app.get('/contact-preview/u/:public_id', async (req, res) => {
       );
 
       const insertedMessageId = insertedMessage.rows?.[0]?.id || null;
+
+      const unreadRes = await pool.query(
+        `SELECT COUNT(*)::int AS unread_count
+         FROM contact_message_logs
+         WHERE code = $1
+           AND deleted_at IS NULL
+           AND read_at IS NULL`,
+        [String(row.code || '').trim().toUpperCase()]
+      );
+
+      const unreadCount = unreadRes.rows[0]?.unread_count || 0;
 
       if (vapidPublicKey && vapidPrivateKey && row.code) {
         const subs = await pool.query(
