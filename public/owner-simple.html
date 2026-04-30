@@ -6996,9 +6996,50 @@ document.addEventListener('DOMContentLoaded', function () {
     return document.getElementById('refreshOwnerAppBtn');
   }
 
+  function isUpdateSuppressActive(){
+    try {
+      const until = Number(localStorage.getItem('owner_update_visual_suppress_until') || sessionStorage.getItem('owner_update_visual_suppress_until') || 0);
+      return !!(until && Date.now() < until);
+    } catch(e) {
+      return false;
+    }
+  }
+
+  function setUpdateSuppressWindow(){
+    try {
+      const until = String(Date.now() + 5 * 60 * 1000);
+      localStorage.setItem('owner_update_visual_suppress_until', until);
+      sessionStorage.setItem('owner_update_visual_suppress_until', until);
+      localStorage.removeItem('owner_force_app_update');
+      sessionStorage.removeItem('owner_force_app_update');
+    } catch(e) {}
+  }
+
+  function forceRefreshButtonNormal(){
+    const btn = getRefreshBtn();
+    if (!btn) return;
+
+    btn.classList.remove('update-available');
+    btn.classList.remove('force-update-available');
+    btn.style.background = '#5aa0ff';
+    btn.style.color = '#fff';
+    btn.style.border = '0';
+    btn.style.boxShadow = '0 8px 18px rgba(90,160,255,.18)';
+    btn.style.animation = 'none';
+    btn.style.transform = 'none';
+    btn.textContent = 'Aggiorna App';
+    btn.title = 'Aggiorna la App';
+    btn.setAttribute('aria-label', 'Aggiorna App');
+  }
+
   function setRefreshButtonUpdateAvailable(){
     const btn = getRefreshBtn();
     if (!btn) return;
+
+    if (isUpdateSuppressActive()) {
+      forceRefreshButtonNormal();
+      return;
+    }
 
     btn.classList.add('update-available');
     btn.textContent = 'Aggiorna App';
@@ -7007,13 +7048,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function setRefreshButtonNormal(){
-    const btn = getRefreshBtn();
-    if (!btn) return;
-
-    btn.classList.remove('update-available');
-    btn.textContent = 'Aggiorna App';
-    btn.title = 'Aggiorna la App';
-    btn.setAttribute('aria-label', 'Aggiorna App');
+    forceRefreshButtonNormal();
   }
 
   function currentBuild(){
@@ -7135,6 +7170,8 @@ document.addEventListener('DOMContentLoaded', function () {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
+      setUpdateSuppressWindow();
+      forceRefreshButtonNormal();
       startTripleRefresh();
     }, true);
   }
