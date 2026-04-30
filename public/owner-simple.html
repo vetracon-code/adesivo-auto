@@ -3676,6 +3676,66 @@ function getOwnerParams(){
       }
     }
 
+    window.markMessageRead = async function(id){
+      const numericId = Number(id);
+      const msg = (ownerMessages || []).find(m => Number(m.id) === numericId);
+
+      let code = '';
+      let plate = '';
+
+      if (msg) {
+        code = msg.code || '';
+        plate = msg.plate || '';
+      }
+
+      if (!code || !plate) {
+        try {
+          const ctx = getOwnerParams();
+          code = ctx.code || '';
+          plate = ctx.plate || '';
+        } catch(e) {}
+      }
+
+      code = String(code || '').trim().toUpperCase();
+      plate = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+      if (!code || !plate || !numericId) {
+        alert('Dati messaggio non pronti. Premi Aggiorna App e riprova.');
+        return false;
+      }
+
+      try {
+        const res = await fetch('/api/owner-messages/read', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ code, plate, id: numericId })
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.success) {
+          alert(data.error || 'Errore aggiornamento messaggio.');
+          return false;
+        }
+
+        ownerMessages = (ownerMessages || []).map(m => {
+          if (Number(m.id) === numericId) {
+            return { ...m, read_at: m.read_at || new Date().toISOString() };
+          }
+          return m;
+        });
+
+        renderMessages();
+        setTimeout(loadOwnerMessages, 500);
+        return true;
+      } catch (e) {
+        console.error('Errore markMessageRead:', e);
+        alert('Errore aggiornamento messaggio.');
+        return false;
+      }
+    };
+
+
     window.deleteMessage = async function(id){
       const msg = (ownerMessages || []).find(m => Number(m.id) === Number(id));
 
