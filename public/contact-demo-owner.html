@@ -494,6 +494,47 @@
 
   <script>
     const params = new URLSearchParams(window.location.search);
+
+    window.__COME_FUNZIONA_DEMO_PATCH__ = true;
+
+    function getDemoOwnerContext(){
+      try {
+        const p = new URLSearchParams(window.location.search);
+        const code = String(p.get('code') || '').trim().toUpperCase();
+        const plate = String(p.get('plate') || '').trim().toUpperCase().replace(/\s+/g, '');
+        const from = String(p.get('from') || '').trim();
+        const fromOwnerPreview = p.get('from_owner_preview') === '1' || from === 'come-funziona';
+        return { code, plate, from, fromOwnerPreview };
+      } catch(e) {
+        return { code:'', plate:'', from:'', fromOwnerPreview:false };
+      }
+    }
+
+    async function logComeFunzionaQrViewOnce(){
+      try {
+        const ctx = getDemoOwnerContext();
+        if (!ctx.code || !ctx.plate || ctx.from !== 'come-funziona') return;
+
+        const key = 'come_funziona_qr_view_logged_' + ctx.code + '_' + ctx.plate;
+        if (sessionStorage.getItem(key) === '1') return;
+        sessionStorage.setItem(key, '1');
+
+        await fetch('/api/log-contact-view', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            code: ctx.code,
+            plate: ctx.plate,
+            reason: 'QR Visualizzato',
+            source: 'come-funziona-demo'
+          })
+        });
+      } catch(e) {
+        console.warn('logComeFunzionaQrViewOnce error:', e);
+      }
+    }
+
+
     const pathMatch = window.location.pathname.match(/\/(?:contact|contact-preview)\/u\/([A-Z0-9]+)/i);
     const publicId = ((params.get('public_id') || (pathMatch ? pathMatch[1] : ''))).trim().toUpperCase();
 
@@ -565,8 +606,8 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          code: contactData.code,
-          plate: contactData.plate,
+          code: (contactData.code || getDemoOwnerContext().code),
+          plate: (contactData.plate || getDemoOwnerContext().plate),
           brand: contactData.brand,
           vehicle_model: contactData.vehicle_model,
           color: contactData.color,
@@ -602,7 +643,7 @@
     function closeSuccessScreen(){
       try {
         const params = new URLSearchParams(window.location.search);
-        const isOwnerPreview = params.get('from_owner_preview') === '1';
+        const isOwnerPreview = params.get('from_owner_preview') === '1' || params.get('from') === 'come-funziona';
         const code = params.get('code') || '';
         const plate = params.get('plate') || '';
 
@@ -701,6 +742,7 @@
         showError(err && err.message ? err.message : 'Impossibile completare l’invio. Riprova più tardi.');
       }
     }
+    logComeFunzionaQrViewOnce();
     sendBtn.addEventListener('click', sendSignal);
     document.getElementById('closeSuccessScreenBtn').addEventListener('click', closeSuccessScreen);
 
@@ -719,7 +761,7 @@
   <script>
     (function(){
       const params = new URLSearchParams(window.location.search);
-      const isOwnerPreview = params.get('from_owner_preview') === '1';
+      const isOwnerPreview = params.get('from_owner_preview') === '1' || params.get('from') === 'come-funziona';
       const code = params.get('code') || '';
       const plate = params.get('plate') || '';
       const topbar = document.getElementById('previewTopbar');
