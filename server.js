@@ -4265,9 +4265,9 @@ app.post('/api/owner-messages/delete', async (req, res) => {
        SET deleted_at = NOW()
        WHERE id = $1
          AND code = $2
-         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $3
+         AND deleted_at IS NULL
        RETURNING id`,
-      [cleanId, cleanCode, cleanPlate]
+      [cleanId, cleanCode]
     );
 
     if (!deleted.rows.length) {
@@ -4319,10 +4319,10 @@ app.post('/api/owner-messages/delete-many', async (req, res) => {
       `UPDATE contact_message_logs
        SET deleted_at = NOW()
        WHERE code = $1
-         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
-         AND id = ANY($3::int[])
+         AND id = ANY($2::int[])
+         AND deleted_at IS NULL
        RETURNING id`,
-      [cleanCode, cleanPlate, cleanIds]
+      [cleanCode, cleanIds]
     );
 
     return res.json({
