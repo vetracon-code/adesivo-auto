@@ -1328,6 +1328,36 @@
     box-shadow:0 10px 22px rgba(255,155,56,.26) !important;
   }
 
+
+  /* Aggiorna App: aggiornamento richiesto via push/admin */
+  #refreshOwnerAppBtn.update-available,
+  #refreshOwnerAppBtn.force-update-available{
+    background:linear-gradient(135deg,#ff9b38 0%,#ffb45f 100%) !important;
+    color:#1b1208 !important;
+    border:1px solid rgba(255,155,56,.75) !important;
+    box-shadow:0 0 0 0 rgba(255,155,56,.55), 0 10px 24px rgba(255,155,56,.32) !important;
+    font-weight:950 !important;
+  }
+
+  #refreshOwnerAppBtn.force-update-available{
+    animation:appUpdatePulse 1.25s ease-in-out infinite;
+  }
+
+  @keyframes appUpdatePulse{
+    0%{
+      transform:translateY(0);
+      box-shadow:0 0 0 0 rgba(255,155,56,.55), 0 10px 24px rgba(255,155,56,.30);
+    }
+    55%{
+      transform:translateY(-1px);
+      box-shadow:0 0 0 7px rgba(255,155,56,.08), 0 14px 28px rgba(255,155,56,.42);
+    }
+    100%{
+      transform:translateY(0);
+      box-shadow:0 0 0 0 rgba(255,155,56,.00), 0 10px 24px rgba(255,155,56,.30);
+    }
+  }
+
 </style>
 
   <link rel="icon" type="image/x-icon" href="/icons/favicon.ico">
@@ -7102,6 +7132,144 @@ document.addEventListener('DOMContentLoaded', function () {
   document.addEventListener('visibilitychange', function(){
     if (!document.hidden) setTimeout(detectAvailableUpdate, 800);
   });
+})();
+</script>
+
+
+<script id="force-update-visual-script">
+(function(){
+  const FORCE_KEY = 'owner_force_app_update';
+
+  function getRefreshBtn(){
+    return document.getElementById('refreshOwnerAppBtn');
+  }
+
+  function hasForceParam(){
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('forceAppUpdate') === '1';
+    } catch(e) {
+      return false;
+    }
+  }
+
+  function persistForceFlagFromUrl(){
+    try {
+      if (!hasForceParam()) return;
+
+      localStorage.setItem(FORCE_KEY, '1');
+      sessionStorage.setItem(FORCE_KEY, '1');
+
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete('forceAppUpdate');
+      const cleanSearch = cleanUrl.searchParams.toString();
+      window.history.replaceState({}, '', cleanUrl.pathname + (cleanSearch ? '?' + cleanSearch : '') + cleanUrl.hash);
+    } catch(e) {}
+  }
+
+  function hasForceFlag(){
+    try {
+      return localStorage.getItem(FORCE_KEY) === '1' || sessionStorage.getItem(FORCE_KEY) === '1';
+    } catch(e) {
+      return false;
+    }
+  }
+
+  async function setBadgeOneIfPossible(){
+    try {
+      if ('setAppBadge' in navigator) {
+        await navigator.setAppBadge(1);
+      }
+    } catch(e) {}
+  }
+
+  async function clearBadgeIfPossible(){
+    try {
+      if ('clearAppBadge' in navigator) {
+        await navigator.clearAppBadge();
+      } else if ('setAppBadge' in navigator) {
+        await navigator.setAppBadge(0);
+      }
+    } catch(e) {}
+  }
+
+  function applyForceVisual(){
+    const btn = getRefreshBtn();
+    if (!btn) return false;
+
+    if (!hasForceFlag()) return false;
+
+    btn.classList.add('update-available');
+    btn.classList.add('force-update-available');
+    btn.textContent = 'Aggiorna App';
+    btn.title = 'Aggiornamento disponibile: tocca per aggiornare la App.';
+    btn.setAttribute('aria-label', 'Aggiornamento disponibile. Aggiorna App.');
+
+    setBadgeOneIfPossible();
+
+    return true;
+  }
+
+  function clearForceFlag(){
+    try {
+      localStorage.removeItem(FORCE_KEY);
+      sessionStorage.removeItem(FORCE_KEY);
+    } catch(e) {}
+
+    clearBadgeIfPossible();
+  }
+
+  function bindRefreshClear(){
+    const btn = getRefreshBtn();
+    if (!btn || btn.dataset.forceUpdateClearBound === '1') return;
+
+    btn.dataset.forceUpdateClearBound = '1';
+
+    btn.addEventListener('click', function(){
+      clearForceFlag();
+      btn.classList.remove('force-update-available');
+    }, true);
+  }
+
+  function initForceUpdateVisual(){
+    persistForceFlagFromUrl();
+    bindRefreshClear();
+
+    if (hasForceFlag()) {
+      applyForceVisual();
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initForceUpdateVisual);
+  } else {
+    initForceUpdateVisual();
+  }
+
+  window.addEventListener('load', initForceUpdateVisual);
+  window.addEventListener('focus', function(){
+    setTimeout(initForceUpdateVisual, 200);
+  });
+
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden) setTimeout(initForceUpdateVisual, 200);
+  });
+
+  // Alcuni script esistenti possono riscrivere il pulsante dopo il load:
+  // lo ribadiamo per qualche secondo.
+  setTimeout(initForceUpdateVisual, 400);
+  setTimeout(initForceUpdateVisual, 1200);
+  setTimeout(initForceUpdateVisual, 2500);
+  setTimeout(initForceUpdateVisual, 5000);
+
+  // Espongo una funzione di debug/test da console.
+  window.forceOwnerAppUpdateVisual = function(){
+    try {
+      localStorage.setItem(FORCE_KEY, '1');
+      sessionStorage.setItem(FORCE_KEY, '1');
+    } catch(e) {}
+    initForceUpdateVisual();
+  };
 })();
 </script>
 
