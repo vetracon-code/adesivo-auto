@@ -1469,13 +1469,13 @@
   .install-assistant-card:before{
     content:"";
     position:absolute;
-    top:-9px;
-    right:72px;
+    bottom:-9px;
+    right:34px;
     width:18px;
     height:18px;
     background:#ffffff;
-    border-left:1px solid rgba(34,48,70,.14);
-    border-top:1px solid rgba(34,48,70,.14);
+    border-right:1px solid rgba(34,48,70,.14);
+    border-bottom:1px solid rgba(34,48,70,.14);
     transform:rotate(45deg);
   }
   .install-assistant-head{
@@ -5064,17 +5064,25 @@ function getOwnerParams(){
       if (currentInstallMode === 'copy_link_ios') {
         try {
           await navigator.clipboard.writeText(window.location.href);
-          resultEl.innerHTML = 'Link copiato. Ora aprilo in <strong>Safari</strong> per completare correttamente il salvataggio della Web App.';
+          resultEl.innerHTML = 'Link copiato. Aprilo in <strong>Safari</strong>, poi segui il balloon.';
         } catch (e) {
-          resultEl.textContent = 'Impossibile copiare automaticamente il link. Copialo manualmente e aprilo in Safari.';
+          resultEl.textContent = 'Copia il link e aprilo in Safari, poi segui il balloon.';
         }
-        explain.style.display = 'block';
+        if (typeof window.openInstallAssistantBalloon === 'function') {
+          window.openInstallAssistantBalloon();
+        } else {
+          explain.style.display = 'block';
+        }
         return;
       }
 
       if (currentInstallMode === 'ios_install') {
-        explain.style.display = 'block';
-        resultEl.innerHTML = 'Su iPhone il salvataggio richiede ancora un passaggio manuale in Safari. Segui le istruzioni qui sopra, poi apri la Web App salvata e attiva le notifiche.';
+        if (typeof window.openInstallAssistantBalloon === 'function') {
+          window.openInstallAssistantBalloon();
+        } else {
+          explain.style.display = 'block';
+        }
+        resultEl.textContent = '';
         return;
       }
 
@@ -5332,6 +5340,10 @@ function getOwnerParams(){
 
     document.getElementById('primaryInstallNotifyBtn').addEventListener('click', tryInstallFlow);
     document.getElementById('secondaryInstallActionBtn').addEventListener('click', () => {
+      if (typeof window.openInstallAssistantBalloon === 'function') {
+        window.openInstallAssistantBalloon();
+        return;
+      }
       const explain = document.getElementById('installExplainBox');
       explain.style.display = explain.style.display === 'none' ? 'block' : 'none';
     });
@@ -5694,14 +5706,15 @@ document.addEventListener('DOMContentLoaded', function () {
       primary.textContent = 'Ho capito';
       body.innerHTML =
         '<ol class="install-assistant-steps">' +
-          '<li>Tocca <strong>Condividi</strong>.</li>' +
-          '<li>Tocca <strong>⊞ Aggiungi alla schermata Home</strong>.</li>' +
-          '<li>Salva con nome: <strong>' + (plate || 'TARGA') + '</strong>.</li>' +
-          '<li>Riapri l’App dalla Home.</li>' +
-        '</ol>';
+          '<li>Tocca i <strong>tre puntini (...)</strong>.</li>' +
+          '<li>Tocca <strong><span style="display:inline-flex;align-items:center;justify-content:center;width:21px;height:21px;border:1.8px solid currentColor;border-radius:6px;font-size:14px;line-height:1;margin-right:4px;">↑</span> Condividi</strong>.</li>' +
+          '<li>Clicca <strong>⊞ Aggiungi alla schermata Home</strong>.</li>' +
+          '<li>Rientra nell\'App ed <strong>attiva le notifiche</strong>.</li>' +
+        '</ol>' +
+        (plate ? '<div style="margin-top:8px;font-weight:800;color:#223046;">Nome App: ' + plate + '</div>' : '');
       if (!d.safari) {
         warning.style.display = 'block';
-        warning.textContent = 'Su iPhone/iPad usa Safari per salvare correttamente l’App.';
+        warning.textContent = 'Se non trovi “Aggiungi alla schermata Home”, apri questa pagina in Safari.';
       }
       return { state };
     }
@@ -5804,7 +5817,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (later) later.addEventListener('click', function(){ iaClose(24); });
     if (primary) primary.addEventListener('click', iaPrimaryAction);
 
-    setTimeout(function(){ iaOpen(false); }, 10000);
+    setTimeout(function(){ iaOpen(false); }, 5000);
   });
 
   document.addEventListener('click', function(e){
