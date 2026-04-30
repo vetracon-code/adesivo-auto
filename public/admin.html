@@ -559,6 +559,7 @@
           <input id="pushTitle" class="input" placeholder="Titolo notifica">
           <select id="pushAudience" class="select">
             <option value="all">Tutti con push attivo</option>
+            <option value="app_update">Avviso aggiornamento App</option>
             <option value="used">Solo attivi</option>
             <option value="new">Solo nuovi da attivare</option>
             <option value="disabled">Solo disattivati</option>
@@ -2153,6 +2154,131 @@ window.fixQrUrl = async function(code){
       overlay.style.display = 'none';
     }
   });
+})();
+</script>
+
+
+<script id="admin-app-update-push-menu">
+(function(){
+  function ensureAppUpdateOption(){
+    const audience = document.getElementById('pushAudience');
+    if (!audience) return;
+
+    if (!Array.from(audience.options).some(o => o.value === 'app_update')) {
+      const opt = document.createElement('option');
+      opt.value = 'app_update';
+      opt.textContent = 'Avviso aggiornamento App';
+      audience.appendChild(opt);
+    }
+  }
+
+  function handlePushAudienceChange(){
+    const audience = document.getElementById('pushAudience');
+    const title = document.getElementById('pushTitle');
+    const message = document.getElementById('pushMessage');
+    const url = document.getElementById('pushUrl');
+    const result = document.getElementById('pushBroadcastResult');
+
+    if (!audience || !title || !message || !url) return;
+
+    if (audience.value === 'app_update') {
+      title.value = 'Aggiorna la tua App';
+      message.value = 'È disponibile una nuova versione. Apri la tua App e tocca “Aggiorna App”.';
+      url.value = 'AUTO: apre ogni Web App proprietario e attiva Aggiorna App';
+      url.disabled = true;
+
+      if (result) {
+        result.textContent = 'Avviso aggiornamento App: verrà inviato a tutti i dispositivi attivi.';
+      }
+    } else {
+      url.disabled = false;
+
+      if (url.value === 'AUTO: apre ogni Web App proprietario e attiva Aggiorna App') {
+        url.value = '';
+      }
+    }
+  }
+
+  async function sendAppUpdateBroadcast(){
+    const result = document.getElementById('pushBroadcastResult');
+
+    const ok = confirm('Confermi l’invio dell’avviso aggiornamento App a tutti i dispositivi attivi?');
+    if (!ok) return;
+
+    if (result) result.textContent = 'Invio avviso aggiornamento App in corso...';
+
+    try {
+      const res = await fetch('/api/admin/push-broadcast', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'same-origin',
+        body: JSON.stringify({
+          title: 'Aggiorna la tua App',
+          message: 'È disponibile una nuova versione. Apri la tua App e tocca “Aggiorna App”.',
+          url: '/owner-simple.html?forceAppUpdate=1',
+          audience: 'app_update',
+          type: 'app_update',
+          app_update: true
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        if (result) result.textContent = data.error || 'Errore invio avviso aggiornamento App.';
+        return;
+      }
+
+      if (result) {
+        result.textContent =
+          `Avviso aggiornamento inviato. Consegnate: ${data.sent || 0} · Fallite: ${data.failed || 0} · Totale target: ${data.total || 0}`;
+      }
+
+      if (typeof loadLastBroadcastStatus === 'function') {
+        loadLastBroadcastStatus();
+      }
+    } catch(e) {
+      if (result) result.textContent = 'Errore invio avviso aggiornamento App.';
+    }
+  }
+
+  function bindAppUpdateMenu(){
+    ensureAppUpdateOption();
+
+    const audience = document.getElementById('pushAudience');
+    const sendBtn = document.getElementById('sendBroadcastPushBtn');
+
+    if (audience && audience.dataset.appUpdateBound !== '1') {
+      audience.dataset.appUpdateBound = '1';
+      audience.addEventListener('change', handlePushAudienceChange);
+      handlePushAudienceChange();
+    }
+
+    if (sendBtn && sendBtn.dataset.appUpdateInterceptor !== '1') {
+      sendBtn.dataset.appUpdateInterceptor = '1';
+
+      sendBtn.addEventListener('click', function(e){
+        const audienceNow = document.getElementById('pushAudience');
+        if (!audienceNow || audienceNow.value !== 'app_update') return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        sendAppUpdateBroadcast();
+      }, true);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindAppUpdateMenu);
+  } else {
+    bindAppUpdateMenu();
+  }
+
+  window.addEventListener('load', bindAppUpdateMenu);
+  setTimeout(bindAppUpdateMenu, 500);
+  setTimeout(bindAppUpdateMenu, 1500);
 })();
 </script>
 

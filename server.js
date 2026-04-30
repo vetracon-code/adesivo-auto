@@ -5593,6 +5593,7 @@ app.post('/api/admin/push-broadcast', requireAdmin, async (req, res) => {
     const cleanTitle = String(title || '').trim();
     const cleanMessage = String(message || '').trim();
     const cleanUrl = String(url || '').trim();
+    const isAppUpdateBroadcast = req.body?.app_update === true || String(req.body?.type || '').trim() === 'app_update' || String(req.body?.audience || '').trim() === 'app_update';
 
     if (!cleanTitle) {
       return res.status(400).json({ success: false, error: 'Titolo mancante.' });
@@ -5617,7 +5618,7 @@ app.post('/api/admin/push-broadcast', requireAdmin, async (req, res) => {
         ps.plate
       FROM push_subscriptions ps
       LEFT JOIN sticker_codes sc ON sc.code = ps.code
-      ${whereClause ? whereClause + " AND " : "WHERE "} ps.is_active = TRUE AND ps.receive_admin_alerts = TRUE
+      ${whereClause ? whereClause + " AND " : "WHERE "} ps.is_active = TRUE ${isAppUpdateBroadcast ? "" : "AND ps.receive_admin_alerts = TRUE"}
       `
     );
 
@@ -5658,7 +5659,17 @@ app.post('/api/admin/push-broadcast', requireAdmin, async (req, res) => {
       };
 
       const directOwnerUrl = `/owner-simple.html?code=${encodeURIComponent(String(row.code || '').trim().toUpperCase())}&plate=${encodeURIComponent(String(row.plate || '').trim())}`;
-      const resolvedOwnerUrl = (!cleanUrl || cleanUrl === '/owner-login.html') ? directOwnerUrl : cleanUrl;
+      let resolvedOwnerUrl = (!cleanUrl || cleanUrl === '/owner-login.html') ? directOwnerUrl : cleanUrl;
+
+      if (isAppUpdateBroadcast) {
+        try {
+          const updateUrl = new URL(directOwnerUrl, 'https://contatto-veicolo.local');
+          updateUrl.searchParams.set('forceAppUpdate', '1');
+          resolvedOwnerUrl = updateUrl.pathname + updateUrl.search;
+        } catch(e) {
+          resolvedOwnerUrl = directOwnerUrl + (directOwnerUrl.includes('?') ? '&' : '?') + 'forceAppUpdate=1';
+        }
+      }
 
       const payloadBase = {
         title: cleanTitle,
