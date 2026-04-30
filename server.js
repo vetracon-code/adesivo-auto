@@ -4010,9 +4010,71 @@ app.post('/api/owner-dashboard', async (req, res, next) => {
        FROM contact_message_logs
        WHERE code = $1
        ORDER BY created_at DESC
-       LIMIT 80`,
+       LIMIT 200`,
       [vehicle.code]
     );
+
+    const areaCounts = { north: 0, center: 0, south: 0, islands: 0 };
+
+    function activeDashboardAreaBucket(cityRaw, regionRaw, countryRaw) {
+      const city = String(cityRaw || '').trim().toLowerCase();
+      const region = String(regionRaw || '').trim().toLowerCase();
+      const country = String(countryRaw || '').trim().toLowerCase();
+
+      if (country && country !== 'it' && country !== 'italy' && country !== 'italia') return '';
+
+      if (
+        city.includes('milan') ||
+        city.includes('milano') ||
+        city.includes('monza') ||
+        region.includes('lombardy') ||
+        region.includes('lombardia') ||
+        region.includes('piedmont') ||
+        region.includes('piemonte') ||
+        region.includes('veneto') ||
+        region.includes('liguria') ||
+        region.includes('emilia') ||
+        region.includes('trentino') ||
+        region.includes('friuli') ||
+        region.includes('aosta')
+      ) return 'north';
+
+      if (
+        city.includes('rome') ||
+        city.includes('roma') ||
+        city.includes('florence') ||
+        city.includes('firenze') ||
+        region.includes('lazio') ||
+        region.includes('tuscany') ||
+        region.includes('toscana') ||
+        region.includes('umbria') ||
+        region.includes('marche') ||
+        region.includes('abruzzo')
+      ) return 'center';
+
+      if (
+        region.includes('sicily') ||
+        region.includes('sicilia') ||
+        region.includes('sardinia') ||
+        region.includes('sardegna')
+      ) return 'islands';
+
+      if (
+        region.includes('campania') ||
+        region.includes('puglia') ||
+        region.includes('apulia') ||
+        region.includes('calabria') ||
+        region.includes('basilicata') ||
+        region.includes('molise')
+      ) return 'south';
+
+      return city || region || country ? 'north' : '';
+    }
+
+    for (const ev of events.rows || []) {
+      const bucket = activeDashboardAreaBucket(ev.ip_city, ev.ip_region, ev.ip_country);
+      if (bucket && areaCounts[bucket] !== undefined) areaCounts[bucket] += 1;
+    }
 
     return res.json({
       success: true,
@@ -4034,7 +4096,8 @@ app.post('/api/owner-dashboard', async (req, res, next) => {
         messagesCount: messagesCount.rows[0]?.total || 0,
         locationsCount: locations.rows[0]?.total || 0,
         lastActivity: last.rows[0]?.last_activity || null,
-        events: events.rows
+        events: events.rows,
+        areaCounts
       }
     });
   } catch (err) {
