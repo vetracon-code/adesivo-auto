@@ -5851,8 +5851,12 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
-    if ((d.type === 'android' || d.type === 'huawei') && typeof tryInstallFlow === 'function') {
-      await tryInstallFlow();
+    if (d.type === 'android' || d.type === 'huawei') {
+      if (typeof window.androidInstallApp === 'function') {
+        await window.androidInstallApp();
+      } else if (typeof tryInstallFlow === 'function') {
+        await tryInstallFlow();
+      }
       setTimeout(() => iaOpen(true), 1200);
       return;
     }
@@ -6370,15 +6374,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
   async function androidInstallApp(){
     try {
-      if (!androidDeferredPrompt) {
+      const promptEvent = androidDeferredPrompt || window.__androidInstallPrompt || null;
+
+      if (!promptEvent) {
         showAndroidBox('Se non appare il pulsante installazione, apri il menu ⋮ di Chrome e scegli “Aggiungi alla schermata Home” o “Installa app”.');
         setInstallResult('Su Android apri il menu ⋮ di Chrome e scegli “Aggiungi alla schermata Home” o “Installa app”.');
         return;
       }
 
-      androidDeferredPrompt.prompt();
-      const choice = await androidDeferredPrompt.userChoice;
+      promptEvent.prompt();
+      const choice = await promptEvent.userChoice;
       androidDeferredPrompt = null;
+      window.__androidInstallPrompt = null;
 
       if (choice && choice.outcome === 'accepted') {
         setInstallResult('App installata. Provo ad attivare subito le notifiche...');
@@ -6402,6 +6409,8 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!isAndroidChrome()) return;
     e.preventDefault();
     androidDeferredPrompt = e;
+    window.__androidInstallPrompt = e;
+    try { window.deferredInstallPrompt = e; } catch(err) {}
     showAndroidBox('Puoi installare la Web App su Android e poi attivare le notifiche.');
   });
 
