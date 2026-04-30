@@ -6838,7 +6838,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <script id="owner-how-it-works-link-script">
 (function(){
-  function getOwnerCtx(){
+  function getOwnerCtxForHow(){
     let code = '';
     let plate = '';
 
@@ -6851,14 +6851,14 @@ document.addEventListener('DOMContentLoaded', function () {
     } catch(e) {}
 
     try {
-      const params = new URLSearchParams(window.location.search);
+      const params = new URLSearchParams(window.location.search || '');
       if (!code) code = params.get('code') || '';
       if (!plate) plate = params.get('plate') || '';
     } catch(e) {}
 
     try {
-      if (!code && window.__OWNER_CODE__) code = window.__OWNER_CODE__;
-      if (!plate && window.__OWNER_PLATE__) plate = window.__OWNER_PLATE__;
+      if (!code) code = window.__OWNER_CODE__ || '';
+      if (!plate) plate = window.__OWNER_PLATE__ || '';
     } catch(e) {}
 
     try {
@@ -6882,120 +6882,58 @@ document.addEventListener('DOMContentLoaded', function () {
     return { code, plate };
   }
 
-  function extractPreviewUrlFromExistingApp(){
-    /*
-      Qui non inventiamo più nulla.
-      Cerchiamo nella pagina il link già pronto o il publicId già usato dalla prova esistente.
-    */
+  async function buildHowItWorksHref(){
+    const ctx = getOwnerCtxForHow();
+    const qs = new URLSearchParams();
 
-    const ctx = getOwnerCtx();
+    if (ctx.code) qs.set('code', ctx.code);
+    if (ctx.plate) qs.set('plate', ctx.plate);
 
-    // 1. Se esiste già un link/iframe verso contact-preview, usiamo quello.
     try {
-      const nodes = Array.from(document.querySelectorAll('a[href*="/contact-preview/u/"], iframe[src*="/contact-preview/u/"]'));
-      for (const el of nodes) {
-        const raw = el.getAttribute('href') || el.getAttribute('src') || '';
-        if (raw && raw.includes('/contact-preview/u/')) {
-          const url = new URL(raw, window.location.origin);
-          if (ctx.code) url.searchParams.set('code', ctx.code);
-          if (ctx.plate) url.searchParams.set('plate', ctx.plate);
-          url.searchParams.set('from_owner_preview', '1');
-          return url.pathname + url.search;
+      if (typeof getPublicId === 'function' && typeof buildPublicQrUrl === 'function') {
+        const publicId = await getPublicId();
+
+        if (publicId) {
+          const trialUrl = buildPublicQrUrl(publicId);
+
+          if (trialUrl && trialUrl !== '#' && trialUrl.includes('/contact-preview/u/')) {
+            qs.set('trial_url', encodeURIComponent(trialUrl));
+          }
         }
       }
-    } catch(e) {}
-
-    // 2. Cerchiamo publicId nelle variabili globali più probabili.
-    const candidates = [];
-
-    try { candidates.push(window.publicId); } catch(e) {}
-    try { candidates.push(window.ownerPublicId); } catch(e) {}
-    try { candidates.push(window.currentPublicId); } catch(e) {}
-    try { candidates.push(window.owner_public_id); } catch(e) {}
-    try { candidates.push(window.currentStickerPublicId); } catch(e) {}
-    try { candidates.push(window.loadedPublicId); } catch(e) {}
-
-    try { candidates.push(window.ownerDashboardData?.public_id); } catch(e) {}
-    try { candidates.push(window.ownerDashboardData?.publicId); } catch(e) {}
-    try { candidates.push(window.dashboardData?.public_id); } catch(e) {}
-    try { candidates.push(window.dashboardData?.publicId); } catch(e) {}
-    try { candidates.push(window.currentVehicle?.public_id); } catch(e) {}
-    try { candidates.push(window.currentVehicle?.publicId); } catch(e) {}
-
-    // 3. Cerchiamo nel DOM eventuali data-public-id
-    try {
-      const dataNode = document.querySelector('[data-public-id]');
-      if (dataNode) candidates.push(dataNode.getAttribute('data-public-id'));
-    } catch(e) {}
-
-    for (const c of candidates) {
-      const publicId = String(c || '').trim();
-      if (publicId) {
-        const qs = new URLSearchParams();
-        if (ctx.code) qs.set('code', ctx.code);
-        if (ctx.plate) qs.set('plate', ctx.plate);
-        qs.set('from_owner_preview', '1');
-        return '/contact-preview/u/' + encodeURIComponent(publicId) + '?' + qs.toString();
-      }
+    } catch(e) {
+      console.warn('buildHowItWorksHref trial_url error:', e);
     }
 
-    // 4. Ultimo tentativo: usa lo stesso handler del pulsante Prova segnalazione se espone dataset/href.
-    try {
-      const previewBtn = document.getElementById('previewStickerBtn');
-      if (previewBtn) {
-        const raw =
-          previewBtn.getAttribute('data-href') ||
-          previewBtn.getAttribute('data-url') ||
-          previewBtn.dataset?.href ||
-          previewBtn.dataset?.url ||
-          '';
-
-        if (raw && raw.includes('/contact-preview/u/')) {
-          const url = new URL(raw, window.location.origin);
-          if (ctx.code) url.searchParams.set('code', ctx.code);
-          if (ctx.plate) url.searchParams.set('plate', ctx.plate);
-          url.searchParams.set('from_owner_preview', '1');
-          return url.pathname + url.search;
-        }
-      }
-    } catch(e) {}
-
-    return '';
+    return '/come-funziona' + (qs.toString() ? '?' + qs.toString() : '');
   }
 
-  function updateHowItWorksLink(){
+  async function updateHowItWorksLink(){
     const link = document.getElementById('ownerHowItWorksLink');
     if (!link) return;
 
-    const ctx = getOwnerCtx();
-    const previewUrl = extractPreviewUrlFromExistingApp();
-
-    try {
-      if (previewUrl) sessionStorage.setItem('owner_exact_preview_url', previewUrl);
-      if (ctx.code) sessionStorage.setItem('owner_code', ctx.code);
-      if (ctx.plate) sessionStorage.setItem('owner_plate', ctx.plate);
-    } catch(e) {}
-
-    const qs = new URLSearchParams();
-    if (ctx.code) qs.set('code', ctx.code);
-    if (ctx.plate) qs.set('plate', ctx.plate);
-    if (previewUrl) qs.set('trial_url', encodeURIComponent(previewUrl));
-
-    link.href = '/come-funziona' + (qs.toString() ? '?' + qs.toString() : '');
+    const href = await buildHowItWorksHref();
+    link.href = href;
   }
 
   function bindHowItWorksClick(){
     const link = document.getElementById('ownerHowItWorksLink');
-    if (!link || link.dataset.exactPreviewBound === '1') return;
+    if (!link || link.dataset.howBound === '1') return;
 
-    link.dataset.exactPreviewBound = '1';
+    link.dataset.howBound = '1';
 
-    link.addEventListener('click', function(e){
-      updateHowItWorksLink();
-      const href = link.getAttribute('href') || '';
-      if (href) {
-        e.preventDefault();
+    link.addEventListener('click', async function(e){
+      e.preventDefault();
+
+      const oldText = link.textContent;
+      link.textContent = 'Apro...';
+
+      try {
+        const href = await buildHowItWorksHref();
         window.location.href = href;
+      } catch(err) {
+        link.textContent = oldText || 'Come funziona';
+        window.location.href = '/come-funziona';
       }
     }, true);
   }
@@ -7012,10 +6950,9 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   window.addEventListener('load', run);
-  setTimeout(run, 300);
-  setTimeout(run, 1000);
-  setTimeout(run, 2500);
-  setTimeout(run, 5000);
+  setTimeout(run, 500);
+  setTimeout(run, 1500);
+  setTimeout(run, 3000);
 })();
 </script>
 
