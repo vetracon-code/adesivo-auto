@@ -3914,7 +3914,31 @@ function getOwnerParams(){
 
         try {
           const params = new URLSearchParams(window.location.search);
-          const requestedMessageId = Number(params.get('messageId') || 0);
+          const requestedMessageId = (() => {
+            const rawMessageId = params.get('messageId') || '';
+            const parsedMessageId = Number(rawMessageId || 0);
+
+            if (!parsedMessageId) return 0;
+
+            try {
+              const openedKey = 'owner_message_opened_once_' + parsedMessageId;
+
+              // Rimuove subito messageId dall'URL: al refresh non deve riaprire lo stesso messaggio.
+              const cleanUrl = new URL(window.location.href);
+              cleanUrl.searchParams.delete('messageId');
+
+              const cleanSearch = cleanUrl.searchParams.toString();
+              const nextUrl = cleanUrl.pathname + (cleanSearch ? '?' + cleanSearch : '') + cleanUrl.hash;
+
+              window.history.replaceState({}, '', nextUrl);
+
+              // Nella stessa sessione evita doppie aperture se qualche script richiama il blocco.
+              if (sessionStorage.getItem(openedKey) === '1') return 0;
+              sessionStorage.setItem(openedKey, '1');
+            } catch(e) {}
+
+            return parsedMessageId;
+          })();
 
           if (
             requestedMessageId &&
