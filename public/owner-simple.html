@@ -7135,10 +7135,10 @@ document.addEventListener('DOMContentLoaded', function () {
 })();
 </script>
 
-
 <script id="force-update-visual-script">
 (function(){
   const FORCE_KEY = 'owner_force_app_update';
+  const SUPPRESS_KEY = 'owner_update_visual_suppress_until';
 
   function getRefreshBtn(){
     return document.getElementById('refreshOwnerAppBtn');
@@ -7153,7 +7153,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  function persistForceFlagFromUrl(){
+  function consumeForceParam(){
     try {
       if (!hasForceParam()) return;
 
@@ -7162,9 +7162,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
       const cleanUrl = new URL(window.location.href);
       cleanUrl.searchParams.delete('forceAppUpdate');
-      const cleanSearch = cleanUrl.searchParams.toString();
-      window.history.replaceState({}, '', cleanUrl.pathname + (cleanSearch ? '?' + cleanSearch : '') + cleanUrl.hash);
+      const search = cleanUrl.searchParams.toString();
+      window.history.replaceState({}, '', cleanUrl.pathname + (search ? '?' + search : '') + cleanUrl.hash);
     } catch(e) {}
+  }
+
+  function isSuppressed(){
+    try {
+      const until = Number(localStorage.getItem(SUPPRESS_KEY) || sessionStorage.getItem(SUPPRESS_KEY) || 0);
+      return until && Date.now() < until;
+    } catch(e) {
+      return false;
+    }
   }
 
   function hasForceFlag(){
@@ -7175,105 +7184,114 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  async function setBadgeOneIfPossible(){
+  async function setBadgeOne(){
     try {
-      if ('setAppBadge' in navigator) {
-        await navigator.setAppBadge(1);
-      }
+      if ('setAppBadge' in navigator) await navigator.setAppBadge(1);
     } catch(e) {}
   }
 
-  async function clearBadgeIfPossible(){
+  async function clearBadge(){
     try {
-      if ('clearAppBadge' in navigator) {
-        await navigator.clearAppBadge();
-      } else if ('setAppBadge' in navigator) {
-        await navigator.setAppBadge(0);
-      }
+      if ('clearAppBadge' in navigator) await navigator.clearAppBadge();
+      else if ('setAppBadge' in navigator) await navigator.setAppBadge(0);
     } catch(e) {}
   }
 
   function applyForceVisual(){
     const btn = getRefreshBtn();
-    if (!btn) return false;
+    if (!btn) return;
 
-    if (!hasForceFlag()) return false;
+    if (isSuppressed()) {
+      clearVisualOnly();
+      return;
+    }
 
-    btn.classList.add('update-available');
+    if (!hasForceFlag()) return;
+
     btn.classList.add('force-update-available');
+    btn.classList.add('update-available');
     btn.textContent = 'Aggiorna App';
     btn.title = 'Aggiornamento disponibile: tocca per aggiornare la App.';
     btn.setAttribute('aria-label', 'Aggiornamento disponibile. Aggiorna App.');
 
-    setBadgeOneIfPossible();
-
-    return true;
+    setBadgeOne();
   }
 
-  function clearForceFlag(){
+  function clearVisualOnly(){
+    const btn = getRefreshBtn();
+    if (!btn) return;
+
+    btn.classList.remove('force-update-available');
+    btn.classList.remove('update-available');
+    btn.style.animation = '';
+    btn.textContent = 'Aggiorna App';
+    btn.title = 'Aggiorna la App';
+    btn.setAttribute('aria-label', 'Aggiorna App');
+  }
+
+  function clearForceUpdateState(){
     try {
       localStorage.removeItem(FORCE_KEY);
       sessionStorage.removeItem(FORCE_KEY);
+
+      localStorage.removeItem('owner_app_update_badge_active');
+      sessionStorage.removeItem('owner_app_update_badge_active');
+
+      const suppressUntil = String(Date.now() + 5 * 60 * 1000);
+      localStorage.setItem(SUPPRESS_KEY, suppressUntil);
+      sessionStorage.setItem(SUPPRESS_KEY, suppressUntil);
     } catch(e) {}
 
-    clearBadgeIfPossible();
+    clearVisualOnly();
+    clearBadge();
   }
 
-  function bindRefreshClear(){
+  function bindRefreshButton(){
     const btn = getRefreshBtn();
-    if (!btn || btn.dataset.forceUpdateClearBound === '1') return;
+    if (!btn || btn.dataset.forceUpdateVisualBound === '1') return;
 
-    btn.dataset.forceUpdateClearBound = '1';
+    btn.dataset.forceUpdateVisualBound = '1';
 
     btn.addEventListener('click', function(){
-      clearForceFlag();
-      btn.classList.remove('force-update-available');
-      btn.classList.remove('update-available');
-      btn.style.animation = '';
-      btn.title = 'Aggiorna la App';
-      btn.setAttribute('aria-label', 'Aggiorna App');
+      clearForceUpdateState();
     }, true);
   }
 
-  function initForceUpdateVisual(){
-    persistForceFlagFromUrl();
-    bindRefreshClear();
-
-    if (hasForceFlag()) {
-      applyForceVisual();
-    }
+  function init(){
+    consumeForceParam();
+    bindRefreshButton();
+    applyForceVisual();
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initForceUpdateVisual);
+    document.addEventListener('DOMContentLoaded', init);
   } else {
-    initForceUpdateVisual();
+    init();
   }
 
-  window.addEventListener('load', initForceUpdateVisual);
-  window.addEventListener('focus', function(){
-    setTimeout(initForceUpdateVisual, 200);
-  });
+  window.addEventListener('load', init);
+  window.addEventListener('focus', function(){ setTimeout(init, 200); });
 
   document.addEventListener('visibilitychange', function(){
-    if (!document.hidden) setTimeout(initForceUpdateVisual, 200);
+    if (!document.hidden) setTimeout(init, 200);
   });
 
-  // Alcuni script esistenti possono riscrivere il pulsante dopo il load:
-  // lo ribadiamo per qualche secondo.
-  setTimeout(initForceUpdateVisual, 400);
-  setTimeout(initForceUpdateVisual, 1200);
-  setTimeout(initForceUpdateVisual, 2500);
-  setTimeout(initForceUpdateVisual, 5000);
+  setTimeout(init, 400);
+  setTimeout(init, 1200);
+  setTimeout(init, 2500);
+  setTimeout(init, 5000);
 
-  // Espongo una funzione di debug/test da console.
   window.forceOwnerAppUpdateVisual = function(){
     try {
       localStorage.setItem(FORCE_KEY, '1');
       sessionStorage.setItem(FORCE_KEY, '1');
+      localStorage.removeItem(SUPPRESS_KEY);
+      sessionStorage.removeItem(SUPPRESS_KEY);
     } catch(e) {}
-    initForceUpdateVisual();
+    applyForceVisual();
   };
+
+  window.clearOwnerUpdateVisualState = clearForceUpdateState;
 })();
 </script>
 
