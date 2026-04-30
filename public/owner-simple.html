@@ -1868,54 +1868,6 @@
           <a id="renewBtn" class="btn btn-primary" href="#">Piani e rinnovo</a>
           <button id="forgetAccessBtn" class="btn btn-secondary" type="button" style="display:none !important; pointer-events:none !important;">Esci da questo dispositivo</button>
         </div>
-
-
-
-<!-- orange-owner-messages-frame-final -->
-<div id="ownerMessagesSection" style="padding:0 22px 22px;margin-top:18px;">
-  <div class="timeline-card" style="
-    padding:22px;
-    border:1px solid rgba(17,24,39,.22);
-    box-shadow:0 16px 36px rgba(255,176,74,.22);
-    background:linear-gradient(135deg,#ffb04a 0%,#ffc86f 55%,#ffd994 100%);
-    color:#111827;
-  ">
-    <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;">
-      <div>
-        <h2 class="section-title" style="
-          margin:0;
-          font-size:1rem;
-          letter-spacing:.04em;
-          color:#111827;
-          font-weight:950;
-        ">MESSAGGI RICEVUTI</h2>
-        <div style="
-          margin-top:6px;
-          color:#111827;
-          font-size:.86rem;
-          line-height:1.42;
-          font-weight:750;
-          opacity:.86;
-        ">Qui trovi le segnalazioni arrivate dal QR del veicolo.</div>
-      </div>
-
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-        <div id="messagesUnreadBadge" class="expiry-badge warn">0 NUOVI</div>
-        <button id="messagesSelectBtn" class="btn btn-secondary" type="button">Seleziona</button>
-        <button id="messagesSelectAllBtn" class="btn btn-secondary" type="button" style="display:none;">Seleziona tutti</button>
-        <button id="messagesMarkReadBtn" class="btn btn-secondary" type="button" style="display:none;">Segna letti</button>
-        <button id="messagesDeleteBtn" class="btn btn-secondary" type="button" style="display:none;">Elimina</button>
-      </div>
-    </div>
-
-    <div id="messagesList" style="display:grid;gap:10px;margin-top:16px;">
-      <div class="muted" style="color:rgba(17,24,39,.78);font-weight:700;">Caricamento messaggi...</div>
-    </div>
-  </div>
-</div>
-<!-- /orange-owner-messages-frame-final -->
-
-
       
 
 <div id="serviceStatusWrap" style="display:none;margin-top:2px;margin-bottom:12px;width:100%;">
@@ -1933,7 +1885,8 @@
               -
             </div>
           </div>
-</div>
+          <div class="owner-messages-heading">MESSAGGI RICEVUTI</div>
+        </div>
 </div>
 
       <div id="stickerPreviewSection" style="display:none;padding:0 22px 20px;">
@@ -1954,6 +1907,26 @@
         </div>
       </div>
 
+      <div id="ownerMessagesSection" style="padding:0 22px 20px;">
+        <div class="timeline-card" style="padding:22px;border:1px solid rgba(103,176,255,.18);box-shadow:0 0 30px rgba(103,176,255,.06) inset;">
+          <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;">
+            <div>
+              <h2 class="section-title" style="margin-bottom:0;font-size:.9rem;">NUOVI MESSAGGI</h2>
+              
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <div id="messagesUnreadBadge" class="expiry-badge warn">0 NUOVI</div>
+              <button id="messagesSelectBtn" class="btn btn-secondary" type="button">Seleziona</button>
+              <button id="messagesSelectAllBtn" class="btn btn-secondary" type="button" style="display:none;">Seleziona tutti</button>
+              <button id="messagesMarkReadBtn" class="btn btn-secondary" type="button" style="display:none;">Segna letti</button>
+              <button id="messagesDeleteBtn" class="btn btn-secondary" type="button" style="display:none;">Elimina</button>
+            </div>
+          </div>
+
+          <div id="messagesList" style="display:grid;gap:10px;margin-top:16px;">
+            <div class="muted">Caricamento messaggi...</div>
+          </div>
+        </div>
       </div>
 
       <div id="ownerAbuseBlocksSection" style="padding:0 22px 20px;">
@@ -2013,6 +1986,7 @@
 
 
     <div class="lower">
+        <div id="serviceStatusPrioritySlot" style="display:none;margin:0 22px 18px;"></div>
         <div class="area-card">
           <h2 class="section-title">AREE DI PROVENIENZA SEGNALAZIONI</h2>
           <div class="italy-map-wrap">
@@ -3187,6 +3161,39 @@ if(!res.ok || !data.success){
         } else {
           serviceStatusValue.textContent = 'Servizio attivo';
           serviceStatusSub.textContent = dLeft === 0 ? 'Scade oggi' : `Scade tra ${dLeft} giorni`;
+        }
+
+        try {
+          const prioritySlot = document.getElementById('serviceStatusPrioritySlot');
+          const originalParentId = 'serviceStatusOriginalSlot';
+
+          if (serviceStatusWrap && !document.getElementById(originalParentId)) {
+            const originalSlot = document.createElement('div');
+            originalSlot.id = originalParentId;
+            originalSlot.style.display = 'contents';
+            serviceStatusWrap.parentNode.insertBefore(originalSlot, serviceStatusWrap);
+          }
+
+          const originalSlot = document.getElementById(originalParentId);
+          const mustPromoteServiceStatus =
+            d.plan_type !== 'always' &&
+            !!d.expires_at &&
+            Number.isFinite(Number(dLeft)) &&
+            Number(dLeft) <= 10;
+
+          if (prioritySlot && originalSlot) {
+            if (mustPromoteServiceStatus) {
+              prioritySlot.style.display = 'block';
+              prioritySlot.appendChild(serviceStatusWrap);
+              serviceStatusWrap.style.margin = '0';
+            } else {
+              prioritySlot.style.display = 'none';
+              originalSlot.parentNode.insertBefore(serviceStatusWrap, originalSlot.nextSibling);
+              serviceStatusWrap.style.margin = '';
+            }
+          }
+        } catch(e) {
+          console.warn('service status priority move error:', e);
         }
       }
 
