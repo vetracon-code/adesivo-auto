@@ -6760,7 +6760,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!isAndroid()) return;
 
     const btn = e.target && e.target.closest
-      ? e.target.closest('#printStickerBtn, #previewStickerBtn, #renewBtn')
+      ? e.target.closest('#printStickerBtn, #previewStickerBtn, #renewBtn, #ownerHowItWorksLink')
       : null;
 
     if (!btn) return;
@@ -6819,6 +6819,21 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
+    if (btn.id === 'ownerHowItWorksLink') {
+      const trialUrl = buildPublicQrUrl(publicId);
+
+      const qs = new URLSearchParams();
+      qs.set('code', ctx.code);
+      qs.set('plate', ctx.plate);
+
+      if (trialUrl && trialUrl !== '#' && trialUrl.includes('/contact-preview/u/')) {
+        qs.set('trial_url', encodeURIComponent(trialUrl));
+      }
+
+      window.location.href = '/come-funziona?' + qs.toString();
+      return;
+    }
+
     if (btn.id === 'previewStickerBtn') {
       const qs = new URLSearchParams();
       qs.set('from_owner_preview', '1');
@@ -6835,126 +6850,5 @@ document.addEventListener('DOMContentLoaded', function () {
   }, true);
 })();
 </script>
-
-<script id="owner-how-it-works-link-script">
-(function(){
-  function getOwnerCtxForHow(){
-    let code = '';
-    let plate = '';
-
-    try {
-      if (typeof getOwnerParams === 'function') {
-        const ctx = getOwnerParams();
-        code = ctx.code || '';
-        plate = ctx.plate || '';
-      }
-    } catch(e) {}
-
-    try {
-      const params = new URLSearchParams(window.location.search || '');
-      if (!code) code = params.get('code') || '';
-      if (!plate) plate = params.get('plate') || '';
-    } catch(e) {}
-
-    try {
-      if (!code) code = window.__OWNER_CODE__ || '';
-      if (!plate) plate = window.__OWNER_PLATE__ || '';
-    } catch(e) {}
-
-    try {
-      if (!code && document.body?.dataset?.ownerCode) code = document.body.dataset.ownerCode;
-      if (!plate && document.body?.dataset?.ownerPlate) plate = document.body.dataset.ownerPlate;
-    } catch(e) {}
-
-    try {
-      if ((!code || !plate) && window.location.pathname) {
-        const m = window.location.pathname.match(/\/owner-app\/([^\/?#]+)\/([^\/?#]+)/i);
-        if (m) {
-          if (!code) code = decodeURIComponent(m[1] || '');
-          if (!plate) plate = decodeURIComponent(m[2] || '');
-        }
-      }
-    } catch(e) {}
-
-    code = String(code || '').trim().toUpperCase();
-    plate = String(plate || '').trim().toUpperCase().replace(/\s+/g,'');
-
-    return { code, plate };
-  }
-
-  async function buildHowItWorksHref(){
-    const ctx = getOwnerCtxForHow();
-    const qs = new URLSearchParams();
-
-    if (ctx.code) qs.set('code', ctx.code);
-    if (ctx.plate) qs.set('plate', ctx.plate);
-
-    try {
-      if (typeof getPublicId === 'function' && typeof buildPublicQrUrl === 'function') {
-        const publicId = await getPublicId();
-
-        if (publicId) {
-          const trialUrl = buildPublicQrUrl(publicId);
-
-          if (trialUrl && trialUrl !== '#' && trialUrl.includes('/contact-preview/u/')) {
-            qs.set('trial_url', encodeURIComponent(trialUrl));
-          }
-        }
-      }
-    } catch(e) {
-      console.warn('buildHowItWorksHref trial_url error:', e);
-    }
-
-    return '/come-funziona' + (qs.toString() ? '?' + qs.toString() : '');
-  }
-
-  async function updateHowItWorksLink(){
-    const link = document.getElementById('ownerHowItWorksLink');
-    if (!link) return;
-
-    const href = await buildHowItWorksHref();
-    link.href = href;
-  }
-
-  function bindHowItWorksClick(){
-    const link = document.getElementById('ownerHowItWorksLink');
-    if (!link || link.dataset.howBound === '1') return;
-
-    link.dataset.howBound = '1';
-
-    link.addEventListener('click', async function(e){
-      e.preventDefault();
-
-      const oldText = link.textContent;
-      link.textContent = 'Apro...';
-
-      try {
-        const href = await buildHowItWorksHref();
-        window.location.href = href;
-      } catch(err) {
-        link.textContent = oldText || 'Come funziona';
-        window.location.href = '/come-funziona';
-      }
-    }, true);
-  }
-
-  function run(){
-    updateHowItWorksLink();
-    bindHowItWorksClick();
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', run);
-  } else {
-    run();
-  }
-
-  window.addEventListener('load', run);
-  setTimeout(run, 500);
-  setTimeout(run, 1500);
-  setTimeout(run, 3000);
-})();
-</script>
-
 </body>
 </html>
