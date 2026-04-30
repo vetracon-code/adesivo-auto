@@ -5728,6 +5728,40 @@ app.post('/api/admin/save-invite', requireAdmin, async (req, res) => {
 
 
 
+
+
+app.post('/api/admin/cleanup-app-update-messages', requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `UPDATE contact_message_logs
+       SET
+         deleted_at = COALESCE(deleted_at, NOW()),
+         read_at = COALESCE(read_at, NOW())
+       WHERE deleted_at IS NULL
+         AND (
+           reason = 'Aggiorna la tua App'
+           OR reason ILIKE '%aggiorna%app%'
+           OR message_text ILIKE '%Aggiorna App%'
+           OR message_text ILIKE '%È disponibile una nuova versione%'
+           OR message_text ILIKE '%E disponibile una nuova versione%'
+         )
+       RETURNING id, code, plate, reason`
+    );
+
+    return res.json({
+      success: true,
+      cleaned_count: result.rows.length,
+      cleaned_ids: result.rows.map(r => r.id)
+    });
+  } catch (err) {
+    console.error('cleanup-app-update-messages error:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Errore pulizia vecchi messaggi aggiornamento App.'
+    });
+  }
+});
+
 app.post('/api/admin/app-update-broadcast', requireAdmin, async (req, res) => {
   try {
     const cleanTitle = String(req.body?.title || 'Aggiorna la tua App').trim();
