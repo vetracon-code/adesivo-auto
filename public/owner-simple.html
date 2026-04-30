@@ -1986,6 +1986,7 @@
 
 
     <div class="lower">
+        <div id="serviceStatusPrioritySlot" style="display:none;margin:0 22px 18px;"></div>
         <div class="area-card">
           <h2 class="section-title">AREE DI PROVENIENZA SEGNALAZIONI</h2>
           <div class="italy-map-wrap">
@@ -3160,6 +3161,39 @@ if(!res.ok || !data.success){
         } else {
           serviceStatusValue.textContent = 'Servizio attivo';
           serviceStatusSub.textContent = dLeft === 0 ? 'Scade oggi' : `Scade tra ${dLeft} giorni`;
+        }
+
+        try {
+          const prioritySlot = document.getElementById('serviceStatusPrioritySlot');
+          const originalParentId = 'serviceStatusOriginalSlot';
+
+          if (serviceStatusWrap && !document.getElementById(originalParentId)) {
+            const originalSlot = document.createElement('div');
+            originalSlot.id = originalParentId;
+            originalSlot.style.display = 'contents';
+            serviceStatusWrap.parentNode.insertBefore(originalSlot, serviceStatusWrap);
+          }
+
+          const originalSlot = document.getElementById(originalParentId);
+          const mustPromoteServiceStatus =
+            d.plan_type !== 'always' &&
+            !!d.expires_at &&
+            Number.isFinite(Number(dLeft)) &&
+            Number(dLeft) <= 10;
+
+          if (prioritySlot && originalSlot) {
+            if (mustPromoteServiceStatus) {
+              prioritySlot.style.display = 'block';
+              prioritySlot.appendChild(serviceStatusWrap);
+              serviceStatusWrap.style.margin = '0';
+            } else {
+              prioritySlot.style.display = 'none';
+              originalSlot.parentNode.insertBefore(serviceStatusWrap, originalSlot.nextSibling);
+              serviceStatusWrap.style.margin = '';
+            }
+          }
+        } catch(e) {
+          console.warn('service status priority move error:', e);
         }
       }
 
