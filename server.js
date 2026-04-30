@@ -1891,6 +1891,11 @@ app.get('/api/temp-debug-plate/:plate', async (req, res) => {
 });
 
 
+
+app.get('/come-funziona', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'come-funziona.html'));
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
