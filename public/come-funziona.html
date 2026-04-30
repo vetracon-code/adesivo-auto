@@ -837,7 +837,7 @@
           <h2>Ora prova il flusso completo</h2>
           <p>Simula una segnalazione e verifica cosa riceve il proprietario nella sua App.</p>
         </div>
-        <a id="trialSignalBtn" class="trial-button" href="/owner-login.html">Prova subito come funziona la segnalazione</a>
+        <a id="trialSignalBtn" class="trial-button" href="#" data-needs-owner-context="1">Prova subito come funziona la segnalazione</a>
       </section>
 
       </div>
@@ -925,47 +925,73 @@
 
   <script id="come-funziona-context-links">
     (function(){
-      try {
+      function getContext(){
         const params = new URLSearchParams(window.location.search);
-        const code = (params.get('code') || '').trim();
-        const plate = (params.get('plate') || '').trim();
 
+        let code = (params.get('code') || '').trim();
+        let plate = (params.get('plate') || '').trim();
+
+        try {
+          if (!code) code = localStorage.getItem('owner_code') || localStorage.getItem('ownerCode') || '';
+          if (!plate) plate = localStorage.getItem('owner_saved_plate') || localStorage.getItem('owner_plate') || localStorage.getItem('ownerPlate') || '';
+        } catch(e) {}
+
+        code = String(code || '').trim().toUpperCase();
+        plate = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+        return { code, plate };
+      }
+
+      function buildOwnerUrl(code, plate){
+        return '/owner-app/' + encodeURIComponent(code) + '/' + encodeURIComponent(plate);
+      }
+
+      function buildTrialUrl(code, plate){
+        return '/contact-demo-owner.html?code=' + encodeURIComponent(code) +
+          '&plate=' + encodeURIComponent(plate) +
+          '&from=come-funziona';
+      }
+
+      function updateLinks(){
+        const ctx = getContext();
         const back = document.getElementById('backToOwnerAppBtn');
-        if (back && code && plate) {
-          back.href = '/owner-app/' + encodeURIComponent(code) + '/' + encodeURIComponent(plate);
-        }
-
+        const trial = document.getElementById('trialSignalBtn');
         const cta = document.getElementById('trialSignalCta');
-        const trial = document.getElementById('trialSignalBtn');
 
-        if (cta && trial && code && plate) {
-          trial.href =
-            '/contact-demo-owner.html?code=' + encodeURIComponent(code) +
-            '&plate=' + encodeURIComponent(plate) +
-            '&from=come-funziona';
-
-          cta.classList.remove('is-hidden');
+        if (back && ctx.code && ctx.plate) {
+          back.href = buildOwnerUrl(ctx.code, ctx.plate);
         }
-      } catch(e) {}
-    })();
-  </script>
 
+        if (trial && ctx.code && ctx.plate) {
+          const trialUrl = buildTrialUrl(ctx.code, ctx.plate);
+          trial.href = trialUrl;
+          trial.dataset.hrefReady = '1';
 
-  <script id="come-funziona-trial-link-script">
-    (function(){
-      try {
-        const params = new URLSearchParams(window.location.search);
-        const code = (params.get('code') || '').trim();
-        const plate = (params.get('plate') || '').trim();
+          trial.onclick = function(e){
+            e.preventDefault();
+            window.location.href = trialUrl;
+          };
 
-        const trial = document.getElementById('trialSignalBtn');
-        if (trial && code && plate) {
-          trial.href =
-            '/contact-demo-owner.html?code=' + encodeURIComponent(code) +
-            '&plate=' + encodeURIComponent(plate) +
-            '&from=come-funziona';
+          if (cta) cta.style.display = '';
+        } else if (trial) {
+          trial.href = '/owner-login.html';
+          trial.onclick = function(e){
+            e.preventDefault();
+            alert('Apri questa guida dalla tua App proprietario per provare la segnalazione collegata al veicolo.');
+            window.location.href = '/owner-login.html';
+          };
         }
-      } catch(e) {}
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', updateLinks);
+      } else {
+        updateLinks();
+      }
+
+      window.addEventListener('load', updateLinks);
+      setTimeout(updateLinks, 300);
+      setTimeout(updateLinks, 1200);
     })();
   </script>
 
