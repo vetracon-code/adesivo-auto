@@ -1689,6 +1689,17 @@ app.get('/owner-app/:code/:plate', async (req, res) => {
       `<body$1 data-owner-code="${code.replace(/"/g,'')}" data-owner-plate="${safePlate}">`
     );
 
+    // Forza il link "Come funziona" a portare sempre il contesto veicolo.
+    const howItWorksHref = `/come-funziona?code=${encodeURIComponent(code)}&plate=${encodeURIComponent(plate)}`;
+    html = html.replace(
+      /<a([^>]*id=["']ownerHowItWorksLink["'][^>]*)href=["'][^"']*["']([^>]*)>/i,
+      `<a$1href="${howItWorksHref}"$2>`
+    );
+    html = html.replace(
+      /<a([^>]*class=["'][^"']*owner-service-intro-link[^"']*["'][^>]*)href=["'][^"']*["']([^>]*)>/i,
+      `<a$1href="${howItWorksHref}"$2>`
+    );
+
     // Se qualche script legge la querystring, garantiamo anche il redirect logico interno
     // senza cambiare URL visibile.
     html = html.replace(
@@ -1790,6 +1801,17 @@ app.get('/owner-simple.html', async (req, res, next) => {
     html = html.replace(
       /<body([^>]*)>/i,
       `<body$1 data-owner-code="${safeCode}" data-owner-plate="${safePlate}">`
+    );
+
+    // Forza il link "Come funziona" anche nella route query legacy.
+    const howItWorksHrefLegacy = `/come-funziona?code=${encodeURIComponent(code)}&plate=${encodeURIComponent(appName)}`;
+    html = html.replace(
+      /<a([^>]*id=["']ownerHowItWorksLink["'][^>]*)href=["'][^"']*["']([^>]*)>/i,
+      `<a$1href="${howItWorksHrefLegacy}"$2>`
+    );
+    html = html.replace(
+      /<a([^>]*class=["'][^"']*owner-service-intro-link[^"']*["'][^>]*)href=["'][^"']*["']([^>]*)>/i,
+      `<a$1href="${howItWorksHrefLegacy}"$2>`
     );
 
     if (!html.includes('window.__OWNER_CODE__')) {
