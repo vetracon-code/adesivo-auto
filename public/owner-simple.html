@@ -5913,20 +5913,34 @@ document.addEventListener('DOMContentLoaded', function () {
     const state = await iaState();
     const d = iaDevice();
 
-    // Su iPhone/iPad e sugli stati informativi “Ho capito” deve SOLO chiudere.
-    if (d.type === 'iphone' || d.type === 'ipad' || state === 'green') {
-      iaClose();
-      iaScheduleImportantReopen();
-      return;
-    }
-
+    // Prima priorità: se l'App è installata ma manca la sottoscrizione push,
+    // anche su iPhone/iPad il pulsante deve tentare la riattivazione notifiche.
     if (state === 'yellow') {
       if (typeof tryEnableNotifications === 'function') {
         await tryEnableNotifications();
       } else if (typeof window.androidEnablePush === 'function') {
         await window.androidEnablePush();
       }
-      setTimeout(() => iaOpen(true), 900);
+
+      if (typeof updateInstallUI === 'function') {
+        setTimeout(updateInstallUI, 700);
+        setTimeout(updateInstallUI, 1800);
+      }
+
+      if (typeof window.setDirectDeviceStatus === 'function') {
+        setTimeout(window.setDirectDeviceStatus, 800);
+        setTimeout(window.setDirectDeviceStatus, 2000);
+      }
+
+      setTimeout(() => iaOpen(true), 1200);
+      return;
+    }
+
+    // Su iPhone/iPad, quando la Web App non è ancora salvata, il pulsante resta istruttivo.
+    // Se il sistema è già verde, chiude semplicemente il balloon.
+    if (d.type === 'iphone' || d.type === 'ipad' || state === 'green') {
+      iaClose();
+      iaScheduleImportantReopen();
       return;
     }
 
