@@ -1319,6 +1319,15 @@
     transform:translateY(1px);
   }
 
+
+  /* Aggiorna App: stato update disponibile */
+  #refreshOwnerAppBtn.update-available{
+    background:linear-gradient(135deg,#ff9b38 0%,#ffb45f 100%) !important;
+    color:#1b1208 !important;
+    border:1px solid rgba(255,155,56,.58) !important;
+    box-shadow:0 10px 22px rgba(255,155,56,.26) !important;
+  }
+
 </style>
 
   <link rel="icon" type="image/x-icon" href="/icons/favicon.ico">
@@ -1687,6 +1696,9 @@
   }
 </style>
 
+<script id="owner-app-build-marker">
+  window.__OWNER_APP_BUILD__ = '1777557791';
+</script>
 </head>
 <body>
   
@@ -6921,5 +6933,177 @@ document.addEventListener('DOMContentLoaded', function () {
   }, true);
 })();
 </script>
+
+<script id="smart-refresh-update-script">
+(function(){
+  const REFRESH_COUNTER_KEY = 'owner_app_forced_refresh_remaining';
+
+  function getRefreshBtn(){
+    return document.getElementById('refreshOwnerAppBtn');
+  }
+
+  function setRefreshButtonUpdateAvailable(){
+    const btn = getRefreshBtn();
+    if (!btn) return;
+
+    btn.classList.add('update-available');
+    btn.textContent = 'Aggiorna App';
+    btn.title = 'Aggiornamento disponibile: tocca per aggiornare la App.';
+    btn.setAttribute('aria-label', 'Aggiornamento disponibile. Aggiorna App.');
+  }
+
+  function setRefreshButtonNormal(){
+    const btn = getRefreshBtn();
+    if (!btn) return;
+
+    btn.classList.remove('update-available');
+    btn.textContent = 'Aggiorna App';
+    btn.title = 'Aggiorna la App';
+    btn.setAttribute('aria-label', 'Aggiorna App');
+  }
+
+  function currentBuild(){
+    return String(window.__OWNER_APP_BUILD__ || '').trim();
+  }
+
+  function extractBuild(html){
+    try {
+      const m = String(html || '').match(/window\.__OWNER_APP_BUILD__\s*=\s*['"]([^'"]+)['"]/);
+      return m && m[1] ? String(m[1]).trim() : '';
+    } catch(e) {
+      return '';
+    }
+  }
+
+  async function detectAvailableUpdate(){
+    try {
+      const current = currentBuild();
+      if (!current) return false;
+
+      const url = new URL(window.location.href);
+      url.searchParams.set('_refresh_check', Date.now().toString());
+
+      const res = await fetch(url.toString(), {
+        method:'GET',
+        cache:'no-store',
+        headers:{ 'Cache-Control':'no-cache' }
+      });
+
+      const html = await res.text();
+      const remote = extractBuild(html);
+
+      if (remote && remote !== current) {
+        setRefreshButtonUpdateAvailable();
+        return true;
+      }
+
+      setRefreshButtonNormal();
+      return false;
+    } catch(e) {
+      return false;
+    }
+  }
+
+  async function updateServiceWorker(){
+    try {
+      if (!('serviceWorker' in navigator)) return;
+
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const reg of regs) {
+        try { await reg.update(); } catch(e) {}
+      }
+    } catch(e) {}
+  }
+
+  async function clearLightCaches(){
+    try {
+      if ('caches' in window) {
+        const names = await caches.keys();
+        await Promise.all(names.map(name => caches.delete(name)));
+      }
+    } catch(e) {}
+  }
+
+  function reloadWithCacheBuster(){
+    const url = new URL(window.location.href);
+    url.searchParams.set('_app_refresh', Date.now().toString());
+    window.location.replace(url.toString());
+  }
+
+  async function startTripleRefresh(){
+    try {
+      sessionStorage.setItem(REFRESH_COUNTER_KEY, '3');
+    } catch(e) {}
+
+    await updateServiceWorker();
+    await clearLightCaches();
+    reloadWithCacheBuster();
+  }
+
+  async function continueTripleRefreshIfNeeded(){
+    let remaining = 0;
+
+    try {
+      remaining = Number(sessionStorage.getItem(REFRESH_COUNTER_KEY) || 0);
+    } catch(e) {}
+
+    if (!remaining || remaining <= 0) return;
+
+    remaining -= 1;
+
+    try {
+      if (remaining > 0) {
+        sessionStorage.setItem(REFRESH_COUNTER_KEY, String(remaining));
+      } else {
+        sessionStorage.removeItem(REFRESH_COUNTER_KEY);
+      }
+    } catch(e) {}
+
+    await updateServiceWorker();
+
+    if (remaining > 0) {
+      setTimeout(reloadWithCacheBuster, 450);
+    } else {
+      setTimeout(function(){
+        setRefreshButtonNormal();
+        detectAvailableUpdate();
+      }, 700);
+    }
+  }
+
+  function bindRefreshButton(){
+    const btn = getRefreshBtn();
+    if (!btn || btn.dataset.smartRefreshBound === '1') return;
+
+    btn.dataset.smartRefreshBound = '1';
+
+    btn.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      startTripleRefresh();
+    }, true);
+  }
+
+  function init(){
+    bindRefreshButton();
+    continueTripleRefreshIfNeeded();
+    setTimeout(detectAvailableUpdate, 1200);
+    setTimeout(detectAvailableUpdate, 5000);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+  window.addEventListener('load', init);
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden) setTimeout(detectAvailableUpdate, 800);
+  });
+})();
+</script>
+
 </body>
 </html>
