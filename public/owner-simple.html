@@ -5695,8 +5695,8 @@ document.addEventListener('DOMContentLoaded', function () {
   function iaImportantHtml(){
     if (!installAssistantImportantMode) return '';
     return '<div class="install-assistant-important">' +
-      '<div style="font-weight:950;letter-spacing:.04em;text-transform:uppercase;">AVVISO IMPORTANTE</div>' +
-      '<div style="margin-top:3px;font-weight:850;text-transform:none;letter-spacing:0;">Indispensabile per l’attivazione del servizio.</div>' +
+      '<div style="font-weight:950;letter-spacing:.04em;text-transform:uppercase;">PASSAGGIO INDISPENSABILE</div>' +
+      '<div style="margin-top:3px;font-weight:850;text-transform:none;letter-spacing:0;">Attiva le notifiche per far funzionare correttamente il sistema.</div>' +
     '</div>';
   }
 
@@ -5863,6 +5863,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
   window.openInstallAssistantBalloon = function(){
     try { localStorage.removeItem('install_assistant_hidden_until'); } catch(e) {}
+    iaOpen(true);
+  };
+
+  window.openInstallAssistantImportantBalloon = function(){
+    try { localStorage.removeItem('install_assistant_hidden_until'); } catch(e) {}
+    installAssistantImportantMode = true;
     iaOpen(true);
   };
 
@@ -6049,6 +6055,14 @@ document.addEventListener('DOMContentLoaded', function () {
         previewBtn.classList.add('is-hidden');
         previewBtn.style.display = 'none';
       }
+
+      // Evita doppioni: se App salvata ma notifiche non attive,
+      // l'attivazione deve passare dal balloon con campana.
+      if (color === 'yellow') {
+        primaryBtn.style.display = 'none';
+      } else {
+        primaryBtn.style.display = 'inline-flex';
+      }
     }
 
     if (secondaryBtn) {
@@ -6058,6 +6072,24 @@ document.addEventListener('DOMContentLoaded', function () {
         secondaryBtn.style.display = 'inline-flex';
         secondaryBtn.textContent = 'Mostra istruzioni';
       }
+    }
+
+    // Se le notifiche restano non attive, riproponi il balloon dopo 10 secondi.
+    if (color === 'yellow') {
+      clearTimeout(window.__yellowNotifyBalloonTimer);
+      window.__yellowNotifyBalloonTimer = setTimeout(async function(){
+        const stillActive = await hasActivePushSubscription();
+        const perm = ('Notification' in window) ? Notification.permission : 'unsupported';
+        if (!(perm === 'granted' && stillActive)) {
+          if (typeof window.openInstallAssistantImportantBalloon === 'function') {
+            window.openInstallAssistantImportantBalloon();
+          } else if (typeof window.openInstallAssistantBalloon === 'function') {
+            window.openInstallAssistantBalloon();
+          }
+        }
+      }, 10000);
+    } else {
+      clearTimeout(window.__yellowNotifyBalloonTimer);
     }
   }
 
