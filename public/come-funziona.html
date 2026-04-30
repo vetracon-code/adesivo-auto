@@ -926,14 +926,11 @@
   <script id="come-funziona-exact-trial-url">
     (function(){
       function getParam(name){
-        try {
-          return new URLSearchParams(window.location.search).get(name) || '';
-        } catch(e) {
-          return '';
-        }
+        try { return new URLSearchParams(window.location.search).get(name) || ''; }
+        catch(e) { return ''; }
       }
 
-      function getCodePlate(){
+      function getCtx(){
         let code = getParam('code');
         let plate = getParam('plate');
 
@@ -943,13 +940,13 @@
         } catch(e) {}
 
         code = String(code || '').trim().toUpperCase();
-        plate = String(plate || '').trim().toUpperCase().replace(/\s+/g,'');
+        plate = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
 
         return { code, plate };
       }
 
-      function getExactTrialUrl(){
-        let raw = getParam('trial_url') || '';
+      function getTrialUrl(){
+        let raw = getParam('trial_url');
 
         try {
           if (!raw) raw = sessionStorage.getItem('owner_exact_preview_url') || '';
@@ -957,48 +954,46 @@
 
         if (!raw) return '';
 
-        try {
-          raw = decodeURIComponent(raw);
-        } catch(e) {}
+        try { raw = decodeURIComponent(raw); } catch(e) {}
 
         if (!raw.includes('/contact-preview/u/')) return '';
-
         return raw;
       }
 
-      function updateBack(){
-        const back = document.getElementById('backToOwnerAppBtn');
-        const ctx = getCodePlate();
+      function init(){
+        const ctx = getCtx();
 
+        const back = document.getElementById('backToOwnerAppBtn');
         if (back && ctx.code && ctx.plate) {
           back.href = '/owner-app/' + encodeURIComponent(ctx.code) + '/' + encodeURIComponent(ctx.plate);
         }
-      }
 
-      function bindTrial(){
         const btn = document.getElementById('trialSignalBtn');
         if (!btn) return;
 
-        const exactUrl = getExactTrialUrl();
+        const trialUrl = getTrialUrl();
 
-        if (exactUrl) {
-          btn.href = exactUrl;
+        if (trialUrl) {
+          btn.href = trialUrl;
+          btn.textContent = 'Prova subito come funziona la segnalazione';
           btn.onclick = function(e){
             e.preventDefault();
-            window.location.href = exactUrl;
+            window.location.href = trialUrl;
           };
           return;
         }
 
+        // Fallback pulito: niente più errore tecnico.
+        btn.textContent = 'Torna all’App e clicca Prova segnalazione';
         btn.onclick = function(e){
           e.preventDefault();
-          alert('Torna all’App e apri “Come funziona” da lì: userò la stessa identica pagina di Prova segnalazione.');
-        };
-      }
 
-      function init(){
-        updateBack();
-        bindTrial();
+          if (ctx.code && ctx.plate) {
+            window.location.href = '/owner-app/' + encodeURIComponent(ctx.code) + '/' + encodeURIComponent(ctx.plate);
+          } else {
+            window.location.href = '/owner-login.html';
+          }
+        };
       }
 
       if (document.readyState === 'loading') {
