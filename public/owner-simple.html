@@ -3620,6 +3620,29 @@ function getOwnerParams(){
         ownerMessages = data.items || [];
         renderMessages();
 
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const requestedMessageId = Number(params.get('messageId') || 0);
+
+          if (
+            requestedMessageId &&
+            autoOpenedMessageId !== requestedMessageId &&
+            typeof window.openMessageDetail === 'function'
+          ) {
+            const foundMessage = ownerMessages.find(m => Number(m.id) === requestedMessageId);
+            if (foundMessage) {
+              autoOpenedMessageId = requestedMessageId;
+              setTimeout(() => {
+                try {
+                  const target = document.getElementById('ownerMessagesSection');
+                  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  window.openMessageDetail(requestedMessageId);
+                } catch(e) {}
+              }, 350);
+            }
+          }
+        } catch(e) {}
+
         // Fallback mappa: alcune Web App ricevono correttamente i messaggi,
         // ma la dashboard non passa sempre eventi alla mappa.
         // I messaggi contengono già ip_city/ip_region/ip_country, quindi li usiamo
