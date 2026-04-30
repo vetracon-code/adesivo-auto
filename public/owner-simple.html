@@ -1358,6 +1358,30 @@
     }
   }
 
+
+  /* Aggiorna App: reset forzato dopo click */
+  body.update-visual-suppressed #refreshOwnerAppBtn,
+  #refreshOwnerAppBtn.update-cleared-force{
+    background:rgba(31,111,235,.10) !important;
+    color:#1f6feb !important;
+    border:1px solid rgba(31,111,235,.22) !important;
+    box-shadow:none !important;
+    animation:none !important;
+    transform:none !important;
+  }
+
+  body.update-visual-suppressed #refreshOwnerAppBtn.update-available,
+  body.update-visual-suppressed #refreshOwnerAppBtn.force-update-available,
+  #refreshOwnerAppBtn.update-cleared-force.update-available,
+  #refreshOwnerAppBtn.update-cleared-force.force-update-available{
+    background:rgba(31,111,235,.10) !important;
+    color:#1f6feb !important;
+    border:1px solid rgba(31,111,235,.22) !important;
+    box-shadow:none !important;
+    animation:none !important;
+    transform:none !important;
+  }
+
 </style>
 
   <link rel="icon" type="image/x-icon" href="/icons/favicon.ico">
@@ -7292,6 +7316,151 @@ document.addEventListener('DOMContentLoaded', function () {
   };
 
   window.clearOwnerUpdateVisualState = clearForceUpdateState;
+})();
+</script>
+
+
+<script id="hard-reset-update-color-script">
+(function(){
+  const FORCE_KEY = 'owner_force_app_update';
+  const SUPPRESS_KEY = 'owner_update_visual_suppress_until';
+  const SUPPRESS_MS = 5 * 60 * 1000;
+
+  function getBtn(){
+    return document.getElementById('refreshOwnerAppBtn');
+  }
+
+  function isSuppressed(){
+    try {
+      const until = Number(localStorage.getItem(SUPPRESS_KEY) || sessionStorage.getItem(SUPPRESS_KEY) || 0);
+      return until && Date.now() < until;
+    } catch(e) {
+      return false;
+    }
+  }
+
+  function setSuppressed(){
+    const until = String(Date.now() + SUPPRESS_MS);
+
+    try {
+      localStorage.setItem(SUPPRESS_KEY, until);
+      sessionStorage.setItem(SUPPRESS_KEY, until);
+
+      localStorage.removeItem(FORCE_KEY);
+      sessionStorage.removeItem(FORCE_KEY);
+      localStorage.removeItem('owner_app_update_badge_active');
+      sessionStorage.removeItem('owner_app_update_badge_active');
+    } catch(e) {}
+  }
+
+  async function clearBadge(){
+    try {
+      if ('clearAppBadge' in navigator) await navigator.clearAppBadge();
+      else if ('setAppBadge' in navigator) await navigator.setAppBadge(0);
+    } catch(e) {}
+  }
+
+  function forceNormalButton(){
+    const btn = getBtn();
+    if (!btn) return;
+
+    document.body.classList.add('update-visual-suppressed');
+
+    btn.classList.remove('update-available');
+    btn.classList.remove('force-update-available');
+    btn.classList.add('update-cleared-force');
+
+    btn.style.animation = 'none';
+    btn.style.transform = 'none';
+    btn.textContent = 'Aggiorna App';
+    btn.title = 'Aggiorna la App';
+    btn.setAttribute('aria-label', 'Aggiorna App');
+  }
+
+  function releaseIfExpired(){
+    if (isSuppressed()) return;
+
+    document.body.classList.remove('update-visual-suppressed');
+
+    const btn = getBtn();
+    if (btn) btn.classList.remove('update-cleared-force');
+  }
+
+  function applyState(){
+    if (isSuppressed()) {
+      forceNormalButton();
+    } else {
+      releaseIfExpired();
+    }
+  }
+
+  function bindClick(){
+    const btn = getBtn();
+    if (!btn || btn.dataset.hardResetUpdateBound === '1') return;
+
+    btn.dataset.hardResetUpdateBound = '1';
+
+    btn.addEventListener('click', function(){
+      setSuppressed();
+      forceNormalButton();
+      clearBadge();
+
+      // Ribadisce dopo eventuali script concorrenti.
+      setTimeout(forceNormalButton, 50);
+      setTimeout(forceNormalButton, 250);
+      setTimeout(forceNormalButton, 800);
+      setTimeout(forceNormalButton, 1800);
+    }, true);
+  }
+
+  function observeButton(){
+    const btn = getBtn();
+    if (!btn || btn.dataset.hardResetObserverBound === '1') return;
+
+    btn.dataset.hardResetObserverBound = '1';
+
+    const obs = new MutationObserver(function(){
+      if (isSuppressed()) {
+        clearTimeout(window.__hardResetUpdateTimer);
+        window.__hardResetUpdateTimer = setTimeout(forceNormalButton, 20);
+      }
+    });
+
+    obs.observe(btn, {
+      attributes:true,
+      attributeFilter:['class','style']
+    });
+  }
+
+  function init(){
+    bindClick();
+    observeButton();
+    applyState();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+  window.addEventListener('load', init);
+  window.addEventListener('focus', init);
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden) init();
+  });
+
+  setTimeout(init, 200);
+  setTimeout(init, 700);
+  setTimeout(init, 1500);
+  setTimeout(init, 3000);
+  setInterval(applyState, 1500);
+
+  window.forceNormalUpdateButton = function(){
+    setSuppressed();
+    forceNormalButton();
+    clearBadge();
+  };
 })();
 </script>
 
