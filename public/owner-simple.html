@@ -3558,7 +3558,7 @@ function getOwnerParams(){
                 <div class="muted" style="margin-top:10px;line-height:1.55;font-size:1rem;">${escapeHtml(preview || 'Nessun dettaglio disponibile')}</div>
                 <div class="muted" style="margin-top:8px;font-size:.9rem;display:flex;flex-wrap:wrap;gap:14px;align-items:center;">${mapLink ? mapLink : ''}${senderPhone ? senderPhone : ''}</div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
-                  <button class="btn btn-secondary" type="button" onclick="openMessageDetail(${item.id})">Apri</button>
+                  <button class="btn btn-secondary open-message-detail-btn" type="button" data-message-id="${item.id || ''}">Apri</button>
                   ${!item.read_at ? `<button class="btn btn-secondary" type="button" onclick="markMessageRead(${item.id})">Segna come letto</button>` : ''}
                   <button class="btn btn-secondary" type="button" onclick="deleteMessage(${item.id})">Elimina</button>
                 </div>
@@ -3929,6 +3929,27 @@ function getOwnerParams(){
       if (abuseResultEl) abuseResultEl.textContent = 'Blocco disattivato.';
       await loadOwnerAbuseBlocks();
     };
+
+    document.addEventListener('click', function(e){
+      const btn = e.target && e.target.closest ? e.target.closest('.open-message-detail-btn') : null;
+      if (!btn) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const id = Number(btn.getAttribute('data-message-id') || 0);
+      if (!id) {
+        alert('ID messaggio non valido. Aggiorna l’App e riprova.');
+        return;
+      }
+
+      if (typeof window.openMessageDetail !== 'function') {
+        alert('Funzione apertura messaggio non disponibile. Aggiorna l’App e riprova.');
+        return;
+      }
+
+      window.openMessageDetail(id);
+    });
 
     document.getElementById('messagesSelectBtn').addEventListener('click', () => {
       messagesSelectionMode = !messagesSelectionMode;
