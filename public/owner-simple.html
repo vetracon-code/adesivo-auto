@@ -1286,14 +1286,34 @@
 (function(){
   try {
     var params = new URLSearchParams(window.location.search);
-    var code = (params.get('code') || '').trim();
-    var plate = (params.get('plate') || '').trim().toUpperCase();
+    var code = (params.get('code') || window.__OWNER_CODE__ || document.body?.dataset?.ownerCode || '').trim();
 
-    if (!plate) {
-      try {
-        plate = (localStorage.getItem('owner_plate') || localStorage.getItem('ownerPlate') || '').trim().toUpperCase();
-      } catch(e) {}
-    }
+    var plate = '';
+
+    try {
+      plate =
+        (window.__OWNER_PLATE__ || '') ||
+        (document.body?.dataset?.ownerPlate || '') ||
+        (params.get('plate') || '');
+
+      if (!plate && window.location.pathname) {
+        var m = window.location.pathname.match(/\/owner-app\/([^\/?#]+)\/([^\/?#]+)/i);
+        if (m && m[2]) plate = decodeURIComponent(m[2] || '');
+        if (!code && m && m[1]) code = decodeURIComponent(m[1] || '').trim();
+      }
+
+      if (!plate) {
+        plate =
+          localStorage.getItem('owner_saved_plate') ||
+          localStorage.getItem('owner_plate') ||
+          localStorage.getItem('ownerPlate') ||
+          '';
+      }
+    } catch(e) {}
+
+    plate = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    if (plate === 'TARGA') plate = '';
 
     // Nome Web App: SOLO TARGA
     var appName = plate || 'TARGA';
@@ -1422,108 +1442,121 @@
     position:fixed;
     left:12px;
     right:12px;
-    top:12px;
+    top:78px;
     z-index:99998;
     display:none;
-    align-items:center;
     justify-content:center;
     pointer-events:none;
   }
-  .install-assistant-balloon.show{
-    display:flex;
-  }
+  .install-assistant-balloon.show{display:flex;}
   .install-assistant-card{
-    width:min(560px,100%);
+    width:min(430px,calc(100vw - 24px));
     pointer-events:auto;
-    border-radius:24px;
-    background:linear-gradient(180deg,rgba(255,255,255,.98) 0%,rgba(245,249,255,.98) 100%);
-    border:1px solid rgba(34,48,70,.12);
-    box-shadow:0 24px 70px rgba(20,34,56,.24);
-    padding:16px 16px 14px;
-    transform:translateY(-120%);
+    position:relative;
+    border-radius:18px;
+    background:#ffffff;
+    border:1px solid rgba(34,48,70,.14);
+    box-shadow:0 18px 48px rgba(20,34,56,.22);
+    padding:14px 14px 13px;
+    transform:translateY(-24px);
     opacity:0;
-    transition:transform .34s ease, opacity .34s ease;
+    transition:transform .28s ease, opacity .28s ease;
   }
   .install-assistant-balloon.show .install-assistant-card{
     transform:translateY(0);
     opacity:1;
   }
+  .install-assistant-card:before{
+    content:"";
+    position:absolute;
+    top:-9px;
+    right:72px;
+    width:18px;
+    height:18px;
+    background:#ffffff;
+    border-left:1px solid rgba(34,48,70,.14);
+    border-top:1px solid rgba(34,48,70,.14);
+    transform:rotate(45deg);
+  }
   .install-assistant-head{
     display:flex;
     align-items:flex-start;
     justify-content:space-between;
-    gap:12px;
+    gap:10px;
   }
   .install-assistant-title-row{
     display:flex;
     align-items:center;
-    gap:10px;
+    gap:9px;
     min-width:0;
   }
   .install-assistant-icon{
-    width:38px;
-    height:38px;
-    border-radius:14px;
+    width:34px;
+    height:34px;
+    border-radius:12px;
     display:flex;
     align-items:center;
     justify-content:center;
-    background:linear-gradient(135deg,#3f79d8 0%,#7fb2ff 100%);
+    background:#3f79d8;
     color:#fff;
-    font-size:1.15rem;
-    box-shadow:0 10px 22px rgba(63,121,216,.24);
+    font-size:1.05rem;
+    box-shadow:0 8px 18px rgba(63,121,216,.22);
     flex:0 0 auto;
   }
   .install-assistant-title{
     font-weight:950;
     color:#223046;
-    line-height:1.12;
-    font-size:1.02rem;
+    line-height:1.1;
+    font-size:1rem;
   }
   .install-assistant-sub{
     margin-top:3px;
-    font-size:.82rem;
+    font-size:.79rem;
     color:#5b6980;
-    line-height:1.3;
+    line-height:1.25;
   }
   .install-assistant-close{
     border:0;
     background:rgba(34,48,70,.07);
     color:#223046;
-    border-radius:12px;
-    width:34px;
-    height:34px;
+    border-radius:10px;
+    width:30px;
+    height:30px;
     font-weight:900;
     cursor:pointer;
     flex:0 0 auto;
   }
   .install-assistant-body{
-    margin-top:12px;
+    margin-top:11px;
     color:#43536b;
-    font-size:.92rem;
-    line-height:1.5;
+    font-size:.91rem;
+    line-height:1.45;
   }
-  .install-assistant-body strong{
-    color:#223046;
+  .install-assistant-body strong{color:#223046;}
+  .install-assistant-steps{
+    margin:8px 0 0;
+    padding-left:20px;
   }
+  .install-assistant-steps li{margin:4px 0;}
   .install-assistant-actions{
     display:flex;
     gap:8px;
     flex-wrap:wrap;
-    margin-top:13px;
+    margin-top:12px;
   }
   .install-assistant-actions button{
     border:0;
-    min-height:40px;
-    border-radius:14px;
-    padding:0 14px;
+    min-height:38px;
+    border-radius:12px;
+    padding:0 13px;
     font-weight:900;
     cursor:pointer;
-    font-size:.88rem;
+    font-size:.86rem;
   }
   .install-assistant-primary{
-    background:linear-gradient(135deg,#3f79d8 0%,#2f5fad 100%);
+    background:#3f79d8;
     color:#fff;
-    box-shadow:0 10px 22px rgba(63,121,216,.20);
+    box-shadow:0 8px 18px rgba(63,121,216,.18);
   }
   .install-assistant-secondary{
     background:#eef3fa;
@@ -1531,14 +1564,14 @@
     border:1px solid rgba(34,48,70,.10) !important;
   }
   .install-assistant-warning{
-    margin-top:10px;
-    border-radius:14px;
-    padding:10px 11px;
-    background:rgba(255,211,108,.18);
+    margin-top:9px;
+    border-radius:12px;
+    padding:9px 10px;
+    background:#fff8e5;
     color:#6f4a00;
-    border:1px solid rgba(255,211,108,.34);
-    font-size:.82rem;
-    line-height:1.42;
+    border:1px solid rgba(255,211,108,.42);
+    font-size:.8rem;
+    line-height:1.36;
     font-weight:750;
   }
 </style>
@@ -5546,8 +5579,36 @@ document.addEventListener('DOMContentLoaded', function () {
   function iaStandalone(){
     try {
       return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    } catch(e) { return false; }
+  }
+
+  function iaOwnerPlate(){
+    try {
+      const params = new URLSearchParams(window.location.search);
+      let plate =
+        (window.__OWNER_PLATE__ || '') ||
+        (document.body?.dataset?.ownerPlate || '') ||
+        (params.get('plate') || '');
+
+      if (!plate && window.location.pathname) {
+        const m = window.location.pathname.match(/\/owner-app\/([^\/?#]+)\/([^\/?#]+)/i);
+        if (m && m[2]) plate = decodeURIComponent(m[2] || '');
+      }
+
+      if (!plate) {
+        plate =
+          localStorage.getItem('owner_saved_plate') ||
+          localStorage.getItem('owner_plate') ||
+          localStorage.getItem('ownerPlate') ||
+          sessionStorage.getItem('owner_saved_plate') ||
+          '';
+      }
+
+      plate = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
+      if (!plate || plate === 'TARGA') return '';
+      return plate;
     } catch(e) {
-      return false;
+      return '';
     }
   }
 
@@ -5559,9 +5620,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!reg || !reg.pushManager) return false;
       const sub = await reg.pushManager.getSubscription();
       return !!sub;
-    } catch(e) {
-      return false;
-    }
+    } catch(e) { return false; }
   }
 
   function iaDevice(){
@@ -5574,10 +5633,10 @@ document.addEventListener('DOMContentLoaded', function () {
     const chrome = /Chrome|CriOS/i.test(ua) && !/Edg|OPR|SamsungBrowser/i.test(ua);
     const safari = /Safari/i.test(ua) && !/Chrome|CriOS|Android/i.test(ua);
 
-    if (huawei) return { type:'huawei', label:'Huawei / Android', safari, chrome, samsung };
+    if (huawei) return { type:'huawei', label:'Huawei', safari, chrome, samsung };
     if (iOS) return { type: iPad ? 'ipad' : 'iphone', label: iPad ? 'iPad' : 'iPhone', safari, chrome, samsung };
-    if (android) return { type:'android', label: samsung ? 'Android · Samsung Internet' : 'Android', safari, chrome, samsung };
-    return { type:'other', label:'Dispositivo rilevato', safari, chrome, samsung };
+    if (android) return { type:'android', label: samsung ? 'Android Samsung' : 'Android', safari, chrome, samsung };
+    return { type:'other', label:'Dispositivo', safari, chrome, samsung };
   }
 
   async function iaState(){
@@ -5590,14 +5649,10 @@ document.addEventListener('DOMContentLoaded', function () {
     return 'red';
   }
 
-  async function iaBuildContent(manual){
+  async function iaBuildContent(){
     const d = iaDevice();
     const state = await iaState();
-    const plate = (() => {
-      try {
-        return String(window.__OWNER_PLATE__ || localStorage.getItem('owner_plate') || localStorage.getItem('owner_saved_plate') || '').trim().toUpperCase();
-      } catch(e) { return ''; }
-    })();
+    const plate = iaOwnerPlate();
 
     const title = iaGet('installAssistantTitle');
     const sub = iaGet('installAssistantSub');
@@ -5608,61 +5663,71 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (!title || !sub || !body || !warning || !primary || !icon) return { state };
 
-    icon.textContent = state === 'green' ? '✓' : (state === 'yellow' ? '🔔' : '↗');
     warning.style.display = 'none';
     warning.textContent = '';
 
     if (state === 'green') {
-      title.textContent = 'App e notifiche attive';
+      title.textContent = 'App attiva';
       sub.textContent = d.label;
-      body.innerHTML = 'Il sistema è già pronto: riceverai gli avvisi su questo dispositivo.';
+      icon.textContent = '✓';
+      body.innerHTML = 'App e notifiche sono attive su questo dispositivo.';
       primary.textContent = 'Chiudi';
       return { state };
     }
 
     if (state === 'yellow') {
-      title.textContent = 'Attiva le notifiche';
+      title.textContent = 'Attiva notifiche';
       sub.textContent = d.label;
+      icon.textContent = '🔔';
       body.innerHTML =
-        'La Web App risulta aperta come App, ma le notifiche non sono ancora attive.<br>' +
-        '<strong>Attivale ora</strong> per ricevere subito gli avvisi del tuo veicolo.';
+        '<strong>Ultimo passaggio.</strong><br>' +
+        'Tocca <strong>Attiva notifiche</strong> e conferma la richiesta.';
       primary.textContent = 'Attiva notifiche';
       return { state };
     }
 
-    title.textContent = 'Salva la Web App';
-    sub.textContent = d.label + (plate ? ' · nome App: ' + plate : '');
-    primary.textContent = d.type === 'android' || d.type === 'huawei' ? 'Installa App' : 'Mostra istruzioni';
+    title.textContent = d.type === 'android' || d.type === 'huawei' ? 'Installa questa App' : 'Salva questa App';
+    sub.textContent = plate ? ('Nome App: ' + plate) : 'Nome App: targa del veicolo';
+    icon.textContent = '↗';
 
     if (d.type === 'iphone' || d.type === 'ipad') {
+      primary.textContent = 'Ho capito';
       body.innerHTML =
-        'Per ricevere correttamente gli avvisi, salva questa Web App sulla schermata Home.<br><br>' +
-        'Su ' + d.label + ': apri la pagina in <strong>Safari</strong>, tocca <strong>Condividi</strong> e scegli <strong>Aggiungi alla schermata Home</strong>.<br><br>' +
-        (plate ? 'Quando salvi, il nome deve essere solo: <strong>' + plate + '</strong>.' : 'Quando salvi, usa come nome la sola targa del mezzo.');
+        '<ol class="install-assistant-steps">' +
+          '<li>Tocca <strong>Condividi</strong>.</li>' +
+          '<li>Tocca <strong>Aggiungi a Home</strong>.</li>' +
+          '<li>Salva con nome: <strong>' + (plate || 'TARGA') + '</strong>.</li>' +
+          '<li>Riapri l’App dalla Home.</li>' +
+        '</ol>';
       if (!d.safari) {
         warning.style.display = 'block';
-        warning.textContent = 'Su iPhone/iPad il salvataggio corretto funziona da Safari. Se sei in un altro browser, copia il link e aprilo in Safari.';
+        warning.textContent = 'Su iPhone/iPad usa Safari per salvare correttamente l’App.';
       }
       return { state };
     }
 
-    if (d.type === 'android') {
+    if (d.type === 'android' || d.type === 'huawei') {
+      primary.textContent = 'Installa App';
       body.innerHTML =
-        'Installa la Web App sul dispositivo e, se il browser lo consente, subito dopo attiva le notifiche nello stesso percorso guidato.<br><br>' +
-        (plate ? 'La Web App deve essere salvata con il nome: <strong>' + plate + '</strong>.' : 'La Web App deve essere salvata con il nome della sola targa.');
+        '<ol class="install-assistant-steps">' +
+          '<li>Tocca <strong>Installa App</strong>.</li>' +
+          '<li>Conferma il salvataggio.</li>' +
+          '<li>Attiva le notifiche quando richiesto.</li>' +
+        '</ol>';
+      if (plate) {
+        warning.style.display = 'block';
+        warning.textContent = 'Il nome dell’App deve essere: ' + plate;
+      }
       return { state };
     }
 
-    if (d.type === 'huawei') {
-      body.innerHTML =
-        'Su Huawei il comportamento dipende dal browser installato. Prova a salvare la Web App sulla schermata Home e poi attiva le notifiche se supportate.';
-      warning.style.display = 'block';
-      warning.textContent = 'Se le notifiche non sono supportate dal browser Huawei, usa Chrome se disponibile.';
-      return { state };
-    }
-
+    primary.textContent = 'Mostra istruzioni';
     body.innerHTML =
-      'Salva questa Web App sul dispositivo e poi attiva le notifiche, se supportate dal browser.';
+      '<ol class="install-assistant-steps">' +
+        '<li>Salva la Web App sul dispositivo.</li>' +
+        '<li>Riaprila dalla schermata Home.</li>' +
+        '<li>Attiva le notifiche.</li>' +
+      '</ol>';
     return { state };
   }
 
@@ -5671,7 +5736,6 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!balloon) return;
 
     const state = await iaState();
-
     if (!manual && state === 'green') return;
 
     if (!manual) {
@@ -5681,7 +5745,7 @@ document.addEventListener('DOMContentLoaded', function () {
       } catch(e) {}
     }
 
-    await iaBuildContent(manual);
+    await iaBuildContent();
     balloon.classList.add('show');
   }
 
