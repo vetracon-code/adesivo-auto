@@ -6836,10 +6836,9 @@ document.addEventListener('DOMContentLoaded', function () {
 })();
 </script>
 
-
 <script id="owner-how-it-works-link-script">
 (function(){
-  function getOwnerContext(){
+  function getOwnerCodePlate(){
     let code = '';
     let plate = '';
 
@@ -6853,17 +6852,34 @@ document.addEventListener('DOMContentLoaded', function () {
 
     try {
       const params = new URLSearchParams(window.location.search);
-      if (!code) code = params.get('code') || window.__OWNER_CODE__ || document.body?.dataset?.ownerCode || '';
-      if (!plate) plate = params.get('plate') || window.__OWNER_PLATE__ || document.body?.dataset?.ownerPlate || '';
+      if (!code) code = params.get('code') || '';
+      if (!plate) plate = params.get('plate') || '';
     } catch(e) {}
 
-    if ((!code || !plate) && window.location.pathname) {
-      const m = window.location.pathname.match(/\/owner-app\/([^\/?#]+)\/([^\/?#]+)/i);
-      if (m) {
-        if (!code) code = decodeURIComponent(m[1] || '');
-        if (!plate) plate = decodeURIComponent(m[2] || '');
+    try {
+      if (!code && window.__OWNER_CODE__) code = window.__OWNER_CODE__;
+      if (!plate && window.__OWNER_PLATE__) plate = window.__OWNER_PLATE__;
+    } catch(e) {}
+
+    try {
+      if (!code && document.body && document.body.dataset) code = document.body.dataset.ownerCode || '';
+      if (!plate && document.body && document.body.dataset) plate = document.body.dataset.ownerPlate || '';
+    } catch(e) {}
+
+    try {
+      if ((!code || !plate) && window.location.pathname) {
+        const m = window.location.pathname.match(/\/owner-app\/([^\/?#]+)\/([^\/?#]+)/i);
+        if (m) {
+          if (!code) code = decodeURIComponent(m[1] || '');
+          if (!plate) plate = decodeURIComponent(m[2] || '');
+        }
       }
-    }
+    } catch(e) {}
+
+    try {
+      if (!code) code = localStorage.getItem('owner_code') || localStorage.getItem('ownerCode') || '';
+      if (!plate) plate = localStorage.getItem('owner_saved_plate') || localStorage.getItem('owner_plate') || localStorage.getItem('ownerPlate') || '';
+    } catch(e) {}
 
     code = String(code || '').trim().toUpperCase();
     plate = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
@@ -6871,65 +6887,19 @@ document.addEventListener('DOMContentLoaded', function () {
     return { code, plate };
   }
 
-  function getPublicId(){
-    // Recupera il public_id dalle variabili o dai dati già caricati dalla dashboard.
-    const candidates = [];
-
-    try { candidates.push(window.ownerPublicId); } catch(e) {}
-    try { candidates.push(window.publicId); } catch(e) {}
-    try { candidates.push(window.currentPublicId); } catch(e) {}
-    try { candidates.push(window.ownerDashboardData && window.ownerDashboardData.public_id); } catch(e) {}
-    try { candidates.push(window.ownerDashboardData && window.ownerDashboardData.publicId); } catch(e) {}
-    try { candidates.push(window.dashboardData && window.dashboardData.public_id); } catch(e) {}
-    try { candidates.push(window.dashboardData && window.dashboardData.publicId); } catch(e) {}
-    try { candidates.push(window.simpleDashboardData && window.simpleDashboardData.public_id); } catch(e) {}
-    try { candidates.push(window.simpleDashboardData && window.simpleDashboardData.publicId); } catch(e) {}
-
-    for (const value of candidates) {
-      const v = String(value || '').trim();
-      if (v) return v;
-    }
-
-    // Fallback: cerca link già presenti verso contact-preview/u/...
-    try {
-      const links = Array.from(document.querySelectorAll('a[href*="/contact-preview/u/"], iframe[src*="/contact-preview/u/"]'));
-      for (const el of links) {
-        const href = el.getAttribute('href') || el.getAttribute('src') || '';
-        const m = href.match(/\/contact-preview\/u\/([^?#\/]+)/i);
-        if (m && m[1]) return decodeURIComponent(m[1]);
-      }
-    } catch(e) {}
-
-    return '';
-  }
-
-  function buildTrialUrl(publicId, ctx){
-    const qs = new URLSearchParams();
-    qs.set('code', ctx.code);
-    qs.set('plate', ctx.plate);
-    qs.set('from_owner_preview', '1');
-
-    return '/contact-preview/u/' + encodeURIComponent(publicId) + '?' + qs.toString();
-  }
-
   function updateHowItWorksLink(){
     const link = document.getElementById('ownerHowItWorksLink');
     if (!link) return;
 
-    const ctx = getOwnerContext();
-    const publicId = getPublicId();
+    const ctx = getOwnerCodePlate();
 
-    const qs = new URLSearchParams();
-
-    if (ctx.code) qs.set('code', ctx.code);
-    if (ctx.plate) qs.set('plate', ctx.plate);
-
-    if (ctx.code && ctx.plate && publicId) {
-      const trialUrl = buildTrialUrl(publicId, ctx);
-      qs.set('trial_url', encodeURIComponent(trialUrl));
+    if (ctx.code && ctx.plate) {
+      link.href =
+        '/come-funziona?code=' + encodeURIComponent(ctx.code) +
+        '&plate=' + encodeURIComponent(ctx.plate);
+    } else {
+      link.href = '/come-funziona';
     }
-
-    link.href = '/come-funziona' + (qs.toString() ? '?' + qs.toString() : '');
   }
 
   if (document.readyState === 'loading') {
@@ -6942,12 +6912,20 @@ document.addEventListener('DOMContentLoaded', function () {
   setTimeout(updateHowItWorksLink, 300);
   setTimeout(updateHowItWorksLink, 1000);
   setTimeout(updateHowItWorksLink, 2500);
-  setTimeout(updateHowItWorksLink, 5000);
 
   document.addEventListener('click', function(e){
     const link = e.target && e.target.closest ? e.target.closest('#ownerHowItWorksLink') : null;
     if (!link) return;
+
     updateHowItWorksLink();
+
+    const ctx = getOwnerCodePlate();
+    if (ctx.code && ctx.plate) {
+      e.preventDefault();
+      window.location.href =
+        '/come-funziona?code=' + encodeURIComponent(ctx.code) +
+        '&plate=' + encodeURIComponent(ctx.plate);
+    }
   }, true);
 })();
 </script>
