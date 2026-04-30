@@ -7501,5 +7501,62 @@ document.addEventListener('DOMContentLoaded', function () {
 })();
 </script>
 
+
+<script id="owner-badge-resync-script">
+(function(){
+  let lastBadgeResyncAt = 0;
+
+  function resyncOwnerBadge(reason){
+    const now = Date.now();
+
+    // Evita richiami troppo ravvicinati.
+    if (now - lastBadgeResyncAt < 2500) return;
+    lastBadgeResyncAt = now;
+
+    try {
+      if (typeof loadOwnerMessages === 'function') {
+        loadOwnerMessages();
+      }
+    } catch(e) {}
+
+    // Secondo passaggio: utile su iPhone quando la Web App si risveglia lentamente.
+    setTimeout(function(){
+      try {
+        if (typeof loadOwnerMessages === 'function') {
+          loadOwnerMessages();
+        }
+      } catch(e) {}
+    }, 1200);
+  }
+
+  window.resyncOwnerBadge = resyncOwnerBadge;
+
+  window.addEventListener('focus', function(){
+    resyncOwnerBadge('focus');
+  });
+
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden) {
+      resyncOwnerBadge('visible');
+    }
+  });
+
+  window.addEventListener('pageshow', function(){
+    resyncOwnerBadge('pageshow');
+  });
+
+  setTimeout(function(){
+    resyncOwnerBadge('startup');
+  }, 1800);
+
+  // Controllo leggero solo quando la Web App è aperta/visibile.
+  setInterval(function(){
+    if (!document.hidden) {
+      resyncOwnerBadge('visible-interval');
+    }
+  }, 30000);
+})();
+</script>
+
 </body>
 </html>
