@@ -837,7 +837,7 @@
           <h2>Ora prova il flusso completo</h2>
           <p>Simula una segnalazione e verifica cosa riceve il proprietario nella sua App.</p>
         </div>
-        <a id="trialSignalBtn" class="trial-button" href="/owner-login.html">Prova subito come funziona la segnalazione</a>
+        <a id="trialSignalBtn" class="trial-button" href="#">Prova subito come funziona la segnalazione</a>
       </section>
 
       </div>
@@ -942,41 +942,97 @@
         return { code, plate };
       }
 
-      function updateLinks(){
-        const ctx = getOwnerContext();
-
+      function setBackLink(ctx){
         const back = document.getElementById('backToOwnerAppBtn');
-        const trial = document.getElementById('trialSignalBtn');
-
         if (back && ctx.code && ctx.plate) {
           back.href = '/owner-app/' + encodeURIComponent(ctx.code) + '/' + encodeURIComponent(ctx.plate);
         }
+      }
 
-        if (trial && ctx.code && ctx.plate) {
-          // STESSA LOGICA DELLA PROVA PROPRIETARIO:
-          // non usiamo più from=come-funziona come flusso separato.
-          const url =
-            '/contact-demo-owner.html?code=' + encodeURIComponent(ctx.code) +
-            '&plate=' + encodeURIComponent(ctx.plate) +
-            '&from_owner_preview=1';
+      async function resolvePreviewUrl(ctx){
+        // 1) Se public_id è già nel link, lo uso.
+        const params = new URLSearchParams(window.location.search);
+        const publicIdFromUrl = (params.get('public_id') || params.get('publicId') || '').trim();
 
-          trial.href = url;
-          trial.onclick = function(e){
-            e.preventDefault();
-            window.location.href = url;
-          };
+        if (publicIdFromUrl) {
+          const qs = new URLSearchParams();
+          qs.set('code', ctx.code);
+          qs.set('plate', ctx.plate);
+          qs.set('from_owner_preview', '1');
+          return '/contact-preview/u/' + encodeURIComponent(publicIdFromUrl) + '?' + qs.toString();
         }
+
+        // 2) Recupero il public_id dal backend usando code/plate.
+        const res = await fetch('/api/owner-dashboard', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ code: ctx.code, plate: ctx.plate })
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Dati veicolo non disponibili.');
+        }
+
+        const publicId =
+          data.public_id ||
+          data.publicId ||
+          (data.item && (data.item.public_id || data.item.publicId)) ||
+          (data.vehicle && (data.vehicle.public_id || data.vehicle.publicId)) ||
+          '';
+
+        if (!publicId) {
+          throw new Error('Public ID del QR non trovato.');
+        }
+
+        const qs = new URLSearchParams();
+        qs.set('code', ctx.code);
+        qs.set('plate', ctx.plate);
+        qs.set('from_owner_preview', '1');
+
+        return '/contact-preview/u/' + encodeURIComponent(publicId) + '?' + qs.toString();
+      }
+
+      function bindTrialButton(){
+        const ctx = getOwnerContext();
+        setBackLink(ctx);
+
+        const trial = document.getElementById('trialSignalBtn');
+        if (!trial) return;
+
+        trial.onclick = async function(e){
+          e.preventDefault();
+
+          if (!ctx.code || !ctx.plate) {
+            alert('Apri questa guida dalla tua App proprietario per provare la segnalazione collegata al veicolo.');
+            window.location.href = '/owner-login.html';
+            return;
+          }
+
+          const oldText = trial.textContent;
+          trial.textContent = 'Apro la prova...';
+          trial.style.pointerEvents = 'none';
+
+          try {
+            const url = await resolvePreviewUrl(ctx);
+            window.location.href = url;
+          } catch(err) {
+            alert((err && err.message) ? err.message : 'Impossibile aprire la prova segnalazione.');
+            trial.textContent = oldText || 'Prova subito come funziona la segnalazione';
+            trial.style.pointerEvents = '';
+          }
+        };
       }
 
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', updateLinks);
+        document.addEventListener('DOMContentLoaded', bindTrialButton);
       } else {
-        updateLinks();
+        bindTrialButton();
       }
 
-      window.addEventListener('load', updateLinks);
-      setTimeout(updateLinks, 300);
-      setTimeout(updateLinks, 1200);
+      window.addEventListener('load', bindTrialButton);
+      setTimeout(bindTrialButton, 500);
     })();
   </script>
 
