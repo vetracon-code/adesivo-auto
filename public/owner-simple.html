@@ -3740,8 +3740,14 @@ function getOwnerParams(){
     };
 
     window.openMessageDetail = async function(id){
-      const item = ownerMessages.find(m => m.id === id);
-      if (!item) return;
+      const numericId = Number(id);
+      const item = (ownerMessages || []).find(m => Number(m.id) === numericId);
+
+      if (!item) {
+        console.warn('Messaggio non trovato per id:', id, ownerMessages);
+        alert('Messaggio non trovato. Aggiorna l’App e riprova.');
+        return;
+      }
 
       if (!item.read_at) {
         await window.markMessageRead(id);
@@ -3761,9 +3767,14 @@ function getOwnerParams(){
       const abuseResultEl = document.getElementById('msgDetailAbuseResult');
       const blockIpBtn = document.getElementById('msgBlockIpBtn');
 
+      if (!modal) {
+        alert('Dettaglio messaggio non disponibile in questa versione. Aggiorna la Web App e riprova.');
+        return;
+      }
+
       modal.style.display = 'flex';
-      reasonEl.textContent = item.reason || 'Segnalazione';
-      dateEl.textContent = fmt(item.created_at);
+      if (reasonEl) reasonEl.textContent = item.reason || 'Segnalazione';
+      if (dateEl) dateEl.textContent = fmt(item.created_at);
 
       const rawText = String(item.message_text || '');
 
@@ -3801,7 +3812,7 @@ function getOwnerParams(){
         phoneEl.href = telClean ? ('tel:' + telClean) : '#';
         phoneWrap.style.display = 'block';
       } else {
-        phoneWrap.style.display = 'none';
+        if (phoneWrap) phoneWrap.style.display = 'none';
         phoneEl.textContent = '';
         phoneEl.href = '#';
       }
@@ -3831,19 +3842,19 @@ function getOwnerParams(){
             };
           }
         } else if (mapPreviewWrap) {
-          mapPreviewWrap.style.display = 'none';
+          if (mapPreviewWrap) mapPreviewWrap.style.display = 'none';
           if (mapCoordsEl) mapCoordsEl.textContent = '-';
         }
       } else {
-        mapWrap.style.display = 'none';
+        if (mapWrap) mapWrap.style.display = 'none';
         mapEl.href = '#';
         if (mapPreviewWrap) {
-          mapPreviewWrap.style.display = 'none';
+          if (mapPreviewWrap) mapPreviewWrap.style.display = 'none';
         }
         if (mapCoordsEl) mapCoordsEl.textContent = '-';
       }
 
-      abuseResultEl.textContent = '';
+      if (abuseResultEl) abuseResultEl.textContent = '';
 
       if (item.ip_address && String(item.ip_address).trim()) {
         const ipValue = String(item.ip_address).trim();
