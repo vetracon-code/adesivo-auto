@@ -1583,16 +1583,12 @@
   
   .install-assistant-important{
     margin:0 0 10px;
-    padding:9px 10px;
+    padding:10px 11px;
     border-radius:12px;
     background:#fff1f1;
-    border:1px solid rgba(217,45,32,.22);
+    border:1px solid rgba(217,45,32,.26);
     color:#b42318;
-    font-weight:950;
-    font-size:.82rem;
-    letter-spacing:.04em;
-    text-transform:uppercase;
-    line-height:1.3;
+    line-height:1.35;
   }
 
   .install-assistant-warning{
@@ -5111,8 +5107,6 @@ function getOwnerParams(){
       if (currentInstallMode === 'ios_install') {
         if (typeof window.openInstallAssistantBalloon === 'function') {
           window.openInstallAssistantBalloon();
-        } else {
-          explain.style.display = 'block';
         }
         resultEl.textContent = '';
         return;
@@ -5618,6 +5612,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <script id="install-assistant-balloon-script">
 (function(){
+  let installAssistantImportantMode = false;
+  let installAssistantReopenTimer = null;
+
   function iaGet(id){ return document.getElementById(id); }
 
   function iaStandalone(){
@@ -5631,7 +5628,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const params = new URLSearchParams(window.location.search);
       let plate =
         (window.__OWNER_PLATE__ || '') ||
-        (document.body?.dataset?.ownerPlate || '') ||
+        (document.body && document.body.dataset ? document.body.dataset.ownerPlate || '' : '') ||
         (params.get('plate') || '');
 
       if (!plate && window.location.pathname) {
@@ -5664,7 +5661,9 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!reg || !reg.pushManager) return false;
       const sub = await reg.pushManager.getSubscription();
       return !!sub;
-    } catch(e) { return false; }
+    } catch(e) {
+      return false;
+    }
   }
 
   function iaDevice(){
@@ -5693,6 +5692,14 @@ document.addEventListener('DOMContentLoaded', function () {
     return 'red';
   }
 
+  function iaImportantHtml(){
+    if (!installAssistantImportantMode) return '';
+    return '<div class="install-assistant-important">' +
+      '<div style="font-weight:950;letter-spacing:.04em;text-transform:uppercase;">AVVISO IMPORTANTE</div>' +
+      '<div style="margin-top:3px;font-weight:850;text-transform:none;letter-spacing:0;">Indispensabile per l’attivazione del servizio.</div>' +
+    '</div>';
+  }
+
   async function iaBuildContent(){
     const d = iaDevice();
     const state = await iaState();
@@ -5714,8 +5721,8 @@ document.addEventListener('DOMContentLoaded', function () {
       title.textContent = 'App attiva';
       sub.textContent = d.label;
       icon.textContent = '✓';
-      body.innerHTML = 'App e notifiche sono attive su questo dispositivo.';
-      primary.textContent = 'Chiudi';
+      body.innerHTML = iaImportantHtml() + 'App e notifiche sono attive su questo dispositivo.';
+      primary.textContent = 'Ho capito';
       return { state };
     }
 
@@ -5724,26 +5731,29 @@ document.addEventListener('DOMContentLoaded', function () {
       sub.textContent = d.label;
       icon.textContent = '🔔';
       body.innerHTML =
+        iaImportantHtml() +
         '<strong>Ultimo passaggio.</strong><br>' +
         'Tocca <strong>Attiva notifiche</strong> e conferma la richiesta.';
       primary.textContent = 'Attiva notifiche';
       return { state };
     }
 
-    title.textContent = d.type === 'android' || d.type === 'huawei' ? 'Installa questa App' : 'Salva questa App';
+    title.textContent = (d.type === 'android' || d.type === 'huawei') ? 'Installa questa App' : 'Salva questa App';
     sub.textContent = plate ? ('Nome App: ' + plate) : 'Nome App: targa del veicolo';
     icon.textContent = '↗';
 
     if (d.type === 'iphone' || d.type === 'ipad') {
       primary.textContent = 'Ho capito';
       body.innerHTML =
+        iaImportantHtml() +
         '<ol class="install-assistant-steps">' +
           '<li>Tocca i <strong>tre puntini (...)</strong>.</li>' +
           '<li>Tocca <strong><span class="ios-share-icon" aria-hidden="true"><svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.2 11.8H7.6C6.5 11.8 5.6 12.7 5.6 13.8V22.2C5.6 23.3 6.5 24.2 7.6 24.2H20.4C21.5 24.2 22.4 23.3 22.4 22.2V13.8C22.4 12.7 21.5 11.8 20.4 11.8H18.8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 17.2V4.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9.8 8.4L14 4.2L18.2 8.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Condividi</strong>.</li>' +
           '<li>Clicca <strong><span class="ios-add-home-icon" aria-hidden="true"><svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5.2" y="5.2" width="17.6" height="17.6" rx="4.2" stroke="currentColor" stroke-width="2"/><path d="M14 9.4V18.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9.4 14H18.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>Aggiungi alla schermata Home</strong>.</li>' +
-          '<li>Rientra nell\'App ed <strong>attiva le notifiche</strong>.</li>' +
+          '<li>Rientra nell\\'App ed <strong>attiva le notifiche</strong>.</li>' +
         '</ol>' +
         (plate ? '<div style="margin-top:8px;font-weight:800;color:#223046;">Nome App: ' + plate + '</div>' : '');
+
       if (!d.safari) {
         warning.style.display = 'block';
         warning.textContent = 'Se non trovi “Aggiungi alla schermata Home”, apri questa pagina in Safari.';
@@ -5754,6 +5764,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (d.type === 'android' || d.type === 'huawei') {
       primary.textContent = 'Installa App';
       body.innerHTML =
+        iaImportantHtml() +
         '<ol class="install-assistant-steps">' +
           '<li>Tocca <strong>Installa App</strong>.</li>' +
           '<li>Conferma il salvataggio.</li>' +
@@ -5766,8 +5777,9 @@ document.addEventListener('DOMContentLoaded', function () {
       return { state };
     }
 
-    primary.textContent = 'Mostra istruzioni';
+    primary.textContent = 'Ho capito';
     body.innerHTML =
+      iaImportantHtml() +
       '<ol class="install-assistant-steps">' +
         '<li>Salva la Web App sul dispositivo.</li>' +
         '<li>Riaprila dalla schermata Home.</li>' +
@@ -5780,10 +5792,18 @@ document.addEventListener('DOMContentLoaded', function () {
     const balloon = iaGet('installAssistantBalloon');
     if (!balloon) return;
 
-    const state = await iaState();
-    if (!manual && state === 'green') return;
+    const params = new URLSearchParams(window.location.search);
+    const force = params.get('showInstallBalloon') === '1' || params.get('installBalloon') === '1';
 
-    if (!manual) {
+    if (force) {
+      try { localStorage.removeItem('install_assistant_hidden_until'); } catch(e) {}
+    }
+
+    const state = await iaState();
+
+    if (!manual && !force && state === 'green') return;
+
+    if (!manual && !force) {
       try {
         const until = Number(localStorage.getItem('install_assistant_hidden_until') || 0);
         if (until && Date.now() < until) return;
@@ -5794,22 +5814,30 @@ document.addEventListener('DOMContentLoaded', function () {
     balloon.classList.add('show');
   }
 
-  function iaClose(delayHours){
+  function iaClose(){
     const balloon = iaGet('installAssistantBalloon');
     if (balloon) balloon.classList.remove('show');
+  }
 
-    if (delayHours) {
-      try {
-        localStorage.setItem('install_assistant_hidden_until', String(Date.now() + delayHours * 60 * 60 * 1000));
-      } catch(e) {}
-    }
+  function iaScheduleImportantReopen(){
+    clearTimeout(installAssistantReopenTimer);
+    installAssistantReopenTimer = setTimeout(async function(){
+      const state = await iaState();
+      if (state !== 'green') {
+        installAssistantImportantMode = true;
+        await iaOpen(true);
+      }
+    }, 10000);
   }
 
   async function iaPrimaryAction(){
     const state = await iaState();
+    const d = iaDevice();
 
-    if (state === 'green') {
-      iaClose(0);
+    // Su iPhone/iPad e sugli stati informativi “Ho capito” deve SOLO chiudere.
+    if (d.type === 'iphone' || d.type === 'ipad' || state === 'green') {
+      iaClose();
+      iaScheduleImportantReopen();
       return;
     }
 
@@ -5823,16 +5851,14 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
-    const d = iaDevice();
-
     if ((d.type === 'android' || d.type === 'huawei') && typeof tryInstallFlow === 'function') {
       await tryInstallFlow();
       setTimeout(() => iaOpen(true), 1200);
       return;
     }
 
-    const explain = iaGet('installExplainBox');
-    if (explain) explain.style.display = 'block';
+    iaClose();
+    iaScheduleImportantReopen();
   }
 
   window.openInstallAssistantBalloon = function(){
@@ -5840,16 +5866,73 @@ document.addEventListener('DOMContentLoaded', function () {
     iaOpen(true);
   };
 
-  document.addEventListener('DOMContentLoaded', function(){
+  window.debugInstallAssistantBalloon = async function(){
+    const state = await iaState();
+    const plate = iaOwnerPlate();
+    const balloon = iaGet('installAssistantBalloon');
+    console.log('[InstallAssistant]', {
+      state,
+      plate,
+      exists: !!balloon,
+      className: balloon ? balloon.className : null,
+      standalone: iaStandalone(),
+      notification: ('Notification' in window) ? Notification.permission : 'unsupported'
+    });
+    await iaOpen(true);
+  };
+
+  function iaInit(){
     const close = iaGet('installAssistantCloseBtn');
     const later = iaGet('installAssistantLaterBtn');
     const primary = iaGet('installAssistantPrimaryBtn');
 
-    if (close) close.addEventListener('click', function(){ iaClose(24); });
-    if (later) later.addEventListener('click', function(){ iaClose(24); });
-    if (primary) primary.addEventListener('click', iaPrimaryAction);
+    if (close && !close.dataset.iaBound) {
+      close.dataset.iaBound = '1';
+      close.addEventListener('click', function(){
+        iaClose();
+        iaScheduleImportantReopen();
+      });
+    }
 
-    setTimeout(function(){ iaOpen(false); }, 5000);
+    if (later) {
+      later.style.display = 'none';
+      if (!later.dataset.iaBound) {
+        later.dataset.iaBound = '1';
+        later.addEventListener('click', function(){
+          iaClose();
+          iaScheduleImportantReopen();
+        });
+      }
+    }
+
+    if (primary && !primary.dataset.iaBound) {
+      primary.dataset.iaBound = '1';
+      primary.addEventListener('click', iaPrimaryAction);
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const force = params.get('showInstallBalloon') === '1' || params.get('installBalloon') === '1';
+
+    if (force) {
+      setTimeout(function(){ iaOpen(true); }, 600);
+    } else {
+      setTimeout(function(){ iaOpen(false); }, 3000);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', iaInit);
+  } else {
+    iaInit();
+  }
+
+  window.addEventListener('load', function(){
+    const params = new URLSearchParams(window.location.search);
+    const force = params.get('showInstallBalloon') === '1' || params.get('installBalloon') === '1';
+
+    if (force) {
+      setTimeout(function(){ iaOpen(true); }, 900);
+    }
   });
 
   document.addEventListener('click', function(e){
