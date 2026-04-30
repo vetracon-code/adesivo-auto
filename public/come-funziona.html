@@ -923,116 +923,80 @@
     </section>
   </main>
 
-  <script id="come-funziona-owner-preview-link">
+  <script id="come-funziona-exact-trial-url">
     (function(){
-      function getOwnerContext(){
-        const params = new URLSearchParams(window.location.search);
+      function params(){
+        return new URLSearchParams(window.location.search);
+      }
 
-        let code = (params.get('code') || '').trim();
-        let plate = (params.get('plate') || '').trim();
-
-        try {
-          if (!code) code = localStorage.getItem('owner_code') || localStorage.getItem('ownerCode') || '';
-          if (!plate) plate = localStorage.getItem('owner_saved_plate') || localStorage.getItem('owner_plate') || localStorage.getItem('ownerPlate') || '';
-        } catch(e) {}
-
-        code = String(code || '').trim().toUpperCase();
-        plate = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
-
+      function cleanOwnerContext(){
+        const p = params();
+        const code = String(p.get('code') || '').trim().toUpperCase();
+        const plate = String(p.get('plate') || '').trim().toUpperCase().replace(/\s+/g, '');
         return { code, plate };
       }
 
-      function setBackLink(ctx){
+      function updateBackButton(){
+        const ctx = cleanOwnerContext();
         const back = document.getElementById('backToOwnerAppBtn');
+
         if (back && ctx.code && ctx.plate) {
           back.href = '/owner-app/' + encodeURIComponent(ctx.code) + '/' + encodeURIComponent(ctx.plate);
         }
       }
 
-      async function resolvePreviewUrl(ctx){
-        // 1) Se public_id è già nel link, lo uso.
-        const params = new URLSearchParams(window.location.search);
-        const publicIdFromUrl = (params.get('public_id') || params.get('publicId') || '').trim();
-
-        if (publicIdFromUrl) {
-          const qs = new URLSearchParams();
-          qs.set('code', ctx.code);
-          qs.set('plate', ctx.plate);
-          qs.set('from_owner_preview', '1');
-          return '/contact-preview/u/' + encodeURIComponent(publicIdFromUrl) + '?' + qs.toString();
-        }
-
-        // 2) Recupero il public_id dal backend usando code/plate.
-        const res = await fetch('/api/owner-dashboard', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ code: ctx.code, plate: ctx.plate })
-        });
-
-        const data = await res.json().catch(() => ({}));
-
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || 'Dati veicolo non disponibili.');
-        }
-
-        const publicId =
-          data.public_id ||
-          data.publicId ||
-          (data.item && (data.item.public_id || data.item.publicId)) ||
-          (data.vehicle && (data.vehicle.public_id || data.vehicle.publicId)) ||
-          '';
-
-        if (!publicId) {
-          throw new Error('Public ID del QR non trovato.');
-        }
-
-        const qs = new URLSearchParams();
-        qs.set('code', ctx.code);
-        qs.set('plate', ctx.plate);
-        qs.set('from_owner_preview', '1');
-
-        return '/contact-preview/u/' + encodeURIComponent(publicId) + '?' + qs.toString();
-      }
-
-      function bindTrialButton(){
-        const ctx = getOwnerContext();
-        setBackLink(ctx);
-
+      function updateTrialButton(){
+        const p = params();
+        const rawTrialUrl = p.get('trial_url') || '';
         const trial = document.getElementById('trialSignalBtn');
+
         if (!trial) return;
 
-        trial.onclick = async function(e){
+        if (!rawTrialUrl) {
+          trial.onclick = function(e){
+            e.preventDefault();
+            alert('Apri questa guida dalla tua App proprietario per usare la prova collegata al veicolo.');
+          };
+          return;
+        }
+
+        let finalUrl = '';
+
+        try {
+          finalUrl = decodeURIComponent(rawTrialUrl);
+        } catch(e) {
+          finalUrl = rawTrialUrl;
+        }
+
+        if (!finalUrl || !finalUrl.includes('/contact-preview/u/')) {
+          trial.onclick = function(e){
+            e.preventDefault();
+            alert('Link prova non valido. Torna all’App e riapri Come funziona.');
+          };
+          return;
+        }
+
+        trial.href = finalUrl;
+        trial.onclick = function(e){
           e.preventDefault();
-
-          if (!ctx.code || !ctx.plate) {
-            alert('Apri questa guida dalla tua App proprietario per provare la segnalazione collegata al veicolo.');
-            window.location.href = '/owner-login.html';
-            return;
-          }
-
-          const oldText = trial.textContent;
-          trial.textContent = 'Apro la prova...';
-          trial.style.pointerEvents = 'none';
-
-          try {
-            const url = await resolvePreviewUrl(ctx);
-            window.location.href = url;
-          } catch(err) {
-            alert((err && err.message) ? err.message : 'Impossibile aprire la prova segnalazione.');
-            trial.textContent = oldText || 'Prova subito come funziona la segnalazione';
-            trial.style.pointerEvents = '';
-          }
+          window.location.href = finalUrl;
         };
       }
 
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', bindTrialButton);
-      } else {
-        bindTrialButton();
+      function init(){
+        updateBackButton();
+        updateTrialButton();
       }
 
-      window.addEventListener('load', bindTrialButton);
-      setTimeout(bindTrialButton, 500);
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+
+      window.addEventListener('load', init);
+      setTimeout(init, 400);
+      setTimeout(init, 1200);
     })();
   </script>
 
