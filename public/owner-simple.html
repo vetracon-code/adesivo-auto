@@ -2523,6 +2523,58 @@ function areaBucket(city, region){
     }
 
     
+
+function applyAreaCountsToItalyDots(areaCounts){
+  try {
+    if (!areaCounts) return;
+
+    const map = {
+      north: document.getElementById('mapDotNorth'),
+      center: document.getElementById('mapDotCenter'),
+      south: document.getElementById('mapDotSouth'),
+      islands: document.getElementById('mapDotIslands')
+    };
+
+    Object.entries(map).forEach(([key, el]) => {
+      if (!el) return;
+
+      const count = Number(areaCounts[key] || 0);
+
+      if (count > 0) {
+        el.classList.add('has-events');
+        el.dataset.count = String(count);
+        el.textContent = String(count);
+        el.style.display = 'inline-flex';
+        el.style.alignItems = 'center';
+        el.style.justifyContent = 'center';
+        el.style.opacity = '1';
+        el.style.visibility = 'visible';
+        el.style.pointerEvents = 'auto';
+        el.style.zIndex = '40';
+        el.style.color = '#ffffff';
+        el.style.fontSize = '.62rem';
+        el.style.fontWeight = '900';
+        el.style.lineHeight = '1';
+        el.style.textAlign = 'center';
+
+        const size = Math.min(30, Math.max(18, 14 + Math.min(count, 16)));
+        el.style.width = size + 'px';
+        el.style.height = size + 'px';
+      } else {
+        el.classList.remove('has-events', 'active');
+        el.dataset.count = '0';
+        el.textContent = '';
+        el.style.display = 'none';
+      }
+    });
+
+    window.__OWNER_AREA_COUNTS__ = areaCounts;
+  } catch(e) {
+    console.warn('applyAreaCountsToItalyDots error:', e);
+  }
+}
+
+
 function renderSystemActivityMapDots(events){
   try {
     const visualBox = document.getElementById('mapVisualBox');
@@ -2930,6 +2982,7 @@ if(!res.ok || !data.success){
         }
       } catch (e) {}
       const events = Array.isArray(d.events) ? d.events : [];
+      const areaCounts = d.areaCounts || null;
 
       try {
         renderSystemActivityMapDots(events);
@@ -3176,6 +3229,12 @@ if(!res.ok || !data.success){
       }
 
       renderItalyMapGroups(events);
+      if (areaCounts) {
+        applyAreaCountsToItalyDots(areaCounts);
+        setTimeout(() => applyAreaCountsToItalyDots(areaCounts), 500);
+        setTimeout(() => applyAreaCountsToItalyDots(areaCounts), 1500);
+        setTimeout(() => applyAreaCountsToItalyDots(areaCounts), 3000);
+      }
 
       // Fix mappa: in alcune Web App i dati area arrivano correttamente dalla dashboard,
       // ma i punti non compaiono perché il render avviene prima che la mappa sia stabile.
