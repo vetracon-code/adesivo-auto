@@ -4624,7 +4624,7 @@ app.post('/api/owner-dashboard', async (req, res) => {
            FROM contact_message_logs
            WHERE code = $1)
          ORDER BY at DESC
-         LIMIT 12`,
+         LIMIT 200`,
         [cleanCode]
       );
       events = recentEvents.rows || [];
