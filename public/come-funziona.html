@@ -925,67 +925,80 @@
 
   <script id="come-funziona-exact-trial-url">
     (function(){
-      function params(){
-        return new URLSearchParams(window.location.search);
+      function getParam(name){
+        try {
+          return new URLSearchParams(window.location.search).get(name) || '';
+        } catch(e) {
+          return '';
+        }
       }
 
-      function cleanOwnerContext(){
-        const p = params();
-        const code = String(p.get('code') || '').trim().toUpperCase();
-        const plate = String(p.get('plate') || '').trim().toUpperCase().replace(/\s+/g, '');
+      function getCodePlate(){
+        let code = getParam('code');
+        let plate = getParam('plate');
+
+        try {
+          if (!code) code = sessionStorage.getItem('owner_code') || localStorage.getItem('owner_code') || '';
+          if (!plate) plate = sessionStorage.getItem('owner_plate') || localStorage.getItem('owner_plate') || localStorage.getItem('owner_saved_plate') || '';
+        } catch(e) {}
+
+        code = String(code || '').trim().toUpperCase();
+        plate = String(plate || '').trim().toUpperCase().replace(/\s+/g,'');
+
         return { code, plate };
       }
 
-      function updateBackButton(){
-        const ctx = cleanOwnerContext();
+      function getExactTrialUrl(){
+        let raw = getParam('trial_url') || '';
+
+        try {
+          if (!raw) raw = sessionStorage.getItem('owner_exact_preview_url') || '';
+        } catch(e) {}
+
+        if (!raw) return '';
+
+        try {
+          raw = decodeURIComponent(raw);
+        } catch(e) {}
+
+        if (!raw.includes('/contact-preview/u/')) return '';
+
+        return raw;
+      }
+
+      function updateBack(){
         const back = document.getElementById('backToOwnerAppBtn');
+        const ctx = getCodePlate();
 
         if (back && ctx.code && ctx.plate) {
           back.href = '/owner-app/' + encodeURIComponent(ctx.code) + '/' + encodeURIComponent(ctx.plate);
         }
       }
 
-      function updateTrialButton(){
-        const p = params();
-        const rawTrialUrl = p.get('trial_url') || '';
-        const trial = document.getElementById('trialSignalBtn');
+      function bindTrial(){
+        const btn = document.getElementById('trialSignalBtn');
+        if (!btn) return;
 
-        if (!trial) return;
+        const exactUrl = getExactTrialUrl();
 
-        if (!rawTrialUrl) {
-          trial.onclick = function(e){
+        if (exactUrl) {
+          btn.href = exactUrl;
+          btn.onclick = function(e){
             e.preventDefault();
-            alert('Apri questa guida dalla tua App proprietario per usare la prova collegata al veicolo.');
+            window.location.href = exactUrl;
           };
           return;
         }
 
-        let finalUrl = '';
-
-        try {
-          finalUrl = decodeURIComponent(rawTrialUrl);
-        } catch(e) {
-          finalUrl = rawTrialUrl;
-        }
-
-        if (!finalUrl || !finalUrl.includes('/contact-preview/u/')) {
-          trial.onclick = function(e){
-            e.preventDefault();
-            alert('Link prova non valido. Torna all’App e riapri Come funziona.');
-          };
-          return;
-        }
-
-        trial.href = finalUrl;
-        trial.onclick = function(e){
+        btn.onclick = function(e){
           e.preventDefault();
-          window.location.href = finalUrl;
+          alert('Torna all’App e apri “Come funziona” da lì: userò la stessa identica pagina di Prova segnalazione.');
         };
       }
 
       function init(){
-        updateBackButton();
-        updateTrialButton();
+        updateBack();
+        bindTrial();
       }
 
       if (document.readyState === 'loading') {

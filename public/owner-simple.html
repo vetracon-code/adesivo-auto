@@ -6838,7 +6838,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <script id="owner-how-it-works-link-script">
 (function(){
-  function getOwnerCodePlate(){
+  function getOwnerCtx(){
     let code = '';
     let plate = '';
 
@@ -6862,8 +6862,8 @@ document.addEventListener('DOMContentLoaded', function () {
     } catch(e) {}
 
     try {
-      if (!code && document.body && document.body.dataset) code = document.body.dataset.ownerCode || '';
-      if (!plate && document.body && document.body.dataset) plate = document.body.dataset.ownerPlate || '';
+      if (!code && document.body?.dataset?.ownerCode) code = document.body.dataset.ownerCode;
+      if (!plate && document.body?.dataset?.ownerPlate) plate = document.body.dataset.ownerPlate;
     } catch(e) {}
 
     try {
@@ -6876,57 +6876,146 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     } catch(e) {}
 
-    try {
-      if (!code) code = localStorage.getItem('owner_code') || localStorage.getItem('ownerCode') || '';
-      if (!plate) plate = localStorage.getItem('owner_saved_plate') || localStorage.getItem('owner_plate') || localStorage.getItem('ownerPlate') || '';
-    } catch(e) {}
-
     code = String(code || '').trim().toUpperCase();
-    plate = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
+    plate = String(plate || '').trim().toUpperCase().replace(/\s+/g,'');
 
     return { code, plate };
+  }
+
+  function extractPreviewUrlFromExistingApp(){
+    /*
+      Qui non inventiamo più nulla.
+      Cerchiamo nella pagina il link già pronto o il publicId già usato dalla prova esistente.
+    */
+
+    const ctx = getOwnerCtx();
+
+    // 1. Se esiste già un link/iframe verso contact-preview, usiamo quello.
+    try {
+      const nodes = Array.from(document.querySelectorAll('a[href*="/contact-preview/u/"], iframe[src*="/contact-preview/u/"]'));
+      for (const el of nodes) {
+        const raw = el.getAttribute('href') || el.getAttribute('src') || '';
+        if (raw && raw.includes('/contact-preview/u/')) {
+          const url = new URL(raw, window.location.origin);
+          if (ctx.code) url.searchParams.set('code', ctx.code);
+          if (ctx.plate) url.searchParams.set('plate', ctx.plate);
+          url.searchParams.set('from_owner_preview', '1');
+          return url.pathname + url.search;
+        }
+      }
+    } catch(e) {}
+
+    // 2. Cerchiamo publicId nelle variabili globali più probabili.
+    const candidates = [];
+
+    try { candidates.push(window.publicId); } catch(e) {}
+    try { candidates.push(window.ownerPublicId); } catch(e) {}
+    try { candidates.push(window.currentPublicId); } catch(e) {}
+    try { candidates.push(window.owner_public_id); } catch(e) {}
+    try { candidates.push(window.currentStickerPublicId); } catch(e) {}
+    try { candidates.push(window.loadedPublicId); } catch(e) {}
+
+    try { candidates.push(window.ownerDashboardData?.public_id); } catch(e) {}
+    try { candidates.push(window.ownerDashboardData?.publicId); } catch(e) {}
+    try { candidates.push(window.dashboardData?.public_id); } catch(e) {}
+    try { candidates.push(window.dashboardData?.publicId); } catch(e) {}
+    try { candidates.push(window.currentVehicle?.public_id); } catch(e) {}
+    try { candidates.push(window.currentVehicle?.publicId); } catch(e) {}
+
+    // 3. Cerchiamo nel DOM eventuali data-public-id
+    try {
+      const dataNode = document.querySelector('[data-public-id]');
+      if (dataNode) candidates.push(dataNode.getAttribute('data-public-id'));
+    } catch(e) {}
+
+    for (const c of candidates) {
+      const publicId = String(c || '').trim();
+      if (publicId) {
+        const qs = new URLSearchParams();
+        if (ctx.code) qs.set('code', ctx.code);
+        if (ctx.plate) qs.set('plate', ctx.plate);
+        qs.set('from_owner_preview', '1');
+        return '/contact-preview/u/' + encodeURIComponent(publicId) + '?' + qs.toString();
+      }
+    }
+
+    // 4. Ultimo tentativo: usa lo stesso handler del pulsante Prova segnalazione se espone dataset/href.
+    try {
+      const previewBtn = document.getElementById('previewStickerBtn');
+      if (previewBtn) {
+        const raw =
+          previewBtn.getAttribute('data-href') ||
+          previewBtn.getAttribute('data-url') ||
+          previewBtn.dataset?.href ||
+          previewBtn.dataset?.url ||
+          '';
+
+        if (raw && raw.includes('/contact-preview/u/')) {
+          const url = new URL(raw, window.location.origin);
+          if (ctx.code) url.searchParams.set('code', ctx.code);
+          if (ctx.plate) url.searchParams.set('plate', ctx.plate);
+          url.searchParams.set('from_owner_preview', '1');
+          return url.pathname + url.search;
+        }
+      }
+    } catch(e) {}
+
+    return '';
   }
 
   function updateHowItWorksLink(){
     const link = document.getElementById('ownerHowItWorksLink');
     if (!link) return;
 
-    const ctx = getOwnerCodePlate();
+    const ctx = getOwnerCtx();
+    const previewUrl = extractPreviewUrlFromExistingApp();
 
-    if (ctx.code && ctx.plate) {
-      link.href =
-        '/come-funziona?code=' + encodeURIComponent(ctx.code) +
-        '&plate=' + encodeURIComponent(ctx.plate);
-    } else {
-      link.href = '/come-funziona';
-    }
+    try {
+      if (previewUrl) sessionStorage.setItem('owner_exact_preview_url', previewUrl);
+      if (ctx.code) sessionStorage.setItem('owner_code', ctx.code);
+      if (ctx.plate) sessionStorage.setItem('owner_plate', ctx.plate);
+    } catch(e) {}
+
+    const qs = new URLSearchParams();
+    if (ctx.code) qs.set('code', ctx.code);
+    if (ctx.plate) qs.set('plate', ctx.plate);
+    if (previewUrl) qs.set('trial_url', encodeURIComponent(previewUrl));
+
+    link.href = '/come-funziona' + (qs.toString() ? '?' + qs.toString() : '');
+  }
+
+  function bindHowItWorksClick(){
+    const link = document.getElementById('ownerHowItWorksLink');
+    if (!link || link.dataset.exactPreviewBound === '1') return;
+
+    link.dataset.exactPreviewBound = '1';
+
+    link.addEventListener('click', function(e){
+      updateHowItWorksLink();
+      const href = link.getAttribute('href') || '';
+      if (href) {
+        e.preventDefault();
+        window.location.href = href;
+      }
+    }, true);
+  }
+
+  function run(){
+    updateHowItWorksLink();
+    bindHowItWorksClick();
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', updateHowItWorksLink);
+    document.addEventListener('DOMContentLoaded', run);
   } else {
-    updateHowItWorksLink();
+    run();
   }
 
-  window.addEventListener('load', updateHowItWorksLink);
-  setTimeout(updateHowItWorksLink, 300);
-  setTimeout(updateHowItWorksLink, 1000);
-  setTimeout(updateHowItWorksLink, 2500);
-
-  document.addEventListener('click', function(e){
-    const link = e.target && e.target.closest ? e.target.closest('#ownerHowItWorksLink') : null;
-    if (!link) return;
-
-    updateHowItWorksLink();
-
-    const ctx = getOwnerCodePlate();
-    if (ctx.code && ctx.plate) {
-      e.preventDefault();
-      window.location.href =
-        '/come-funziona?code=' + encodeURIComponent(ctx.code) +
-        '&plate=' + encodeURIComponent(ctx.plate);
-    }
-  }, true);
+  window.addEventListener('load', run);
+  setTimeout(run, 300);
+  setTimeout(run, 1000);
+  setTimeout(run, 2500);
+  setTimeout(run, 5000);
 })();
 </script>
 
