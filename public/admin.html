@@ -2223,6 +2223,7 @@ window.fixQrUrl = async function(code){
       <h2>Aggiornamento App</h2>
       <p>Invia un avviso tecnico a tutte le Web App proprietario attive. Questo invio apre la Web App corretta e attiva il pulsante <strong>Aggiorna App</strong>.</p>
       <button id="sendAppUpdateBroadcastBtn" type="button">Invia avviso aggiornamento App</button>
+      <button id="cleanupOldAppUpdateMessagesBtn" type="button" style="margin-left:8px;background:#111827;color:#ffb04a;border:1px solid rgba(255,176,74,.45);">Pulisci vecchi avvisi Aggiorna App</button>
       <div class="app-update-warning">Nota: questo avviso non viene salvato nei messaggi ricevuti del proprietario e non altera il conteggio messaggi.</div>
       <div id="appUpdateBroadcastResult"></div>
     `;
@@ -2230,7 +2231,42 @@ window.fixQrUrl = async function(code){
     anchor.parentNode.insertBefore(panel, anchor.nextSibling);
 
     const btn = document.getElementById('sendAppUpdateBroadcastBtn');
+    const cleanupBtn = document.getElementById('cleanupOldAppUpdateMessagesBtn');
     const result = document.getElementById('appUpdateBroadcastResult');
+
+    if (cleanupBtn) {
+      cleanupBtn.addEventListener('click', async function(){
+        const ok = confirm('Vuoi eliminare da tutte le Web App i vecchi messaggi tecnici Aggiorna la tua App?');
+        if (!ok) return;
+
+        cleanupBtn.disabled = true;
+        if (result) result.textContent = 'Pulizia vecchi avvisi in corso...';
+
+        try {
+          const res = await fetch('/api/admin/cleanup-old-app-update-messages', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            credentials:'same-origin',
+            body: JSON.stringify({})
+          });
+
+          const data = await res.json().catch(() => ({}));
+
+          if (!res.ok || !data.success) {
+            if (result) result.textContent = data.error || 'Errore durante la pulizia.';
+            return;
+          }
+
+          if (result) {
+            result.textContent = `Pulizia completata. Vecchi avvisi eliminati: ${data.cleaned_count || 0}.`;
+          }
+        } catch(e) {
+          if (result) result.textContent = 'Errore durante la pulizia.';
+        } finally {
+          cleanupBtn.disabled = false;
+        }
+      });
+    }
 
     if (btn) {
       btn.addEventListener('click', async function(){
