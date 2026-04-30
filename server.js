@@ -4095,67 +4095,60 @@ app.post('/api/owner-messages', async (req, res) => {
 
 app.post('/api/owner-messages/read', async (req, res) => {
   try {
-    const { code, plate, id } = req.body || {};
-    if (!code || !plate || !id) {
-      return res.status(400).json({ success: false, error: 'Dati mancanti.' });
+    const { id } = req.body || {};
+    const cleanId = Number(id || 0);
+
+    if (!Number.isFinite(cleanId) || cleanId <= 0) {
+      return res.status(400).json({ success: false, error: 'ID messaggio mancante.' });
     }
 
-    const owner = await pool.query(
-      `SELECT code
-       FROM sticker_codes
-       WHERE code = $1 AND plate = $2
-       LIMIT 1`,
-      [code, plate]
-    );
-
-    if (!owner.rows.length) {
-      return res.status(404).json({ success: false, error: 'Record proprietario non trovato.' });
-    }
-
-    await pool.query(
+    const updated = await pool.query(
       `UPDATE contact_message_logs
        SET read_at = COALESCE(read_at, NOW())
-       WHERE id = $1 AND code = $2`,
-      [id, code]
+       WHERE id = $1
+         AND deleted_at IS NULL
+       RETURNING id, code, plate, read_at`,
+      [cleanId]
     );
 
-    return res.json({ success: true });
+    if (!updated.rows.length) {
+      return res.status(404).json({ success: false, error: 'Messaggio non trovato.' });
+    }
+
+    return res.json({ success: true, item: updated.rows[0] });
   } catch (err) {
-    console.error(err);
+    console.error('owner-messages/read error:', err);
     return res.status(500).json({ success: false, error: 'Errore aggiornamento messaggio.' });
   }
 });
 
 app.post('/api/owner-messages/read-many', async (req, res) => {
   try {
-    const { code, plate, ids } = req.body || {};
-    if (!code || !plate || !Array.isArray(ids) || !ids.length) {
-      return res.status(400).json({ success: false, error: 'Dati mancanti.' });
+    const { ids } = req.body || {};
+    const cleanIds = Array.isArray(ids)
+      ? ids.map(x => Number(x)).filter(x => Number.isFinite(x) && x > 0)
+      : [];
+
+    if (!cleanIds.length) {
+      return res.status(400).json({ success: false, error: 'ID messaggi mancanti.' });
     }
 
-    const owner = await pool.query(
-      `SELECT code
-       FROM sticker_codes
-       WHERE code = $1 AND plate = $2
-       LIMIT 1`,
-      [code, plate]
-    );
-
-    if (!owner.rows.length) {
-      return res.status(404).json({ success: false, error: 'Record proprietario non trovato.' });
-    }
-
-    await pool.query(
+    const updated = await pool.query(
       `UPDATE contact_message_logs
        SET read_at = COALESCE(read_at, NOW())
-       WHERE code = $1
-         AND id = ANY($2::int[])`,
-      [code, ids]
+       WHERE id = ANY($1::int[])
+         AND deleted_at IS NULL
+       RETURNING id`,
+      [cleanIds]
     );
 
-    return res.json({ success: true });
+    return res.json({
+      success: true,
+      updated_count: updated.rows.length,
+      updated_ids: updated.rows.map(r => r.id)
+    });
   } catch (err) {
-    console.error(err);
+    console.error('owner-messages/read-many error:', err);
     return res.status(500).json({ success: false, error: 'Errore aggiornamento multiplo.' });
   }
 });
