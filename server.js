@@ -5726,6 +5726,96 @@ app.post('/api/admin/save-invite', requireAdmin, async (req, res) => {
 
 
 
+
+
+app.post('/api/admin/app-update-broadcast', requireAdmin, async (req, res) => {
+  try {
+    const cleanTitle = String(req.body?.title || 'Aggiorna la tua App').trim();
+    const cleanMessage = String(req.body?.message || 'È disponibile una nuova versione. Apri la tua App e tocca “Aggiorna App”.').trim();
+
+    const rows = await pool.query(
+      `SELECT DISTINCT
+         ps.endpoint,
+         ps.p256dh,
+         ps.auth,
+         ps.code,
+         ps.plate
+       FROM push_subscriptions ps
+       WHERE ps.is_active = TRUE`
+    );
+
+    if (!rows.rows.length) {
+      return res.json({ success: true, sent: 0, failed: 0, total: 0 });
+    }
+
+    let sent = 0;
+    let failed = 0;
+
+    for (const row of rows.rows) {
+      const code = String(row.code || '').trim().toUpperCase();
+      const plate = String(row.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+      if (!code || !plate) {
+        failed += 1;
+        continue;
+      }
+
+      const targetUrl = `/owner-app/${encodeURIComponent(code)}/${encodeURIComponent(plate)}?forceAppUpdate=1`;
+
+      const payload = JSON.stringify({
+        title: cleanTitle,
+        body: cleanMessage,
+        url: targetUrl,
+        targetUrl,
+        channel: 'app-update-technical',
+        type: 'app_update',
+        appUpdate: true,
+        requireInteraction: true,
+        renotify: true,
+        tag: `app-update-${code}`,
+        icon: '/icons/android-chrome-192x192.png',
+        badge: '/icons/favicon-32x32.png'
+      });
+
+      try {
+        await webpush.sendNotification(
+          {
+            endpoint: row.endpoint,
+            keys: {
+              p256dh: row.p256dh,
+              auth: row.auth
+            }
+          },
+          payload
+        );
+        sent += 1;
+      } catch (pushErr) {
+        failed += 1;
+        console.error('app-update-broadcast push error:', pushErr.statusCode || '', pushErr.body || pushErr.message || pushErr);
+
+        if (pushErr.statusCode === 404 || pushErr.statusCode === 410) {
+          try {
+            await pool.query('UPDATE push_subscriptions SET is_active = FALSE WHERE endpoint = $1', [row.endpoint]);
+          } catch (cleanupErr) {
+            console.error('app-update-broadcast cleanup error:', cleanupErr);
+          }
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      sent,
+      failed,
+      total: rows.rows.length
+    });
+  } catch (err) {
+    console.error('app-update-broadcast error:', err);
+    return res.status(500).json({ success: false, error: 'Errore invio aggiornamento App.' });
+  }
+});
+
+
 app.post('/api/admin/push-broadcast', requireAdmin, async (req, res) => {
   try {
     const {

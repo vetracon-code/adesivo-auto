@@ -559,7 +559,6 @@
           <input id="pushTitle" class="input" placeholder="Titolo notifica">
           <select id="pushAudience" class="select">
             <option value="all">Tutti con push attivo</option>
-            <option value="app_update">Avviso aggiornamento App</option>
             <option value="used">Solo attivi</option>
             <option value="new">Solo nuovi da attivare</option>
             <option value="disabled">Solo disattivati</option>
@@ -2158,127 +2157,129 @@ window.fixQrUrl = async function(code){
 </script>
 
 
-<script id="admin-app-update-push-menu">
+<style id="admin-app-update-dedicated-style">
+  .app-update-panel{
+    margin-top:18px;
+    padding:18px;
+    border-radius:18px;
+    background:linear-gradient(135deg,rgba(255,176,74,.16),rgba(255,255,255,.05));
+    border:1px solid rgba(255,176,74,.35);
+    box-shadow:0 12px 34px rgba(0,0,0,.18);
+  }
+  .app-update-panel h2{
+    margin:0 0 8px;
+    font-size:1.05rem;
+    color:#ffb04a;
+  }
+  .app-update-panel p{
+    margin:0 0 12px;
+    line-height:1.45;
+    opacity:.86;
+  }
+  .app-update-panel .app-update-warning{
+    font-size:.86rem;
+    color:#ffd7a3;
+    margin-top:10px;
+  }
+  .app-update-panel button{
+    min-height:40px;
+    padding:0 16px;
+    border-radius:12px;
+    border:0;
+    cursor:pointer;
+    background:#ffb04a;
+    color:#111827;
+    font-weight:900;
+    box-shadow:0 10px 24px rgba(255,176,74,.25);
+  }
+  .app-update-panel button:disabled{
+    opacity:.55;
+    cursor:not-allowed;
+  }
+  #appUpdateBroadcastResult{
+    margin-top:10px;
+    font-size:.9rem;
+    line-height:1.45;
+    opacity:.92;
+  }
+</style>
+
+<script id="admin-app-update-dedicated-script">
 (function(){
-  function ensureAppUpdateOption(){
-    const audience = document.getElementById('pushAudience');
-    if (!audience) return;
-
-    if (!Array.from(audience.options).some(o => o.value === 'app_update')) {
-      const opt = document.createElement('option');
-      opt.value = 'app_update';
-      opt.textContent = 'Avviso aggiornamento App';
-      audience.appendChild(opt);
-    }
+  function findPushBox(){
+    return document.querySelector('.push-broadcast') || document.querySelector('main') || document.body;
   }
 
-  function handlePushAudienceChange(){
-    const audience = document.getElementById('pushAudience');
-    const title = document.getElementById('pushTitle');
-    const message = document.getElementById('pushMessage');
-    const url = document.getElementById('pushUrl');
-    const result = document.getElementById('pushBroadcastResult');
+  function insertAppUpdatePanel(){
+    if (document.getElementById('appUpdateBroadcastPanel')) return;
 
-    if (!audience || !title || !message || !url) return;
+    const anchor = findPushBox();
+    if (!anchor || !anchor.parentNode) return;
 
-    if (audience.value === 'app_update') {
-      title.value = 'Aggiorna la tua App';
-      message.value = 'È disponibile una nuova versione. Apri la tua App e tocca “Aggiorna App”.';
-      url.value = 'AUTO: apre ogni Web App proprietario e attiva Aggiorna App';
-      url.disabled = true;
+    const panel = document.createElement('div');
+    panel.id = 'appUpdateBroadcastPanel';
+    panel.className = 'app-update-panel';
+    panel.innerHTML = `
+      <h2>Aggiornamento App</h2>
+      <p>Invia un avviso tecnico a tutte le Web App proprietario attive. Questo invio apre la Web App corretta e attiva il pulsante <strong>Aggiorna App</strong>.</p>
+      <button id="sendAppUpdateBroadcastBtn" type="button">Invia avviso aggiornamento App</button>
+      <div class="app-update-warning">Nota: questo avviso non viene salvato nei messaggi ricevuti del proprietario e non altera il conteggio messaggi.</div>
+      <div id="appUpdateBroadcastResult"></div>
+    `;
 
-      if (result) {
-        result.textContent = 'Avviso aggiornamento App: verrà inviato a tutti i dispositivi attivi.';
-      }
-    } else {
-      url.disabled = false;
+    anchor.parentNode.insertBefore(panel, anchor.nextSibling);
 
-      if (url.value === 'AUTO: apre ogni Web App proprietario e attiva Aggiorna App') {
-        url.value = '';
-      }
-    }
-  }
+    const btn = document.getElementById('sendAppUpdateBroadcastBtn');
+    const result = document.getElementById('appUpdateBroadcastResult');
 
-  async function sendAppUpdateBroadcast(){
-    const result = document.getElementById('pushBroadcastResult');
+    if (btn) {
+      btn.addEventListener('click', async function(){
+        const ok = confirm('Confermi l’invio dell’avviso tecnico Aggiorna App a tutti i dispositivi attivi?');
+        if (!ok) return;
 
-    const ok = confirm('Confermi l’invio dell’avviso aggiornamento App a tutti i dispositivi attivi?');
-    if (!ok) return;
+        btn.disabled = true;
+        if (result) result.textContent = 'Invio avviso tecnico in corso...';
 
-    if (result) result.textContent = 'Invio avviso aggiornamento App in corso...';
+        try {
+          const res = await fetch('/api/admin/app-update-broadcast', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            credentials:'same-origin',
+            body: JSON.stringify({
+              title: 'Aggiorna la tua App',
+              message: 'È disponibile una nuova versione. Apri la tua App e tocca “Aggiorna App”.'
+            })
+          });
 
-    try {
-      const res = await fetch('/api/admin/push-broadcast', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        credentials:'same-origin',
-        body: JSON.stringify({
-          title: 'Aggiorna la tua App',
-          message: 'È disponibile una nuova versione. Apri la tua App e tocca “Aggiorna App”.',
-          url: '/owner-simple.html?forceAppUpdate=1',
-          audience: 'app_update',
-          type: 'app_update',
-          app_update: true
-        })
+          const data = await res.json().catch(() => ({}));
+
+          if (!res.ok || !data.success) {
+            if (result) result.textContent = data.error || 'Errore durante invio aggiornamento App.';
+            return;
+          }
+
+          if (result) {
+            result.textContent =
+              `Avviso tecnico inviato. Consegnate: ${data.sent || 0} · Fallite: ${data.failed || 0} · Totale target: ${data.total || 0}`;
+          }
+        } catch(e) {
+          if (result) result.textContent = 'Errore durante invio aggiornamento App.';
+        } finally {
+          btn.disabled = false;
+        }
       });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok || !data.success) {
-        if (result) result.textContent = data.error || 'Errore invio avviso aggiornamento App.';
-        return;
-      }
-
-      if (result) {
-        result.textContent =
-          `Avviso aggiornamento inviato. Consegnate: ${data.sent || 0} · Fallite: ${data.failed || 0} · Totale target: ${data.total || 0}`;
-      }
-
-      if (typeof loadLastBroadcastStatus === 'function') {
-        loadLastBroadcastStatus();
-      }
-    } catch(e) {
-      if (result) result.textContent = 'Errore invio avviso aggiornamento App.';
-    }
-  }
-
-  function bindAppUpdateMenu(){
-    ensureAppUpdateOption();
-
-    const audience = document.getElementById('pushAudience');
-    const sendBtn = document.getElementById('sendBroadcastPushBtn');
-
-    if (audience && audience.dataset.appUpdateBound !== '1') {
-      audience.dataset.appUpdateBound = '1';
-      audience.addEventListener('change', handlePushAudienceChange);
-      handlePushAudienceChange();
-    }
-
-    if (sendBtn && sendBtn.dataset.appUpdateInterceptor !== '1') {
-      sendBtn.dataset.appUpdateInterceptor = '1';
-
-      sendBtn.addEventListener('click', function(e){
-        const audienceNow = document.getElementById('pushAudience');
-        if (!audienceNow || audienceNow.value !== 'app_update') return;
-
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-
-        sendAppUpdateBroadcast();
-      }, true);
     }
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bindAppUpdateMenu);
+    document.addEventListener('DOMContentLoaded', insertAppUpdatePanel);
   } else {
-    bindAppUpdateMenu();
+    insertAppUpdatePanel();
   }
 
-  window.addEventListener('load', bindAppUpdateMenu);
-  setTimeout(bindAppUpdateMenu, 500);
-  setTimeout(bindAppUpdateMenu, 1500);
+  window.addEventListener('load', insertAppUpdatePanel);
+  setTimeout(insertAppUpdatePanel, 500);
+  setTimeout(insertAppUpdatePanel, 1500);
 })();
 </script>
 
