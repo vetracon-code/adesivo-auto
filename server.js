@@ -2649,6 +2649,104 @@ ${isDownloadFile ? `` : `<script id="owner-print-topbar-script-v1">
 
 
 
+app.get('/owner-print-kit.html', async (req, res) => {
+  try {
+    const cleanCode = String(req.query.code || '').trim().toUpperCase();
+    const cleanPlate = String(req.query.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    if (!cleanCode && !cleanPlate) {
+      return res.status(400).send('Inserisci almeno codice o targa.');
+    }
+
+    let found;
+
+    if (cleanCode) {
+      found = await pool.query(
+        `SELECT code, public_id, qr_url, plate, brand, vehicle_model
+         FROM sticker_codes
+         WHERE code = $1
+         LIMIT 1`,
+        [cleanCode]
+      );
+    } else {
+      found = await pool.query(
+        `SELECT code, public_id, qr_url, plate, brand, vehicle_model
+         FROM sticker_codes
+         WHERE REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $1
+         ORDER BY activated_at DESC NULLS LAST, id DESC
+         LIMIT 1`,
+        [cleanPlate]
+      );
+    }
+
+    if (!found.rows.length) {
+      return res.status(404).send('Record non trovato.');
+    }
+
+    let row = found.rows[0];
+    let dbPlate = String(row.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    if (cleanPlate && dbPlate !== cleanPlate) {
+      const fallbackByPlate = await pool.query(
+        `SELECT code, public_id, qr_url, plate, brand, vehicle_model
+         FROM sticker_codes
+         WHERE REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $1
+         ORDER BY activated_at DESC NULLS LAST, id DESC
+         LIMIT 1`,
+        [cleanPlate]
+      );
+
+      if (!fallbackByPlate.rows.length) {
+        return res.status(401).send('Targa non corrispondente al codice.');
+      }
+
+      row = fallbackByPlate.rows[0];
+      dbPlate = String(row.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+    }
+
+    let qrValue = '';
+    if (row.qr_url && String(row.qr_url).trim()) {
+      qrValue = String(row.qr_url).trim();
+    } else if (row.public_id && String(row.public_id).trim()) {
+      const baseUrl = (process.env.PUBLIC_BASE_URL || 'https://adesivo-auto.onrender.com').replace(/\/$/, '');
+      qrValue = `${baseUrl}/contact/u/${encodeURIComponent(String(row.public_id).trim())}`;
+    } else {
+      return res.status(400).send('QR URL o public_id mancante.');
+    }
+
+    const QRCode = require('qrcode');
+    const qrDataUrl = await QRCode.toDataURL(qrValue, {
+      errorCorrectionLevel: 'H',
+      margin: 1,
+      width: 900,
+      color: {
+        dark: '#000000',
+        light: '#ffffff'
+      }
+    });
+
+    const generateOwnerPrintKitHtml = require('./lib/generateOwnerPrintKitHtml');
+
+    const html = generateOwnerPrintKitHtml({
+      row,
+      qrDataUrl,
+      qrValue,
+      code: row.code || cleanCode,
+      plate: row.plate || cleanPlate
+    });
+
+    return res.send(html);
+  } catch (err) {
+    console.error('owner-print-kit error:', err);
+    return res.status(500).send(
+      'Errore generazione kit cartelli.\\n\\n' +
+      'Dettaglio: ' + (err && err.message ? err.message : String(err))
+    );
+  }
+});
+
+
+
 
 
 app.get('/api/owner/sticker-print-pdf', async (req, res) => {
