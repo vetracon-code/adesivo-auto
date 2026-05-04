@@ -1447,8 +1447,9 @@ button[data-action="submit-report"]:not(:disabled) {
 
 
 
-/* AVVISAMI - pulsante RIPROVA sotto frame/notifica */
-.avvisami-retry-visible {
+
+/* AVVISAMI - pulsante RIPROVA sotto il frame operativo */
+.avvisami-retry-operational {
   display: block !important;
   width: min(100%, 420px);
   margin: 18px auto 0;
@@ -1467,7 +1468,7 @@ button[data-action="submit-report"]:not(:disabled) {
   z-index: 999;
 }
 
-.avvisami-retry-visible:hover {
+.avvisami-retry-operational:hover {
   transform: translateY(-1px);
   box-shadow: 0 18px 42px rgba(255, 138, 0, 0.42);
 }
@@ -2816,8 +2817,11 @@ button[data-action="submit-report"]:not(:disabled) {
 
 
 
+
+
+
 <script>
-/* AVVISAMI - centra frame mobile e ripristina RIPROVA */
+/* AVVISAMI - mobile: usa il frame operativo, non lo scanner */
 (function () {
   function isMobile() {
     return window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
@@ -2827,26 +2831,112 @@ button[data-action="submit-report"]:not(:disabled) {
     return (el && el.textContent ? el.textContent : '').trim().toLowerCase();
   }
 
-  function findPhoneFrame() {
+  function isScannerOnly(el) {
+    if (!el) return false;
+    var txt = textOf(el);
     return (
-      document.querySelector('.phone-frame') ||
-      document.querySelector('.phone-demo') ||
-      document.querySelector('.demo-scanner') ||
-      document.querySelector('.scanner-scene') ||
-      document.querySelector('.scene-bg')
+      txt.includes('inquadra') ||
+      txt.includes('scanner') ||
+      txt.includes('qr code') ||
+      txt.includes('scansion')
     );
   }
 
-  function findNotificationFrame() {
-    return (
-      document.querySelector('.avvisami-demo-sent-note') ||
-      document.querySelector('.owner-notification') ||
-      document.querySelector('.notification-card') ||
-      document.querySelector('.phone-notification') ||
-      document.querySelector('.result-card') ||
-      document.querySelector('.success-card') ||
-      findPhoneFrame()
-    );
+  function isSendButton(el) {
+    return textOf(el).includes('invia segnalazione');
+  }
+
+  function findSendButton() {
+    return Array.from(document.querySelectorAll('button, a, div[role="button"]')).find(isSendButton);
+  }
+
+  function isCategoryButton(el) {
+    if (!el) return false;
+    return el.matches && el.matches('.cat-btn[data-type], button[data-type]');
+  }
+
+  function isReasonCandidate(el) {
+    var txt = textOf(el);
+    if (!txt) return false;
+
+    if (
+      isSendButton(el) ||
+      isCategoryButton(el) ||
+      txt.includes('riprova') ||
+      txt.includes('promo') ||
+      txt.includes('founder') ||
+      txt.includes('singolo punto') ||
+      txt.includes('rete di punti') ||
+      txt.includes('configurazione') ||
+      txt.includes('cosa vuoi proteggere') ||
+      txt.includes('inquadra')
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function findReasonButtons() {
+    var selectors = '[data-reason], .reason, .reason-btn, .issue-option, .problem-option, button';
+    var candidates = Array.from(document.querySelectorAll(selectors)).filter(isReasonCandidate);
+
+    var unique = [];
+    candidates.forEach(function (el) {
+      var btn = el.closest('button, a, div[role="button"], [data-reason], .reason, .reason-btn, .issue-option, .problem-option') || el;
+      if (!unique.includes(btn)) unique.push(btn);
+    });
+
+    return unique.slice(0, 8);
+  }
+
+  function findOperationalFrame() {
+    /*
+      Frame corretto: quello che contiene i motivi e il pulsante Invia segnalazione.
+      Escludiamo volutamente lo scanner QR.
+    */
+    var send = findSendButton();
+    var reasons = findReasonButtons();
+
+    if (send) {
+      var c = send.parentElement;
+
+      while (c && c !== document.body) {
+        var reasonCount = reasons.filter(function (r) {
+          return c.contains(r);
+        }).length;
+
+        var txt = textOf(c);
+
+        if (
+          reasonCount >= 3 &&
+          c.contains(send) &&
+          !isScannerOnly(c)
+        ) {
+          return c;
+        }
+
+        c = c.parentElement;
+      }
+    }
+
+    if (reasons.length) {
+      var container = reasons[0].parentElement;
+
+      while (container && container !== document.body) {
+        var count = reasons.filter(function (r) {
+          return container.contains(r);
+        }).length;
+
+        if (count >= 3 && !isScannerOnly(container)) {
+          return container;
+        }
+
+        container = container.parentElement;
+      }
+    }
+
+    return send ? send.parentElement : null;
   }
 
   function findTopTarget() {
@@ -2859,19 +2949,30 @@ button[data-action="submit-report"]:not(:disabled) {
     );
   }
 
-  function centerElement(el) {
-    if (!el || !isMobile()) return;
+  function scrollOperationalFrameIntoView() {
+    if (!isMobile()) return;
 
     setTimeout(function () {
-      var rect = el.getBoundingClientRect();
+      var frame = findOperationalFrame();
+      if (!frame) return;
+
+      var rect = frame.getBoundingClientRect();
       var vh = window.innerHeight || document.documentElement.clientHeight;
+      var absoluteTop = rect.top + window.pageYOffset;
 
       /*
-        Centro reale: mette il frame circa al centro verticale.
-        Se il frame è alto, lo lascia con un margine superiore leggibile.
+        Vogliamo vedere tutto: motivi + Invia segnalazione.
+        Se il blocco è più basso dello schermo, lo allineiamo poco sotto l'alto.
+        Se ci sta, lo centriamo.
       */
-      var absoluteTop = rect.top + window.pageYOffset;
-      var targetTop = absoluteTop - Math.max(24, (vh - rect.height) / 2);
+      var margin = 18;
+      var targetTop;
+
+      if (rect.height > vh - 40) {
+        targetTop = absoluteTop - margin;
+      } else {
+        targetTop = absoluteTop - ((vh - rect.height) / 2);
+      }
 
       window.scrollTo({
         top: Math.max(0, targetTop),
@@ -2881,39 +2982,26 @@ button[data-action="submit-report"]:not(:disabled) {
       setTimeout(function () {
         window.dispatchEvent(new Event('scroll'));
       }, 500);
-    }, 260);
-  }
 
-  function scrollCategoryToCenteredFrame() {
-    if (!isMobile()) return;
-
-    /*
-      Dopo la selezione categoria, diamo tempo al JS esistente di cambiare
-      immagine/motivi, poi centriamo il frame e non il blocco troppo basso.
-    */
-    setTimeout(function () {
-      var frame = findPhoneFrame();
-      centerElement(frame);
-    }, 380);
+      setTimeout(function () {
+        window.dispatchEvent(new Event('scroll'));
+      }, 1000);
+    }, 420);
   }
 
   function ensureRetryButton() {
-    var existing = document.querySelector('.avvisami-retry-visible');
+    var existing = document.querySelector('.avvisami-retry-operational');
     if (existing) return existing;
 
-    var anchor = findNotificationFrame();
-    if (!anchor) return null;
+    var frame = findOperationalFrame();
+    if (!frame) return null;
 
     var btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'avvisami-retry-visible';
+    btn.className = 'avvisami-retry-operational';
     btn.textContent = 'RIPROVA';
 
-    /*
-      Se esiste una nota/notifica, il pulsante va subito sotto.
-      Altrimenti va sotto il frame principale, così resta comunque visibile.
-    */
-    anchor.insertAdjacentElement('afterend', btn);
+    frame.insertAdjacentElement('afterend', btn);
     return btn;
   }
 
@@ -2934,7 +3022,7 @@ button[data-action="submit-report"]:not(:disabled) {
       el.classList.remove('avvisami-reason-border-hint');
     });
 
-    document.querySelectorAll('.avvisami-retry-visible').forEach(function (el) {
+    document.querySelectorAll('.avvisami-retry-visible, .avvisami-retry-under-reasons, .avvisami-retry-under-frame, .avvisami-retry-operational').forEach(function (el) {
       el.remove();
     });
   }
@@ -2943,12 +3031,14 @@ button[data-action="submit-report"]:not(:disabled) {
     var cat = event.target.closest('.cat-btn[data-type], button[data-type]');
 
     if (cat) {
-      scrollCategoryToCenteredFrame();
-      setTimeout(ensureRetryButton, 900);
+      setTimeout(function () {
+        ensureRetryButton();
+        scrollOperationalFrameIntoView();
+      }, 260);
       return;
     }
 
-    var retry = event.target.closest('.avvisami-retry-visible, .avvisami-retry-under-reasons, .avvisami-retry-under-frame');
+    var retry = event.target.closest('.avvisami-retry-operational, .avvisami-retry-visible, .avvisami-retry-under-reasons, .avvisami-retry-under-frame');
 
     if (retry) {
       event.preventDefault();
@@ -2971,11 +3061,7 @@ button[data-action="submit-report"]:not(:disabled) {
   });
 
   var observer = new MutationObserver(function () {
-    /*
-      Quando compare la notifica dopo l'invio, ricrea il pulsante RIPROVA
-      immediatamente sotto il frame/notifica.
-    */
-    setTimeout(ensureRetryButton, 120);
+    setTimeout(ensureRetryButton, 140);
   });
 
   observer.observe(document.documentElement, {
