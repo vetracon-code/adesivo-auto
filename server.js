@@ -6074,6 +6074,26 @@ app.post('/api/admin/broadcast-delete', requireAdmin, async (req, res) => {
       });
     }
 
+    /*
+      IMPORTANTE:
+      La colonna reale dei recipients va scoperta PRIMA della transazione.
+      Se proviamo una colonna inesistente dentro BEGIN, PostgreSQL manda la transazione
+      in stato aborted e poi tutte le query successive falliscono con 25P02.
+    */
+    const colInfo = await client.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_name = 'broadcast_notification_recipients'
+         AND column_name IN ('broadcast_notification_id', 'notification_id', 'broadcast_id')`
+    );
+
+    const availableCols = colInfo.rows.map(r => r.column_name);
+    const recipientColumn =
+      availableCols.includes('broadcast_notification_id') ? 'broadcast_notification_id' :
+      availableCols.includes('notification_id') ? 'notification_id' :
+      availableCols.includes('broadcast_id') ? 'broadcast_id' :
+      null;
+
     await client.query('BEGIN');
 
     const existing = await client.query(
@@ -6093,6 +6113,8 @@ app.post('/api/admin/broadcast-delete', requireAdmin, async (req, res) => {
         deleted_count: 0,
         deleted_ids: [],
         recipients_deleted_count: 0,
+        recipients_delete_mode: recipientColumn || 'none',
+        available_recipient_columns: availableCols,
         requested_ids: cleanIds,
         found_ids: [],
         warning: 'Nessuna push trovata con gli ID richiesti.'
@@ -6100,36 +6122,15 @@ app.post('/api/admin/broadcast-delete', requireAdmin, async (req, res) => {
     }
 
     let recipientsDeletedCount = 0;
-    let recipientsDeleteMode = 'none';
-    let recipientsDeleteError = '';
 
-    /*
-      Non usiamo RETURNING id sui recipients:
-      alcune versioni della tabella potrebbero non avere una colonna id.
-      Usiamo rowCount, molto più sicuro.
-    */
-    const possibleRecipientColumns = [
-      'broadcast_notification_id',
-      'notification_id',
-      'broadcast_id'
-    ];
+    if (recipientColumn) {
+      const deletedRecipients = await client.query(
+        `DELETE FROM broadcast_notification_recipients
+         WHERE ${recipientColumn} = ANY($1::int[])`,
+        [foundIds]
+      );
 
-    for (const col of possibleRecipientColumns) {
-      try {
-        const deletedRecipients = await client.query(
-          `DELETE FROM broadcast_notification_recipients
-           WHERE ${col} = ANY($1::int[])`,
-          [foundIds]
-        );
-
-        recipientsDeletedCount = deletedRecipients.rowCount || 0;
-        recipientsDeleteMode = col;
-        recipientsDeleteError = '';
-        break;
-      } catch (err) {
-        recipientsDeleteError = err.message;
-        console.error(`broadcast recipients delete failed with ${col}:`, err.message);
-      }
+      recipientsDeletedCount = deletedRecipients.rowCount || 0;
     }
 
     const notificationsDeleted = await client.query(
@@ -6146,8 +6147,8 @@ app.post('/api/admin/broadcast-delete', requireAdmin, async (req, res) => {
       deleted_count: notificationsDeleted.rows.length,
       deleted_ids: notificationsDeleted.rows.map(r => Number(r.id)),
       recipients_deleted_count: recipientsDeletedCount,
-      recipients_delete_mode: recipientsDeleteMode,
-      recipients_delete_error: recipientsDeleteError || null,
+      recipients_delete_mode: recipientColumn || 'none',
+      available_recipient_columns: availableCols,
       requested_ids: cleanIds,
       found_ids: foundIds
     });
