@@ -2099,5 +2099,119 @@ button[data-action="submit-report"]:not(:disabled) {
 })();
 </script>
 
+
+<script>
+/* AVVISAMI - mobile: scroll automatico dalla categoria al frame demo */
+(function () {
+  var categoryWords = [
+    'veicolo',
+    'barca',
+    'negozio',
+    'casa',
+    'immobile',
+    'oggetto',
+    'attrezzatura',
+    'su misura'
+  ];
+
+  function isMobile() {
+    return window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+  }
+
+  function textOf(el) {
+    return (el && el.textContent ? el.textContent : '').trim().toLowerCase();
+  }
+
+  function looksLikeCategory(el) {
+    if (!el) return false;
+
+    var txt = textOf(el);
+    if (!txt) return false;
+
+    if (
+      txt.includes('invia segnalazione') ||
+      txt.includes('riprova') ||
+      txt.includes('promo') ||
+      txt.includes('founder')
+    ) {
+      return false;
+    }
+
+    return categoryWords.some(function (word) {
+      return txt.includes(word);
+    });
+  }
+
+  function findDemoFrame() {
+    var selectors = [
+      '.scanner-scene',
+      '.demo-scanner',
+      '.phone-demo',
+      '.phone-frame',
+      '.scanner-frame',
+      '.scene-bg',
+      '[data-demo-frame]',
+      '[data-scanner]'
+    ];
+
+    for (var i = 0; i < selectors.length; i++) {
+      var el = document.querySelector(selectors[i]);
+      if (el) return el;
+    }
+
+    var sendBtn = Array.from(document.querySelectorAll('button, a, div[role="button"]')).find(function (el) {
+      return textOf(el).includes('invia segnalazione');
+    });
+
+    if (sendBtn) {
+      return sendBtn.closest('section, .card, .demo, .panel, .phone, div') || sendBtn;
+    }
+
+    return null;
+  }
+
+  function scrollToDemoFrame() {
+    if (!isMobile()) return;
+
+    setTimeout(function () {
+      var frame = findDemoFrame();
+      if (!frame) return;
+
+      var rect = frame.getBoundingClientRect();
+      var absoluteTop = rect.top + window.pageYOffset;
+
+      var offset = 18;
+      var target = Math.max(0, absoluteTop - offset);
+
+      window.scrollTo({
+        top: target,
+        behavior: 'smooth'
+      });
+
+      // Forza il controllo dell'effetto guida già presente dopo lo scroll.
+      setTimeout(function () {
+        window.dispatchEvent(new Event('scroll'));
+      }, 450);
+
+      setTimeout(function () {
+        window.dispatchEvent(new Event('scroll'));
+      }, 950);
+    }, 180);
+  }
+
+  document.addEventListener('click', function (event) {
+    var clicked = event.target.closest(
+      'button, a, div[role="button"], .category, .category-card, .use-case, .tile, [data-category]'
+    );
+
+    if (!clicked) return;
+
+    if (looksLikeCategory(clicked)) {
+      scrollToDemoFrame();
+    }
+  }, true);
+})();
+</script>
+
 </body>
 </html>
