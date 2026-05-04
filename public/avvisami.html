@@ -1284,6 +1284,36 @@ button[data-action="submit-report"]:not(:disabled) {
   cursor: pointer !important;
 }
 
+
+/* AVVISAMI - evidenziazione sequenziale motivi segnalazione */
+.avvisami-reason-pulse {
+  position: relative !important;
+  z-index: 5 !important;
+  animation: avvisamiReasonPulse 0.85s ease-in-out 1 !important;
+  box-shadow:
+    0 0 0 3px rgba(255, 184, 77, 0.65),
+    0 12px 30px rgba(255, 138, 0, 0.32) !important;
+  border-color: rgba(255, 165, 0, 0.95) !important;
+  transform: translateY(-1px) scale(1.025) !important;
+}
+
+@keyframes avvisamiReasonPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 184, 77, 0);
+    transform: translateY(0) scale(1);
+  }
+  35% {
+    box-shadow:
+      0 0 0 4px rgba(255, 184, 77, 0.7),
+      0 12px 30px rgba(255, 138, 0, 0.34);
+    transform: translateY(-1px) scale(1.025);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 184, 77, 0);
+    transform: translateY(0) scale(1);
+  }
+}
+
 </style>
 </head>
 
@@ -1795,6 +1825,150 @@ button[data-action="submit-report"]:not(:disabled) {
   });
 
   setInterval(paintSendButtons, 700);
+})();
+</script>
+
+
+<script>
+/* AVVISAMI - sequenza guida sui motivi da selezionare */
+(function () {
+  var avvisamiReasonSequencePlayed = false;
+  var avvisamiReasonSequenceRunning = false;
+
+  var reasonWords = [
+    'urtata',
+    'intralcio',
+    'vetri',
+    'porta aperta',
+    'bimbo',
+    'animale',
+    'furto',
+    'tentato furto',
+    'varie',
+    'cima',
+    'ormeggio',
+    'parabordo',
+    'telo',
+    'copertura',
+    'oblò',
+    'acqua',
+    'corrente',
+    'banchina',
+    'problema'
+  ];
+
+  function normalizeText(el) {
+    return (el && el.textContent ? el.textContent : '').trim().toLowerCase();
+  }
+
+  function isSendButton(el) {
+    return normalizeText(el).includes('invia segnalazione');
+  }
+
+  function looksLikeReasonButton(el) {
+    if (!el || isSendButton(el)) return false;
+
+    var txt = normalizeText(el);
+    if (!txt) return false;
+
+    if (
+      txt.includes('invia') ||
+      txt.includes('riprova') ||
+      txt.includes('scegli') ||
+      txt.includes('categoria') ||
+      txt.includes('promo') ||
+      txt.includes('founder')
+    ) {
+      return false;
+    }
+
+    return reasonWords.some(function (word) {
+      return txt.includes(word);
+    });
+  }
+
+  function getReasonButtons() {
+    var candidates = Array.from(document.querySelectorAll(
+      'button, a, div[role="button"], .reason, .reason-btn, .issue-option, .problem-option, [data-reason]'
+    ));
+
+    var buttons = candidates.filter(looksLikeReasonButton);
+
+    // Evita duplicati se il testo è contenuto in elementi annidati
+    var unique = [];
+    buttons.forEach(function (btn) {
+      if (!unique.some(function (u) { return u.contains(btn) || btn.contains(u); })) {
+        unique.push(btn);
+      }
+    });
+
+    return unique.slice(0, 4);
+  }
+
+  function hasAlreadySelectedReason() {
+    return !!document.querySelector(
+      '.selected, .active, [data-selected="true"], [aria-pressed="true"]'
+    );
+  }
+
+  function playReasonSequenceOnce() {
+    if (avvisamiReasonSequencePlayed || avvisamiReasonSequenceRunning) return;
+
+    var buttons = getReasonButtons();
+    if (buttons.length < 2) return;
+
+    avvisamiReasonSequencePlayed = true;
+    avvisamiReasonSequenceRunning = true;
+
+    buttons.forEach(function (btn, index) {
+      setTimeout(function () {
+        if (hasAlreadySelectedReason()) {
+          avvisamiReasonSequenceRunning = false;
+          return;
+        }
+
+        buttons.forEach(function (b) {
+          b.classList.remove('avvisami-reason-pulse');
+        });
+
+        btn.classList.add('avvisami-reason-pulse');
+
+        setTimeout(function () {
+          btn.classList.remove('avvisami-reason-pulse');
+          if (index === buttons.length - 1) {
+            avvisamiReasonSequenceRunning = false;
+          }
+        }, 850);
+      }, index * 950);
+    });
+  }
+
+  function maybeStartSequence() {
+    if (avvisamiReasonSequencePlayed) return;
+
+    var buttons = getReasonButtons();
+    if (buttons.length >= 2) {
+      setTimeout(playReasonSequenceOnce, 450);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    setTimeout(maybeStartSequence, 500);
+    setTimeout(maybeStartSequence, 1200);
+  });
+
+  document.addEventListener('click', function () {
+    setTimeout(maybeStartSequence, 350);
+  }, true);
+
+  var observer = new MutationObserver(function () {
+    maybeStartSequence();
+  });
+
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  });
 })();
 </script>
 
