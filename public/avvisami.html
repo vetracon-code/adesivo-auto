@@ -2987,5 +2987,60 @@ button[data-action="submit-report"]:not(:disabled) {
 })();
 </script>
 
+
+<script>
+/* AVVISAMI - trillo breve quando si invia una segnalazione */
+(function () {
+  function isSendButton(el) {
+    var txt = (el && el.textContent ? el.textContent : '').trim().toLowerCase();
+    return txt.includes('invia segnalazione');
+  }
+
+  function playAvvisamiChime() {
+    try {
+      var AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+
+      var ctx = new AudioContext();
+      var now = ctx.currentTime;
+
+      function tone(freq, start, duration, gainValue) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + start);
+
+        gain.gain.setValueAtTime(0.0001, now + start);
+        gain.gain.exponentialRampToValueAtTime(gainValue, now + start + 0.025);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + start + duration);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now + start);
+        osc.stop(now + start + duration + 0.03);
+      }
+
+      // Doppio trillo tipo notifica ricevuta, breve e non aggressivo.
+      tone(880, 0.00, 0.16, 0.11);
+      tone(1175, 0.14, 0.18, 0.09);
+
+      setTimeout(function () {
+        try { ctx.close(); } catch (e) {}
+      }, 700);
+    } catch (e) {}
+  }
+
+  document.addEventListener('click', function (event) {
+    var btn = event.target.closest('button, a, div[role="button"]');
+    if (!btn || !isSendButton(btn)) return;
+
+    // Parte solo su click reale dell'utente, quindi compatibile con i blocchi audio mobile.
+    playAvvisamiChime();
+  }, true);
+})();
+</script>
+
 </body>
 </html>
