@@ -2754,234 +2754,7 @@ button[data-action="submit-report"]:not(:disabled) {
 
 
 
-<script>
-/* AVVISAMI - mobile: dopo categoria scende alla pagina segnalazione, non allo scanner */
-(function () {
-  var categoryWords = [
-    'negozio',
-    'casa',
-    'immobile',
-    'veicolo',
-    'barca',
-    'condominio',
-    'residence',
-    'struttura',
-    'quartiere',
-    'area pubblica',
-    'comune',
-    'su misura'
-  ];
 
-  function isMobile() {
-    return window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
-  }
-
-  function textOf(el) {
-    return (el && el.textContent ? el.textContent : '').trim().toLowerCase();
-  }
-
-  function isCategory(el) {
-    if (!el) return false;
-
-    if (el.classList && el.classList.contains('cat-btn')) return true;
-    if (el.hasAttribute && el.hasAttribute('data-type')) return true;
-
-    var txt = textOf(el);
-    return categoryWords.some(function (word) {
-      return txt.includes(word);
-    });
-  }
-
-  function isSendButton(el) {
-    return textOf(el).includes('invia segnalazione');
-  }
-
-  function findSendButton() {
-    return Array.from(document.querySelectorAll('button, a, div[role="button"]')).find(isSendButton);
-  }
-
-  function findReasonButtons() {
-    var candidates = Array.from(document.querySelectorAll(
-      '[data-reason], .reason, .reason-btn, .issue-option, .problem-option, button'
-    ));
-
-    return candidates.filter(function (el) {
-      var txt = textOf(el);
-      if (!txt) return false;
-
-      if (
-        isCategory(el) ||
-        isSendButton(el) ||
-        txt.includes('riprova') ||
-        txt.includes('promo') ||
-        txt.includes('founder') ||
-        txt.includes('singolo punto') ||
-        txt.includes('rete di punti') ||
-        txt.includes('configurazione')
-      ) {
-        return false;
-      }
-
-      return true;
-    }).slice(0, 8);
-  }
-
-  function findReasonsContainer() {
-    var send = findSendButton();
-    if (send) {
-      var c = send.parentElement;
-      while (c && c !== document.body) {
-        var reasonsInside = findReasonButtons().filter(function (btn) {
-          return c.contains(btn);
-        });
-
-        if (reasonsInside.length >= 2) return c;
-        c = c.parentElement;
-      }
-    }
-
-    var reasons = findReasonButtons();
-    if (!reasons.length) return null;
-
-    var container = reasons[0].parentElement;
-
-    while (container && container !== document.body) {
-      var count = reasons.filter(function (btn) {
-        return container.contains(btn);
-      }).length;
-
-      if (count >= 2) return container;
-      container = container.parentElement;
-    }
-
-    return reasons[0].parentElement;
-  }
-
-  function findQuestionBlock() {
-    var candidates = Array.from(document.querySelectorAll('h1,h2,h3,p,div,section')).filter(function (el) {
-      var txt = textOf(el);
-      return (
-        txt.includes('qualcosa non va') ||
-        txt.includes('cosa vuoi segnalare') ||
-        txt.includes('seleziona un motivo') ||
-        txt.includes('scegli il motivo') ||
-        txt.includes('invia segnalazione')
-      );
-    });
-
-    if (candidates.length) {
-      var el = candidates[0];
-      return el.closest('section, .card, .panel, .phone-frame, .phone-demo, .demo, div') || el;
-    }
-
-    return findReasonsContainer();
-  }
-
-  function scrollToReportPage() {
-    if (!isMobile()) return;
-
-    setTimeout(function () {
-      var target = findQuestionBlock() || findReasonsContainer() || findSendButton();
-      if (!target) return;
-
-      var top = target.getBoundingClientRect().top + window.pageYOffset - 10;
-
-      window.scrollTo({
-        top: Math.max(0, top),
-        behavior: 'smooth'
-      });
-
-      setTimeout(function () {
-        window.dispatchEvent(new Event('scroll'));
-      }, 450);
-
-      setTimeout(function () {
-        window.dispatchEvent(new Event('scroll'));
-      }, 950);
-    }, 260);
-  }
-
-  function findTopTarget() {
-    return (
-      document.querySelector('.cat-btn') ||
-      document.querySelector('[data-type]') ||
-      document.querySelector('.hero') ||
-      document.body
-    );
-  }
-
-  function resetDemoVisualState() {
-    document.querySelectorAll('.avvisami-demo-sent-note').forEach(function (el) {
-      el.remove();
-    });
-
-    document.querySelectorAll('.avvisami-send-btn').forEach(function (btn) {
-      btn.textContent = 'Invia segnalazione';
-      btn.classList.remove('is-active', 'is-demo-pulse', 'avvisami-send-demo-orange');
-      btn.setAttribute('disabled', 'disabled');
-      btn.setAttribute('aria-disabled', 'true');
-      btn.style.setProperty('pointer-events', 'none', 'important');
-    });
-
-    document.querySelectorAll('.avvisami-reason-border-hint').forEach(function (el) {
-      el.classList.remove('avvisami-reason-border-hint');
-    });
-  }
-
-  function ensureRetryButton() {
-    if (document.querySelector('.avvisami-retry-under-reasons')) return;
-
-    var container = findReasonsContainer();
-    if (!container) return;
-
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'avvisami-retry-under-reasons';
-    btn.textContent = 'RIPROVA';
-
-    container.insertAdjacentElement('afterend', btn);
-  }
-
-  document.addEventListener('click', function (event) {
-    var category = event.target.closest('button, a, div[role="button"], .cat-btn, [data-type]');
-    if (category && isCategory(category)) {
-      setTimeout(function () {
-        ensureRetryButton();
-        scrollToReportPage();
-      }, 220);
-      return;
-    }
-
-    var retry = event.target.closest('.avvisami-retry-under-reasons, .avvisami-retry-under-frame');
-    if (retry) {
-      event.preventDefault();
-      resetDemoVisualState();
-
-      var target = findTopTarget();
-      var top = target.getBoundingClientRect().top + window.pageYOffset - 18;
-
-      window.scrollTo({
-        top: Math.max(0, top),
-        behavior: 'smooth'
-      });
-    }
-  }, true);
-
-  document.addEventListener('DOMContentLoaded', function () {
-    setTimeout(ensureRetryButton, 700);
-    setTimeout(ensureRetryButton, 1600);
-  });
-
-  var observer = new MutationObserver(function () {
-    ensureRetryButton();
-  });
-
-  observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true
-  });
-})();
-</script>
 
 
 <script>
@@ -3034,6 +2807,114 @@ button[data-action="submit-report"]:not(:disabled) {
 
     // Parte solo su click reale dell'utente, quindi compatibile con i blocchi audio mobile.
     playAvvisamiChime();
+  }, true);
+})();
+</script>
+
+
+<script>
+/* AVVISAMI - fix mobile: click categoria scende alla pagina di segnalazione */
+(function () {
+  function isMobile() {
+    return window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+  }
+
+  function textOf(el) {
+    return (el && el.textContent ? el.textContent : '').trim().toLowerCase();
+  }
+
+  function isSendButton(el) {
+    return textOf(el).includes('invia segnalazione');
+  }
+
+  function findSendButton() {
+    return Array.from(document.querySelectorAll('button, a, div[role="button"]')).find(isSendButton);
+  }
+
+  function findReportTitle() {
+    return Array.from(document.querySelectorAll('h1,h2,h3,p,div,section')).find(function (el) {
+      var txt = textOf(el);
+      return (
+        txt.includes('qualcosa non va') ||
+        txt.includes('cosa vuoi segnalare') ||
+        txt.includes('seleziona un motivo') ||
+        txt.includes('scegli il motivo')
+      );
+    });
+  }
+
+  function findReasonsContainer() {
+    var send = findSendButton();
+
+    if (send) {
+      var c = send.parentElement;
+
+      while (c && c !== document.body) {
+        var txt = textOf(c);
+
+        if (
+          txt.includes('invia segnalazione') &&
+          (
+            txt.includes('altro') ||
+            txt.includes('allarme') ||
+            txt.includes('vetrina') ||
+            txt.includes('urtata') ||
+            txt.includes('animale') ||
+            txt.includes('cima') ||
+            txt.includes('rifiuti') ||
+            txt.includes('lampione') ||
+            txt.includes('vandalismo')
+          )
+        ) {
+          return c;
+        }
+
+        c = c.parentElement;
+      }
+
+      return send;
+    }
+
+    var title = findReportTitle();
+    if (title) {
+      return title.closest('section, .card, .panel, .phone-frame, .phone-demo, .demo, div') || title;
+    }
+
+    return null;
+  }
+
+  function scrollToReportArea() {
+    if (!isMobile()) return;
+
+    setTimeout(function () {
+      var target = findReasonsContainer() || findReportTitle() || findSendButton();
+
+      if (!target) return;
+
+      var rect = target.getBoundingClientRect();
+      var top = rect.top + window.pageYOffset - 12;
+
+      window.scrollTo({
+        top: Math.max(0, top),
+        behavior: 'smooth'
+      });
+
+      setTimeout(function () {
+        window.dispatchEvent(new Event('scroll'));
+      }, 500);
+
+      setTimeout(function () {
+        window.dispatchEvent(new Event('scroll'));
+      }, 1000);
+    }, 300);
+  }
+
+  document.addEventListener('click', function (event) {
+    var cat = event.target.closest('.cat-btn[data-type], button[data-type]');
+
+    if (!cat) return;
+
+    scrollToReportArea();
   }, true);
 })();
 </script>
