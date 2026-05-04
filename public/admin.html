@@ -2319,5 +2319,303 @@ window.fixQrUrl = async function(code){
 })();
 </script>
 
+
+<style id="admin-broadcast-delete-panel-style-v1">
+  .broadcast-delete-panel{
+    margin-top:18px;
+    padding:18px;
+    border-radius:18px;
+    background:linear-gradient(135deg,rgba(255,159,28,.12),rgba(255,255,255,.04));
+    border:1px solid rgba(255,159,28,.28);
+    box-shadow:0 14px 34px rgba(0,0,0,.18);
+  }
+
+  .broadcast-delete-panel h2{
+    margin:0 0 8px;
+    color:#ffb04a;
+    font-size:1.05rem;
+  }
+
+  .broadcast-delete-panel p{
+    margin:0 0 14px;
+    line-height:1.45;
+    opacity:.84;
+  }
+
+  .broadcast-delete-toolbar{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    align-items:center;
+    margin-bottom:12px;
+  }
+
+  .broadcast-delete-toolbar button{
+    min-height:38px;
+    padding:0 14px;
+    border-radius:12px;
+    border:1px solid rgba(255,159,28,.35);
+    cursor:pointer;
+    font-weight:900;
+    background:rgba(255,159,28,.10);
+    color:#ffb04a;
+  }
+
+  .broadcast-delete-toolbar button.danger{
+    background:rgba(239,68,68,.12);
+    border-color:rgba(239,68,68,.38);
+    color:#fecaca;
+  }
+
+  .broadcast-delete-toolbar button:disabled{
+    opacity:.55;
+    cursor:not-allowed;
+  }
+
+  .broadcast-delete-list{
+    display:grid;
+    gap:10px;
+    max-height:360px;
+    overflow:auto;
+    padding-right:4px;
+  }
+
+  .broadcast-delete-item{
+    display:grid;
+    grid-template-columns:auto 1fr;
+    gap:10px;
+    padding:12px;
+    border-radius:14px;
+    background:rgba(255,255,255,.055);
+    border:1px solid rgba(255,255,255,.09);
+  }
+
+  .broadcast-delete-item input{
+    margin-top:4px;
+    transform:scale(1.15);
+  }
+
+  .broadcast-delete-title{
+    font-weight:900;
+    color:#fff;
+    margin-bottom:4px;
+  }
+
+  .broadcast-delete-message{
+    font-size:.88rem;
+    line-height:1.4;
+    opacity:.82;
+    margin-bottom:6px;
+  }
+
+  .broadcast-delete-meta{
+    font-size:.78rem;
+    opacity:.68;
+    line-height:1.35;
+  }
+
+  #broadcastDeleteResult{
+    margin-top:10px;
+    font-size:.9rem;
+    line-height:1.45;
+  }
+</style>
+
+<script id="admin-broadcast-delete-panel-v1">
+(function(){
+  function escapeHtml(value){
+    return String(value ?? '').replace(/[&<>"']/g, function(ch){
+      return ({
+        '&':'&amp;',
+        '<':'&lt;',
+        '>':'&gt;',
+        '"':'&quot;',
+        "'":'&#39;'
+      })[ch];
+    });
+  }
+
+  function formatDate(value){
+    if (!value) return '-';
+    try {
+      return new Date(value).toLocaleString('it-IT');
+    } catch(e) {
+      return String(value);
+    }
+  }
+
+  function findAnchor(){
+    return document.querySelector('#appUpdateBroadcastPanel')
+      || document.querySelector('.push-broadcast')
+      || document.querySelector('main')
+      || document.body;
+  }
+
+  async function loadBroadcastDeleteList(){
+    const list = document.getElementById('broadcastDeleteList');
+    const result = document.getElementById('broadcastDeleteResult');
+    const deleteBtn = document.getElementById('deleteSelectedBroadcastsBtn');
+
+    if (!list) return;
+
+    list.innerHTML = '<div class="broadcast-delete-meta">Caricamento push inviate...</div>';
+    if (result) result.textContent = '';
+    if (deleteBtn) deleteBtn.disabled = true;
+
+    try {
+      const res = await fetch('/api/admin/broadcast-list', {
+        credentials:'same-origin'
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        list.innerHTML = '<div class="broadcast-delete-meta">Errore caricamento elenco push.</div>';
+        if (result) result.textContent = data.error || 'Errore caricamento elenco push.';
+        return;
+      }
+
+      const items = data.items || [];
+
+      if (!items.length) {
+        list.innerHTML = '<div class="broadcast-delete-meta">Nessuna push inviata trovata.</div>';
+        return;
+      }
+
+      list.innerHTML = items.map(item => {
+        const title = escapeHtml(item.title || 'Push amministratore');
+        const message = escapeHtml(item.message || '');
+        const created = escapeHtml(formatDate(item.created_at));
+        const audience = escapeHtml(item.audience || '-');
+        const total = item.total_recipients ?? '-';
+        const opened = item.opened_count ?? '-';
+        const sent = item.sent_count ?? '-';
+        const failed = item.failed_count ?? '-';
+
+        return `
+          <label class="broadcast-delete-item">
+            <input type="checkbox" class="broadcastDeleteCheckbox" value="${escapeHtml(item.id)}">
+            <div>
+              <div class="broadcast-delete-title">${title}</div>
+              <div class="broadcast-delete-message">${message}</div>
+              <div class="broadcast-delete-meta">
+                ID ${escapeHtml(item.id)} · ${created}<br>
+                Target: ${audience} · Totale: ${total} · Inviate: ${sent} · Fallite: ${failed} · Aperte: ${opened}
+              </div>
+            </div>
+          </label>
+        `;
+      }).join('');
+
+      document.querySelectorAll('.broadcastDeleteCheckbox').forEach(cb => {
+        cb.addEventListener('change', updateDeleteButtonState);
+      });
+
+      updateDeleteButtonState();
+    } catch(e) {
+      list.innerHTML = '<div class="broadcast-delete-meta">Errore caricamento elenco push.</div>';
+      if (result) result.textContent = 'Errore caricamento elenco push.';
+    }
+  }
+
+  function selectedBroadcastIds(){
+    return Array.from(document.querySelectorAll('.broadcastDeleteCheckbox:checked'))
+      .map(cb => Number(cb.value))
+      .filter(x => Number.isFinite(x) && x > 0);
+  }
+
+  function updateDeleteButtonState(){
+    const deleteBtn = document.getElementById('deleteSelectedBroadcastsBtn');
+    if (!deleteBtn) return;
+    deleteBtn.disabled = selectedBroadcastIds().length === 0;
+  }
+
+  async function deleteSelectedBroadcasts(){
+    const ids = selectedBroadcastIds();
+    const result = document.getElementById('broadcastDeleteResult');
+    const deleteBtn = document.getElementById('deleteSelectedBroadcastsBtn');
+
+    if (!ids.length) {
+      if (result) result.textContent = 'Seleziona almeno una push da eliminare.';
+      return;
+    }
+
+    const ok = confirm(`Confermi eliminazione di ${ids.length} push inviate? Questa operazione rimuove anche i relativi destinatari dallo storico.`);
+    if (!ok) return;
+
+    if (deleteBtn) deleteBtn.disabled = true;
+    if (result) result.textContent = 'Eliminazione in corso...';
+
+    try {
+      const res = await fetch('/api/admin/broadcast-delete', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'same-origin',
+        body: JSON.stringify({ ids })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        if (result) result.textContent = data.error || 'Errore eliminazione push.';
+        updateDeleteButtonState();
+        return;
+      }
+
+      if (result) {
+        result.textContent = `Push eliminate: ${data.deleted_count || 0}. Destinatari rimossi: ${data.recipients_deleted_count || 0}.`;
+      }
+
+      await loadBroadcastDeleteList();
+
+      if (typeof loadLastBroadcastStatus === 'function') {
+        try { loadLastBroadcastStatus(); } catch(e) {}
+      }
+    } catch(e) {
+      if (result) result.textContent = 'Errore eliminazione push.';
+      updateDeleteButtonState();
+    }
+  }
+
+  function insertPanel(){
+    if (document.getElementById('broadcastDeletePanel')) return;
+
+    const anchor = findAnchor();
+    if (!anchor || !anchor.parentNode) return;
+
+    const panel = document.createElement('div');
+    panel.id = 'broadcastDeletePanel';
+    panel.className = 'broadcast-delete-panel';
+    panel.innerHTML = `
+      <h2>Storico push inviate</h2>
+      <p>Seleziona le push amministratore che non vuoi più visualizzare nello storico e rimuovile definitivamente.</p>
+      <div class="broadcast-delete-toolbar">
+        <button id="refreshBroadcastListBtn" type="button">Aggiorna elenco</button>
+        <button id="deleteSelectedBroadcastsBtn" class="danger" type="button" disabled>Elimina selezionate</button>
+      </div>
+      <div id="broadcastDeleteList" class="broadcast-delete-list"></div>
+      <div id="broadcastDeleteResult"></div>
+    `;
+
+    anchor.parentNode.insertBefore(panel, anchor.nextSibling);
+
+    document.getElementById('refreshBroadcastListBtn')?.addEventListener('click', loadBroadcastDeleteList);
+    document.getElementById('deleteSelectedBroadcastsBtn')?.addEventListener('click', deleteSelectedBroadcasts);
+
+    loadBroadcastDeleteList();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', insertPanel);
+  } else {
+    insertPanel();
+  }
+
+  window.addEventListener('load', insertPanel);
+  setTimeout(insertPanel, 500);
+  setTimeout(insertPanel, 1500);
+})();
+</script>
+
 </body>
 </html>

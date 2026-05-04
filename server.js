@@ -6001,6 +6001,120 @@ app.post('/api/admin/app-update-broadcast', requireAdmin, async (req, res) => {
 });
 
 
+
+
+// admin-broadcast-delete-endpoints-v1
+app.get('/api/admin/broadcast-list', requireAdmin, async (req, res) => {
+  try {
+    const notifications = await pool.query(
+      `SELECT *
+       FROM broadcast_notifications
+       ORDER BY created_at DESC NULLS LAST, id DESC
+       LIMIT 200`
+    );
+
+    const recipientCounts = await pool.query(
+      `SELECT
+         broadcast_notification_id,
+         COUNT(*)::int AS total_recipients,
+         COUNT(*) FILTER (WHERE opened_at IS NOT NULL)::int AS opened_count
+       FROM broadcast_notification_recipients
+       GROUP BY broadcast_notification_id`
+    ).catch(() => ({ rows: [] }));
+
+    const countsMap = new Map();
+    for (const r of recipientCounts.rows || []) {
+      countsMap.set(Number(r.broadcast_notification_id), r);
+    }
+
+    const items = (notifications.rows || []).map(row => {
+      const counts = countsMap.get(Number(row.id)) || {};
+      return {
+        id: row.id,
+        title: row.title || row.notification_title || row.subject || 'Push amministratore',
+        message: row.message || row.body || row.notification_message || '',
+        audience: row.audience || row.channel || row.type || '',
+        created_at: row.created_at || null,
+        sent_count: row.sent_count ?? row.sent ?? null,
+        failed_count: row.failed_count ?? row.failed ?? null,
+        total_recipients: counts.total_recipients ?? row.total ?? null,
+        opened_count: counts.opened_count ?? null
+      };
+    });
+
+    return res.json({
+      success: true,
+      items
+    });
+  } catch (err) {
+    console.error('admin broadcast-list error:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Errore caricamento push inviate.',
+      detail: err.message
+    });
+  }
+});
+
+app.post('/api/admin/broadcast-delete', requireAdmin, async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const ids = Array.isArray(req.body?.ids)
+      ? req.body.ids.map(x => Number(x)).filter(x => Number.isFinite(x) && x > 0)
+      : [];
+
+    const cleanIds = [...new Set(ids)];
+
+    if (!cleanIds.length) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nessuna push selezionata.'
+      });
+    }
+
+    await client.query('BEGIN');
+
+    const recipientsDeleted = await client.query(
+      `DELETE FROM broadcast_notification_recipients
+       WHERE broadcast_notification_id = ANY($1::int[])
+       RETURNING id`,
+      [cleanIds]
+    ).catch(async err => {
+      console.error('delete broadcast recipients fallback/error:', err.message);
+      return { rows: [] };
+    });
+
+    const notificationsDeleted = await client.query(
+      `DELETE FROM broadcast_notifications
+       WHERE id = ANY($1::int[])
+       RETURNING id`,
+      [cleanIds]
+    );
+
+    await client.query('COMMIT');
+
+    return res.json({
+      success: true,
+      deleted_count: notificationsDeleted.rows.length,
+      deleted_ids: notificationsDeleted.rows.map(r => r.id),
+      recipients_deleted_count: recipientsDeleted.rows.length
+    });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch(e) {}
+    console.error('admin broadcast-delete error:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Errore eliminazione push.',
+      detail: err.message
+    });
+  } finally {
+    client.release();
+  }
+});
+// /admin-broadcast-delete-endpoints-v1
+
+
 app.post('/api/admin/push-broadcast', requireAdmin, async (req, res) => {
   try {
     const {
