@@ -6069,27 +6069,71 @@ app.post('/api/admin/broadcast-delete', requireAdmin, async (req, res) => {
     if (!cleanIds.length) {
       return res.status(400).json({
         success: false,
-        error: 'Nessuna push selezionata.'
+        error: 'Nessuna push selezionata.',
+        received_body: req.body || null
       });
     }
 
     await client.query('BEGIN');
 
-    const recipientsDeleted = await client.query(
-      `DELETE FROM broadcast_notification_recipients
-       WHERE broadcast_notification_id = ANY($1::int[])
-       RETURNING id`,
+    const existing = await client.query(
+      `SELECT id
+       FROM broadcast_notifications
+       WHERE id = ANY($1::int[])
+       ORDER BY id`,
       [cleanIds]
-    ).catch(async err => {
-      console.error('delete broadcast recipients fallback/error:', err.message);
-      return { rows: [] };
-    });
+    );
+
+    const foundIds = existing.rows.map(r => Number(r.id));
+
+    if (!foundIds.length) {
+      await client.query('COMMIT');
+      return res.json({
+        success: true,
+        deleted_count: 0,
+        deleted_ids: [],
+        recipients_deleted_count: 0,
+        requested_ids: cleanIds,
+        found_ids: [],
+        warning: 'Nessuna push trovata con gli ID richiesti.'
+      });
+    }
+
+    let recipientsDeletedCount = 0;
+    let recipientsDeleteMode = 'none';
+
+    try {
+      const recipientsDeleted = await client.query(
+        `DELETE FROM broadcast_notification_recipients
+         WHERE broadcast_notification_id = ANY($1::int[])
+         RETURNING id`,
+        [foundIds]
+      );
+      recipientsDeletedCount = recipientsDeleted.rows.length;
+      recipientsDeleteMode = 'broadcast_notification_id';
+    } catch (err1) {
+      console.error('broadcast recipients delete by broadcast_notification_id failed:', err1.message);
+
+      try {
+        const recipientsDeletedAlt = await client.query(
+          `DELETE FROM broadcast_notification_recipients
+           WHERE notification_id = ANY($1::int[])
+           RETURNING id`,
+          [foundIds]
+        );
+        recipientsDeletedCount = recipientsDeletedAlt.rows.length;
+        recipientsDeleteMode = 'notification_id';
+      } catch (err2) {
+        console.error('broadcast recipients delete by notification_id failed:', err2.message);
+        recipientsDeleteMode = 'failed_both';
+      }
+    }
 
     const notificationsDeleted = await client.query(
       `DELETE FROM broadcast_notifications
        WHERE id = ANY($1::int[])
        RETURNING id`,
-      [cleanIds]
+      [foundIds]
     );
 
     await client.query('COMMIT');
@@ -6097,8 +6141,11 @@ app.post('/api/admin/broadcast-delete', requireAdmin, async (req, res) => {
     return res.json({
       success: true,
       deleted_count: notificationsDeleted.rows.length,
-      deleted_ids: notificationsDeleted.rows.map(r => r.id),
-      recipients_deleted_count: recipientsDeleted.rows.length
+      deleted_ids: notificationsDeleted.rows.map(r => Number(r.id)),
+      recipients_deleted_count: recipientsDeletedCount,
+      recipients_delete_mode: recipientsDeleteMode,
+      requested_ids: cleanIds,
+      found_ids: foundIds
     });
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch(e) {}
@@ -6106,7 +6153,8 @@ app.post('/api/admin/broadcast-delete', requireAdmin, async (req, res) => {
     return res.status(500).json({
       success: false,
       error: 'Errore eliminazione push.',
-      detail: err.message
+      detail: err.message,
+      received_body: req.body || null
     });
   } finally {
     client.release();
