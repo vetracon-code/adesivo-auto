@@ -1260,27 +1260,28 @@ button[data-action="submit-report"]:not(:disabled) {
 }
 
 
-/* AVVISAMI - pulsante Invia segnalazione: grigio inattivo, arancione dopo scelta */
-button.avvisami-send-disabled {
+
+/* AVVISAMI - stato corretto pulsante invia segnalazione */
+.avvisami-send-force-disabled {
   background: linear-gradient(135deg, #d1d5db, #9ca3af) !important;
   background-color: #9ca3af !important;
   color: #374151 !important;
-  border: 1px solid rgba(156, 163, 175, 0.9) !important;
+  border: 1px solid rgba(156, 163, 175, 0.95) !important;
   opacity: 1 !important;
   filter: none !important;
-  cursor: not-allowed !important;
   box-shadow: none !important;
+  cursor: not-allowed !important;
 }
 
-button.avvisami-send-active {
+.avvisami-send-force-active {
   background: linear-gradient(135deg, #ffb347, #ff8a00) !important;
   background-color: #ff9f1c !important;
   color: #111111 !important;
   border: 1px solid rgba(255, 165, 0, 0.95) !important;
   opacity: 1 !important;
   filter: none !important;
-  cursor: pointer !important;
   box-shadow: 0 14px 32px rgba(255, 138, 0, 0.34) !important;
+  cursor: pointer !important;
 }
 
 </style>
@@ -1681,63 +1682,115 @@ button.avvisami-send-active {
 
 
 
+
+
+
 <script>
-/* AVVISAMI - Invia segnalazione grigio prima della scelta, arancione dopo */
+/* AVVISAMI - gestione reale pulsante invia segnalazione */
 (function () {
+  var reportReasonSelected = false;
+
+  var reasonTexts = [
+    'urtata',
+    'intralcio',
+    'vetri',
+    'porta aperta',
+    'bimbo',
+    'animale',
+    'furto',
+    'tentato furto',
+    'varie',
+    'cima',
+    'ormeggio',
+    'parabordo',
+    'telo',
+    'copertura',
+    'oblò',
+    'acqua',
+    'corrente',
+    'banchina',
+    'problema'
+  ];
+
+  function isSendButton(el) {
+    var txt = (el && el.textContent ? el.textContent : '').trim().toLowerCase();
+    return txt.includes('invia segnalazione');
+  }
+
   function findSendButtons() {
-    return Array.from(document.querySelectorAll('button, a, div')).filter(function (el) {
-      var txt = (el.textContent || '').trim().toLowerCase();
-      return txt.includes('invia segnalazione');
-    });
+    return Array.from(document.querySelectorAll('button, a, div[role="button"]')).filter(isSendButton);
   }
 
-  function hasSelectedReason() {
-    var selectors = [
-      '.reason.selected',
-      '.reason.active',
-      '.reason-btn.selected',
-      '.reason-btn.active',
-      '.issue-option.selected',
-      '.issue-option.active',
-      '.problem-option.selected',
-      '.problem-option.active',
-      '[data-selected="true"]',
-      '[aria-pressed="true"]'
-    ];
-
-    if (document.querySelector(selectors.join(','))) return true;
-
-    return Array.from(document.querySelectorAll('button, .reason, .reason-btn, .issue-option, .problem-option, [data-reason]')).some(function (el) {
-      var cls = (el.className || '').toString().toLowerCase();
-      return cls.includes('selected') || cls.includes('active') || el.getAttribute('aria-pressed') === 'true';
-    });
-  }
-
-  function updateSendButtons() {
-    var selected = hasSelectedReason();
-
+  function paintSendButtons() {
     findSendButtons().forEach(function (btn) {
-      btn.classList.remove('avvisami-send-disabled', 'avvisami-send-active');
+      btn.classList.remove('avvisami-send-force-disabled', 'avvisami-send-force-active');
 
-      if (selected) {
-        btn.classList.add('avvisami-send-active');
+      if (reportReasonSelected) {
+        btn.classList.add('avvisami-send-force-active');
         btn.removeAttribute('disabled');
         btn.style.setProperty('pointer-events', 'auto', 'important');
       } else {
-        btn.classList.add('avvisami-send-disabled');
+        btn.classList.add('avvisami-send-force-disabled');
         btn.setAttribute('disabled', 'disabled');
         btn.style.setProperty('pointer-events', 'none', 'important');
       }
     });
   }
 
-  document.addEventListener('DOMContentLoaded', updateSendButtons);
+  function looksLikeReason(el) {
+    if (!el || isSendButton(el)) return false;
 
-  document.addEventListener('click', function () {
-    setTimeout(updateSendButtons, 80);
+    var txt = (el.textContent || '').trim().toLowerCase();
+    if (!txt) return false;
+
+    if (txt.includes('riprova') || txt.includes('scegli') || txt.includes('categoria')) return false;
+
+    return reasonTexts.some(function (word) {
+      return txt.includes(word);
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    reportReasonSelected = false;
+    setTimeout(paintSendButtons, 50);
+    setTimeout(paintSendButtons, 300);
   });
 
-  setInterval(updateSendButtons, 500);
+  document.addEventListener('click', function (event) {
+    var clicked = event.target.closest('button, a, div[role="button"], .reason, .reason-btn, .issue-option, .problem-option, [data-reason]');
+
+    if (!clicked) {
+      setTimeout(paintSendButtons, 80);
+      return;
+    }
+
+    var txt = (clicked.textContent || '').trim().toLowerCase();
+
+    if (txt.includes('riprova')) {
+      reportReasonSelected = false;
+      setTimeout(paintSendButtons, 80);
+      return;
+    }
+
+    if (looksLikeReason(clicked)) {
+      reportReasonSelected = true;
+      setTimeout(paintSendButtons, 80);
+      return;
+    }
+
+    setTimeout(paintSendButtons, 80);
+  }, true);
+
+  var observer = new MutationObserver(function () {
+    paintSendButtons();
+  });
+
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  });
+
+  setInterval(paintSendButtons, 700);
 })();
 </script>
 
