@@ -1449,11 +1449,19 @@ button[data-action="submit-report"]:not(:disabled) {
 
 
 
-/* AVVISAMI - pulsante RIPROVA nel frame Crea il tuo AVVISAMI */
-.avvisami-retry-founder {
-  display: block !important;
+
+/* AVVISAMI - RIPROVA separato sopra il frame Founder */
+.avvisami-retry-before-founder-wrap {
   width: min(100%, 420px);
-  margin: 16px auto 0;
+  margin: 22px auto 14px;
+  display: flex;
+  justify-content: center;
+  position: relative;
+  z-index: 999;
+}
+
+.avvisami-retry-before-founder {
+  width: 100%;
   border: 1px solid rgba(255, 165, 0, 0.95);
   border-radius: 18px;
   padding: 14px 18px;
@@ -1465,11 +1473,9 @@ button[data-action="submit-report"]:not(:disabled) {
   text-align: center;
   cursor: pointer;
   box-shadow: 0 14px 34px rgba(255, 138, 0, 0.32);
-  position: relative;
-  z-index: 999;
 }
 
-.avvisami-retry-founder:hover {
+.avvisami-retry-before-founder:hover {
   transform: translateY(-1px);
   box-shadow: 0 18px 42px rgba(255, 138, 0, 0.42);
 }
@@ -2383,16 +2389,23 @@ button[data-action="submit-report"]:not(:disabled) {
 
 
 
+
+
+
 <script>
-/* AVVISAMI - RIPROVA solo nel frame Founder finale */
+/* AVVISAMI - RIPROVA sopra Founder + scroll mobile al frame operativo */
 (function () {
+  function isMobile() {
+    return window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+  }
+
   function textOf(el) {
     return (el && el.textContent ? el.textContent : '').trim().toLowerCase();
   }
 
-  function removeWrongRetryButtons() {
+  function removeAllRetryButtons() {
     document.querySelectorAll(
-      '.avvisami-retry-after-sent, .avvisami-retry-operational, .avvisami-retry-visible, .avvisami-retry-under-reasons, .avvisami-retry-under-frame'
+      '.avvisami-retry-founder, .avvisami-retry-after-sent, .avvisami-retry-operational, .avvisami-retry-visible, .avvisami-retry-under-reasons, .avvisami-retry-under-frame, .avvisami-retry-before-founder-wrap'
     ).forEach(function (el) {
       el.remove();
     });
@@ -2412,39 +2425,221 @@ button[data-action="submit-report"]:not(:disabled) {
 
     if (!candidates.length) return null;
 
-    /*
-      Prende il contenitore più specifico ma non microscopico:
-      deve contenere il testo founder/commerciale, non tutta la pagina.
-    */
-    var best = candidates[0];
+    var best = null;
 
     candidates.forEach(function (el) {
       var txt = textOf(el);
-      if (
-        txt.includes('crea il tuo avvisami') &&
-        (txt.includes('promo founder') || txt.includes('9,90'))
-      ) {
+      var ok =
+        txt.includes('crea il tuo avvisami') ||
+        txt.includes('promo founder') ||
+        txt.includes('founder 1.000') ||
+        txt.includes('founder 1000');
+
+      if (!ok) return;
+
+      if (!best) {
+        best = el;
+        return;
+      }
+
+      /*
+        Preferisce il contenitore più piccolo utile, non tutta la pagina.
+      */
+      if (el.textContent.length < best.textContent.length) {
         best = el;
       }
     });
 
+    if (!best) best = candidates[0];
+
     return best.closest('.card, .panel, section, article, div') || best;
   }
 
-  function ensureFounderRetryButton() {
-    removeWrongRetryButtons();
+  function ensureRetryBeforeFounder() {
+    var existing = document.querySelector('.avvisami-retry-before-founder-wrap');
+    if (existing) return existing;
 
-    if (document.querySelector('.avvisami-retry-founder')) return;
+    /*
+      Prima rimuove tutti gli altri RIPROVA, inclusi quelli dentro il frame Founder.
+    */
+    document.querySelectorAll(
+      '.avvisami-retry-founder, .avvisami-retry-after-sent, .avvisami-retry-operational, .avvisami-retry-visible, .avvisami-retry-under-reasons, .avvisami-retry-under-frame'
+    ).forEach(function (el) {
+      el.remove();
+    });
 
     var frame = findFounderFrame();
-    if (!frame) return;
+    if (!frame || !frame.parentElement) return null;
+
+    var wrap = document.createElement('div');
+    wrap.className = 'avvisami-retry-before-founder-wrap';
 
     var btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'avvisami-retry-founder';
+    btn.className = 'avvisami-retry-before-founder';
     btn.textContent = 'RIPROVA';
 
-    frame.appendChild(btn);
+    wrap.appendChild(btn);
+
+    /*
+      Posizione corretta: prima del frame Founder, separato e fuori.
+    */
+    frame.parentElement.insertBefore(wrap, frame);
+
+    return wrap;
+  }
+
+  function isSendButton(el) {
+    return textOf(el).includes('invia segnalazione');
+  }
+
+  function findSendButton() {
+    return Array.from(document.querySelectorAll('button, a, div[role="button"]')).find(isSendButton);
+  }
+
+  function isCategoryButton(el) {
+    if (!el) return false;
+    return !!(el.matches && el.matches('.cat-btn[data-type], button[data-type]'));
+  }
+
+  function isReasonCandidate(el) {
+    var txt = textOf(el);
+    if (!txt) return false;
+
+    if (
+      isSendButton(el) ||
+      isCategoryButton(el) ||
+      txt.includes('riprova') ||
+      txt.includes('promo') ||
+      txt.includes('founder') ||
+      txt.includes('singolo punto') ||
+      txt.includes('rete di punti') ||
+      txt.includes('configurazione') ||
+      txt.includes('cosa vuoi proteggere') ||
+      txt.includes('inquadra') ||
+      txt.includes('scanner') ||
+      txt.includes('qr code')
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function findReasonButtons() {
+    var candidates = Array.from(document.querySelectorAll(
+      '[data-reason], .reason, .reason-btn, .issue-option, .problem-option, button'
+    ));
+
+    var filtered = candidates.filter(isReasonCandidate);
+
+    var unique = [];
+    filtered.forEach(function (el) {
+      var btn = el.closest('button, a, div[role="button"], [data-reason], .reason, .reason-btn, .issue-option, .problem-option') || el;
+
+      if (!unique.some(function (u) {
+        return u === btn || u.contains(btn) || btn.contains(u);
+      })) {
+        unique.push(btn);
+      }
+    });
+
+    return unique.slice(0, 8);
+  }
+
+  function findOperationalFrame() {
+    /*
+      Deve trovare il frame della pagina di prova:
+      quello con motivi + Invia segnalazione.
+      NON lo scanner.
+    */
+    var send = findSendButton();
+    var reasons = findReasonButtons();
+
+    if (send) {
+      var c = send.parentElement;
+
+      while (c && c !== document.body) {
+        var txt = textOf(c);
+        var reasonCount = reasons.filter(function (r) {
+          return c.contains(r);
+        }).length;
+
+        var isScanner =
+          txt.includes('inquadra') ||
+          txt.includes('scanner') ||
+          txt.includes('qr code');
+
+        if (c.contains(send) && reasonCount >= 3 && !isScanner) {
+          return c;
+        }
+
+        c = c.parentElement;
+      }
+    }
+
+    if (reasons.length) {
+      var container = reasons[0].parentElement;
+
+      while (container && container !== document.body) {
+        var count = reasons.filter(function (r) {
+          return container.contains(r);
+        }).length;
+
+        var txt = textOf(container);
+        var isScanner =
+          txt.includes('inquadra') ||
+          txt.includes('scanner') ||
+          txt.includes('qr code');
+
+        if (count >= 3 && !isScanner) {
+          return container;
+        }
+
+        container = container.parentElement;
+      }
+    }
+
+    return send || null;
+  }
+
+  function scrollOperationalFrameCentered() {
+    if (!isMobile()) return;
+
+    setTimeout(function () {
+      var frame = findOperationalFrame();
+      if (!frame) return;
+
+      var rect = frame.getBoundingClientRect();
+      var vh = window.innerHeight || document.documentElement.clientHeight;
+      var absoluteTop = rect.top + window.pageYOffset;
+
+      /*
+        Obiettivo: vedere tutto il frame operativo.
+        Se entra nello schermo, lo centra.
+        Se è più alto dello schermo, lo porta appena sotto il bordo superiore.
+      */
+      var targetTop;
+
+      if (rect.height <= vh - 34) {
+        targetTop = absoluteTop - ((vh - rect.height) / 2);
+      } else {
+        targetTop = absoluteTop - 14;
+      }
+
+      window.scrollTo({
+        top: Math.max(0, targetTop),
+        behavior: 'smooth'
+      });
+
+      setTimeout(function () {
+        window.dispatchEvent(new Event('scroll'));
+      }, 500);
+
+      setTimeout(function () {
+        window.dispatchEvent(new Event('scroll'));
+      }, 1000);
+    }, 430);
   }
 
   function resetDemoState() {
@@ -2478,29 +2673,43 @@ button[data-action="submit-report"]:not(:disabled) {
   }
 
   document.addEventListener('click', function (event) {
-    var retry = event.target.closest('.avvisami-retry-founder');
-    if (!retry) return;
+    var retry = event.target.closest('.avvisami-retry-before-founder');
 
-    event.preventDefault();
+    if (retry) {
+      event.preventDefault();
 
-    resetDemoState();
+      resetDemoState();
 
-    var target = findTopTarget();
-    var top = target.getBoundingClientRect().top + window.pageYOffset - 18;
+      var target = findTopTarget();
+      var top = target.getBoundingClientRect().top + window.pageYOffset - 18;
 
-    window.scrollTo({
-      top: Math.max(0, top),
-      behavior: 'smooth'
-    });
+      window.scrollTo({
+        top: Math.max(0, top),
+        behavior: 'smooth'
+      });
+
+      return;
+    }
+
+    var cat = event.target.closest('.cat-btn[data-type], button[data-type]');
+
+    if (cat) {
+      /*
+        Dopo il click la pagina aggiorna categoria/motivi.
+        Poi scendiamo al frame operativo, centrato.
+      */
+      setTimeout(scrollOperationalFrameCentered, 120);
+      return;
+    }
   }, true);
 
   document.addEventListener('DOMContentLoaded', function () {
-    setTimeout(ensureFounderRetryButton, 700);
-    setTimeout(ensureFounderRetryButton, 1600);
+    setTimeout(ensureRetryBeforeFounder, 700);
+    setTimeout(ensureRetryBeforeFounder, 1600);
   });
 
   var observer = new MutationObserver(function () {
-    setTimeout(ensureFounderRetryButton, 120);
+    setTimeout(ensureRetryBeforeFounder, 120);
   });
 
   observer.observe(document.documentElement, {
