@@ -1370,6 +1370,47 @@ button[data-action="submit-report"]:not(:disabled) {
   }
 }
 
+
+/* AVVISAMI - pulsante invia segnalazione sotto i motivi */
+.avvisami-send-btn {
+  width: 100%;
+  margin-top: 12px;
+  border-radius: 18px;
+  padding: 14px 16px;
+  font-weight: 850;
+  font-size: 0.95rem;
+  border: 1px solid rgba(156, 163, 175, 0.9);
+  background: linear-gradient(135deg, #d1d5db, #9ca3af);
+  color: #374151;
+  opacity: 1;
+  cursor: not-allowed;
+  box-shadow: none;
+  transition:
+    background 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.avvisami-send-btn.is-active {
+  background: linear-gradient(135deg, #ffb347, #ff8a00) !important;
+  background-color: #ff9f1c !important;
+  color: #111111 !important;
+  border-color: rgba(255, 165, 0, 0.95) !important;
+  cursor: pointer !important;
+  box-shadow: 0 14px 32px rgba(255, 138, 0, 0.34) !important;
+}
+
+.avvisami-send-btn.is-demo-pulse {
+  background: linear-gradient(135deg, #ffb347, #ff8a00) !important;
+  background-color: #ff9f1c !important;
+  color: #111111 !important;
+  border-color: rgba(255, 165, 0, 0.95) !important;
+  box-shadow: 0 14px 32px rgba(255, 138, 0, 0.34) !important;
+  transform: translateY(-1px);
+}
+
 </style>
 </head>
 
@@ -2303,6 +2344,204 @@ button[data-action="submit-report"]:not(:disabled) {
       scrollToDemoFrame();
     }
   }, true);
+})();
+</script>
+
+
+<script>
+/* AVVISAMI - ripristina pulsante invia sotto i motivi: grigio -> arancione dopo selezione */
+(function () {
+  var selectedReason = null;
+  var pulseTimer = null;
+
+  function textOf(el) {
+    return (el && el.textContent ? el.textContent : '').trim().toLowerCase();
+  }
+
+  function isReasonButton(el) {
+    if (!el) return false;
+
+    var txt = textOf(el);
+    if (!txt) return false;
+
+    if (
+      txt.includes('invia segnalazione') ||
+      txt.includes('riprova') ||
+      txt.includes('promo') ||
+      txt.includes('founder') ||
+      txt.includes('singolo punto') ||
+      txt.includes('rete di punti') ||
+      txt.includes('configurazione')
+    ) {
+      return false;
+    }
+
+    return !!el.closest('[data-reason], .reason, .reason-btn, .issue-option, .problem-option, button');
+  }
+
+  function getReasonButtons() {
+    var candidates = Array.from(document.querySelectorAll(
+      '[data-reason], .reason, .reason-btn, .issue-option, .problem-option'
+    ));
+
+    if (!candidates.length) {
+      candidates = Array.from(document.querySelectorAll('button')).filter(function (btn) {
+        var txt = textOf(btn);
+        return txt &&
+          !txt.includes('negozio') &&
+          !txt.includes('casa') &&
+          !txt.includes('immobile') &&
+          !txt.includes('veicolo') &&
+          !txt.includes('barca') &&
+          !txt.includes('condominio') &&
+          !txt.includes('residence') &&
+          !txt.includes('quartiere') &&
+          !txt.includes('area pubblica') &&
+          !txt.includes('comune') &&
+          !txt.includes('su misura') &&
+          !txt.includes('invia segnalazione') &&
+          !txt.includes('riprova');
+      });
+    }
+
+    var unique = [];
+    candidates.forEach(function (el) {
+      var btn = el.closest('button, a, div[role="button"], [data-reason], .reason, .reason-btn, .issue-option, .problem-option') || el;
+      if (!unique.includes(btn)) unique.push(btn);
+    });
+
+    return unique.slice(0, 8);
+  }
+
+  function getReasonContainer() {
+    var buttons = getReasonButtons();
+    if (!buttons.length) return null;
+
+    var container = buttons[0].parentElement;
+    while (container && container !== document.body) {
+      var ok = buttons.slice(0, Math.min(4, buttons.length)).every(function (btn) {
+        return container.contains(btn);
+      });
+      if (ok) return container;
+      container = container.parentElement;
+    }
+
+    return buttons[0].parentElement;
+  }
+
+  function ensureSendButton() {
+    var existing = document.querySelector('.avvisami-send-btn');
+    if (existing) return existing;
+
+    var container = getReasonContainer();
+    if (!container) return null;
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'avvisami-send-btn';
+    btn.textContent = 'Invia segnalazione';
+    btn.setAttribute('disabled', 'disabled');
+    btn.setAttribute('aria-disabled', 'true');
+
+    container.appendChild(btn);
+    return btn;
+  }
+
+  function setSendState(active) {
+    var btn = ensureSendButton();
+    if (!btn) return;
+
+    btn.classList.remove('is-demo-pulse');
+
+    if (active) {
+      btn.classList.add('is-active');
+      btn.removeAttribute('disabled');
+      btn.setAttribute('aria-disabled', 'false');
+      btn.style.setProperty('pointer-events', 'auto', 'important');
+    } else {
+      btn.classList.remove('is-active');
+      btn.setAttribute('disabled', 'disabled');
+      btn.setAttribute('aria-disabled', 'true');
+      btn.style.setProperty('pointer-events', 'none', 'important');
+    }
+  }
+
+  function demoPulseSendButton() {
+    var btn = ensureSendButton();
+    if (!btn || selectedReason) return;
+
+    clearTimeout(pulseTimer);
+
+    btn.classList.add('is-demo-pulse');
+
+    pulseTimer = setTimeout(function () {
+      if (!selectedReason) {
+        btn.classList.remove('is-demo-pulse');
+        setSendState(false);
+      }
+    }, 420);
+  }
+
+  function resetSendButton() {
+    selectedReason = null;
+    setSendState(false);
+
+    setTimeout(demoPulseSendButton, 350);
+  }
+
+  document.addEventListener('click', function (event) {
+    var el = event.target.closest('button, a, div[role="button"], [data-reason], .reason, .reason-btn, .issue-option, .problem-option');
+
+    if (!el) return;
+
+    var txt = textOf(el);
+
+    if (txt.includes('riprova')) {
+      setTimeout(resetSendButton, 80);
+      return;
+    }
+
+    if (
+      el.classList.contains('cat-btn') ||
+      el.hasAttribute('data-type') ||
+      txt === 'negozio' ||
+      txt === 'casa / immobile' ||
+      txt === 'veicolo' ||
+      txt === 'barca' ||
+      txt === 'condominio' ||
+      txt === 'residence / struttura' ||
+      txt === 'quartiere' ||
+      txt === 'area pubblica / comune' ||
+      txt === 'su misura'
+    ) {
+      setTimeout(resetSendButton, 180);
+      return;
+    }
+
+    if (isReasonButton(el)) {
+      selectedReason = txt || 'motivo selezionato';
+      setSendState(true);
+      return;
+    }
+  }, true);
+
+  document.addEventListener('DOMContentLoaded', function () {
+    setTimeout(resetSendButton, 600);
+    setTimeout(resetSendButton, 1400);
+  });
+
+  var observer = new MutationObserver(function () {
+    ensureSendButton();
+
+    if (!selectedReason) {
+      setSendState(false);
+    }
+  });
+
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  });
 })();
 </script>
 
