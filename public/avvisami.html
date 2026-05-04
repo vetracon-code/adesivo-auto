@@ -1584,7 +1584,66 @@ button[data-action="submit-report"]:not(:disabled) {
   color: #ffb347;
   margin-bottom: 4px;
 }
-\n</style>
+\n
+/* AVVISAMI - pulsante reale Invia segnalazione dentro lista motivi */
+#avvisamiSendReportBtn,
+.avvisami-real-send-btn {
+  display: block !important;
+  width: 100% !important;
+  margin: 14px 0 0 !important;
+  border-radius: 18px !important;
+  padding: 14px 16px !important;
+  font-weight: 850 !important;
+  font-size: 0.95rem !important;
+  border: 1px solid rgba(156, 163, 175, 0.95) !important;
+  background: linear-gradient(135deg, #d1d5db, #9ca3af) !important;
+  color: #374151 !important;
+  opacity: 1 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  box-shadow: none !important;
+  text-align: center !important;
+}
+
+#avvisamiSendReportBtn.is-active,
+.avvisami-real-send-btn.is-active {
+  background: linear-gradient(135deg, #ffb347, #ff8a00) !important;
+  background-color: #ff9f1c !important;
+  color: #111111 !important;
+  border-color: rgba(255, 165, 0, 0.95) !important;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  box-shadow: 0 14px 32px rgba(255, 138, 0, 0.34) !important;
+}
+
+.avvisami-real-message {
+  margin-top: 14px;
+  padding: 14px 15px;
+  border-radius: 18px;
+  background: rgba(17, 24, 39, 0.90);
+  color: #ffffff;
+  border: 1px solid rgba(255,255,255,0.16);
+  box-shadow: 0 16px 42px rgba(0,0,0,0.34);
+  font-size: 0.88rem;
+  line-height: 1.28;
+}
+
+.avvisami-real-message strong {
+  display: block;
+  color: #ffb347;
+  margin-bottom: 4px;
+}
+
+
+/* AVVISAMI - blocca vecchi messaggi vicino al pulsante invia */
+.avvisami-demo-sent-note,
+.avvisami-received-message,
+.avvisami-real-message,
+.avvisami-real-message-fixed {
+  display: none !important;
+}
+
+</style>
 </head>
 
 <body>
@@ -1918,7 +1977,17 @@ button[data-action="submit-report"]:not(:disabled) {
           <span>${reason}</span>
           <b>›</b>
         </button>
-      `).join("");
+      `).join("") + `
+<button
+  type="button"
+  id="avvisamiSendReportBtn"
+  class="avvisami-real-send-btn"
+  disabled
+  aria-disabled="true"
+>
+  Invia segnalazione
+</button>
+`;
 
       document.querySelectorAll(".reason-btn").forEach(btn => {
         btn.addEventListener("click", () => selectReason(btn.dataset.reason, btn));
@@ -3298,5 +3367,341 @@ button[data-action="submit-report"]:not(:disabled) {
   });
 })();
 </script>
-\n</body>
+\n
+<script>
+/* AVVISAMI - gestione pulsante reale Invia segnalazione */
+(function () {
+  var selectedReason = null;
+
+  function isMobile() {
+    return window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+  }
+
+  function playChime() {
+    try {
+      var AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+
+      var ctx = new AudioContext();
+      var now = ctx.currentTime;
+
+      function tone(freq, start, duration, gainValue) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + start);
+
+        gain.gain.setValueAtTime(0.0001, now + start);
+        gain.gain.exponentialRampToValueAtTime(gainValue, now + start + 0.025);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + start + duration);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now + start);
+        osc.stop(now + start + duration + 0.03);
+      }
+
+      tone(880, 0.00, 0.16, 0.10);
+      tone(1175, 0.14, 0.18, 0.08);
+
+      setTimeout(function () {
+        try { ctx.close(); } catch (e) {}
+      }, 700);
+    } catch (e) {}
+  }
+
+  function getSendButton() {
+    return document.getElementById('avvisamiSendReportBtn');
+  }
+
+  function setSendActive(active) {
+    var btn = getSendButton();
+    if (!btn) return;
+
+    if (active) {
+      btn.classList.add('is-active');
+      btn.removeAttribute('disabled');
+      btn.setAttribute('aria-disabled', 'false');
+      btn.style.setProperty('pointer-events', 'auto', 'important');
+    } else {
+      btn.classList.remove('is-active');
+      btn.setAttribute('disabled', 'disabled');
+      btn.setAttribute('aria-disabled', 'true');
+      btn.style.setProperty('pointer-events', 'none', 'important');
+    }
+  }
+
+  function resetSend() {
+    selectedReason = null;
+    document.querySelectorAll('.avvisami-real-message').forEach(function (el) {
+      el.remove();
+    });
+    setSendActive(false);
+  }
+
+  function showMessage() {
+    var btn = getSendButton();
+    if (!btn) return;
+
+    document.querySelectorAll('.avvisami-real-message').forEach(function (el) {
+      el.remove();
+    });
+
+    var msg = document.createElement('div');
+    msg.className = 'avvisami-real-message';
+    msg.innerHTML = '<strong>Messaggio ricevuto</strong><span>Il proprietario riceve la segnalazione: ' + (selectedReason || 'motivo selezionato') + '.</span>';
+
+    btn.insertAdjacentElement('afterend', msg);
+
+    if (isMobile()) {
+      setTimeout(function () {
+        var rect = msg.getBoundingClientRect();
+        var vh = window.innerHeight || document.documentElement.clientHeight;
+        var absoluteTop = rect.top + window.pageYOffset;
+        var targetTop = absoluteTop - Math.max(24, (vh - rect.height) / 2);
+
+        window.scrollTo({
+          top: Math.max(0, targetTop),
+          behavior: 'smooth'
+        });
+      }, 180);
+    }
+  }
+
+  document.addEventListener('click', function (event) {
+    var send = event.target.closest('#avvisamiSendReportBtn');
+
+    if (send) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (!selectedReason) {
+        setSendActive(false);
+        return;
+      }
+
+      playChime();
+      showMessage();
+      return;
+    }
+
+    var reason = event.target.closest('[data-reason]');
+
+    if (reason && !reason.id.includes('avvisamiSendReportBtn')) {
+      selectedReason = reason.getAttribute('data-reason') || reason.textContent.trim();
+
+      document.querySelectorAll('[data-reason]').forEach(function (el) {
+        el.classList.remove('selected', 'active');
+        el.setAttribute('aria-pressed', 'false');
+        el.removeAttribute('data-selected');
+      });
+
+      reason.classList.add('selected', 'active');
+      reason.setAttribute('aria-pressed', 'true');
+      reason.setAttribute('data-selected', 'true');
+
+      setSendActive(true);
+      return;
+    }
+
+    var cat = event.target.closest('.cat-btn[data-type], button[data-type]');
+    if (cat) {
+      setTimeout(resetSend, 260);
+      setTimeout(function () {
+        setSendActive(false);
+      }, 700);
+    }
+  }, true);
+
+  document.addEventListener('DOMContentLoaded', function () {
+    setTimeout(function () {
+      setSendActive(false);
+    }, 600);
+  });
+
+  var observer = new MutationObserver(function () {
+    if (!selectedReason) setSendActive(false);
+  });
+
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  });
+})();
+</script>
+
+
+<script>
+/* AVVISAMI - forza l'avviso solo nello smartphone ricevente */
+(function () {
+  var lastReason = "";
+
+  function isMobile() {
+    return window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
+  }
+
+  function qs(id) {
+    return document.getElementById(id);
+  }
+
+  function cleanWrongMessages() {
+    document.querySelectorAll(
+      ".avvisami-demo-sent-note, .avvisami-received-message, .avvisami-real-message, .avvisami-real-message-fixed"
+    ).forEach(function (el) {
+      el.remove();
+    });
+  }
+
+  function playChime() {
+    try {
+      var AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+
+      var ctx = new AudioContext();
+      var now = ctx.currentTime;
+
+      function tone(freq, start, duration, gainValue) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, now + start);
+
+        gain.gain.setValueAtTime(0.0001, now + start);
+        gain.gain.exponentialRampToValueAtTime(gainValue, now + start + 0.025);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + start + duration);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now + start);
+        osc.stop(now + start + duration + 0.03);
+      }
+
+      tone(880, 0.00, 0.16, 0.10);
+      tone(1175, 0.14, 0.18, 0.08);
+
+      setTimeout(function () {
+        try { ctx.close(); } catch (e) {}
+      }, 700);
+    } catch (e) {}
+  }
+
+  function scrollToOwnerPhone() {
+    if (!isMobile()) return;
+
+    var target = qs("ownerNotificationPanel") || qs("ownerScreen") || qs("notificationCard");
+    if (!target) return;
+
+    setTimeout(function () {
+      var rect = target.getBoundingClientRect();
+      var vh = window.innerHeight || document.documentElement.clientHeight;
+      var absoluteTop = rect.top + window.pageYOffset;
+      var targetTop = absoluteTop - Math.max(18, (vh - rect.height) / 2);
+
+      window.scrollTo({
+        top: Math.max(0, targetTop),
+        behavior: "smooth"
+      });
+    }, 180);
+  }
+
+  function showOnlyOwnerNotification() {
+    cleanWrongMessages();
+
+    var card = qs("notificationCard");
+    var body = qs("notificationBody");
+    var screen = qs("ownerScreen");
+
+    if (body) {
+      body.textContent = "Qualcuno ha segnalato: " + (lastReason || "motivo selezionato") + ".";
+    }
+
+    if (card) {
+      card.classList.add("show");
+    }
+
+    if (screen) {
+      screen.classList.add("sent");
+    }
+
+    playChime();
+    scrollToOwnerPhone();
+  }
+
+  function setSendReady(ready) {
+    var btn = qs("sendBtn");
+    if (!btn) return;
+
+    if (ready) {
+      btn.disabled = false;
+      btn.classList.add("ready");
+      btn.setAttribute("aria-disabled", "false");
+    } else {
+      btn.disabled = true;
+      btn.classList.remove("ready");
+      btn.setAttribute("aria-disabled", "true");
+    }
+  }
+
+  document.addEventListener("click", function (event) {
+    var reason = event.target.closest(".reason-btn[data-reason]");
+    if (reason) {
+      lastReason = reason.getAttribute("data-reason") || reason.textContent.trim();
+      setSendReady(true);
+      cleanWrongMessages();
+      return;
+    }
+
+    var send = event.target.closest("#sendBtn");
+    if (send) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      if (!lastReason) {
+        setSendReady(false);
+        return;
+      }
+
+      showOnlyOwnerNotification();
+      return;
+    }
+
+    var cat = event.target.closest(".cat-btn[data-type], button[data-type]");
+    if (cat) {
+      lastReason = "";
+      cleanWrongMessages();
+
+      var card = qs("notificationCard");
+      var body = qs("notificationBody");
+      var screen = qs("ownerScreen");
+
+      if (card) card.classList.remove("show");
+      if (screen) screen.classList.remove("sent");
+      if (body) body.textContent = "La notifica comparirà dopo l’invio.";
+
+      setTimeout(function () {
+        setSendReady(false);
+      }, 250);
+    }
+  }, true);
+
+  document.addEventListener("DOMContentLoaded", function () {
+    cleanWrongMessages();
+  });
+
+  var observer = new MutationObserver(function () {
+    cleanWrongMessages();
+  });
+
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  });
+})();
+</script>
+
+</body>
 </html>
