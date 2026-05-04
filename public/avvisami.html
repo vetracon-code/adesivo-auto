@@ -1445,10 +1445,12 @@ button[data-action="submit-report"]:not(:disabled) {
 }
 
 
-/* AVVISAMI - pulsante RIPROVA sotto il frame */
-.avvisami-retry-under-frame {
+
+/* AVVISAMI - RIPROVA sempre visibile sotto la demo operativa */
+.avvisami-retry-under-reasons {
+  display: block !important;
   width: 100%;
-  margin: 16px auto 0;
+  margin: 18px auto 0;
   border: 1px solid rgba(255, 165, 0, 0.95);
   border-radius: 18px;
   padding: 14px 18px;
@@ -1460,10 +1462,11 @@ button[data-action="submit-report"]:not(:disabled) {
   text-align: center;
   cursor: pointer;
   box-shadow: 0 14px 34px rgba(255, 138, 0, 0.32);
-  transition: transform 180ms ease, box-shadow 180ms ease;
+  position: relative;
+  z-index: 50;
 }
 
-.avvisami-retry-under-frame:hover {
+.avvisami-retry-under-reasons:hover {
   transform: translateY(-1px);
   box-shadow: 0 18px 42px rgba(255, 138, 0, 0.42);
 }
@@ -2295,118 +2298,7 @@ button[data-action="submit-report"]:not(:disabled) {
 </script>
 
 
-<script>
-/* AVVISAMI - mobile: scroll automatico dalla categoria al frame demo */
-(function () {
-  var categoryWords = [
-    'veicolo',
-    'barca',
-    'negozio',
-    'casa',
-    'immobile',
-    'oggetto',
-    'attrezzatura',
-    'su misura'
-  ];
 
-  function isMobile() {
-    return window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
-  }
-
-  function textOf(el) {
-    return (el && el.textContent ? el.textContent : '').trim().toLowerCase();
-  }
-
-  function looksLikeCategory(el) {
-    if (!el) return false;
-
-    var txt = textOf(el);
-    if (!txt) return false;
-
-    if (
-      txt.includes('invia segnalazione') ||
-      txt.includes('riprova') ||
-      txt.includes('promo') ||
-      txt.includes('founder')
-    ) {
-      return false;
-    }
-
-    return categoryWords.some(function (word) {
-      return txt.includes(word);
-    });
-  }
-
-  function findDemoFrame() {
-    var selectors = [
-      '.scanner-scene',
-      '.demo-scanner',
-      '.phone-demo',
-      '.phone-frame',
-      '.scanner-frame',
-      '.scene-bg',
-      '[data-demo-frame]',
-      '[data-scanner]'
-    ];
-
-    for (var i = 0; i < selectors.length; i++) {
-      var el = document.querySelector(selectors[i]);
-      if (el) return el;
-    }
-
-    var sendBtn = Array.from(document.querySelectorAll('button, a, div[role="button"]')).find(function (el) {
-      return textOf(el).includes('invia segnalazione');
-    });
-
-    if (sendBtn) {
-      return sendBtn.closest('section, .card, .demo, .panel, .phone, div') || sendBtn;
-    }
-
-    return null;
-  }
-
-  function scrollToDemoFrame() {
-    if (!isMobile()) return;
-
-    setTimeout(function () {
-      var frame = findDemoFrame();
-      if (!frame) return;
-
-      var rect = frame.getBoundingClientRect();
-      var absoluteTop = rect.top + window.pageYOffset;
-
-      var offset = 18;
-      var target = Math.max(0, absoluteTop - offset);
-
-      window.scrollTo({
-        top: target,
-        behavior: 'smooth'
-      });
-
-      // Forza il controllo dell'effetto guida già presente dopo lo scroll.
-      setTimeout(function () {
-        window.dispatchEvent(new Event('scroll'));
-      }, 450);
-
-      setTimeout(function () {
-        window.dispatchEvent(new Event('scroll'));
-      }, 950);
-    }, 180);
-  }
-
-  document.addEventListener('click', function (event) {
-    var clicked = event.target.closest(
-      'button, a, div[role="button"], .category, .category-card, .use-case, .tile, [data-category]'
-    );
-
-    if (!clicked) return;
-
-    if (looksLikeCategory(clicked)) {
-      scrollToDemoFrame();
-    }
-  }, true);
-})();
-</script>
 
 
 <script>
@@ -2863,34 +2755,166 @@ button[data-action="submit-report"]:not(:disabled) {
 </script>
 
 
+
+
+
 <script>
-/* AVVISAMI - aggiunge RIPROVA sotto il frame e torna alle categorie */
+/* AVVISAMI - mobile: dopo categoria scende alla pagina segnalazione, non allo scanner */
 (function () {
-  function findFrame() {
-    return (
-      document.querySelector('.owner-notification') ||
-      document.querySelector('.notification-card') ||
-      document.querySelector('.phone-notification') ||
-      document.querySelector('.result-card') ||
-      document.querySelector('.success-card') ||
-      document.querySelector('.scanner-scene') ||
-      document.querySelector('.demo-scanner') ||
-      document.querySelector('.phone-frame') ||
-      document.querySelector('.phone-demo')
-    );
+  var categoryWords = [
+    'negozio',
+    'casa',
+    'immobile',
+    'veicolo',
+    'barca',
+    'condominio',
+    'residence',
+    'struttura',
+    'quartiere',
+    'area pubblica',
+    'comune',
+    'su misura'
+  ];
+
+  function isMobile() {
+    return window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+  }
+
+  function textOf(el) {
+    return (el && el.textContent ? el.textContent : '').trim().toLowerCase();
+  }
+
+  function isCategory(el) {
+    if (!el) return false;
+
+    if (el.classList && el.classList.contains('cat-btn')) return true;
+    if (el.hasAttribute && el.hasAttribute('data-type')) return true;
+
+    var txt = textOf(el);
+    return categoryWords.some(function (word) {
+      return txt.includes(word);
+    });
+  }
+
+  function isSendButton(el) {
+    return textOf(el).includes('invia segnalazione');
+  }
+
+  function findSendButton() {
+    return Array.from(document.querySelectorAll('button, a, div[role="button"]')).find(isSendButton);
+  }
+
+  function findReasonButtons() {
+    var candidates = Array.from(document.querySelectorAll(
+      '[data-reason], .reason, .reason-btn, .issue-option, .problem-option, button'
+    ));
+
+    return candidates.filter(function (el) {
+      var txt = textOf(el);
+      if (!txt) return false;
+
+      if (
+        isCategory(el) ||
+        isSendButton(el) ||
+        txt.includes('riprova') ||
+        txt.includes('promo') ||
+        txt.includes('founder') ||
+        txt.includes('singolo punto') ||
+        txt.includes('rete di punti') ||
+        txt.includes('configurazione')
+      ) {
+        return false;
+      }
+
+      return true;
+    }).slice(0, 8);
+  }
+
+  function findReasonsContainer() {
+    var send = findSendButton();
+    if (send) {
+      var c = send.parentElement;
+      while (c && c !== document.body) {
+        var reasonsInside = findReasonButtons().filter(function (btn) {
+          return c.contains(btn);
+        });
+
+        if (reasonsInside.length >= 2) return c;
+        c = c.parentElement;
+      }
+    }
+
+    var reasons = findReasonButtons();
+    if (!reasons.length) return null;
+
+    var container = reasons[0].parentElement;
+
+    while (container && container !== document.body) {
+      var count = reasons.filter(function (btn) {
+        return container.contains(btn);
+      }).length;
+
+      if (count >= 2) return container;
+      container = container.parentElement;
+    }
+
+    return reasons[0].parentElement;
+  }
+
+  function findQuestionBlock() {
+    var candidates = Array.from(document.querySelectorAll('h1,h2,h3,p,div,section')).filter(function (el) {
+      var txt = textOf(el);
+      return (
+        txt.includes('qualcosa non va') ||
+        txt.includes('cosa vuoi segnalare') ||
+        txt.includes('seleziona un motivo') ||
+        txt.includes('scegli il motivo') ||
+        txt.includes('invia segnalazione')
+      );
+    });
+
+    if (candidates.length) {
+      var el = candidates[0];
+      return el.closest('section, .card, .panel, .phone-frame, .phone-demo, .demo, div') || el;
+    }
+
+    return findReasonsContainer();
+  }
+
+  function scrollToReportPage() {
+    if (!isMobile()) return;
+
+    setTimeout(function () {
+      var target = findQuestionBlock() || findReasonsContainer() || findSendButton();
+      if (!target) return;
+
+      var top = target.getBoundingClientRect().top + window.pageYOffset - 10;
+
+      window.scrollTo({
+        top: Math.max(0, top),
+        behavior: 'smooth'
+      });
+
+      setTimeout(function () {
+        window.dispatchEvent(new Event('scroll'));
+      }, 450);
+
+      setTimeout(function () {
+        window.dispatchEvent(new Event('scroll'));
+      }, 950);
+    }, 260);
   }
 
   function findTopTarget() {
     return (
       document.querySelector('.cat-btn') ||
       document.querySelector('[data-type]') ||
-      document.querySelector('.category-groups') ||
       document.querySelector('.hero') ||
       document.body
     );
   }
 
-  function resetDemoState() {
+  function resetDemoVisualState() {
     document.querySelectorAll('.avvisami-demo-sent-note').forEach(function (el) {
       el.remove();
     });
@@ -2903,47 +2927,53 @@ button[data-action="submit-report"]:not(:disabled) {
       btn.style.setProperty('pointer-events', 'none', 'important');
     });
 
-    document.querySelectorAll('.selected, .active').forEach(function (el) {
-      if (!el.classList.contains('cat-btn')) {
-        el.classList.remove('selected', 'active');
-      }
+    document.querySelectorAll('.avvisami-reason-border-hint').forEach(function (el) {
+      el.classList.remove('avvisami-reason-border-hint');
     });
   }
 
   function ensureRetryButton() {
-    if (document.querySelector('.avvisami-retry-under-frame')) return;
+    if (document.querySelector('.avvisami-retry-under-reasons')) return;
 
-    var frame = findFrame();
-    if (!frame || !frame.parentElement) return;
+    var container = findReasonsContainer();
+    if (!container) return;
 
     var btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'avvisami-retry-under-frame';
+    btn.className = 'avvisami-retry-under-reasons';
     btn.textContent = 'RIPROVA';
 
-    frame.insertAdjacentElement('afterend', btn);
+    container.insertAdjacentElement('afterend', btn);
   }
 
   document.addEventListener('click', function (event) {
-    var btn = event.target.closest('.avvisami-retry-under-frame');
-    if (!btn) return;
+    var category = event.target.closest('button, a, div[role="button"], .cat-btn, [data-type]');
+    if (category && isCategory(category)) {
+      setTimeout(function () {
+        ensureRetryButton();
+        scrollToReportPage();
+      }, 220);
+      return;
+    }
 
-    event.preventDefault();
+    var retry = event.target.closest('.avvisami-retry-under-reasons, .avvisami-retry-under-frame');
+    if (retry) {
+      event.preventDefault();
+      resetDemoVisualState();
 
-    resetDemoState();
+      var target = findTopTarget();
+      var top = target.getBoundingClientRect().top + window.pageYOffset - 18;
 
-    var target = findTopTarget();
-    var top = target.getBoundingClientRect().top + window.pageYOffset - 18;
-
-    window.scrollTo({
-      top: Math.max(0, top),
-      behavior: 'smooth'
-    });
+      window.scrollTo({
+        top: Math.max(0, top),
+        behavior: 'smooth'
+      });
+    }
   }, true);
 
   document.addEventListener('DOMContentLoaded', function () {
-    setTimeout(ensureRetryButton, 600);
-    setTimeout(ensureRetryButton, 1500);
+    setTimeout(ensureRetryButton, 700);
+    setTimeout(ensureRetryButton, 1600);
   });
 
   var observer = new MutationObserver(function () {
