@@ -1286,18 +1286,32 @@ button[data-action="submit-report"]:not(:disabled) {
 
 
 
-/* AVVISAMI - mobile: bordo azzurro sequenziale sui motivi quando entrano in vista */
+
+/* AVVISAMI - mobile: guida ripetibile motivi + demo CTA invia */
 @media screen and (max-width: 640px) {
   .avvisami-reason-border-hint {
     border-color: #38bdf8 !important;
+    outline: 2px solid rgba(56, 189, 248, 0.85) !important;
+    outline-offset: 2px !important;
     box-shadow:
-      0 0 0 2px rgba(56, 189, 248, 0.55),
-      0 0 18px rgba(56, 189, 248, 0.42) !important;
-    transform: translateY(-1px) !important;
+      0 0 0 3px rgba(56, 189, 248, 0.35),
+      0 0 22px rgba(56, 189, 248, 0.48) !important;
+    transform: translateY(-1px) scale(1.015) !important;
     transition:
-      border-color 180ms ease,
-      box-shadow 180ms ease,
-      transform 180ms ease !important;
+      border-color 160ms ease,
+      outline 160ms ease,
+      box-shadow 160ms ease,
+      transform 160ms ease !important;
+  }
+
+  .avvisami-send-demo-orange {
+    background: linear-gradient(135deg, #ffb347, #ff8a00) !important;
+    background-color: #ff9f1c !important;
+    color: #111111 !important;
+    border: 1px solid rgba(255, 165, 0, 0.95) !important;
+    opacity: 1 !important;
+    filter: none !important;
+    box-shadow: 0 14px 32px rgba(255, 138, 0, 0.34) !important;
   }
 }
 
@@ -1815,12 +1829,16 @@ button[data-action="submit-report"]:not(:disabled) {
 
 
 
+
+
+
 <script>
-/* AVVISAMI - mobile: evidenzia i motivi solo quando la sezione è visibile */
+/* AVVISAMI - mobile: ripete guida quando il frame torna visibile */
 (function () {
-  var sequencePlayed = false;
   var sequenceRunning = false;
   var userSelectedReason = false;
+  var frameWasVisible = false;
+  var lastRunAt = 0;
 
   var reasonWords = [
     'urtata',
@@ -1858,6 +1876,10 @@ button[data-action="submit-report"]:not(:disabled) {
     return textOf(el).includes('invia segnalazione');
   }
 
+  function findSendButtons() {
+    return Array.from(document.querySelectorAll('button, a, div[role="button"]')).filter(isSendButton);
+  }
+
   function looksLikeReason(el) {
     if (!el || isSendButton(el)) return false;
 
@@ -1887,10 +1909,15 @@ button[data-action="submit-report"]:not(:disabled) {
 
     var found = candidates.filter(looksLikeReason);
 
+    // Prende gli elementi cliccabili più esterni, evitando che un figlio annidato rubi il posto al secondo pulsante.
     var unique = [];
     found.forEach(function (el) {
-      if (!unique.some(function (u) { return u.contains(el) || el.contains(u); })) {
-        unique.push(el);
+      var clickable = el.closest('button, a, div[role="button"], .reason, .reason-btn, .issue-option, .problem-option, [data-reason]') || el;
+
+      if (!unique.includes(clickable) && !unique.some(function (u) {
+        return u === clickable || u.contains(clickable) || clickable.contains(u);
+      })) {
+        unique.push(clickable);
       }
     });
 
@@ -1901,14 +1928,75 @@ button[data-action="submit-report"]:not(:disabled) {
     document.querySelectorAll('.avvisami-reason-border-hint').forEach(function (el) {
       el.classList.remove('avvisami-reason-border-hint');
     });
+
+    document.querySelectorAll('.avvisami-send-demo-orange').forEach(function (el) {
+      el.classList.remove('avvisami-send-demo-orange');
+    });
   }
 
-  function playSequence(buttons) {
-    if (sequencePlayed || sequenceRunning || userSelectedReason || !isMobile()) return;
-    if (!buttons || buttons.length < 2) return;
+  function getFrameElement(buttons) {
+    if (!buttons || !buttons.length) return null;
 
-    sequencePlayed = true;
+    var container = buttons[0].parentElement;
+
+    while (container && container !== document.body) {
+      var allInside = buttons.every(function (btn) {
+        return container.contains(btn);
+      });
+
+      if (allInside) return container;
+
+      container = container.parentElement;
+    }
+
+    return buttons[0];
+  }
+
+  function pulseSendButtonDemo(done) {
+    if (userSelectedReason) {
+      if (done) done();
+      return;
+    }
+
+    var buttons = findSendButtons();
+    if (!buttons.length) {
+      if (done) done();
+      return;
+    }
+
+    // due lampeggi grigio -> arancione -> grigio
+    [0, 420].forEach(function (delay) {
+      setTimeout(function () {
+        if (userSelectedReason) return;
+        buttons.forEach(function (btn) {
+          btn.classList.add('avvisami-send-demo-orange');
+        });
+      }, delay);
+
+      setTimeout(function () {
+        buttons.forEach(function (btn) {
+          btn.classList.remove('avvisami-send-demo-orange');
+        });
+      }, delay + 260);
+    });
+
+    setTimeout(function () {
+      if (done) done();
+    }, 900);
+  }
+
+  function playSequence() {
+    if (!isMobile() || sequenceRunning || userSelectedReason) return;
+
+    var now = Date.now();
+    if (now - lastRunAt < 1200) return;
+
+    var buttons = getReasonButtons();
+    if (buttons.length < 2) return;
+
+    lastRunAt = now;
     sequenceRunning = true;
+    clearHints();
 
     buttons.forEach(function (btn, index) {
       setTimeout(function () {
@@ -1923,55 +2011,44 @@ button[data-action="submit-report"]:not(:disabled) {
 
         setTimeout(function () {
           btn.classList.remove('avvisami-reason-border-hint');
+
           if (index === buttons.length - 1) {
-            sequenceRunning = false;
+            pulseSendButtonDemo(function () {
+              sequenceRunning = false;
+            });
           }
-        }, 700);
-      }, index * 780);
+        }, 620);
+      }, index * 720);
     });
   }
 
-  function observeWhenVisible() {
-    if (!isMobile() || sequencePlayed) return;
+  function isFrameVisibleEnough(el) {
+    if (!el) return false;
+
+    var rect = el.getBoundingClientRect();
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+
+    return rect.top < vh * 0.78 && rect.bottom > vh * 0.28;
+  }
+
+  function checkVisibilityAndMaybeRun() {
+    if (!isMobile() || userSelectedReason || sequenceRunning) return;
 
     var buttons = getReasonButtons();
     if (buttons.length < 2) return;
 
-    var container = buttons[0].parentElement;
-    while (container && container !== document.body) {
-      var allInside = buttons.every(function (btn) {
-        return container.contains(btn);
-      });
-      if (allInside) break;
-      container = container.parentElement;
+    var frame = getFrameElement(buttons);
+    var visible = isFrameVisibleEnough(frame);
+
+    if (visible && !frameWasVisible) {
+      frameWasVisible = true;
+      setTimeout(playSequence, 180);
     }
 
-    var target = container && container !== document.body ? container : buttons[0];
-
-    if (!('IntersectionObserver' in window)) {
-      playSequence(buttons);
-      return;
+    if (!visible) {
+      frameWasVisible = false;
+      clearHints();
     }
-
-    var observer = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (
-          entry.isIntersecting &&
-          entry.intersectionRatio >= 0.35 &&
-          !sequencePlayed &&
-          !userSelectedReason
-        ) {
-          observer.disconnect();
-          setTimeout(function () {
-            playSequence(getReasonButtons());
-          }, 250);
-        }
-      });
-    }, {
-      threshold: [0.35, 0.55, 0.75]
-    });
-
-    observer.observe(target);
   }
 
   document.addEventListener('click', function (event) {
@@ -1987,29 +2064,38 @@ button[data-action="submit-report"]:not(:disabled) {
 
     var txt = clicked ? textOf(clicked) : '';
     if (txt.includes('riprova')) {
-      sequencePlayed = false;
-      sequenceRunning = false;
       userSelectedReason = false;
+      sequenceRunning = false;
+      frameWasVisible = false;
       clearHints();
-      setTimeout(observeWhenVisible, 300);
+      setTimeout(checkVisibilityAndMaybeRun, 300);
     }
   }, true);
 
   document.addEventListener('DOMContentLoaded', function () {
-    setTimeout(observeWhenVisible, 500);
-    setTimeout(observeWhenVisible, 1400);
+    setTimeout(checkVisibilityAndMaybeRun, 500);
+    setTimeout(checkVisibilityAndMaybeRun, 1200);
+  });
+
+  window.addEventListener('scroll', function () {
+    checkVisibilityAndMaybeRun();
+  }, { passive: true });
+
+  window.addEventListener('resize', function () {
+    frameWasVisible = false;
+    checkVisibilityAndMaybeRun();
   });
 
   var observer = new MutationObserver(function () {
-    if (!sequencePlayed && !sequenceRunning && !userSelectedReason) {
-      observeWhenVisible();
-    }
+    checkVisibilityAndMaybeRun();
   });
 
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true
   });
+
+  setInterval(checkVisibilityAndMaybeRun, 700);
 })();
 </script>
 
