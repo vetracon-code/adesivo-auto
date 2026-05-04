@@ -1285,32 +1285,19 @@ button[data-action="submit-report"]:not(:disabled) {
 }
 
 
-/* AVVISAMI - evidenziazione sequenziale motivi segnalazione */
-.avvisami-reason-pulse {
-  position: relative !important;
-  z-index: 5 !important;
-  animation: avvisamiReasonPulse 0.85s ease-in-out 1 !important;
-  box-shadow:
-    0 0 0 3px rgba(255, 184, 77, 0.65),
-    0 12px 30px rgba(255, 138, 0, 0.32) !important;
-  border-color: rgba(255, 165, 0, 0.95) !important;
-  transform: translateY(-1px) scale(1.025) !important;
-}
 
-@keyframes avvisamiReasonPulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(255, 184, 77, 0);
-    transform: translateY(0) scale(1);
-  }
-  35% {
+/* AVVISAMI - mobile: bordo azzurro sequenziale sui motivi quando entrano in vista */
+@media screen and (max-width: 640px) {
+  .avvisami-reason-border-hint {
+    border-color: #38bdf8 !important;
     box-shadow:
-      0 0 0 4px rgba(255, 184, 77, 0.7),
-      0 12px 30px rgba(255, 138, 0, 0.34);
-    transform: translateY(-1px) scale(1.025);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(255, 184, 77, 0);
-    transform: translateY(0) scale(1);
+      0 0 0 2px rgba(56, 189, 248, 0.55),
+      0 0 18px rgba(56, 189, 248, 0.42) !important;
+    transform: translateY(-1px) !important;
+    transition:
+      border-color 180ms ease,
+      box-shadow 180ms ease,
+      transform 180ms ease !important;
   }
 }
 
@@ -1829,11 +1816,15 @@ button[data-action="submit-report"]:not(:disabled) {
 </script>
 
 
+
+
+
 <script>
-/* AVVISAMI - sequenza guida sui motivi da selezionare */
+/* AVVISAMI - mobile: evidenzia i motivi solo quando la sezione è visibile */
 (function () {
-  var avvisamiReasonSequencePlayed = false;
-  var avvisamiReasonSequenceRunning = false;
+  var sequencePlayed = false;
+  var sequenceRunning = false;
+  var userSelectedReason = false;
 
   var reasonWords = [
     'urtata',
@@ -1845,30 +1836,36 @@ button[data-action="submit-report"]:not(:disabled) {
     'furto',
     'tentato furto',
     'varie',
+    'altro',
     'cima',
     'ormeggio',
     'parabordo',
     'telo',
     'copertura',
     'oblò',
+    'oblo',
     'acqua',
     'corrente',
     'banchina',
     'problema'
   ];
 
-  function normalizeText(el) {
+  function isMobile() {
+    return window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+  }
+
+  function textOf(el) {
     return (el && el.textContent ? el.textContent : '').trim().toLowerCase();
   }
 
   function isSendButton(el) {
-    return normalizeText(el).includes('invia segnalazione');
+    return textOf(el).includes('invia segnalazione');
   }
 
-  function looksLikeReasonButton(el) {
+  function looksLikeReason(el) {
     if (!el || isSendButton(el)) return false;
 
-    var txt = normalizeText(el);
+    var txt = textOf(el);
     if (!txt) return false;
 
     if (
@@ -1892,77 +1889,125 @@ button[data-action="submit-report"]:not(:disabled) {
       'button, a, div[role="button"], .reason, .reason-btn, .issue-option, .problem-option, [data-reason]'
     ));
 
-    var buttons = candidates.filter(looksLikeReasonButton);
+    var found = candidates.filter(looksLikeReason);
 
-    // Evita duplicati se il testo è contenuto in elementi annidati
     var unique = [];
-    buttons.forEach(function (btn) {
-      if (!unique.some(function (u) { return u.contains(btn) || btn.contains(u); })) {
-        unique.push(btn);
+    found.forEach(function (el) {
+      if (!unique.some(function (u) { return u.contains(el) || el.contains(u); })) {
+        unique.push(el);
       }
     });
 
-    return unique.slice(0, 4);
+    return unique.slice(0, 6);
   }
 
-  function hasAlreadySelectedReason() {
-    return !!document.querySelector(
-      '.selected, .active, [data-selected="true"], [aria-pressed="true"]'
-    );
+  function clearHints() {
+    document.querySelectorAll('.avvisami-reason-border-hint').forEach(function (el) {
+      el.classList.remove('avvisami-reason-border-hint');
+    });
   }
 
-  function playReasonSequenceOnce() {
-    if (avvisamiReasonSequencePlayed || avvisamiReasonSequenceRunning) return;
+  function playSequence(buttons) {
+    if (sequencePlayed || sequenceRunning || userSelectedReason || !isMobile()) return;
+    if (!buttons || buttons.length < 2) return;
+
+    sequencePlayed = true;
+    sequenceRunning = true;
+
+    buttons.forEach(function (btn, index) {
+      setTimeout(function () {
+        if (userSelectedReason) {
+          clearHints();
+          sequenceRunning = false;
+          return;
+        }
+
+        clearHints();
+        btn.classList.add('avvisami-reason-border-hint');
+
+        setTimeout(function () {
+          btn.classList.remove('avvisami-reason-border-hint');
+          if (index === buttons.length - 1) {
+            sequenceRunning = false;
+          }
+        }, 700);
+      }, index * 780);
+    });
+  }
+
+  function observeWhenVisible() {
+    if (!isMobile() || sequencePlayed) return;
 
     var buttons = getReasonButtons();
     if (buttons.length < 2) return;
 
-    avvisamiReasonSequencePlayed = true;
-    avvisamiReasonSequenceRunning = true;
-
-    buttons.forEach(function (btn, index) {
-      setTimeout(function () {
-        if (hasAlreadySelectedReason()) {
-          avvisamiReasonSequenceRunning = false;
-          return;
-        }
-
-        buttons.forEach(function (b) {
-          b.classList.remove('avvisami-reason-pulse');
-        });
-
-        btn.classList.add('avvisami-reason-pulse');
-
-        setTimeout(function () {
-          btn.classList.remove('avvisami-reason-pulse');
-          if (index === buttons.length - 1) {
-            avvisamiReasonSequenceRunning = false;
-          }
-        }, 850);
-      }, index * 950);
-    });
-  }
-
-  function maybeStartSequence() {
-    if (avvisamiReasonSequencePlayed) return;
-
-    var buttons = getReasonButtons();
-    if (buttons.length >= 2) {
-      setTimeout(playReasonSequenceOnce, 450);
+    var container = buttons[0].parentElement;
+    while (container && container !== document.body) {
+      var allInside = buttons.every(function (btn) {
+        return container.contains(btn);
+      });
+      if (allInside) break;
+      container = container.parentElement;
     }
+
+    var target = container && container !== document.body ? container : buttons[0];
+
+    if (!('IntersectionObserver' in window)) {
+      playSequence(buttons);
+      return;
+    }
+
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (
+          entry.isIntersecting &&
+          entry.intersectionRatio >= 0.35 &&
+          !sequencePlayed &&
+          !userSelectedReason
+        ) {
+          observer.disconnect();
+          setTimeout(function () {
+            playSequence(getReasonButtons());
+          }, 250);
+        }
+      });
+    }, {
+      threshold: [0.35, 0.55, 0.75]
+    });
+
+    observer.observe(target);
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
-    setTimeout(maybeStartSequence, 500);
-    setTimeout(maybeStartSequence, 1200);
-  });
+  document.addEventListener('click', function (event) {
+    var clicked = event.target.closest(
+      'button, a, div[role="button"], .reason, .reason-btn, .issue-option, .problem-option, [data-reason]'
+    );
 
-  document.addEventListener('click', function () {
-    setTimeout(maybeStartSequence, 350);
+    if (clicked && looksLikeReason(clicked)) {
+      userSelectedReason = true;
+      clearHints();
+      return;
+    }
+
+    var txt = clicked ? textOf(clicked) : '';
+    if (txt.includes('riprova')) {
+      sequencePlayed = false;
+      sequenceRunning = false;
+      userSelectedReason = false;
+      clearHints();
+      setTimeout(observeWhenVisible, 300);
+    }
   }, true);
 
+  document.addEventListener('DOMContentLoaded', function () {
+    setTimeout(observeWhenVisible, 500);
+    setTimeout(observeWhenVisible, 1400);
+  });
+
   var observer = new MutationObserver(function () {
-    maybeStartSequence();
+    if (!sequencePlayed && !sequenceRunning && !userSelectedReason) {
+      observeWhenVisible();
+    }
   });
 
   observer.observe(document.documentElement, {
