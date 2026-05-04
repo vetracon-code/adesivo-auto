@@ -1446,10 +1446,11 @@ button[data-action="submit-report"]:not(:disabled) {
 
 
 
-/* AVVISAMI - RIPROVA sempre visibile sotto la demo operativa */
-.avvisami-retry-under-reasons {
+
+/* AVVISAMI - pulsante RIPROVA sotto frame/notifica */
+.avvisami-retry-visible {
   display: block !important;
-  width: 100%;
+  width: min(100%, 420px);
   margin: 18px auto 0;
   border: 1px solid rgba(255, 165, 0, 0.95);
   border-radius: 18px;
@@ -1463,10 +1464,10 @@ button[data-action="submit-report"]:not(:disabled) {
   cursor: pointer;
   box-shadow: 0 14px 34px rgba(255, 138, 0, 0.32);
   position: relative;
-  z-index: 50;
+  z-index: 999;
 }
 
-.avvisami-retry-under-reasons:hover {
+.avvisami-retry-visible:hover {
   transform: translateY(-1px);
   box-shadow: 0 18px 42px rgba(255, 138, 0, 0.42);
 }
@@ -2816,8 +2817,11 @@ button[data-action="submit-report"]:not(:disabled) {
 </script>
 
 
+
+
+
 <script>
-/* AVVISAMI - fix mobile: click categoria scende alla pagina di segnalazione */
+/* AVVISAMI - centra frame mobile e ripristina RIPROVA */
 (function () {
   function isMobile() {
     return window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
@@ -2827,99 +2831,161 @@ button[data-action="submit-report"]:not(:disabled) {
     return (el && el.textContent ? el.textContent : '').trim().toLowerCase();
   }
 
-  function isSendButton(el) {
-    return textOf(el).includes('invia segnalazione');
+  function findPhoneFrame() {
+    return (
+      document.querySelector('.phone-frame') ||
+      document.querySelector('.phone-demo') ||
+      document.querySelector('.demo-scanner') ||
+      document.querySelector('.scanner-scene') ||
+      document.querySelector('.scene-bg')
+    );
   }
 
-  function findSendButton() {
-    return Array.from(document.querySelectorAll('button, a, div[role="button"]')).find(isSendButton);
+  function findNotificationFrame() {
+    return (
+      document.querySelector('.avvisami-demo-sent-note') ||
+      document.querySelector('.owner-notification') ||
+      document.querySelector('.notification-card') ||
+      document.querySelector('.phone-notification') ||
+      document.querySelector('.result-card') ||
+      document.querySelector('.success-card') ||
+      findPhoneFrame()
+    );
   }
 
-  function findReportTitle() {
-    return Array.from(document.querySelectorAll('h1,h2,h3,p,div,section')).find(function (el) {
-      var txt = textOf(el);
-      return (
-        txt.includes('qualcosa non va') ||
-        txt.includes('cosa vuoi segnalare') ||
-        txt.includes('seleziona un motivo') ||
-        txt.includes('scegli il motivo')
-      );
-    });
+  function findTopTarget() {
+    return (
+      document.querySelector('.cat-btn') ||
+      document.querySelector('[data-type]') ||
+      document.querySelector('.cat-group-label') ||
+      document.querySelector('.hero') ||
+      document.body
+    );
   }
 
-  function findReasonsContainer() {
-    var send = findSendButton();
-
-    if (send) {
-      var c = send.parentElement;
-
-      while (c && c !== document.body) {
-        var txt = textOf(c);
-
-        if (
-          txt.includes('invia segnalazione') &&
-          (
-            txt.includes('altro') ||
-            txt.includes('allarme') ||
-            txt.includes('vetrina') ||
-            txt.includes('urtata') ||
-            txt.includes('animale') ||
-            txt.includes('cima') ||
-            txt.includes('rifiuti') ||
-            txt.includes('lampione') ||
-            txt.includes('vandalismo')
-          )
-        ) {
-          return c;
-        }
-
-        c = c.parentElement;
-      }
-
-      return send;
-    }
-
-    var title = findReportTitle();
-    if (title) {
-      return title.closest('section, .card, .panel, .phone-frame, .phone-demo, .demo, div') || title;
-    }
-
-    return null;
-  }
-
-  function scrollToReportArea() {
-    if (!isMobile()) return;
+  function centerElement(el) {
+    if (!el || !isMobile()) return;
 
     setTimeout(function () {
-      var target = findReasonsContainer() || findReportTitle() || findSendButton();
+      var rect = el.getBoundingClientRect();
+      var vh = window.innerHeight || document.documentElement.clientHeight;
 
-      if (!target) return;
-
-      var rect = target.getBoundingClientRect();
-      var top = rect.top + window.pageYOffset - 12;
+      /*
+        Centro reale: mette il frame circa al centro verticale.
+        Se il frame è alto, lo lascia con un margine superiore leggibile.
+      */
+      var absoluteTop = rect.top + window.pageYOffset;
+      var targetTop = absoluteTop - Math.max(24, (vh - rect.height) / 2);
 
       window.scrollTo({
-        top: Math.max(0, top),
+        top: Math.max(0, targetTop),
         behavior: 'smooth'
       });
 
       setTimeout(function () {
         window.dispatchEvent(new Event('scroll'));
       }, 500);
+    }, 260);
+  }
 
-      setTimeout(function () {
-        window.dispatchEvent(new Event('scroll'));
-      }, 1000);
-    }, 300);
+  function scrollCategoryToCenteredFrame() {
+    if (!isMobile()) return;
+
+    /*
+      Dopo la selezione categoria, diamo tempo al JS esistente di cambiare
+      immagine/motivi, poi centriamo il frame e non il blocco troppo basso.
+    */
+    setTimeout(function () {
+      var frame = findPhoneFrame();
+      centerElement(frame);
+    }, 380);
+  }
+
+  function ensureRetryButton() {
+    var existing = document.querySelector('.avvisami-retry-visible');
+    if (existing) return existing;
+
+    var anchor = findNotificationFrame();
+    if (!anchor) return null;
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'avvisami-retry-visible';
+    btn.textContent = 'RIPROVA';
+
+    /*
+      Se esiste una nota/notifica, il pulsante va subito sotto.
+      Altrimenti va sotto il frame principale, così resta comunque visibile.
+    */
+    anchor.insertAdjacentElement('afterend', btn);
+    return btn;
+  }
+
+  function resetDemoState() {
+    document.querySelectorAll('.avvisami-demo-sent-note').forEach(function (el) {
+      el.remove();
+    });
+
+    document.querySelectorAll('.avvisami-send-btn').forEach(function (btn) {
+      btn.textContent = 'Invia segnalazione';
+      btn.classList.remove('is-active', 'is-demo-pulse', 'avvisami-send-demo-orange');
+      btn.setAttribute('disabled', 'disabled');
+      btn.setAttribute('aria-disabled', 'true');
+      btn.style.setProperty('pointer-events', 'none', 'important');
+    });
+
+    document.querySelectorAll('.avvisami-reason-border-hint').forEach(function (el) {
+      el.classList.remove('avvisami-reason-border-hint');
+    });
+
+    document.querySelectorAll('.avvisami-retry-visible').forEach(function (el) {
+      el.remove();
+    });
   }
 
   document.addEventListener('click', function (event) {
     var cat = event.target.closest('.cat-btn[data-type], button[data-type]');
 
-    if (!cat) return;
+    if (cat) {
+      scrollCategoryToCenteredFrame();
+      setTimeout(ensureRetryButton, 900);
+      return;
+    }
 
-    scrollToReportArea();
+    var retry = event.target.closest('.avvisami-retry-visible, .avvisami-retry-under-reasons, .avvisami-retry-under-frame');
+
+    if (retry) {
+      event.preventDefault();
+
+      resetDemoState();
+
+      var target = findTopTarget();
+      var top = target.getBoundingClientRect().top + window.pageYOffset - 18;
+
+      window.scrollTo({
+        top: Math.max(0, top),
+        behavior: 'smooth'
+      });
+    }
   }, true);
+
+  document.addEventListener('DOMContentLoaded', function () {
+    setTimeout(ensureRetryButton, 1000);
+    setTimeout(ensureRetryButton, 2200);
+  });
+
+  var observer = new MutationObserver(function () {
+    /*
+      Quando compare la notifica dopo l'invio, ricrea il pulsante RIPROVA
+      immediatamente sotto il frame/notifica.
+    */
+    setTimeout(ensureRetryButton, 120);
+  });
+
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  });
 })();
 </script>
 
