@@ -6101,31 +6101,34 @@ app.post('/api/admin/broadcast-delete', requireAdmin, async (req, res) => {
 
     let recipientsDeletedCount = 0;
     let recipientsDeleteMode = 'none';
+    let recipientsDeleteError = '';
 
-    try {
-      const recipientsDeleted = await client.query(
-        `DELETE FROM broadcast_notification_recipients
-         WHERE broadcast_notification_id = ANY($1::int[])
-         RETURNING id`,
-        [foundIds]
-      );
-      recipientsDeletedCount = recipientsDeleted.rows.length;
-      recipientsDeleteMode = 'broadcast_notification_id';
-    } catch (err1) {
-      console.error('broadcast recipients delete by broadcast_notification_id failed:', err1.message);
+    /*
+      Non usiamo RETURNING id sui recipients:
+      alcune versioni della tabella potrebbero non avere una colonna id.
+      Usiamo rowCount, molto più sicuro.
+    */
+    const possibleRecipientColumns = [
+      'broadcast_notification_id',
+      'notification_id',
+      'broadcast_id'
+    ];
 
+    for (const col of possibleRecipientColumns) {
       try {
-        const recipientsDeletedAlt = await client.query(
+        const deletedRecipients = await client.query(
           `DELETE FROM broadcast_notification_recipients
-           WHERE notification_id = ANY($1::int[])
-           RETURNING id`,
+           WHERE ${col} = ANY($1::int[])`,
           [foundIds]
         );
-        recipientsDeletedCount = recipientsDeletedAlt.rows.length;
-        recipientsDeleteMode = 'notification_id';
-      } catch (err2) {
-        console.error('broadcast recipients delete by notification_id failed:', err2.message);
-        recipientsDeleteMode = 'failed_both';
+
+        recipientsDeletedCount = deletedRecipients.rowCount || 0;
+        recipientsDeleteMode = col;
+        recipientsDeleteError = '';
+        break;
+      } catch (err) {
+        recipientsDeleteError = err.message;
+        console.error(`broadcast recipients delete failed with ${col}:`, err.message);
       }
     }
 
@@ -6144,16 +6147,22 @@ app.post('/api/admin/broadcast-delete', requireAdmin, async (req, res) => {
       deleted_ids: notificationsDeleted.rows.map(r => Number(r.id)),
       recipients_deleted_count: recipientsDeletedCount,
       recipients_delete_mode: recipientsDeleteMode,
+      recipients_delete_error: recipientsDeleteError || null,
       requested_ids: cleanIds,
       found_ids: foundIds
     });
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch(e) {}
     console.error('admin broadcast-delete error:', err);
+
     return res.status(500).json({
       success: false,
       error: 'Errore eliminazione push.',
       detail: err.message,
+      code: err.code || null,
+      constraint: err.constraint || null,
+      table: err.table || null,
+      column: err.column || null,
       received_body: req.body || null
     });
   } finally {
