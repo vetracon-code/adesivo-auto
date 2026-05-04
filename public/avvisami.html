@@ -1529,8 +1529,9 @@ button[data-action="submit-report"]:not(:disabled) {
 }
 
 
-/* AVVISAMI - pulsante Invia segnalazione sotto i motivi */
-.avvisami-send-btn {
+
+/* AVVISAMI - pulsante invia segnalazione forzato sotto i motivi */
+.avvisami-send-forced {
   display: block !important;
   width: 100% !important;
   margin: 14px 0 0 !important;
@@ -1543,11 +1544,12 @@ button[data-action="submit-report"]:not(:disabled) {
   color: #374151 !important;
   opacity: 1 !important;
   cursor: not-allowed !important;
+  pointer-events: none !important;
   box-shadow: none !important;
   text-align: center !important;
 }
 
-.avvisami-send-btn.is-active {
+.avvisami-send-forced.is-active {
   background: linear-gradient(135deg, #ffb347, #ff8a00) !important;
   background-color: #ff9f1c !important;
   color: #111111 !important;
@@ -1557,7 +1559,7 @@ button[data-action="submit-report"]:not(:disabled) {
   box-shadow: 0 14px 32px rgba(255, 138, 0, 0.34) !important;
 }
 
-.avvisami-send-btn.is-demo-pulse {
+.avvisami-send-forced.is-demo-pulse {
   background: linear-gradient(135deg, #ffb347, #ff8a00) !important;
   background-color: #ff9f1c !important;
   color: #111111 !important;
@@ -1565,7 +1567,24 @@ button[data-action="submit-report"]:not(:disabled) {
   box-shadow: 0 14px 32px rgba(255, 138, 0, 0.34) !important;
 }
 
-</style>
+.avvisami-received-message {
+  margin-top: 14px;
+  padding: 14px 15px;
+  border-radius: 18px;
+  background: rgba(17, 24, 39, 0.90);
+  color: #ffffff;
+  border: 1px solid rgba(255,255,255,0.16);
+  box-shadow: 0 16px 42px rgba(0,0,0,0.34);
+  font-size: 0.88rem;
+  line-height: 1.28;
+}
+
+.avvisami-received-message strong {
+  display: block;
+  color: #ffb347;
+  margin-bottom: 4px;
+}
+\n</style>
 </head>
 
 <body>
@@ -2949,21 +2968,39 @@ button[data-action="submit-report"]:not(:disabled) {
 </script>
 
 
+
+
+
 <script>
-/* AVVISAMI - ripristina solo pulsante Invia segnalazione sotto i motivi */
+/* AVVISAMI - forza pulsante invia, trillo e messaggio ricevuto */
 (function () {
   var selectedReason = null;
+
+  var reasonWords = [
+    'serranda','porta','vetrina','allarme','perdita','acqua','furto','intrusione',
+    'cancello','portone','box','garage','vetri','fumo','incendio',
+    'urtata','urtato','intralcio','parcheggio','animale',
+    'cima','ormeggio','parabordo','telo','copertura','corrente',
+    'luce','ascensore','rifiuti','vandalismo','danno',
+    'guasto','manutenzione','sicurezza','situazione','anomala',
+    'lampione','rumori','cestino','panchina','arredo',
+    'richiesta','urgente','altro'
+  ];
+
+  function isMobile() {
+    return window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+  }
 
   function textOf(el) {
     return (el && el.textContent ? el.textContent : '').trim().toLowerCase();
   }
 
-  function isSendButton(el) {
-    return textOf(el).includes('invia segnalazione');
+  function isCategory(el) {
+    return !!(el && el.matches && el.matches('.cat-btn[data-type], button[data-type]'));
   }
 
-  function isCategoryButton(el) {
-    return !!(el && el.matches && el.matches('.cat-btn[data-type], button[data-type]'));
+  function isSend(el) {
+    return textOf(el).includes('invia segnalazione');
   }
 
   function looksLikeReason(el) {
@@ -2973,8 +3010,8 @@ button[data-action="submit-report"]:not(:disabled) {
     if (!txt) return false;
 
     if (
-      isSendButton(el) ||
-      isCategoryButton(el) ||
+      isCategory(el) ||
+      isSend(el) ||
       txt.includes('riprova') ||
       txt.includes('promo') ||
       txt.includes('founder') ||
@@ -2992,28 +3029,17 @@ button[data-action="submit-report"]:not(:disabled) {
 
     if (el.hasAttribute && el.hasAttribute('data-reason')) return true;
 
-    var words = [
-      'serranda','porta','vetrina','allarme','perdita','acqua','furto','intrusione',
-      'cancello','portone','box','garage','vetri','fumo','incendio',
-      'urtata','urtato','intralcio','parcheggio','animale',
-      'cima','ormeggio','parabordo','telo','copertura','corrente',
-      'luce','ascensore','rifiuti','vandalismo','danno',
-      'guasto','manutenzione','sicurezza','situazione','anomala',
-      'lampione','rumori','cestino','panchina','arredo',
-      'richiesta','urgente','altro'
-    ];
-
-    return words.some(function (word) {
+    return reasonWords.some(function (word) {
       return txt.includes(word);
     });
   }
 
   function getReasonButtons() {
-    var candidates = Array.from(document.querySelectorAll(
+    var all = Array.from(document.querySelectorAll(
       '[data-reason], .reason, .reason-btn, .issue-option, .problem-option, button'
     ));
 
-    var filtered = candidates.filter(looksLikeReason);
+    var filtered = all.filter(looksLikeReason);
 
     var unique = [];
     filtered.forEach(function (el) {
@@ -3029,9 +3055,12 @@ button[data-action="submit-report"]:not(:disabled) {
     return unique.slice(0, 6);
   }
 
-  function getReasonContainer() {
+  function getOperationalContainer() {
     var reasons = getReasonButtons();
-    if (!reasons.length) return null;
+
+    if (!reasons.length) {
+      return null;
+    }
 
     var container = reasons[0].parentElement;
 
@@ -3053,34 +3082,44 @@ button[data-action="submit-report"]:not(:disabled) {
     return reasons[0].parentElement;
   }
 
-  function ensureSendButton() {
-    var existing = Array.from(document.querySelectorAll('button, a, div[role="button"]')).find(isSendButton);
+  function removeDuplicateSendButtons() {
+    Array.from(document.querySelectorAll('button, a, div[role="button"]')).forEach(function (el) {
+      if (isSend(el) && !el.classList.contains('avvisami-send-forced')) {
+        el.remove();
+      }
+    });
+  }
 
-    if (existing) {
-      existing.classList.add('avvisami-send-btn');
-      return existing;
+  function ensureSendButton() {
+    removeDuplicateSendButtons();
+
+    var existing = document.querySelector('.avvisami-send-forced');
+    var container = getOperationalContainer();
+
+    if (existing && container && existing.parentElement !== container) {
+      existing.remove();
+      existing = null;
     }
 
-    var container = getReasonContainer();
+    if (existing) return existing;
+
     if (!container) return null;
 
     var btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'avvisami-send-btn';
+    btn.className = 'avvisami-send-forced';
     btn.textContent = 'Invia segnalazione';
     btn.setAttribute('disabled', 'disabled');
     btn.setAttribute('aria-disabled', 'true');
-    btn.style.setProperty('pointer-events', 'none', 'important');
 
     container.appendChild(btn);
     return btn;
   }
 
-  function setSendState(active) {
+  function setSendActive(active) {
     var btn = ensureSendButton();
     if (!btn) return;
 
-    btn.classList.add('avvisami-send-btn');
     btn.classList.remove('is-demo-pulse');
 
     if (active) {
@@ -3096,9 +3135,20 @@ button[data-action="submit-report"]:not(:disabled) {
     }
   }
 
-  function resetButton() {
+  function resetState() {
     selectedReason = null;
-    setSendState(false);
+
+    document.querySelectorAll('.avvisami-received-message').forEach(function (el) {
+      el.remove();
+    });
+
+    getReasonButtons().forEach(function (btn) {
+      btn.classList.remove('selected', 'active');
+      btn.setAttribute('aria-pressed', 'false');
+      btn.removeAttribute('data-selected');
+    });
+
+    setSendActive(false);
 
     var btn = ensureSendButton();
     if (btn) {
@@ -3109,89 +3159,137 @@ button[data-action="submit-report"]:not(:disabled) {
             btn.classList.remove('is-demo-pulse');
           }, 360);
         }
-      }, 450);
+      }, 500);
     }
   }
 
-  function selectReason(reasonBtn) {
-    selectedReason = (reasonBtn.getAttribute('data-reason') || reasonBtn.textContent || 'Motivo selezionato').trim();
+  function selectReason(btn) {
+    selectedReason = (btn.getAttribute('data-reason') || btn.textContent || 'Motivo selezionato').trim();
 
-    getReasonButtons().forEach(function (btn) {
-      btn.classList.remove('selected', 'active');
-      btn.setAttribute('aria-pressed', 'false');
-      btn.removeAttribute('data-selected');
+    getReasonButtons().forEach(function (b) {
+      b.classList.remove('selected', 'active');
+      b.setAttribute('aria-pressed', 'false');
+      b.removeAttribute('data-selected');
     });
 
-    reasonBtn.classList.add('selected', 'active');
-    reasonBtn.setAttribute('aria-pressed', 'true');
-    reasonBtn.setAttribute('data-selected', 'true');
+    btn.classList.add('selected', 'active');
+    btn.setAttribute('aria-pressed', 'true');
+    btn.setAttribute('data-selected', 'true');
 
-    setSendState(true);
+    setSendActive(true);
   }
 
-  function showSentMessage() {
-    var container = getReasonContainer();
+  function playChime() {
+    try {
+      var AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+
+      var ctx = new AudioContext();
+      var now = ctx.currentTime;
+
+      function tone(freq, start, duration, gainValue) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + start);
+
+        gain.gain.setValueAtTime(0.0001, now + start);
+        gain.gain.exponentialRampToValueAtTime(gainValue, now + start + 0.025);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + start + duration);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now + start);
+        osc.stop(now + start + duration + 0.03);
+      }
+
+      tone(880, 0.00, 0.16, 0.10);
+      tone(1175, 0.14, 0.18, 0.08);
+
+      setTimeout(function () {
+        try { ctx.close(); } catch (e) {}
+      }, 700);
+    } catch (e) {}
+  }
+
+  function showReceivedMessage() {
+    var container = getOperationalContainer();
     if (!container) return;
 
-    document.querySelectorAll('.avvisami-demo-sent-note').forEach(function (el) {
+    document.querySelectorAll('.avvisami-received-message').forEach(function (el) {
       el.remove();
     });
 
     var note = document.createElement('div');
-    note.className = 'avvisami-demo-sent-note';
-    note.innerHTML = '<strong>Segnalazione inviata</strong><span>Il proprietario riceve: ' + (selectedReason || 'motivo selezionato') + '.</span>';
+    note.className = 'avvisami-received-message';
+    note.innerHTML = '<strong>Messaggio ricevuto</strong><span>Il proprietario riceve la segnalazione: ' + (selectedReason || 'motivo selezionato') + '.</span>';
 
     container.appendChild(note);
+
+    if (isMobile()) {
+      setTimeout(function () {
+        var rect = note.getBoundingClientRect();
+        var vh = window.innerHeight || document.documentElement.clientHeight;
+        var absoluteTop = rect.top + window.pageYOffset;
+        var targetTop = absoluteTop - Math.max(24, (vh - rect.height) / 2);
+
+        window.scrollTo({
+          top: Math.max(0, targetTop),
+          behavior: 'smooth'
+        });
+      }, 180);
+    }
   }
 
   document.addEventListener('click', function (event) {
     var cat = event.target.closest('.cat-btn[data-type], button[data-type]');
 
     if (cat) {
-      setTimeout(resetButton, 260);
-      setTimeout(function () {
-        ensureSendButton();
-        setSendState(false);
-      }, 900);
+      setTimeout(resetState, 300);
+      setTimeout(ensureSendButton, 700);
       return;
     }
 
     var clicked = event.target.closest('button, a, div[role="button"], [data-reason], .reason, .reason-btn, .issue-option, .problem-option');
     if (!clicked) return;
 
-    if (isSendButton(clicked)) {
+    if (clicked.classList && clicked.classList.contains('avvisami-send-forced')) {
       event.preventDefault();
       event.stopPropagation();
 
       if (!selectedReason) {
-        setSendState(false);
+        setSendActive(false);
         return;
       }
 
-      showSentMessage();
+      playChime();
+      showReceivedMessage();
       return;
     }
 
     if (looksLikeReason(clicked)) {
       selectReason(clicked);
+      return;
     }
   }, true);
 
   document.addEventListener('DOMContentLoaded', function () {
     setTimeout(function () {
       ensureSendButton();
-      setSendState(false);
-    }, 700);
+      setSendActive(false);
+    }, 800);
 
     setTimeout(function () {
       ensureSendButton();
-      if (!selectedReason) setSendState(false);
-    }, 1600);
+      if (!selectedReason) setSendActive(false);
+    }, 1800);
   });
 
   var observer = new MutationObserver(function () {
     ensureSendButton();
-    if (!selectedReason) setSendState(false);
+    if (!selectedReason) setSendActive(false);
   });
 
   observer.observe(document.documentElement, {
@@ -3200,6 +3298,5 @@ button[data-action="submit-report"]:not(:disabled) {
   });
 })();
 </script>
-
-</body>
+\n</body>
 </html>
