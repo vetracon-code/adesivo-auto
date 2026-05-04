@@ -1444,6 +1444,30 @@ button[data-action="submit-report"]:not(:disabled) {
   position: relative;
 }
 
+
+/* AVVISAMI - pulsante RIPROVA sotto il frame */
+.avvisami-retry-under-frame {
+  width: 100%;
+  margin: 16px auto 0;
+  border: 1px solid rgba(255, 165, 0, 0.95);
+  border-radius: 18px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #ffb347, #ff8a00);
+  color: #111111;
+  font-weight: 900;
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 14px 34px rgba(255, 138, 0, 0.32);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.avvisami-retry-under-frame:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 42px rgba(255, 138, 0, 0.42);
+}
+
 </style>
 </head>
 
@@ -2825,6 +2849,101 @@ button[data-action="submit-report"]:not(:disabled) {
     if (!currentReason) {
       setSendVisual(false);
     }
+  });
+
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  });
+})();
+</script>
+
+
+<script>
+/* AVVISAMI - aggiunge RIPROVA sotto il frame e torna alle categorie */
+(function () {
+  function findFrame() {
+    return (
+      document.querySelector('.owner-notification') ||
+      document.querySelector('.notification-card') ||
+      document.querySelector('.phone-notification') ||
+      document.querySelector('.result-card') ||
+      document.querySelector('.success-card') ||
+      document.querySelector('.scanner-scene') ||
+      document.querySelector('.demo-scanner') ||
+      document.querySelector('.phone-frame') ||
+      document.querySelector('.phone-demo')
+    );
+  }
+
+  function findTopTarget() {
+    return (
+      document.querySelector('.cat-btn') ||
+      document.querySelector('[data-type]') ||
+      document.querySelector('.category-groups') ||
+      document.querySelector('.hero') ||
+      document.body
+    );
+  }
+
+  function resetDemoState() {
+    document.querySelectorAll('.avvisami-demo-sent-note').forEach(function (el) {
+      el.remove();
+    });
+
+    document.querySelectorAll('.avvisami-send-btn').forEach(function (btn) {
+      btn.textContent = 'Invia segnalazione';
+      btn.classList.remove('is-active', 'is-demo-pulse', 'avvisami-send-demo-orange');
+      btn.setAttribute('disabled', 'disabled');
+      btn.setAttribute('aria-disabled', 'true');
+      btn.style.setProperty('pointer-events', 'none', 'important');
+    });
+
+    document.querySelectorAll('.selected, .active').forEach(function (el) {
+      if (!el.classList.contains('cat-btn')) {
+        el.classList.remove('selected', 'active');
+      }
+    });
+  }
+
+  function ensureRetryButton() {
+    if (document.querySelector('.avvisami-retry-under-frame')) return;
+
+    var frame = findFrame();
+    if (!frame || !frame.parentElement) return;
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'avvisami-retry-under-frame';
+    btn.textContent = 'RIPROVA';
+
+    frame.insertAdjacentElement('afterend', btn);
+  }
+
+  document.addEventListener('click', function (event) {
+    var btn = event.target.closest('.avvisami-retry-under-frame');
+    if (!btn) return;
+
+    event.preventDefault();
+
+    resetDemoState();
+
+    var target = findTopTarget();
+    var top = target.getBoundingClientRect().top + window.pageYOffset - 18;
+
+    window.scrollTo({
+      top: Math.max(0, top),
+      behavior: 'smooth'
+    });
+  }, true);
+
+  document.addEventListener('DOMContentLoaded', function () {
+    setTimeout(ensureRetryButton, 600);
+    setTimeout(ensureRetryButton, 1500);
+  });
+
+  var observer = new MutationObserver(function () {
+    ensureRetryButton();
   });
 
   observer.observe(document.documentElement, {
