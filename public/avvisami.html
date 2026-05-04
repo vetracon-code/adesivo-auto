@@ -1885,7 +1885,25 @@ button[data-action="submit-report"]:not(:disabled) {
     min-height: 52px !important;
   }
 }
-\n</style>
+\n
+/* AVVISAMI - lascia un solo pulsante invia e nasconde placeholder dopo invio */
+#sendBtn {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.owner-screen.sent .notification-area > div:first-child {
+  display: none !important;
+}
+
+.owner-screen.sent #notificationCard {
+  display: block !important;
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+}
+
+</style>
 </head>
 
 <body>
@@ -3395,5 +3413,125 @@ button[data-action="submit-report"]:not(:disabled) {
   });
 })();
 </script>
-\n</body>
+\n
+<script>
+/* AVVISAMI - fix doppio pulsante invia + placeholder smartphone */
+(function () {
+  function qs(id) {
+    return document.getElementById(id);
+  }
+
+  function hideNativeSendButton() {
+    var oldBtn = qs("sendBtn");
+    if (oldBtn) {
+      oldBtn.style.setProperty("display", "none", "important");
+      oldBtn.style.setProperty("visibility", "hidden", "important");
+      oldBtn.style.setProperty("pointer-events", "none", "important");
+    }
+  }
+
+  function hideOwnerPlaceholder() {
+    var area = document.querySelector(".notification-area");
+    if (!area) return;
+
+    Array.from(area.children).forEach(function (child) {
+      var txt = (child.textContent || "").toLowerCase();
+
+      if (
+        txt.includes("nessuna segnalazione") ||
+        txt.includes("la notifica arriverà") ||
+        txt.includes("la notifica arrivera")
+      ) {
+        child.style.setProperty("display", "none", "important");
+      }
+    });
+  }
+
+  function showOwnerPlaceholder() {
+    var area = document.querySelector(".notification-area");
+    if (!area) return;
+
+    Array.from(area.children).forEach(function (child) {
+      var txt = (child.textContent || "").toLowerCase();
+
+      if (
+        txt.includes("nessuna segnalazione") ||
+        txt.includes("la notifica arriverà") ||
+        txt.includes("la notifica arrivera")
+      ) {
+        child.style.removeProperty("display");
+      }
+    });
+  }
+
+  function forceOwnerNotificationVisible() {
+    var card = qs("notificationCard");
+    var screen = qs("ownerScreen");
+
+    if (card && card.classList.contains("show")) {
+      hideOwnerPlaceholder();
+    }
+
+    if (screen && screen.classList.contains("sent")) {
+      hideOwnerPlaceholder();
+    }
+  }
+
+  document.addEventListener("click", function (event) {
+    hideNativeSendButton();
+
+    var send = event.target.closest("#sendBtnEmergency");
+
+    if (send) {
+      setTimeout(function () {
+        hideNativeSendButton();
+        hideOwnerPlaceholder();
+        forceOwnerNotificationVisible();
+      }, 80);
+
+      setTimeout(function () {
+        hideNativeSendButton();
+        hideOwnerPlaceholder();
+        forceOwnerNotificationVisible();
+      }, 350);
+
+      return;
+    }
+
+    var cat = event.target.closest(".cat-btn[data-type], button[data-type]");
+    if (cat) {
+      setTimeout(function () {
+        hideNativeSendButton();
+
+        var card = qs("notificationCard");
+        var screen = qs("ownerScreen");
+
+        if (card) card.classList.remove("show");
+        if (screen) screen.classList.remove("sent");
+
+        showOwnerPlaceholder();
+      }, 250);
+    }
+  }, true);
+
+  document.addEventListener("DOMContentLoaded", function () {
+    hideNativeSendButton();
+    forceOwnerNotificationVisible();
+  });
+
+  var observer = new MutationObserver(function () {
+    hideNativeSendButton();
+    forceOwnerNotificationVisible();
+  });
+
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["class", "style"]
+  });
+})();
+</script>
+
+</body>
 </html>
