@@ -514,6 +514,13 @@
       box-shadow:none;
     }
 
+    #takeCharge{
+      background:linear-gradient(135deg,var(--yellow),var(--orange));
+      color:#111827;
+      border:0;
+      box-shadow:0 14px 30px rgba(255,138,0,.28);
+    }
+
     .eta-grid{
       display:grid;
       grid-template-columns:repeat(3,1fr);
@@ -2177,6 +2184,7 @@
 
   function showMobilePreview(pointId){
     if (!isMobile()) return;
+    if (window.__avvisamiGuidedStep === "choose-point" || window.__avvisamiGuidedStep === "choose-reason") return;
 
     const box = ensureMobilePreview();
     if (!box) return;
@@ -2363,6 +2371,8 @@
 
     guidedActive = true;
     guidedStep = "choose-point";
+    window.__avvisamiGuidedActive = true;
+    window.__avvisamiGuidedStep = guidedStep;
 
     setHint("Scegli il punto da cui vuoi simulare la segnalazione.");
     scrollCenter(document.getElementById("map"), 40);
@@ -2373,10 +2383,11 @@
     if (!guidedActive || guidedStep !== "choose-point") return;
 
     guidedStep = "choose-reason";
+    window.__avvisamiGuidedStep = guidedStep;
     stopMarkerPulse();
 
     setHint("Hai scelto il punto. Ora seleziona il motivo della segnalazione.");
-    scrollCenter(document.querySelector(".public-card"), 260);
+    scrollCenter(document.querySelector(".public-card .public-screen") || document.querySelector(".public-card"), 180);
 
     setTimeout(function(){
       pulseElements(".reason-btn", 150);
@@ -2396,6 +2407,7 @@
     if (!guidedActive) return;
 
     guidedStep = "take-charge";
+    window.__avvisamiGuidedStep = guidedStep;
 
     setTimeout(function(){
       scrollCenter(document.querySelector(".detail-card"), 280);
@@ -2411,6 +2423,7 @@
     if (!guidedActive) return;
 
     guidedStep = "choose-eta";
+    window.__avvisamiGuidedStep = guidedStep;
 
     setHint("Scegli tra quanto tempo è previsto l’intervento.");
 
@@ -2423,6 +2436,7 @@
     if (!guidedActive) return;
 
     guidedStep = "complete";
+    window.__avvisamiGuidedStep = guidedStep;
 
     setHint("Ora chiudi l’intervento per vedere il risultato finale sulla mappa.");
 
@@ -2435,6 +2449,7 @@
     if (!guidedActive) return;
 
     guidedStep = "done";
+    window.__avvisamiGuidedStep = guidedStep;
 
     setHint("Intervento completato. Guarda il punto sulla mappa: lo stato è aggiornato.");
 
@@ -2454,6 +2469,8 @@
     setTimeout(function(){
       guidedActive = false;
       guidedStep = "idle";
+      window.__avvisamiGuidedActive = false;
+      window.__avvisamiGuidedStep = "idle";
     }, 2600);
   }
 
@@ -2887,6 +2904,32 @@
     return window.matchMedia && window.matchMedia("(max-width:1024px)").matches;
   }
 
+  function hideMobilePreview(){
+    const box = document.getElementById("mobileMapPreview");
+    if (box) box.classList.remove("show");
+  }
+
+  function scrollToReportFrame(delay){
+    const target = document.querySelector(".public-card .public-screen") || document.querySelector(".public-card");
+    if (!target) return;
+
+    setTimeout(function(){
+      const rect = target.getBoundingClientRect();
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      const absoluteTop = rect.top + window.pageYOffset;
+      const top = absoluteTop - Math.max(12, (vh - rect.height) / 2);
+
+      window.scrollTo({
+        top: Math.max(0, top),
+        behavior: "smooth"
+      });
+    }, delay || 80);
+  }
+
+  function isGuidedReasonStep(){
+    return window.__avvisamiGuidedStep === "choose-point" || window.__avvisamiGuidedStep === "choose-reason";
+  }
+
   function forceSelectPoint(pointId){
     if (!pointId) return;
 
@@ -2929,7 +2972,13 @@
       } catch(e) {}
     }, 40);
 
-    // Su mobile/tablet apre subito anche la preview dentro mappa.
+    if (isTouchLike() && isGuidedReasonStep()) {
+      hideMobilePreview();
+      scrollToReportFrame(150);
+      return;
+    }
+
+    // Su mobile/tablet apre subito anche la preview dentro mappa fuori dal flusso guidato.
     if (isTouchLike()) {
       setTimeout(function(){
         try {
