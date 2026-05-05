@@ -688,6 +688,125 @@
   display:none !important;
 }
 
+
+/* AVVISAMI Azienda Demo - stato in sovraimpressione sulla foto */
+.photo{
+  position: relative !important;
+}
+
+.photo-status-overlay{
+  position:absolute;
+  left:12px;
+  right:12px;
+  bottom:12px;
+  z-index:5;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:10px 12px;
+  border-radius:16px;
+  background:rgba(15,23,42,.82);
+  color:#ffffff;
+  border:1px solid rgba(255,255,255,.16);
+  box-shadow:0 14px 32px rgba(0,0,0,.34);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  text-align:left;
+}
+
+.photo-status-main{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+
+.photo-status-dot{
+  width:11px;
+  height:11px;
+  flex:0 0 auto;
+  border-radius:999px;
+  background:#22c55e;
+  box-shadow:0 0 0 5px rgba(34,197,94,.18);
+}
+
+.photo-status-text{
+  display:grid;
+  gap:1px;
+  min-width:0;
+}
+
+.photo-status-text strong{
+  font-size:.82rem;
+  line-height:1.1;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.photo-status-text span{
+  color:#d1d5db;
+  font-size:.72rem;
+  line-height:1.15;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.photo-status-badge{
+  flex:0 0 auto;
+  border-radius:999px;
+  padding:6px 8px;
+  font-size:.68rem;
+  font-weight:900;
+  color:#111827;
+  background:linear-gradient(135deg,#ffb347,#ff8a00);
+}
+
+.photo-status-overlay.status-idle .photo-status-dot,
+.photo-status-overlay.status-done .photo-status-dot{
+  background:#22c55e;
+  box-shadow:0 0 0 5px rgba(34,197,94,.18);
+}
+
+.photo-status-overlay.status-new .photo-status-dot{
+  background:#facc15;
+  box-shadow:0 0 0 5px rgba(250,204,21,.18);
+}
+
+.photo-status-overlay.status-assigned .photo-status-dot{
+  background:#38bdf8;
+  box-shadow:0 0 0 5px rgba(56,189,248,.18);
+}
+
+.photo-status-overlay.status-progress .photo-status-dot{
+  background:#a855f7;
+  box-shadow:0 0 0 5px rgba(168,85,247,.18);
+}
+
+@media (max-width:640px){
+  .photo-status-overlay{
+    left:9px;
+    right:9px;
+    bottom:9px;
+    padding:9px 10px;
+    border-radius:15px;
+  }
+
+  .photo-status-text strong{
+    font-size:.78rem;
+  }
+
+  .photo-status-text span{
+    font-size:.68rem;
+  }
+
+  .photo-status-badge{
+    display:none;
+  }
+}
+
 </style>
 </head>
 
@@ -1281,6 +1400,133 @@
   });
 
   setInterval(applyPointPhoto, 1200);
+})();
+</script>
+
+
+<script>
+/* AVVISAMI Azienda Demo - overlay stato sulla foto */
+(function(){
+  function getStatusForCurrent(){
+    if (typeof current === "undefined") return null;
+    if (typeof getStatus === "function") return getStatus(current);
+    return null;
+  }
+
+  function statusInfo(s){
+    const state = (s && s.state) || "idle";
+    const eta = (s && s.eta && s.eta !== "Non impostato") ? s.eta : "";
+    const reason = (s && s.reason) ? s.reason : "";
+
+    if (state === "new") {
+      return {
+        cls:"status-new",
+        title:"Già segnalato",
+        sub: reason ? "Problema: " + reason : "In attesa di presa in carico",
+        badge:"ATTESA"
+      };
+    }
+
+    if (state === "assigned") {
+      return {
+        cls:"status-assigned",
+        title:"Preso in carico",
+        sub: eta ? "Intervento previsto: " + eta : "Responsabile avvisato",
+        badge:"PRESO"
+      };
+    }
+
+    if (state === "progress") {
+      return {
+        cls:"status-progress",
+        title:"In lavorazione",
+        sub: eta ? "Intervento previsto: " + eta : "Intervento programmato",
+        badge:"WORK"
+      };
+    }
+
+    if (state === "done") {
+      return {
+        cls:"status-done",
+        title:"Completato",
+        sub:"Problema risolto",
+        badge:"OK"
+      };
+    }
+
+    return {
+      cls:"status-idle",
+      title:"Nessuna segnalazione",
+      sub:"Punto regolare",
+      badge:"OK"
+    };
+  }
+
+  function ensureOverlay(){
+    const photo = document.getElementById("pointPhoto");
+    if (!photo) return null;
+
+    let overlay = photo.querySelector(".photo-status-overlay");
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.className = "photo-status-overlay status-idle";
+      overlay.innerHTML = `
+        <div class="photo-status-main">
+          <span class="photo-status-dot"></span>
+          <span class="photo-status-text">
+            <strong>Nessuna segnalazione</strong>
+            <span>Punto regolare</span>
+          </span>
+        </div>
+        <span class="photo-status-badge">OK</span>
+      `;
+      photo.appendChild(overlay);
+    }
+
+    return overlay;
+  }
+
+  function updatePhotoOverlay(){
+    const overlay = ensureOverlay();
+    if (!overlay) return;
+
+    const s = getStatusForCurrent();
+    const info = statusInfo(s);
+
+    overlay.className = "photo-status-overlay " + info.cls;
+    overlay.querySelector("strong").textContent = info.title;
+    overlay.querySelector(".photo-status-text span").textContent = info.sub;
+    overlay.querySelector(".photo-status-badge").textContent = info.badge;
+  }
+
+  document.addEventListener("click", function(e){
+    if (
+      e.target.closest(".marker") ||
+      e.target.closest("#sendBtn") ||
+      e.target.closest("#takeCharge") ||
+      e.target.closest("[data-eta]") ||
+      e.target.closest("#completeReport") ||
+      e.target.closest("#rescanBtn") ||
+      e.target.closest("#differentIssueBtn") ||
+      e.target.closest("#sendInfoBtn")
+    ) {
+      setTimeout(updatePhotoOverlay, 80);
+      setTimeout(updatePhotoOverlay, 260);
+    }
+  }, true);
+
+  document.addEventListener("mouseover", function(e){
+    if (e.target.closest(".marker")) {
+      setTimeout(updatePhotoOverlay, 80);
+    }
+  }, true);
+
+  document.addEventListener("DOMContentLoaded", function(){
+    setTimeout(updatePhotoOverlay, 400);
+    setTimeout(updatePhotoOverlay, 1200);
+  });
+
+  setInterval(updatePhotoOverlay, 1000);
 })();
 </script>
 
