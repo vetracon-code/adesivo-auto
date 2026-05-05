@@ -3890,5 +3890,83 @@ body.avvisami-area-pubblica-active .scene-bg {
 })();
 </script>
 
+<script>
+/* AVVISAMI - sincronizza contatore segnalazioni con il pulsante finale */
+(function () {
+  var sentCount = 0;
+  var lastCountedAt = 0;
+
+  function qs(id) {
+    return document.getElementById(id);
+  }
+
+  function readCounter() {
+    var kpi = qs("kpiMessages");
+    if (!kpi) return 0;
+
+    var value = parseInt(String(kpi.textContent || "0").replace(/\D/g, ""), 10);
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  function writeCounter(value) {
+    var kpi = qs("kpiMessages");
+    if (!kpi) return;
+
+    sentCount = Math.max(Number(value) || 0, sentCount);
+    kpi.textContent = String(sentCount);
+  }
+
+  function resetNotificationCounterState() {
+    var current = readCounter();
+    sentCount = Math.max(sentCount, current);
+    lastCountedAt = 0;
+  }
+
+  function countSentReport() {
+    var now = Date.now();
+    if (now - lastCountedAt < 700) return;
+
+    lastCountedAt = now;
+    writeCounter(Math.max(readCounter(), sentCount) + 1);
+  }
+
+  function isSendButtonReady(button) {
+    if (!button) return false;
+    if (button.disabled) return false;
+    if (button.getAttribute("aria-disabled") === "true") return false;
+    return true;
+  }
+
+  document.addEventListener("click", function (event) {
+    var send = event.target.closest("#sendBtnEmergency, #sendBtn");
+    if (!send || !isSendButtonReady(send)) return;
+
+    setTimeout(function () {
+      var card = qs("notificationCard");
+      var ownerScreen = qs("ownerScreen");
+      var reportVisible =
+        (card && card.classList.contains("show")) ||
+        (ownerScreen && ownerScreen.classList.contains("sent"));
+
+      if (reportVisible) {
+        countSentReport();
+      }
+    }, 160);
+  }, true);
+
+  document.addEventListener("click", function (event) {
+    var retry = event.target.closest("#retryBtn");
+    var category = event.target.closest(".cat-btn[data-type], button[data-type]");
+    if (!retry && !category) return;
+
+    setTimeout(resetNotificationCounterState, 240);
+  }, true);
+
+  document.addEventListener("DOMContentLoaded", function () {
+    sentCount = readCounter();
+  });
+})();
+</script>
+
 </body>
 </html>
