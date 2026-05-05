@@ -943,6 +943,94 @@
   }
 }
 
+
+/* AVVISAMI Azienda Demo - flusso guidato mobile/tablet */
+.guided-demo-start-wrap{
+  margin:16px 0 0;
+  display:none;
+}
+
+.guided-demo-start{
+  width:100%;
+  min-height:54px;
+  border:none;
+  border-radius:18px;
+  padding:14px 16px;
+  font-weight:950;
+  font-size:.98rem;
+  color:#111827;
+  background:linear-gradient(135deg,var(--yellow),var(--orange));
+  box-shadow:0 16px 34px rgba(255,138,0,.28);
+  cursor:pointer;
+}
+
+.guided-demo-hint{
+  margin-top:10px;
+  padding:11px 13px;
+  border-radius:16px;
+  background:rgba(255,255,255,.07);
+  border:1px solid rgba(255,255,255,.10);
+  color:#d1d5db;
+  font-size:.84rem;
+  line-height:1.35;
+  display:none;
+}
+
+.guided-demo-hint.show{
+  display:block;
+}
+
+.guided-pulse-marker{
+  animation: guidedMarkerPulse .82s ease-in-out 1;
+}
+
+.guided-pulse-soft{
+  animation: guidedSoftPulse .92s ease-in-out 2;
+}
+
+.guided-pulse-strong{
+  animation: guidedStrongPulse .9s ease-in-out 3;
+}
+
+@keyframes guidedMarkerPulse{
+  0%,100%{
+    transform:translate(-50%,-50%) scale(1);
+    box-shadow:0 12px 26px rgba(255,138,0,.42);
+  }
+  50%{
+    transform:translate(-50%,-50%) scale(1.28);
+    box-shadow:0 0 0 18px rgba(255,138,0,0),0 18px 40px rgba(255,138,0,.62);
+  }
+}
+
+@keyframes guidedSoftPulse{
+  0%,100%{
+    border-color:inherit;
+    box-shadow:0 6px 16px rgba(15,23,42,.06);
+  }
+  50%{
+    border-color:#38bdf8;
+    box-shadow:0 0 0 5px rgba(56,189,248,.18),0 12px 28px rgba(56,189,248,.18);
+  }
+}
+
+@keyframes guidedStrongPulse{
+  0%,100%{
+    transform:translateY(0);
+    box-shadow:0 12px 26px rgba(255,138,0,.24);
+  }
+  50%{
+    transform:translateY(-2px);
+    box-shadow:0 0 0 6px rgba(255,138,0,.18),0 18px 38px rgba(255,138,0,.36);
+  }
+}
+
+@media (max-width:1024px){
+  .guided-demo-start-wrap{
+    display:block;
+  }
+}
+
 </style>
 </head>
 
@@ -1796,6 +1884,266 @@
   document.addEventListener("DOMContentLoaded", function(){
     ensureMobilePreview();
   });
+})();
+</script>
+
+
+<script>
+/* AVVISAMI Azienda Demo - flusso guidato solo mobile/tablet */
+(function(){
+  let guidedActive = false;
+  let guidedStep = "idle";
+  let markerPulseTimer = null;
+
+  function isGuidedDevice(){
+    return window.matchMedia && window.matchMedia("(max-width:1024px)").matches;
+  }
+
+  function scrollCenter(el, delay){
+    if (!isGuidedDevice() || !el) return;
+
+    setTimeout(function(){
+      const rect = el.getBoundingClientRect();
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      const absoluteTop = rect.top + window.pageYOffset;
+      const top = absoluteTop - Math.max(18, (vh - rect.height) / 2);
+
+      window.scrollTo({
+        top: Math.max(0, top),
+        behavior: "smooth"
+      });
+    }, delay || 80);
+  }
+
+  function ensureStartButton(){
+    const mapWrap = document.querySelector(".map-wrap");
+    if (!mapWrap || document.getElementById("guidedDemoStart")) return;
+
+    const wrap = document.createElement("div");
+    wrap.className = "guided-demo-start-wrap";
+    wrap.innerHTML = `
+      <button type="button" class="guided-demo-start" id="guidedDemoStart">
+        Simula segnalazione
+      </button>
+      <div class="guided-demo-hint" id="guidedDemoHint">
+        Tocca un punto sulla mappa per simulare una segnalazione reale.
+      </div>
+    `;
+
+    mapWrap.appendChild(wrap);
+
+    document.getElementById("guidedDemoStart").addEventListener("click", startGuidedDemo);
+  }
+
+  function setHint(text){
+    const hint = document.getElementById("guidedDemoHint");
+    if (!hint) return;
+    hint.textContent = text;
+    hint.classList.add("show");
+  }
+
+  function stopMarkerPulse(){
+    if (markerPulseTimer) {
+      clearInterval(markerPulseTimer);
+      markerPulseTimer = null;
+    }
+    document.querySelectorAll(".marker").forEach(function(m){
+      m.classList.remove("guided-pulse-marker");
+    });
+  }
+
+  function startMarkerPulse(){
+    stopMarkerPulse();
+
+    const markers = Array.from(document.querySelectorAll(".marker[data-point]"));
+    if (!markers.length) return;
+
+    let i = 0;
+
+    function pulseOne(){
+      markers.forEach(function(m){
+        m.classList.remove("guided-pulse-marker");
+      });
+
+      const marker = markers[i % markers.length];
+      marker.classList.add("guided-pulse-marker");
+
+      setTimeout(function(){
+        marker.classList.remove("guided-pulse-marker");
+      }, 850);
+
+      i++;
+    }
+
+    pulseOne();
+    markerPulseTimer = setInterval(pulseOne, 620);
+  }
+
+  function pulseElements(selector, repeatDelay){
+    const els = Array.from(document.querySelectorAll(selector));
+    if (!els.length) return;
+
+    els.forEach(function(el, index){
+      setTimeout(function(){
+        el.classList.remove("guided-pulse-soft");
+        void el.offsetWidth;
+        el.classList.add("guided-pulse-soft");
+      }, index * (repeatDelay || 180));
+    });
+  }
+
+  function pulseStrong(el){
+    if (!el) return;
+    el.classList.remove("guided-pulse-strong");
+    void el.offsetWidth;
+    el.classList.add("guided-pulse-strong");
+  }
+
+  function startGuidedDemo(){
+    if (!isGuidedDevice()) return;
+
+    guidedActive = true;
+    guidedStep = "choose-point";
+
+    setHint("Scegli il punto da cui vuoi simulare la segnalazione.");
+    scrollCenter(document.getElementById("map"), 40);
+    startMarkerPulse();
+  }
+
+  function afterPointSelected(){
+    if (!guidedActive || guidedStep !== "choose-point") return;
+
+    guidedStep = "choose-reason";
+    stopMarkerPulse();
+
+    setHint("Hai scelto il punto. Ora seleziona il motivo della segnalazione.");
+    scrollCenter(document.querySelector(".public-card"), 260);
+
+    setTimeout(function(){
+      pulseElements(".reason-btn", 150);
+    }, 850);
+  }
+
+  function afterReasonSelected(){
+    if (!guidedActive || guidedStep !== "choose-reason") return;
+
+    setHint("Ora premi Invia segnalazione per completare la prova.");
+    setTimeout(function(){
+      pulseStrong(document.getElementById("sendBtn"));
+    }, 180);
+  }
+
+  function afterReportSent(){
+    if (!guidedActive) return;
+
+    guidedStep = "take-charge";
+
+    setTimeout(function(){
+      scrollCenter(document.querySelector(".detail-card"), 280);
+    }, 350);
+
+    setTimeout(function(){
+      setHint("Ora simula il responsabile: prendi in carico la segnalazione.");
+      pulseStrong(document.getElementById("takeCharge"));
+    }, 950);
+  }
+
+  function afterTakeCharge(){
+    if (!guidedActive) return;
+
+    guidedStep = "choose-eta";
+
+    setHint("Scegli tra quanto tempo è previsto l’intervento.");
+
+    setTimeout(function(){
+      pulseElements(".eta-grid button", 160);
+    }, 260);
+  }
+
+  function afterEtaSelected(){
+    if (!guidedActive) return;
+
+    guidedStep = "complete";
+
+    setHint("Ora chiudi l’intervento per vedere il risultato finale sulla mappa.");
+
+    setTimeout(function(){
+      pulseStrong(document.getElementById("completeReport"));
+    }, 260);
+  }
+
+  function afterCompleted(){
+    if (!guidedActive) return;
+
+    guidedStep = "done";
+
+    setHint("Intervento completato. Guarda il punto sulla mappa: lo stato è aggiornato.");
+
+    setTimeout(function(){
+      scrollCenter(document.getElementById("map"), 360);
+    }, 450);
+
+    setTimeout(function(){
+      const active = document.querySelector(".marker.active");
+      if (active) {
+        active.classList.remove("guided-pulse-marker");
+        void active.offsetWidth;
+        active.classList.add("guided-pulse-marker");
+      }
+    }, 1150);
+
+    setTimeout(function(){
+      guidedActive = false;
+      guidedStep = "idle";
+    }, 2600);
+  }
+
+  document.addEventListener("click", function(e){
+    if (!isGuidedDevice()) return;
+
+    if (e.target.closest(".marker[data-point]")) {
+      setTimeout(afterPointSelected, 120);
+      return;
+    }
+
+    if (e.target.closest(".reason-btn")) {
+      setTimeout(afterReasonSelected, 120);
+      return;
+    }
+
+    if (e.target.closest("#sendBtn")) {
+      if (guidedActive) {
+        setTimeout(afterReportSent, 240);
+      }
+      return;
+    }
+
+    if (e.target.closest("#takeCharge")) {
+      if (guidedActive) {
+        setTimeout(afterTakeCharge, 240);
+      }
+      return;
+    }
+
+    if (e.target.closest(".eta-grid button")) {
+      if (guidedActive) {
+        setTimeout(afterEtaSelected, 240);
+      }
+      return;
+    }
+
+    if (e.target.closest("#completeReport")) {
+      if (guidedActive) {
+        setTimeout(afterCompleted, 240);
+      }
+    }
+  }, true);
+
+  document.addEventListener("DOMContentLoaded", function(){
+    ensureStartButton();
+  });
+
+  setTimeout(ensureStartButton, 600);
 })();
 </script>
 
