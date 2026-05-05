@@ -1031,6 +1031,164 @@
   }
 }
 
+
+/* AVVISAMI Azienda Demo - assegnazione responsabile */
+.assignment-drawer{
+  display:none;
+  margin-top:14px;
+  border-radius:22px;
+  border:1px solid rgba(255,255,255,.14);
+  background:rgba(15,23,42,.92);
+  box-shadow:0 18px 44px rgba(0,0,0,.34);
+  padding:14px;
+}
+
+.assignment-drawer.show{
+  display:block;
+}
+
+.assignment-drawer h3{
+  margin:0 0 6px;
+  font-size:1rem;
+  letter-spacing:-.02em;
+}
+
+.assignment-drawer p{
+  margin:0 0 12px;
+  color:#cbd5e1;
+  font-size:.84rem;
+  line-height:1.35;
+}
+
+.assignment-list{
+  display:grid;
+  gap:8px;
+}
+
+.assignment-option{
+  width:100%;
+  display:grid;
+  grid-template-columns:12px 1fr auto;
+  align-items:center;
+  gap:10px;
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.06);
+  color:#ffffff;
+  border-radius:16px;
+  padding:11px 12px;
+  cursor:pointer;
+  text-align:left;
+}
+
+.assignment-option.selected{
+  border-color:#ff8a00;
+  background:rgba(255,138,0,.14);
+  box-shadow:0 0 0 4px rgba(255,138,0,.10);
+}
+
+.assignment-dot{
+  width:10px;
+  height:10px;
+  border-radius:999px;
+  background:#ef4444;
+  box-shadow:0 0 0 4px rgba(239,68,68,.14);
+}
+
+.assignment-dot.available{
+  background:#22c55e;
+  box-shadow:0 0 0 4px rgba(34,197,94,.14);
+}
+
+.assignment-name{
+  display:grid;
+  gap:2px;
+  min-width:0;
+}
+
+.assignment-name strong{
+  font-size:.88rem;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.assignment-name span{
+  color:#cbd5e1;
+  font-size:.74rem;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.assignment-presence{
+  font-size:.68rem;
+  font-weight:900;
+  color:#111827;
+  background:#e5e7eb;
+  border-radius:999px;
+  padding:5px 7px;
+}
+
+.assignment-option.available .assignment-presence{
+  background:#bbf7d0;
+  color:#14532d;
+}
+
+.assignment-option.unavailable{
+  opacity:.78;
+}
+
+.assignment-confirm{
+  width:100%;
+  margin-top:10px;
+  min-height:46px;
+  border:none;
+  border-radius:16px;
+  padding:12px 14px;
+  font-weight:950;
+  color:#374151;
+  background:linear-gradient(135deg,#d1d5db,#9ca3af);
+  cursor:not-allowed;
+}
+
+.assignment-confirm.ready{
+  color:#111827;
+  background:linear-gradient(135deg,var(--yellow),var(--orange));
+  cursor:pointer;
+  box-shadow:0 12px 26px rgba(255,138,0,.24);
+}
+
+.assignment-summary{
+  display:none;
+  margin-top:10px;
+  padding:10px 12px;
+  border-radius:16px;
+  background:rgba(34,197,94,.12);
+  border:1px solid rgba(34,197,94,.22);
+  color:#bbf7d0;
+  font-size:.84rem;
+  line-height:1.35;
+}
+
+.assignment-summary.show{
+  display:block;
+}
+
+.guided-pulse-assignment{
+  animation: guidedAssignmentPulse .9s ease-in-out 3;
+}
+
+@keyframes guidedAssignmentPulse{
+  0%,100%{
+    box-shadow:0 18px 44px rgba(0,0,0,.34);
+    border-color:rgba(255,255,255,.14);
+  }
+  50%{
+    box-shadow:0 0 0 6px rgba(56,189,248,.16),0 18px 44px rgba(0,0,0,.34);
+    border-color:#38bdf8;
+  }
+}
+
 </style>
 </head>
 
@@ -1167,6 +1325,17 @@
             <div class="status-row"><span>Responsabile</span><b id="assignee">Reception / Sicurezza</b></div>
             <div class="status-row"><span>Ultima attività</span><b id="lastActivity">Nessuna</b></div>
             <div class="status-row"><span>Intervento previsto</span><b id="eta">Non impostato</b></div>
+
+            <div class="assignment-summary" id="assignmentSummary"></div>
+
+            <div class="assignment-drawer" id="assignmentDrawer">
+              <h3>Assegna responsabile</h3>
+              <p>Seleziona chi deve gestire l’intervento. Il pallino indica se la persona è disponibile in azienda.</p>
+              <div class="assignment-list" id="assignmentList"></div>
+              <button type="button" class="assignment-confirm" id="assignmentConfirm" aria-disabled="true">
+                Conferma responsabile
+              </button>
+            </div>
 
             <div class="actions">
               <button class="action secondary" id="takeCharge">Prendi in carico</button>
@@ -2043,8 +2212,8 @@
     }, 350);
 
     setTimeout(function(){
-      setHint("Ora simula il responsabile: prendi in carico la segnalazione.");
-      pulseStrong(document.getElementById("takeCharge"));
+      setHint("Ora assegna un responsabile all’intervento, poi potrà prenderlo in carico.");
+      if (typeof openAssignmentDrawer === "function") { openAssignmentDrawer(); }
     }, 950);
   }
 
@@ -2144,6 +2313,221 @@
   });
 
   setTimeout(ensureStartButton, 600);
+})();
+</script>
+
+
+<script>
+/* AVVISAMI Azienda Demo - gestione assegnazione responsabile obbligatoria */
+(function(){
+  const assigneesByPoint = {
+    ingresso: [
+      { name:"Marco Bianchi", role:"Sicurezza / Reception", available:true },
+      { name:"Sara Rossi", role:"Facility Manager", available:true },
+      { name:"Luca Verdi", role:"Responsabile esterno", available:false }
+    ],
+    parcheggio: [
+      { name:"Sara Rossi", role:"Facility Manager", available:true },
+      { name:"Team Sicurezza", role:"Controllo area parcheggio", available:true },
+      { name:"Marco Bianchi", role:"Reception", available:false }
+    ],
+    magazzino: [
+      { name:"Gianni Colombo", role:"Responsabile magazzino", available:true },
+      { name:"Elena Riva", role:"Logistica", available:true },
+      { name:"Manutenzione esterna", role:"Tecnico reperibile", available:false }
+    ],
+    attrezzatura: [
+      { name:"Gianni Colombo", role:"Responsabile magazzino", available:true },
+      { name:"Paolo Neri", role:"Manutenzione mezzi", available:true },
+      { name:"Assistenza tecnica", role:"Fornitore esterno", available:false }
+    ],
+    carico: [
+      { name:"Elena Riva", role:"Responsabile logistica", available:true },
+      { name:"Team Magazzino", role:"Area carico / scarico", available:true },
+      { name:"Trasportatore referente", role:"Esterno", available:false }
+    ],
+    tecnico: [
+      { name:"Paolo Neri", role:"Manutenzione impianti", available:true },
+      { name:"Ditta impianti", role:"Tecnico esterno", available:false },
+      { name:"Sara Rossi", role:"Facility Manager", available:true }
+    ],
+    uffici: [
+      { name:"Laura Conti", role:"Amministrazione", available:true },
+      { name:"Luca Verdi", role:"IT / Stampanti", available:false },
+      { name:"Team Pulizie", role:"Servizi generali", available:true }
+    ],
+    servizi: [
+      { name:"Team Pulizie", role:"Pulizie / riordino", available:true },
+      { name:"Paolo Neri", role:"Manutenzione", available:true },
+      { name:"Ditta idraulica", role:"Tecnico esterno", available:false }
+    ]
+  };
+
+  let selectedAssignee = null;
+  let assignedByPoint = {};
+
+  function qs(id){
+    return document.getElementById(id);
+  }
+
+  function getAssignees(){
+    if (typeof current === "undefined") return [];
+    return assigneesByPoint[current] || [];
+  }
+
+  function getAssigned(){
+    if (typeof current === "undefined") return null;
+    return assignedByPoint[current] || null;
+  }
+
+  function renderAssignmentSummary(){
+    const box = qs("assignmentSummary");
+    if (!box) return;
+
+    const assigned = getAssigned();
+
+    if (!assigned) {
+      box.classList.remove("show");
+      box.textContent = "";
+      return;
+    }
+
+    box.classList.add("show");
+    box.innerHTML = "Responsabile assegnato: <strong>" + assigned.name + "</strong> — " + assigned.role + ".";
+  }
+
+  function renderAssignmentDrawer(){
+    const list = qs("assignmentList");
+    const confirm = qs("assignmentConfirm");
+    if (!list || !confirm) return;
+
+    selectedAssignee = null;
+    confirm.classList.remove("ready");
+    confirm.setAttribute("aria-disabled", "true");
+
+    const assignees = getAssignees();
+
+    list.innerHTML = assignees.map((a, index) => `
+      <button type="button"
+        class="assignment-option ${a.available ? "available" : "unavailable"}"
+        data-index="${index}">
+        <span class="assignment-dot ${a.available ? "available" : ""}"></span>
+        <span class="assignment-name">
+          <strong>${a.name}</strong>
+          <span>${a.role}</span>
+        </span>
+        <span class="assignment-presence">${a.available ? "IN AZIENDA" : "ASSENTE"}</span>
+      </button>
+    `).join("");
+
+    list.querySelectorAll(".assignment-option").forEach(btn => {
+      btn.addEventListener("click", function(){
+        const index = Number(btn.getAttribute("data-index"));
+        selectedAssignee = assignees[index];
+
+        list.querySelectorAll(".assignment-option").forEach(b => b.classList.remove("selected"));
+        btn.classList.add("selected");
+
+        confirm.classList.add("ready");
+        confirm.setAttribute("aria-disabled", "false");
+      });
+    });
+  }
+
+  function openAssignmentDrawer(){
+    const drawer = qs("assignmentDrawer");
+    if (!drawer) return;
+
+    renderAssignmentDrawer();
+    drawer.classList.add("show");
+    drawer.classList.remove("guided-pulse-assignment");
+    void drawer.offsetWidth;
+    drawer.classList.add("guided-pulse-assignment");
+
+    setTimeout(function(){
+      drawer.scrollIntoView({ behavior:"smooth", block:"center" });
+    }, 80);
+  }
+
+  function closeAssignmentDrawer(){
+    const drawer = qs("assignmentDrawer");
+    if (!drawer) return;
+    drawer.classList.remove("show");
+  }
+
+  function confirmAssignment(){
+    if (!selectedAssignee || typeof current === "undefined") return;
+
+    assignedByPoint[current] = selectedAssignee;
+
+    if (typeof points !== "undefined" && points[current]) {
+      points[current].assignee = selectedAssignee.name + " — " + selectedAssignee.role;
+    }
+
+    const assigneeEl = qs("assignee");
+    if (assigneeEl) {
+      assigneeEl.textContent = selectedAssignee.name + " — " + selectedAssignee.role;
+    }
+
+    if (typeof setEvent === "function") {
+      setEvent("Intervento assegnato a " + selectedAssignee.name + " — " + selectedAssignee.role + ".");
+    }
+
+    renderAssignmentSummary();
+    closeAssignmentDrawer();
+
+    setTimeout(function(){
+      const btn = qs("takeCharge");
+      if (btn) {
+        btn.classList.remove("guided-pulse-strong");
+        void btn.offsetWidth;
+        btn.classList.add("guided-pulse-strong");
+      }
+    }, 180);
+  }
+
+  function interceptTakeCharge(e){
+    const btn = e.target.closest && e.target.closest("#takeCharge");
+    if (!btn) return;
+
+    const assigned = getAssigned();
+
+    if (!assigned) {
+      e.preventDefault();
+      e.stopPropagation();
+      openAssignmentDrawer();
+    }
+  }
+
+  document.addEventListener("click", interceptTakeCharge, true);
+
+  document.addEventListener("click", function(e){
+    const confirm = e.target.closest && e.target.closest("#assignmentConfirm");
+    if (!confirm) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!selectedAssignee) return;
+    confirmAssignment();
+  }, true);
+
+  document.addEventListener("click", function(e){
+    const marker = e.target.closest && e.target.closest(".marker[data-point]");
+    if (!marker) return;
+
+    setTimeout(function(){
+      selectedAssignee = null;
+      closeAssignmentDrawer();
+      renderAssignmentSummary();
+    }, 130);
+  }, true);
+
+  document.addEventListener("DOMContentLoaded", function(){
+    renderAssignmentSummary();
+  });
+
+  window.openAssignmentDrawer = openAssignmentDrawer;
 })();
 </script>
 
