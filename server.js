@@ -1,13 +1,12 @@
 
-// SECURITY PATCH 1
 require('dotenv').config();
 const express = require('express');
 const Stripe = require('stripe');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const webpush = require('web-push');
-const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 const { generateStickerPrintPdf } = require('./lib/generateStickerPrintPdf');
 const pool = require('./db');
@@ -94,20 +93,23 @@ function parseCookies(req) {
 }
 
 function signAdminSession(value) {
-  const crypto = require('crypto');
-const nodeCrypto = require('node:crypto');
   const sig = crypto.createHmac('sha256', getAdminSecret()).update(value).digest('hex');
   return `${value}.${sig}`;
 }
 
 function verifyAdminSession(token) {
-  const crypto = require('crypto');
   if (!token || !token.includes('.')) return false;
   const idx = token.lastIndexOf('.');
   const value = token.slice(0, idx);
   const sig = token.slice(idx + 1);
   const expected = crypto.createHmac('sha256', getAdminSecret()).update(value).digest('hex');
-  return sig === expected && value === 'admin-authenticated';
+  const sigBuffer = Buffer.from(sig, 'hex');
+  const expectedBuffer = Buffer.from(expected, 'hex');
+  return (
+    value === 'admin-authenticated' &&
+    sigBuffer.length === expectedBuffer.length &&
+    crypto.timingSafeEqual(sigBuffer, expectedBuffer)
+  );
 }
 
 function endOfMonthFromDate(dateValue) {
@@ -184,12 +186,10 @@ function requireAdmin(req, res, next) {
 
 
 function generateOwnerAccessToken() {
-  const crypto = require('crypto');
   return crypto.randomBytes(18).toString('base64').replace(/[^A-Za-z0-9]/g, '').slice(0, 24);
 }
 
 function generateCode() {
-  const crypto = require('crypto');
   return 'AMC-' + crypto.randomBytes(4).toString('hex').toUpperCase();
 }
 
@@ -358,20 +358,22 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
-if (!process.env.DATABASE_URL) {
-  throw new Error('Variabile ambiente mancante: DATABASE_URL');
-}
+function validateRuntimeEnv() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error('Variabile ambiente mancante: DATABASE_URL');
+  }
 
-if (!process.env.ADMIN_EMAIL) {
-  throw new Error('Variabile ambiente mancante: ADMIN_EMAIL');
-}
+  if (!process.env.ADMIN_EMAIL) {
+    throw new Error('Variabile ambiente mancante: ADMIN_EMAIL');
+  }
 
-if (!process.env.ADMIN_PASSWORD) {
-  throw new Error('Variabile ambiente mancante: ADMIN_PASSWORD');
-}
+  if (!process.env.ADMIN_PASSWORD) {
+    throw new Error('Variabile ambiente mancante: ADMIN_PASSWORD');
+  }
 
-if (!process.env.BASE_URL) {
-  console.warn('Attenzione: BASE_URL non impostata. Verrà usato il fallback locale.');
+  if (!process.env.BASE_URL) {
+    console.warn('Attenzione: BASE_URL non impostata. Verrà usato il fallback locale.');
+  }
 }
 
 app.use(cors());
@@ -1840,7 +1842,7 @@ app.get('/owner-simple.html', async (req, res, next) => {
 
 
 
-app.get('/api/temp-debug-plate/:plate', async (req, res) => {
+app.get('/api/temp-debug-plate/:plate', requireAdmin, async (req, res) => {
   try {
     const plate = String(req.params.plate || '').trim().toUpperCase().replace(/\s+/g, '');
 
@@ -7550,7 +7552,7 @@ app.post('/api/admin/scan-stats', requireAdmin, async (req, res) => {
 
 
 
-app.post('/api/debug-fix-owner-device-roles-by-record', async (req, res) => {
+app.post('/api/debug-fix-owner-device-roles-by-record', requireAdmin, async (req, res) => {
   try {
     const { code, public_id, plate, phone } = req.body || {};
 
@@ -7669,7 +7671,7 @@ app.post('/api/debug-fix-owner-device-roles-by-record', async (req, res) => {
 });
 
 
-app.post('/api/debug-owner-device-roles-by-record', async (req, res) => {
+app.post('/api/debug-owner-device-roles-by-record', requireAdmin, async (req, res) => {
   try {
     const { code, public_id, plate, phone } = req.body || {};
 
@@ -8075,6 +8077,7 @@ async function initDb() {
 
 async function startServer() {
   try {
+    validateRuntimeEnv();
     await initDb();
     app.listen(PORT, () => {
       console.log(`Server attivo su ${BASE_URL}`);
@@ -8084,4 +8087,8 @@ async function startServer() {
   }
 }
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = { app, startServer, initDb, validateRuntimeEnv };
