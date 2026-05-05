@@ -542,7 +542,121 @@
         grid-template-columns:repeat(2,1fr);
       }
     }
-  </style>
+  
+/* AVVISAMI Azienda Demo - flusso realistico QR */
+.scan-actions{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin-top:12px;
+}
+
+.scan-actions button{
+  border:1px solid #e5e7eb;
+  background:#ffffff;
+  color:#111827;
+  border-radius:15px;
+  padding:10px 12px;
+  min-height:44px;
+  font-weight:900;
+  cursor:pointer;
+  box-shadow:0 6px 16px rgba(15,23,42,.06);
+}
+
+.scan-actions button.primary{
+  border:none;
+  background:linear-gradient(135deg,var(--yellow),var(--orange));
+  box-shadow:0 12px 26px rgba(255,138,0,.22);
+}
+
+.public-status.open{
+  background:#fff7ed;
+  border-color:#fed7aa;
+  color:#9a3412;
+}
+
+.public-status.assigned{
+  background:#eff6ff;
+  border-color:#bfdbfe;
+  color:#1d4ed8;
+}
+
+.public-status.progress{
+  background:#f5f3ff;
+  border-color:#ddd6fe;
+  color:#6d28d9;
+}
+
+.public-status.done{
+  background:#ecfdf5;
+  border-color:#bbf7d0;
+  color:#166534;
+}
+
+.public-meta{
+  display:grid;
+  gap:6px;
+  margin:10px 0 12px;
+  font-size:.82rem;
+  color:#334155;
+}
+
+.public-meta div{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  border-bottom:1px solid #e5e7eb;
+  padding-bottom:6px;
+}
+
+.public-meta div:last-child{
+  border-bottom:none;
+  padding-bottom:0;
+}
+
+.public-meta b{
+  text-align:right;
+  color:#111827;
+}
+
+.add-info-box{
+  display:none;
+  margin-top:10px;
+  border-radius:16px;
+  border:1px solid #e5e7eb;
+  background:#ffffff;
+  padding:10px;
+}
+
+.add-info-box.show{
+  display:block;
+}
+
+.add-info-box textarea{
+  width:100%;
+  min-height:72px;
+  resize:vertical;
+  border:1px solid #d1d5db;
+  border-radius:13px;
+  padding:10px;
+  font-family:inherit;
+  font-size:.88rem;
+  outline:none;
+}
+
+.add-info-box button{
+  width:100%;
+  margin-top:8px;
+  border:none;
+  border-radius:14px;
+  padding:10px 12px;
+  font-weight:900;
+  background:linear-gradient(135deg,var(--yellow),var(--orange));
+  color:#111827;
+  cursor:pointer;
+}
+
+</style>
 </head>
 
 <body>
@@ -635,8 +749,24 @@
                 Nessuna segnalazione aperta per questo punto.
               </div>
 
+              <div class="public-meta" id="publicMeta">
+                <div><span>Stato</span><b>Nessuna segnalazione</b></div>
+                <div><span>Responsabile</span><b>—</b></div>
+                <div><span>Intervento previsto</span><b>—</b></div>
+              </div>
+
               <div class="reasons" id="reasonList"></div>
               <button class="send-btn" id="sendBtn" type="button" aria-disabled="true">Invia segnalazione</button>
+
+              <div class="scan-actions">
+                <button type="button" class="primary" id="rescanBtn">Simula nuova scansione QR</button>
+                <button type="button" id="differentIssueBtn">Segnala problema diverso</button>
+              </div>
+
+              <div class="add-info-box" id="addInfoBox">
+                <textarea id="addInfoText" placeholder="Aggiungi un dettaglio utile alla segnalazione già aperta..."></textarea>
+                <button type="button" id="sendInfoBtn">Aggiungi informazione</button>
+              </div>
             </div>
           </div>
         </div>
@@ -797,6 +927,7 @@
     let selectedReason = "";
     let statuses = {};
     let events = [];
+    let publicMode = "fresh";
 
     function nowLabel(){
       return "adesso";
@@ -808,6 +939,7 @@
         label:"Nessuna segnalazione aperta",
         eta:"Non impostato",
         last:"Nessuna",
+        reason:"",
         events:[]
       };
     }
@@ -836,6 +968,12 @@
       `).join("");
     }
 
+    function setSendReady(ready){
+      const btn = document.getElementById("sendBtn");
+      btn.classList.toggle("ready", !!ready);
+      btn.setAttribute("aria-disabled", ready ? "false" : "true");
+    }
+
     function renderReasons(){
       const p = points[current];
       const list = document.getElementById("reasonList");
@@ -855,18 +993,59 @@
         });
       });
 
+      selectedReason = "";
       setSendReady(false);
     }
 
-    function setSendReady(ready){
-      const btn = document.getElementById("sendBtn");
-      btn.classList.toggle("ready", !!ready);
-      btn.setAttribute("aria-disabled", ready ? "false" : "true");
+    function renderPublicStatus(){
+      const p = points[current];
+      const s = getStatus(current);
+      const publicStatus = document.getElementById("publicStatus");
+      const meta = document.getElementById("publicMeta");
+      const addInfo = document.getElementById("addInfoBox");
+
+      publicStatus.className = "public-status";
+
+      let statusLabel = "Nessuna segnalazione";
+      let etaLabel = "—";
+      let responsibleLabel = p.assignee;
+
+      if (s.state === "idle") {
+        publicStatus.textContent = "Nessuna segnalazione aperta per questo punto.";
+      } else {
+        publicStatus.classList.add(
+          s.state === "new" ? "open" :
+          s.state === "assigned" ? "assigned" :
+          s.state === "progress" ? "progress" :
+          s.state === "done" ? "done" : "open"
+        );
+
+        statusLabel = s.label;
+        etaLabel = s.eta || "Non impostato";
+
+        if (publicMode === "rescan") {
+          publicStatus.textContent =
+            s.state === "done"
+              ? "Questo punto risulta completato. Ultimo aggiornamento: " + s.last + "."
+              : "Questo punto è già stato segnalato. Stato: " + s.label + ". Ultimo aggiornamento: " + s.last + ".";
+        } else {
+          publicStatus.textContent = "Segnalazione aperta: " + (s.reason || "problema già segnalato") + ". Stato: " + s.label + ".";
+        }
+      }
+
+      meta.innerHTML = `
+        <div><span>Stato</span><b>${statusLabel}</b></div>
+        <div><span>Responsabile</span><b>${responsibleLabel}</b></div>
+        <div><span>Intervento previsto</span><b>${etaLabel}</b></div>
+      `;
+
+      addInfo.classList.toggle("show", s.state !== "idle" && s.state !== "done");
     }
 
     function renderPoint(id){
       current = id;
       selectedReason = "";
+      publicMode = "fresh";
 
       const p = points[id];
       const s = getStatus(id);
@@ -884,12 +1063,7 @@
       document.getElementById("assignee").textContent = p.assignee;
       document.getElementById("lastActivity").textContent = s.last;
       document.getElementById("eta").textContent = s.eta;
-
       document.getElementById("publicTitle").textContent = p.title;
-      document.getElementById("publicStatus").textContent =
-        s.state === "idle"
-          ? "Nessuna segnalazione aperta per questo punto."
-          : "Già segnalato · Stato: " + s.label + " · Ultimo aggiornamento: " + s.last + ".";
 
       const badge = document.getElementById("stateBadge");
       badge.className = "state " + s.state;
@@ -897,6 +1071,7 @@
 
       events = s.events || [];
       renderReasons();
+      renderPublicStatus();
       renderTimeline();
     }
 
@@ -907,6 +1082,7 @@
         label,
         eta: extra.eta || existing.eta || "Non impostato",
         last: extra.last || "adesso",
+        reason: extra.reason || existing.reason || "",
         events: events
       };
       renderPoint(current);
@@ -918,10 +1094,45 @@
       const p = points[current];
       setEvent("Segnalazione inviata: “" + selectedReason + "”.");
       setEvent("Smistata a: " + p.assignee + ".");
-      updateStatus("new", "Già segnalato", { last:"adesso" });
+      updateStatus("new", "Già segnalato", { last:"adesso", reason:selectedReason });
+      publicMode = "rescan";
+      renderPublicStatus();
+    }
+
+    function simulateRescan(){
+      publicMode = "rescan";
+      renderPublicStatus();
+
+      const s = getStatus(current);
+      if (s.state === "idle") {
+        setEvent("Nuova scansione QR: nessuna segnalazione aperta.");
+      } else {
+        setEvent("Nuova scansione QR: mostrato stato aggiornato al segnalatore.");
+      }
+    }
+
+    function differentIssue(){
+      publicMode = "fresh";
+      renderReasons();
+      renderPublicStatus();
+      setEvent("Utente pronto a segnalare un problema diverso sullo stesso punto.");
+    }
+
+    function sendAdditionalInfo(){
+      const textarea = document.getElementById("addInfoText");
+      const value = textarea.value.trim();
+      if (!value) return;
+
+      setEvent("Informazione aggiunta dal segnalatore: “" + value + "”.");
+      textarea.value = "";
+      publicMode = "rescan";
+      renderPublicStatus();
     }
 
     document.getElementById("sendBtn").addEventListener("click", submitReport);
+    document.getElementById("rescanBtn").addEventListener("click", simulateRescan);
+    document.getElementById("differentIssueBtn").addEventListener("click", differentIssue);
+    document.getElementById("sendInfoBtn").addEventListener("click", sendAdditionalInfo);
 
     document.querySelectorAll(".marker").forEach(marker => {
       marker.addEventListener("mouseenter", () => renderPoint(marker.dataset.point));
@@ -932,6 +1143,8 @@
       const p = points[current];
       setEvent("Segnalazione presa in carico da " + p.assignee + ".");
       updateStatus("assigned", "Preso in carico", { last:"adesso" });
+      publicMode = "rescan";
+      renderPublicStatus();
     });
 
     document.querySelectorAll("[data-eta]").forEach(btn => {
@@ -939,12 +1152,16 @@
         const eta = btn.dataset.eta;
         setEvent("Intervento previsto: " + eta + ".");
         updateStatus("progress", "In lavorazione", { eta, last:"adesso" });
+        publicMode = "rescan";
+        renderPublicStatus();
       });
     });
 
     document.getElementById("completeReport").addEventListener("click", () => {
       setEvent("Intervento completato.");
       updateStatus("done", "Completato", { eta:"Completato", last:"adesso" });
+      publicMode = "rescan";
+      renderPublicStatus();
     });
 
     renderPoint(current);
