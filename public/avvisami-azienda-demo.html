@@ -1264,6 +1264,55 @@
   top:48% !important;
 }
 
+
+/* AVVISAMI Azienda Demo - pulsante simulazione nel riquadro hero */
+.hero-simulate-wrap{
+  margin-top:18px;
+}
+
+.hero-simulate-btn{
+  width:100%;
+  max-width:380px;
+  min-height:54px;
+  border:none;
+  border-radius:18px;
+  padding:14px 18px;
+  font-weight:950;
+  font-size:.98rem;
+  letter-spacing:.02em;
+  color:#111827;
+  background:linear-gradient(135deg,var(--yellow),var(--orange));
+  box-shadow:0 16px 34px rgba(255,138,0,.28);
+  cursor:pointer;
+}
+
+.hero-simulate-btn:active{
+  transform:translateY(1px);
+}
+
+/* Vecchia posizione sotto mappa: rimane solo la guida testuale */
+.guided-demo-start-wrap{
+  display:none !important;
+}
+
+.map-select-point-label{
+  display:none;
+  margin:14px 0 0;
+  padding:12px 14px;
+  border-radius:18px;
+  background:rgba(255,179,71,.12);
+  border:1px solid rgba(255,179,71,.28);
+  color:#ffb347;
+  text-align:center;
+  font-size:.88rem;
+  font-weight:950;
+  letter-spacing:.06em;
+}
+
+.map-select-point-label.show{
+  display:block;
+}
+
 </style>
 </head>
 
@@ -1288,6 +1337,12 @@
           Ogni punto dell’azienda può avere un QR dedicato, una foto, un responsabile e un menu di segnalazione specifico.
           La segnalazione arriva già contestualizzata: dove, cosa, stato e tempi di intervento.
         </p>
+
+        <div class="hero-simulate-wrap">
+          <button type="button" class="hero-simulate-btn" id="heroGuidedDemoStart">
+            SIMULA SEGNALAZIONE
+          </button>
+        </div>
       </div>
 
       <div class="summary-card">
@@ -1341,6 +1396,10 @@
 
             <div class="hint">
               Ogni QR può mostrare motivi diversi in base al punto: uffici, servizi, magazzino, parcheggio, area tecnica o logistica.
+            </div>
+
+            <div class="map-select-point-label" id="mapSelectPointLabel">
+              SELEZIONA UN PUNTO
             </div>
           </div>
         </div>
@@ -2914,6 +2973,89 @@
 
     forceSelectPoint(pointId);
   }, true);
+})();
+</script>
+
+
+<script>
+/* AVVISAMI Azienda Demo - avvio simulazione da hero */
+(function(){
+  function isGuidedDevice(){
+    return window.matchMedia && window.matchMedia("(max-width:1024px)").matches;
+  }
+
+  function scrollCenter(el, delay){
+    if (!el) return;
+
+    setTimeout(function(){
+      const rect = el.getBoundingClientRect();
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      const absoluteTop = rect.top + window.pageYOffset;
+      const top = absoluteTop - Math.max(18, (vh - rect.height) / 2);
+
+      window.scrollTo({
+        top: Math.max(0, top),
+        behavior:"smooth"
+      });
+    }, delay || 80);
+  }
+
+  function showSelectPointLabel(){
+    const label = document.getElementById("mapSelectPointLabel");
+    if (!label) return;
+    label.classList.add("show");
+  }
+
+  function hideSelectPointLabel(){
+    const label = document.getElementById("mapSelectPointLabel");
+    if (!label) return;
+    label.classList.remove("show");
+  }
+
+  function startFromHero(){
+    const oldBtn = document.getElementById("guidedDemoStart");
+    const map = document.getElementById("map");
+
+    showSelectPointLabel();
+    scrollCenter(map, 60);
+
+    // Avvia il flusso guidato già esistente, inclusi lampeggi marker.
+    setTimeout(function(){
+      if (oldBtn) {
+        oldBtn.click();
+      } else {
+        // Fallback: lampeggio semplice dei marker se il vecchio bottone non fosse stato creato.
+        const markers = Array.from(document.querySelectorAll(".marker[data-point]"));
+        markers.forEach(function(marker, index){
+          setTimeout(function(){
+            marker.classList.remove("guided-pulse-marker");
+            void marker.offsetWidth;
+            marker.classList.add("guided-pulse-marker");
+          }, index * 160);
+        });
+      }
+    }, 380);
+  }
+
+  document.addEventListener("click", function(e){
+    if (e.target.closest("#heroGuidedDemoStart")) {
+      e.preventDefault();
+      startFromHero();
+      return;
+    }
+
+    if (e.target.closest(".marker[data-point]")) {
+      hideSelectPointLabel();
+    }
+  }, true);
+
+  document.addEventListener("DOMContentLoaded", function(){
+    const btn = document.getElementById("heroGuidedDemoStart");
+    if (btn && !isGuidedDevice()) {
+      // Per ora lo lasciamo visibile anche da PC, ma il flusso guidato resta pensato mobile/tablet.
+      btn.title = "Demo guidata ottimizzata per smartphone e tablet";
+    }
+  });
 })();
 </script>
 
