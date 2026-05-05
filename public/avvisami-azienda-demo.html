@@ -1189,6 +1189,62 @@
   }
 }
 
+
+/* AVVISAMI Azienda Demo - nominativo responsabile sopra presa in carico */
+.assigned-operator-box{
+  margin:12px 0 12px;
+  padding:12px 13px;
+  border-radius:18px;
+  background:rgba(255,255,255,.065);
+  border:1px solid rgba(255,255,255,.12);
+  color:#ffffff;
+  display:grid;
+  gap:3px;
+}
+
+.assigned-operator-box span{
+  color:#ffb347;
+  font-size:.70rem;
+  font-weight:950;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+}
+
+.assigned-operator-box strong{
+  font-size:.96rem;
+  line-height:1.2;
+}
+
+.assigned-operator-box small{
+  color:#cbd5e1;
+  font-size:.78rem;
+  line-height:1.25;
+}
+
+.assigned-operator-box.ready{
+  background:rgba(34,197,94,.12);
+  border-color:rgba(34,197,94,.24);
+}
+
+.assigned-operator-box.ready span{
+  color:#86efac;
+}
+
+.mobile-return-map-pulse{
+  animation: mobileReturnMapPulse .95s ease-in-out 3;
+}
+
+@keyframes mobileReturnMapPulse{
+  0%,100%{
+    transform:translate(-50%,-50%) scale(1);
+    box-shadow:0 12px 26px rgba(255,138,0,.42);
+  }
+  50%{
+    transform:translate(-50%,-50%) scale(1.32);
+    box-shadow:0 0 0 20px rgba(255,138,0,0),0 20px 44px rgba(255,138,0,.68);
+  }
+}
+
 </style>
 </head>
 
@@ -1329,12 +1385,18 @@
             <div class="assignment-summary" id="assignmentSummary"></div>
 
             <div class="assignment-drawer" id="assignmentDrawer">
-              <h3>Assegna responsabile</h3>
-              <p>Seleziona chi deve gestire l’intervento. Il pallino indica se la persona è disponibile in azienda.</p>
+              <h3>Responsabile assegnazioni</h3>
+              <p>Seleziona chi assegna o gestisce l’intervento. Il pallino indica se la persona è disponibile in azienda.</p>
               <div class="assignment-list" id="assignmentList"></div>
               <button type="button" class="assignment-confirm" id="assignmentConfirm" aria-disabled="true">
                 Conferma responsabile
               </button>
+            </div>
+
+            <div class="assigned-operator-box" id="assignedOperatorBox">
+              <span>Responsabile incaricato</span>
+              <strong id="assignedOperatorName">Da assegnare</strong>
+              <small id="assignedOperatorRole">Seleziona prima un responsabile assegnazioni.</small>
             </div>
 
             <div class="actions">
@@ -2528,6 +2590,161 @@
   });
 
   window.openAssignmentDrawer = openAssignmentDrawer;
+})();
+</script>
+
+
+<script>
+/* AVVISAMI Azienda Demo - aggiorna responsabile e ritorno mappa mobile */
+(function(){
+  function isMobileOrTablet(){
+    return window.matchMedia && window.matchMedia("(max-width:1024px)").matches;
+  }
+
+  function qs(id){
+    return document.getElementById(id);
+  }
+
+  function scrollCenter(el, delay){
+    if (!isMobileOrTablet() || !el) return;
+
+    setTimeout(function(){
+      const rect = el.getBoundingClientRect();
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      const absoluteTop = rect.top + window.pageYOffset;
+      const top = absoluteTop - Math.max(18, (vh - rect.height) / 2);
+
+      window.scrollTo({
+        top: Math.max(0, top),
+        behavior: "smooth"
+      });
+    }, delay || 80);
+  }
+
+  function getAssignedTextFromSummary(){
+    const summary = qs("assignmentSummary");
+    if (!summary || !summary.classList.contains("show")) return null;
+
+    const txt = (summary.textContent || "").replace(/Responsabile assegnato:/i, "").trim();
+    if (!txt) return null;
+
+    const parts = txt.split("—").map(v => v.trim());
+
+    return {
+      name: parts[0] || txt,
+      role: parts.slice(1).join(" — ") || ""
+    };
+  }
+
+  function updateAssignedOperatorBox(){
+    const box = qs("assignedOperatorBox");
+    const nameEl = qs("assignedOperatorName");
+    const roleEl = qs("assignedOperatorRole");
+
+    if (!box || !nameEl || !roleEl) return;
+
+    const assigned = getAssignedTextFromSummary();
+
+    if (!assigned) {
+      box.classList.remove("ready");
+      nameEl.textContent = "Da assegnare";
+      roleEl.textContent = "Seleziona prima un responsabile assegnazioni.";
+      return;
+    }
+
+    box.classList.add("ready");
+    nameEl.textContent = assigned.name;
+    roleEl.textContent = assigned.role
+      ? assigned.role + " · ora può prendere in carico e fissare il tempo di intervento."
+      : "Ora può prendere in carico e fissare il tempo di intervento.";
+  }
+
+  function getCurrentMarker(){
+    if (typeof current === "undefined") return null;
+    return document.querySelector('.marker[data-point="' + current + '"]');
+  }
+
+  function pulseCurrentMarker(){
+    const marker = getCurrentMarker();
+    if (!marker) return;
+
+    marker.classList.remove("mobile-return-map-pulse");
+    void marker.offsetWidth;
+    marker.classList.add("mobile-return-map-pulse");
+
+    setTimeout(function(){
+      marker.classList.remove("mobile-return-map-pulse");
+    }, 3000);
+  }
+
+  function openMobilePreview(){
+    if (typeof current === "undefined") return;
+
+    const marker = getCurrentMarker();
+    if (marker) {
+      marker.click();
+    }
+
+    // Se la funzione mobile preview è già presente, il click la apre.
+    // Questo secondo tentativo serve se il browser non intercetta bene il click sintetico.
+    setTimeout(function(){
+      try {
+        const event = new MouseEvent("click", { bubbles:true, cancelable:true });
+        if (marker) marker.dispatchEvent(event);
+      } catch(e) {}
+    }, 220);
+  }
+
+  function returnToMapAndShowResult(){
+    if (!isMobileOrTablet()) return;
+
+    const map = qs("map");
+    scrollCenter(map, 350);
+
+    setTimeout(pulseCurrentMarker, 1050);
+
+    setTimeout(function(){
+      openMobilePreview();
+    }, 1900);
+  }
+
+  document.addEventListener("click", function(e){
+    if (e.target.closest("#assignmentConfirm")) {
+      setTimeout(updateAssignedOperatorBox, 120);
+      setTimeout(updateAssignedOperatorBox, 420);
+      return;
+    }
+
+    if (e.target.closest(".marker[data-point]")) {
+      setTimeout(updateAssignedOperatorBox, 180);
+      return;
+    }
+
+    if (e.target.closest("#takeCharge")) {
+      setTimeout(updateAssignedOperatorBox, 150);
+      return;
+    }
+
+    if (e.target.closest(".eta-grid button")) {
+      // Dopo la scelta del tempo: ritorno automatico alla mappa,
+      // lampeggio punto, apertura mini-card con foto e stato.
+      setTimeout(updateAssignedOperatorBox, 150);
+      setTimeout(returnToMapAndShowResult, 420);
+      return;
+    }
+
+    if (e.target.closest("#completeReport")) {
+      // Anche dopo chiusura intervento, torna alla mappa e mostra risultato.
+      setTimeout(returnToMapAndShowResult, 420);
+    }
+  }, true);
+
+  document.addEventListener("DOMContentLoaded", function(){
+    setTimeout(updateAssignedOperatorBox, 500);
+    setTimeout(updateAssignedOperatorBox, 1400);
+  });
+
+  setInterval(updateAssignedOperatorBox, 1500);
 })();
 </script>
 
