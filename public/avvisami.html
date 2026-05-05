@@ -3930,6 +3930,16 @@ body.avvisami-area-pubblica-active .scene-bg {
     writeCounter(Math.max(readCounter(), sentCount) + 1);
   }
 
+  function reportIsVisible() {
+    var card = qs("notificationCard");
+    var ownerScreen = qs("ownerScreen");
+
+    return (
+      (card && card.classList.contains("show")) ||
+      (ownerScreen && ownerScreen.classList.contains("sent"))
+    );
+  }
+
   function isSendButtonReady(button) {
     if (!button) return false;
     if (button.disabled) return false;
@@ -3942,13 +3952,7 @@ body.avvisami-area-pubblica-active .scene-bg {
     if (!send || !isSendButtonReady(send)) return;
 
     setTimeout(function () {
-      var card = qs("notificationCard");
-      var ownerScreen = qs("ownerScreen");
-      var reportVisible =
-        (card && card.classList.contains("show")) ||
-        (ownerScreen && ownerScreen.classList.contains("sent"));
-
-      if (reportVisible) {
+      if (reportIsVisible()) {
         countSentReport();
       }
     }, 160);
@@ -3964,6 +3968,27 @@ body.avvisami-area-pubblica-active .scene-bg {
 
   document.addEventListener("DOMContentLoaded", function () {
     sentCount = readCounter();
+
+    ["notificationCard", "ownerScreen"].forEach(function (id) {
+      var el = qs(id);
+      if (!el || !window.MutationObserver) return;
+
+      var wasVisible = reportIsVisible();
+      var observer = new MutationObserver(function () {
+        var isVisible = reportIsVisible();
+
+        if (isVisible && !wasVisible) {
+          countSentReport();
+        }
+
+        wasVisible = isVisible;
+      });
+
+      observer.observe(el, {
+        attributes: true,
+        attributeFilter: ["class"]
+      });
+    });
   });
 })();
 </script>
