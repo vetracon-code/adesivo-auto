@@ -2769,5 +2769,153 @@
 })();
 </script>
 
+
+<script>
+/* AVVISAMI Azienda Demo - fix primo tap/click marker */
+(function(){
+  let lastTapAt = 0;
+  let lastPoint = "";
+
+  function isTouchLike(){
+    return window.matchMedia && window.matchMedia("(max-width:1024px)").matches;
+  }
+
+  function forceSelectPoint(pointId){
+    if (!pointId) return;
+
+    try {
+      if (typeof renderPoint === "function") {
+        renderPoint(pointId);
+      } else if (typeof current !== "undefined") {
+        current = pointId;
+      }
+    } catch(e) {}
+
+    document.querySelectorAll(".marker[data-point]").forEach(function(m){
+      m.classList.toggle("active", m.getAttribute("data-point") === pointId);
+    });
+
+    // Forza aggiornamento foto dopo renderPoint.
+    setTimeout(function(){
+      try {
+        const photo = document.getElementById("pointPhoto");
+        if (!photo || typeof current === "undefined") return;
+
+        const photoMap = {
+          ingresso: "/images/avvisami/azienda/avvisami-azienda-ingresso-principale.png?v=ingresso-1",
+          parcheggio: "/images/avvisami/azienda/avvisami-azienda-parcheggio.png?v=parcheggio-1",
+          magazzino: "/images/avvisami/azienda/avvisami-azienda-magazzino.png?v=magazzino-1",
+          attrezzatura: "/images/avvisami/azienda/avvisami-azienda-attrezzatura-muletto.png?v=attrezzatura-1",
+          carico: "/images/avvisami/azienda/avvisami-azienda-carico-scarico.png?v=carico-1",
+          tecnico: "/images/avvisami/azienda/avvisami-azienda-locale-tecnico.png?v=tecnico-1",
+          uffici: "/images/avvisami/azienda/avvisami-azienda-uffici.png?v=uffici-1",
+          servizi: "/images/avvisami/azienda/avvisami-azienda-servizi-igienici.png?v=servizi-1"
+        };
+
+        const url = photoMap[current];
+
+        if (url) {
+          photo.classList.add("has-photo");
+          photo.style.backgroundImage = "url('" + url + "')";
+          photo.textContent = "";
+        }
+      } catch(e) {}
+    }, 40);
+
+    // Su mobile/tablet apre subito anche la preview dentro mappa.
+    if (isTouchLike()) {
+      setTimeout(function(){
+        try {
+          const marker = document.querySelector('.marker[data-point="' + pointId + '"]');
+          const box = document.getElementById("mobileMapPreview");
+
+          if (marker && box) {
+            // Non ridispatchiamo click, altrimenti rischiamo loop: aggiorniamo la preview esistente.
+            const p = typeof points !== "undefined" ? points[pointId] : null;
+            const s = typeof getStatus === "function" ? getStatus(pointId) : { state:"idle", eta:"Non impostato" };
+
+            const photos = {
+              ingresso: "/images/avvisami/azienda/avvisami-azienda-ingresso-principale.png?v=ingresso-1",
+              parcheggio: "/images/avvisami/azienda/avvisami-azienda-parcheggio.png?v=parcheggio-1",
+              magazzino: "/images/avvisami/azienda/avvisami-azienda-magazzino.png?v=magazzino-1",
+              attrezzatura: "/images/avvisami/azienda/avvisami-azienda-attrezzatura-muletto.png?v=attrezzatura-1",
+              carico: "/images/avvisami/azienda/avvisami-azienda-carico-scarico.png?v=carico-1",
+              tecnico: "/images/avvisami/azienda/avvisami-azienda-locale-tecnico.png?v=tecnico-1",
+              uffici: "/images/avvisami/azienda/avvisami-azienda-uffici.png?v=uffici-1",
+              servizi: "/images/avvisami/azienda/avvisami-azienda-servizi-igienici.png?v=servizi-1"
+            };
+
+            const state = (s && s.state) || "idle";
+            const title = p && p.title ? p.title : "Punto QR";
+            const img = photos[pointId] || "";
+
+            let status = "Nessuna segnalazione";
+            if (state === "new") status = "Già segnalato";
+            if (state === "assigned") status = "Preso in carico";
+            if (state === "progress") status = "In lavorazione";
+            if (state === "done") status = "Completato";
+
+            let eta = "Intervento previsto: —";
+            if (s && s.eta && s.eta !== "Non impostato") {
+              eta = "Intervento previsto: " + s.eta;
+            }
+            if (s && s.reason && state !== "idle" && state !== "done") {
+              eta = "Problema: " + s.reason + (s.eta && s.eta !== "Non impostato" ? " · " + s.eta : "");
+            }
+
+            box.className = "mobile-map-preview show status-" + state;
+
+            const imgEl = box.querySelector("#mobileMapPreviewImg");
+            const titleEl = box.querySelector("#mobileMapPreviewTitle");
+            const statusEl = box.querySelector("#mobileMapPreviewStatus");
+            const etaEl = box.querySelector("#mobileMapPreviewEta");
+
+            if (imgEl) imgEl.style.backgroundImage = img ? "url('" + img + "')" : "";
+            if (titleEl) titleEl.textContent = title;
+            if (statusEl) statusEl.textContent = status;
+            if (etaEl) etaEl.textContent = eta;
+          }
+        } catch(e) {}
+      }, 90);
+    }
+  }
+
+  document.addEventListener("pointerup", function(e){
+    const marker = e.target.closest && e.target.closest(".marker[data-point]");
+    if (!marker) return;
+
+    const pointId = marker.getAttribute("data-point");
+    const now = Date.now();
+
+    // Evita doppio evento ravvicinato pointer/click sullo stesso marker.
+    if (lastPoint === pointId && now - lastTapAt < 220) {
+      return;
+    }
+
+    lastPoint = pointId;
+    lastTapAt = now;
+
+    forceSelectPoint(pointId);
+  }, true);
+
+  document.addEventListener("click", function(e){
+    const marker = e.target.closest && e.target.closest(".marker[data-point]");
+    if (!marker) return;
+
+    const pointId = marker.getAttribute("data-point");
+    const now = Date.now();
+
+    if (lastPoint === pointId && now - lastTapAt < 220) {
+      return;
+    }
+
+    lastPoint = pointId;
+    lastTapAt = now;
+
+    forceSelectPoint(pointId);
+  }, true);
+})();
+</script>
+
 </body>
 </html>
