@@ -807,6 +807,142 @@
   }
 }
 
+
+/* AVVISAMI Azienda Demo - preview mobile dentro mappa */
+.mobile-map-preview{
+  display:none;
+}
+
+@media (max-width:900px){
+  .map{
+    position:relative;
+  }
+
+  .mobile-map-preview{
+    position:absolute;
+    left:10px;
+    right:10px;
+    bottom:10px;
+    z-index:30;
+    min-height:24%;
+    max-height:38%;
+    display:none;
+    grid-template-columns:86px 1fr 32px;
+    gap:10px;
+    align-items:center;
+    padding:10px;
+    border-radius:20px;
+    background:rgba(15,23,42,.88);
+    color:#ffffff;
+    border:1px solid rgba(255,255,255,.18);
+    box-shadow:0 18px 42px rgba(0,0,0,.38);
+    backdrop-filter:blur(14px);
+    -webkit-backdrop-filter:blur(14px);
+  }
+
+  .mobile-map-preview.show{
+    display:grid;
+  }
+
+  .mobile-map-preview-img{
+    width:86px;
+    height:74px;
+    border-radius:15px;
+    background:
+      linear-gradient(135deg,rgba(255,179,71,.32),rgba(56,189,248,.20)),
+      linear-gradient(135deg,#1f2937,#0f172a);
+    background-size:cover;
+    background-position:center center;
+    background-repeat:no-repeat;
+    border:1px solid rgba(255,255,255,.16);
+    flex:0 0 auto;
+  }
+
+  .mobile-map-preview-content{
+    min-width:0;
+    display:grid;
+    gap:4px;
+  }
+
+  .mobile-map-preview-kicker{
+    color:#ffb347;
+    font-size:.66rem;
+    font-weight:950;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+  }
+
+  .mobile-map-preview-title{
+    font-size:.92rem;
+    font-weight:950;
+    line-height:1.1;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+
+  .mobile-map-preview-status{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    color:#d1d5db;
+    font-size:.74rem;
+    line-height:1.2;
+  }
+
+  .mobile-map-preview-dot{
+    width:9px;
+    height:9px;
+    border-radius:999px;
+    background:#22c55e;
+    box-shadow:0 0 0 4px rgba(34,197,94,.18);
+    flex:0 0 auto;
+  }
+
+  .mobile-map-preview-eta{
+    color:#cbd5e1;
+    font-size:.72rem;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+
+  .mobile-map-preview-close{
+    width:32px;
+    height:32px;
+    border:none;
+    border-radius:999px;
+    background:rgba(255,255,255,.12);
+    color:#ffffff;
+    font-size:1.05rem;
+    font-weight:900;
+    cursor:pointer;
+    display:grid;
+    place-items:center;
+  }
+
+  .mobile-map-preview.status-new .mobile-map-preview-dot{
+    background:#facc15;
+    box-shadow:0 0 0 4px rgba(250,204,21,.18);
+  }
+
+  .mobile-map-preview.status-assigned .mobile-map-preview-dot{
+    background:#38bdf8;
+    box-shadow:0 0 0 4px rgba(56,189,248,.18);
+  }
+
+  .mobile-map-preview.status-progress .mobile-map-preview-dot{
+    background:#a855f7;
+    box-shadow:0 0 0 4px rgba(168,85,247,.18);
+  }
+
+  .mobile-map-preview.status-done .mobile-map-preview-dot,
+  .mobile-map-preview.status-idle .mobile-map-preview-dot{
+    background:#22c55e;
+    box-shadow:0 0 0 4px rgba(34,197,94,.18);
+  }
+}
+
 </style>
 </head>
 
@@ -1527,6 +1663,139 @@
   });
 
   setInterval(updatePhotoOverlay, 1000);
+})();
+</script>
+
+
+<script>
+/* AVVISAMI Azienda Demo - preview mobile marker dentro mappa */
+(function(){
+  const mobilePointPhotos = {
+    ingresso: "/images/avvisami/azienda/avvisami-azienda-ingresso-principale.png?v=ingresso-1",
+    parcheggio: "/images/avvisami/azienda/avvisami-azienda-parcheggio.png?v=parcheggio-1",
+    magazzino: "/images/avvisami/azienda/avvisami-azienda-magazzino.png?v=magazzino-1",
+    attrezzatura: "/images/avvisami/azienda/avvisami-azienda-attrezzatura-muletto.png?v=attrezzatura-1",
+    carico: "/images/avvisami/azienda/avvisami-azienda-carico-scarico.png?v=carico-1",
+    tecnico: "/images/avvisami/azienda/avvisami-azienda-locale-tecnico.png?v=tecnico-1",
+    uffici: "/images/avvisami/azienda/avvisami-azienda-uffici.png?v=uffici-1",
+    servizi: "/images/avvisami/azienda/avvisami-azienda-servizi-igienici.png?v=servizi-1"
+  };
+
+  function isMobile(){
+    return window.matchMedia && window.matchMedia("(max-width:900px)").matches;
+  }
+
+  function statusText(s){
+    if (!s || s.state === "idle") return "Nessuna segnalazione";
+    if (s.state === "new") return "Già segnalato";
+    if (s.state === "assigned") return "Preso in carico";
+    if (s.state === "progress") return "In lavorazione";
+    if (s.state === "done") return "Completato";
+    return s.label || "Stato aggiornato";
+  }
+
+  function ensureMobilePreview(){
+    const map = document.getElementById("map");
+    if (!map) return null;
+
+    let box = document.getElementById("mobileMapPreview");
+    if (box) return box;
+
+    box = document.createElement("div");
+    box.id = "mobileMapPreview";
+    box.className = "mobile-map-preview";
+    box.innerHTML = `
+      <div class="mobile-map-preview-img" id="mobileMapPreviewImg"></div>
+      <div class="mobile-map-preview-content">
+        <div class="mobile-map-preview-kicker">Punto QR</div>
+        <div class="mobile-map-preview-title" id="mobileMapPreviewTitle">Punto selezionato</div>
+        <div class="mobile-map-preview-status">
+          <span class="mobile-map-preview-dot"></span>
+          <span id="mobileMapPreviewStatus">Nessuna segnalazione</span>
+        </div>
+        <div class="mobile-map-preview-eta" id="mobileMapPreviewEta">Intervento previsto: —</div>
+      </div>
+      <button type="button" class="mobile-map-preview-close" id="mobileMapPreviewClose" aria-label="Chiudi">×</button>
+    `;
+
+    map.appendChild(box);
+
+    box.querySelector("#mobileMapPreviewClose").addEventListener("click", function(e){
+      e.stopPropagation();
+      box.classList.remove("show");
+    });
+
+    return box;
+  }
+
+  function showMobilePreview(pointId){
+    if (!isMobile()) return;
+
+    const box = ensureMobilePreview();
+    if (!box) return;
+
+    const p = typeof points !== "undefined" ? points[pointId] : null;
+    if (!p) return;
+
+    const s = typeof getStatus === "function"
+      ? getStatus(pointId)
+      : { state:"idle", eta:"Non impostato" };
+
+    const state = (s && s.state) || "idle";
+    const img = mobilePointPhotos[pointId] || "";
+
+    box.className = "mobile-map-preview show status-" + state;
+
+    const imgEl = box.querySelector("#mobileMapPreviewImg");
+    imgEl.style.backgroundImage = img ? "url('" + img + "')" : "";
+
+    box.querySelector("#mobileMapPreviewTitle").textContent = p.title || "Punto QR";
+    box.querySelector("#mobileMapPreviewStatus").textContent = statusText(s);
+
+    let eta = "Intervento previsto: —";
+    if (s && s.eta && s.eta !== "Non impostato") {
+      eta = "Intervento previsto: " + s.eta;
+    }
+
+    if (s && s.reason && state !== "idle" && state !== "done") {
+      eta = "Problema: " + s.reason + (s.eta && s.eta !== "Non impostato" ? " · " + s.eta : "");
+    }
+
+    box.querySelector("#mobileMapPreviewEta").textContent = eta;
+  }
+
+  document.addEventListener("click", function(e){
+    const marker = e.target.closest(".marker[data-point]");
+    if (!marker) return;
+
+    const pointId = marker.getAttribute("data-point");
+    setTimeout(function(){
+      showMobilePreview(pointId);
+    }, 90);
+  }, true);
+
+  document.addEventListener("click", function(e){
+    if (
+      e.target.closest("#sendBtn") ||
+      e.target.closest("#takeCharge") ||
+      e.target.closest("[data-eta]") ||
+      e.target.closest("#completeReport") ||
+      e.target.closest("#rescanBtn") ||
+      e.target.closest("#differentIssueBtn") ||
+      e.target.closest("#sendInfoBtn")
+    ) {
+      setTimeout(function(){
+        if (typeof current !== "undefined") showMobilePreview(current);
+      }, 120);
+      setTimeout(function(){
+        if (typeof current !== "undefined") showMobilePreview(current);
+      }, 360);
+    }
+  }, true);
+
+  document.addEventListener("DOMContentLoaded", function(){
+    ensureMobilePreview();
+  });
 })();
 </script>
 
