@@ -176,6 +176,19 @@
         <label>Ora preferita per gli avvisi</label>
         <input id="timeInput" type="time" value="09:00">
 
+        <div class="conditional-box active" id="recurrenceBox">
+          <label>Ricorrenza della scadenza</label>
+          <select id="recurrenceMode" onchange="updateRecurrenceMode()">
+            <option value="none">Nessuna, una sola volta</option>
+            <option value="monthly">Mensile</option>
+            <option value="yearly">Annuale</option>
+            <option value="custom">Personalizzata / da definire</option>
+          </select>
+          <div class="hint-small" id="recurrenceHint">
+            Per abbonamenti mensili come AppleCare+, cloud, streaming o software mensili, scegli “Mensile”.
+          </div>
+        </div>
+
         <label>Piano avvisi consigliato</label>
         <div class="profiles" id="profiles"></div>
 
@@ -251,7 +264,7 @@ const otherSuggestions = {
   "Famiglia e documenti": ["Permesso di soggiorno","SPID","Carta nazionale servizi","Firma digitale personale","PEC personale","Patentino muletto","Patentino drone","Patentino nautico","Abbonamento mezzi pubblici","Mensa scolastica","Trasporto scolastico","Retta asilo","Retta scuola","Scadenza ISEE","Dichiarazione redditi","730 / modello redditi","Altro documento familiare"],
   "Salute": ["Rinnovo medico di base","Scelta / cambio medico di base","Pediatra","Tessera sanitaria","Rinnovo piano terapeutico","Rinnovo ricetta periodica","Farmaco da assumere","Farmaco da ricomprare","Integratori","Vaccinazioni","Richiamo vaccino","Analisi del sangue","Controllo pressione","Controllo glicemia","Pulizia denti","Cambio lenti a contatto","Controllo occhiali","Scadenza esenzione ticket","Altro promemoria salute"],
   "Casa": ["Manutenzione caldaia","Controllo fumi","Manutenzione condizionatore","Cambio filtri condizionatore","Cambio filtri acqua","Depuratore acqua","Estintori casa / box","Antifurto","Videosorveglianza","Affitto","Mutuo","Rata condominio","TARI","IMU","Canone RAI","Luce","Gas","Acqua","Internet fibra","Contratto energia","Contratto gas","Scadenza contratto locazione","Rinnovo contratto affitto","Altro promemoria casa"],
-  "Pagamenti": ["Rinnovo abbonamento","Disdetta abbonamento","Ultimo giorno utile per disdetta","Netflix / streaming","Spotify / musica","Amazon Prime","iCloud","Google Drive","Microsoft 365","Adobe","Canva","ChatGPT / servizi AI","Antivirus","VPN","Dominio web","Hosting","Server","Email professionale","PEC","Firma digitale","Palestra","Abbonamento telefono","SIM","eSIM","Rata finanziamento","Rata prestito","Carta di credito in scadenza","Bancomat in scadenza","Contratto manutenzione","Contratto consulenza","Altro pagamento ricorrente"]
+  "Pagamenti": ["Rinnovo abbonamento","Abbonamento mensile","AppleCare+","Disdetta abbonamento","Ultimo giorno utile per disdetta","Netflix / streaming","Spotify / musica","Amazon Prime","iCloud","Google Drive","Microsoft 365","Adobe","Canva","ChatGPT / servizi AI","Antivirus","VPN","Dominio web","Hosting","Server","Email professionale","PEC","Firma digitale","Palestra","Abbonamento telefono","SIM","eSIM","Rata finanziamento","Rata prestito","Carta di credito in scadenza","Bancomat in scadenza","Contratto manutenzione","Contratto consulenza","Altro pagamento ricorrente"]
 };
 
 const profiles = {
@@ -261,7 +274,8 @@ const profiles = {
   critical:{title:"Critica anticipata",text:"Per documenti e pratiche lente.",alerts:["180 giorni prima","90 giorni prima","60 giorni prima","30 giorni prima","15 giorni prima","7 giorni prima","3 giorni prima","1 giorno prima","giorno stesso"]},
   insistent:{title:"Insistente",text:"Per scadenze da non ignorare.",alerts:["30 giorni prima","15 giorni prima","7 giorni prima","3 giorni prima","2 giorni prima","1 giorno prima","giorno stesso","ogni ora dalle 8:00 alle 15:00 finché non confermi"]},
   notice:{title:"Con preavviso disdetta",text:"Per contratti e abbonamenti.",alerts:["90 giorni prima del rinnovo: verifica condizioni","60 giorni prima ultimo giorno utile","30 giorni prima","15 giorni prima","7 giorni prima","3 giorni prima","1 giorno prima","ultimo giorno utile per disdire"]},
-  tolerance:{title:"Con tolleranza",text:"Per scadenze con periodo successivo da verificare.",alerts:["30 giorni prima","15 giorni prima","7 giorni prima","3 giorni prima","1 giorno prima","giorno scadenza","1 giorno dopo","7 giorni dopo","14 giorni dopo","15 giorni dopo"]}
+  tolerance:{title:"Con tolleranza",text:"Per scadenze con periodo successivo da verificare.",alerts:["30 giorni prima","15 giorni prima","7 giorni prima","3 giorni prima","1 giorno prima","giorno scadenza","1 giorno dopo","7 giorni dopo","14 giorni dopo","15 giorni dopo"]},
+  monthly:{title:"Mensile leggero",text:"Per rinnovi mensili automatici.",alerts:["1 giorno prima","giorno stesso"]}
 };
 
 const suggestedProfile = {
@@ -269,7 +283,7 @@ const suggestedProfile = {
   "Patente":"critical","Carta identità":"critical","Passaporto":"critical","Tessera sanitaria":"standard","Certificato sportivo":"important",
   "Medicine":"insistent","Ricette":"important","Visite":"standard","Esami":"standard","Dentista":"soft","Oculista":"soft","Rinnovo medico di base":"critical",
   "Caldaia":"important","TARI / IMU":"standard","Condominio":"standard","Luce / gas / acqua":"standard","Internet":"soft","Assicurazione casa":"important",
-  "Abbonamenti":"soft","Disdetta abbonamento":"notice","Software":"standard","Dominio / hosting":"important","PEC / firma digitale":"critical","Rate / finanziamenti":"insistent","Carta di credito in scadenza":"important","Altro":"standard"
+  "Abbonamenti":"soft","Abbonamento mensile":"monthly","AppleCare+":"monthly","Disdetta abbonamento":"notice","Software":"standard","Dominio / hosting":"important","PEC / firma digitale":"critical","Rate / finanziamenti":"insistent","Carta di credito in scadenza":"important","Altro":"standard"
 };
 
 let qs = new URLSearchParams(location.search);
@@ -302,6 +316,20 @@ function selectProfile(k){ currentProfile=k; renderProfiles(); updatePreview(); 
 
 function applyPreset(p){
   nameInput.value = p === "Altro" ? "" : p;
+
+  if (typeof recurrenceMode !== "undefined") {
+    if (p === "AppleCare+" || p === "Abbonamento mensile") {
+      recurrenceMode.value = "monthly";
+      currentProfile = "monthly";
+    } else if (p === "Abbonamenti") {
+      recurrenceMode.value = "monthly";
+      currentProfile = "monthly";
+    } else if (recurrenceMode.value === "monthly" && currentProfile === "monthly") {
+      // lascia mensile solo se già scelto volontariamente
+    }
+    updateRecurrenceMode();
+  }
+
   updateConditionalBlocks();
   updatePreview();
 }
@@ -323,7 +351,29 @@ function applyOtherSuggestion(){
 
 function updateMedicineMode(){ updatePreview(); }
 
+function updateRecurrenceMode(){
+  const mode = recurrenceMode.value || "none";
+
+  if (mode === "monthly") {
+    currentProfile = "monthly";
+    recurrenceHint.innerHTML = "Rinnovo mensile: avvisi ridotti a 1 giorno prima e giorno stesso. Dopo il rinnovo verrà proposta/creata la scadenza del mese successivo.";
+    renderProfiles();
+  } else if (mode === "yearly") {
+    recurrenceHint.innerHTML = "Rinnovo annuale: utile per assicurazioni, domini, PEC, software annuali, documenti e contratti.";
+  } else if (mode === "custom") {
+    recurrenceHint.innerHTML = "Ricorrenza personalizzata: per ora viene salvata come impostazione da rifinire nella versione successiva.";
+  } else {
+    recurrenceHint.innerHTML = "Per abbonamenti mensili come AppleCare+, cloud, streaming o software mensili, scegli “Mensile”.";
+  }
+
+  updatePreview();
+}
+
 function updatePreview(){
+  if (typeof recurrenceMode !== "undefined" && recurrenceMode.value === "monthly" && currentPreset !== "Medicine") {
+    currentProfile = "monthly";
+  }
+
   if (currentPreset === "Medicine") {
     const medMode = medicineMode.value || "daily";
     const interval = medicineIntervalHours.value || "8";
@@ -370,7 +420,14 @@ function saveDeadline(){
     selectedAlerts = Array.from(document.querySelectorAll("#alertPreview .pill")).map(x => x.textContent);
   }
 
-  const item = {id:Date.now(),category:currentCategory,type:currentPreset,name,owner,date,time,profile:currentProfile,alerts:selectedAlerts,notes,status:"active",createdAt:new Date().toISOString(),extra};
+  const recurrence = (typeof recurrenceMode !== "undefined" ? recurrenceMode.value : "none") || "none";
+
+  if (recurrence === "monthly" && currentPreset !== "Medicine") {
+    selectedAlerts = profiles.monthly.alerts;
+    currentProfile = "monthly";
+  }
+
+  const item = {id:Date.now(),category:currentCategory,type:currentPreset,name,owner,date,time,profile:currentProfile,alerts:selectedAlerts,notes,status:"active",createdAt:new Date().toISOString(),recurrence,extra};
   deadlines.push(item);
   persist();
   resetForm(); renderList(); openMessage(item.id);
@@ -379,6 +436,7 @@ function saveDeadline(){
 function resetForm(){
   ownerInput.value=""; dateInput.value=""; timeInput.value="09:00"; notesInput.value="";
   medicineStartDate.value=""; medicineEndDate.value=""; medicineFirstTime.value="08:00"; medicineDailyTimes.value="";
+  updateRecurrenceMode();
   applyPreset(currentPreset);
 }
 
@@ -397,7 +455,7 @@ function renderList(){
     const days=daysUntil(d.date);
     return `<div class="deadline ${color(days)}" id="d-${d.id}">
       <h3>${esc(d.name)}</h3>
-      <small>${esc(d.category)} · ${esc(d.owner || "nessun riferimento")} · ${esc(label(days))}</small>
+      <small>${esc(d.category)} · ${esc(d.owner || "nessun riferimento")} · ${esc(label(days))}${d.recurrence && d.recurrence !== "none" ? " · " + esc(d.recurrence === "monthly" ? "mensile" : d.recurrence === "yearly" ? "annuale" : "ricorrente") : ""}</small>
       <div class="pills" style="margin-top:10px">${d.alerts.map(a=>`<span class="pill">${esc(a)}</span>`).join("")}</div>
       <div class="deadline-actions">
         <button class="mini later" onclick="openMessage(${d.id})">Apri messaggio</button>
@@ -420,6 +478,7 @@ function buildMessage(d){
   if (d.type === "Disdetta abbonamento") return `Ricordati di inviare la comunicazione di disdetta per ${d.name} entro la data indicata. Verifica se il servizio richiede email, PEC, raccomandata o procedura nell’area clienti.`;
   if (d.type === "Permesso parcheggio residenti") return `Il permesso parcheggio residenti sta per scadere. Verifica il rinnovo comunale, i documenti richiesti e il pagamento prima della scadenza.`;
   if (d.type === "Medicine") return `Promemoria farmaco: ${d.name}. Controlla orari, intervallo e conferma quando hai gestito l’assunzione o il promemoria.`;
+  if (d.recurrence === "monthly") return `Promemoria rinnovo mensile: ${d.name}. Questo avviso si ripete automaticamente ogni mese. Ti avviserò il giorno prima e il giorno stesso del rinnovo.`;
   if (d.name && d.name.indexOf("TEST") === 0) return `Questo è un messaggio TEST. Serve per verificare che l’avviso si apra nella pagina dedicata, sia leggibile completamente e mostri le azioni: Continua a ricordarmelo, Fatto, Modifica e Cancella definitivamente.`;
   return `Promemoria per ${d.name}. Controlla la scadenza e conferma quando hai completato.`;
 }
@@ -445,7 +504,44 @@ function deleteFromModal(){ if(!currentModalId) return; deadlines = deadlines.fi
 function closeModal(){ messageModal.style.display = "none"; currentModalId = null; }
 messageModal.addEventListener("click", function(e){ if(e.target === messageModal) closeModal(); });
 
-function completeDeadline(id){ deadlines=deadlines.map(d=>d.id===id?{...d,status:"completed",completedAt:new Date().toISOString()}:d); persist(); renderList(); }
+function completeDeadline(id){
+  const original = deadlines.find(d => d.id === id);
+  deadlines = deadlines.map(d=>d.id===id?{...d,status:"completed",completedAt:new Date().toISOString()}:d);
+
+  if (original && (original.recurrence === "monthly" || original.recurrence === "yearly")) {
+    const next = createNextRecurringDeadline(original);
+    if (next) deadlines.push(next);
+  }
+
+  persist();
+  renderList();
+}
+
+function createNextRecurringDeadline(d){
+  if (!d || !d.date) return null;
+  const nextDate = addRecurrenceDate(d.date, d.recurrence);
+  if (!nextDate) return null;
+
+  return {
+    ...d,
+    id: Date.now() + Math.floor(Math.random()*100000),
+    date: nextDate,
+    status: "active",
+    createdAt: new Date().toISOString(),
+    completedAt: null,
+    lastAction: "created_from_recurring",
+    notes: d.notes || ""
+  };
+}
+
+function addRecurrenceDate(dateStr, recurrence){
+  const d = new Date(dateStr + "T00:00:00");
+  if (isNaN(d.getTime())) return "";
+  if (recurrence === "monthly") d.setMonth(d.getMonth() + 1);
+  else if (recurrence === "yearly") d.setFullYear(d.getFullYear() + 1);
+  else return "";
+  return d.toISOString().slice(0,10);
+}
 function editDeadline(id){
   const d=deadlines.find(x=>x.id===id); if(!d)return;
   currentCategory=d.category; currentPreset=d.type; currentProfile=d.profile;
