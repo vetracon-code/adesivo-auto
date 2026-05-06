@@ -205,6 +205,9 @@
         <div class="actions">
           <button class="primary" onclick="saveDeadline()">Salva scadenza</button>
           <button class="secondary" onclick="resetForm()">Pulisci</button>
+          <button class="secondary" onclick="exportDeadlines()">Esporta backup</button>
+          <button class="secondary" onclick="document.getElementById('restoreFileInput').click()">Importa backup</button>
+          <input id="restoreFileInput" type="file" accept="application/json,.json" style="display:none" onchange="importDeadlinesFile(event)">
         </div>
       </div>
 
@@ -465,6 +468,106 @@ function renderList(){
       </div>
     </div>`;
   }).join("");
+}
+
+
+function exportDeadlines(){
+  const payload = {
+    app: "Contatto Veicolo",
+    module: "Le mie scadenze",
+    version: 1,
+    plate: plate || "",
+    exportedAt: new Date().toISOString(),
+    deadlines: deadlines
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const safePlate = plate || "scadenze";
+  a.href = url;
+  a.download = "backup-scadenze-" + safePlate + "-" + new Date().toISOString().slice(0,10) + ".json";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function importDeadlinesFile(event){
+  const file = event.target.files && event.target.files[0];
+  event.target.value = "";
+  if(!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(){
+    try {
+      const parsed = JSON.parse(String(reader.result || "{}"));
+      const imported = Array.isArray(parsed) ? parsed : parsed.deadlines;
+
+      if(!Array.isArray(imported)) {
+        alert("Backup non valido: elenco scadenze non trovato.");
+        return;
+      }
+
+      const valid = imported
+        .filter(x => x && x.name && x.date)
+        .map(x => ({
+          ...x,
+          id: Date.now() + Math.floor(Math.random()*1000000),
+          status: x.status || "active"
+        }));
+
+      if(!valid.length) {
+        alert("Il backup non contiene scadenze valide.");
+        return;
+      }
+
+      const existingKeys = new Set(deadlines.map(normalizeDeadlineKey));
+      const duplicates = valid.filter(x => existingKeys.has(normalizeDeadlineKey(x)));
+
+      if(duplicates.length) {
+        const choice = prompt(
+          "Ho trovato " + duplicates.length + " possibili duplicati.\n\n" +
+          "Scrivi:\n" +
+          "1 = salva tutto sostituendo le scadenze attuali\n" +
+          "2 = aggiungi solo le nuove, saltando i duplicati\n" +
+          "3 = mantieni entrambi anche se duplicati\n" +
+          "4 = annulla importazione"
+        );
+
+        if(choice === "1") {
+          if(!confirm("Confermi di voler sostituire tutte le scadenze attuali con quelle del backup?")) return;
+          deadlines = valid;
+        } else if(choice === "2") {
+          deadlines = deadlines.concat(valid.filter(x => !existingKeys.has(normalizeDeadlineKey(x))));
+        } else if(choice === "3") {
+          deadlines = deadlines.concat(valid);
+        } else {
+          return;
+        }
+      } else {
+        if(!confirm("Nessun duplicato trovato. Importare " + valid.length + " scadenze?")) return;
+        deadlines = deadlines.concat(valid);
+      }
+
+      persist();
+      renderList();
+      alert("Backup importato correttamente.");
+    } catch(e) {
+      alert("Errore lettura backup: " + e.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function normalizeDeadlineKey(d){
+  return [
+    String(d.category || "").trim().toLowerCase(),
+    String(d.type || "").trim().toLowerCase(),
+    String(d.name || "").trim().toLowerCase(),
+    String(d.owner || "").trim().toLowerCase(),
+    String(d.date || "").trim()
+  ].join("|");
 }
 
 function createTestMessage(){
