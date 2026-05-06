@@ -3963,6 +3963,7 @@
           
         <div class="actions owner-main-actions">
           <button id="printStickerBtn" class="btn btn-primary" type="button">Stampa QR</button>
+          <button id="ownerDeadlinesBtnEY018SW" class="btn btn-primary" type="button" style="display:none;">Le mie scadenze</button>
           <button id="previewStickerBtn" class="btn btn-secondary" type="button">Prova segnalazione</button>
           <a id="renewBtn" class="btn btn-primary" href="#">Piani e rinnovo</a>
           <button id="forgetAccessBtn" class="btn btn-secondary" type="button" style="display:none !important; pointer-events:none !important;">Esci da questo dispositivo</button>
@@ -10123,6 +10124,78 @@ document.addEventListener('DOMContentLoaded', function () {
   window.addEventListener('load', hideMapDetailsUI);
   setTimeout(hideMapDetailsUI, 500);
   setTimeout(hideMapDetailsUI, 1500);
+})();
+</script>
+
+
+<script id="owner-deadlines-ey018sw-script">
+(function(){
+  function norm(v){
+    return String(v || '').trim().toUpperCase().replace(/\s+/g,'');
+  }
+
+  function qs(name){
+    try { return new URLSearchParams(location.search || '').get(name) || ''; }
+    catch(e){ return ''; }
+  }
+
+  function fromOwnerAppPath(){
+    var m = location.pathname.match(/\/owner-app\/([^\/]+)\/([^\/]+)/);
+    if (!m) return {};
+    return {
+      code: decodeURIComponent(m[1] || ''),
+      plate: decodeURIComponent(m[2] || '')
+    };
+  }
+
+  function findPlate(){
+    var fromPath = fromOwnerAppPath();
+    var candidates = [
+      qs('plate'),
+      fromPath.plate,
+      document.body ? (document.body.innerText.match(/EY\s*018\s*SW/i) || [''])[0] : ''
+    ];
+
+    for (var i = 0; i < candidates.length; i++) {
+      var v = norm(candidates[i]);
+      if (v) return v;
+    }
+    return '';
+  }
+
+  function findCode(){
+    var fromPath = fromOwnerAppPath();
+    return norm(qs('code') || fromPath.code || '');
+  }
+
+  function wire(){
+    var btn = document.getElementById('ownerDeadlinesBtnEY018SW');
+    if (!btn) return;
+
+    var plate = findPlate();
+
+    if (plate !== 'EY018SW') {
+      btn.style.display = 'none';
+      return;
+    }
+
+    btn.style.display = '';
+
+    btn.addEventListener('click', function(){
+      var code = findCode();
+      var url = '/owner-deadlines.html?plate=EY018SW';
+      if (code) {
+        url = '/owner-deadlines.html?code=' + encodeURIComponent(code) + '&plate=EY018SW';
+      }
+      window.location.href = url + '&v=from-owner-app';
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wire);
+  } else {
+    wire();
+  }
 })();
 </script>
 
