@@ -8166,6 +8166,7 @@ app.post('/api/test/deadline-push-ey018sw', async (req, res) => {
         plate: 'EY 018 SW',
         messageId: insertedMessageId,
         unreadCount,
+        url: ownerUrl,
         targetUrl: ownerUrl
       }
     });
