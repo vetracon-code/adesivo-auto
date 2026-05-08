@@ -6100,11 +6100,13 @@ function getOwnerParams(){
       list.innerHTML = ownerMessages.map(item => {
         const selected = selectedMessageIds.has(item.id);
         const isNew = !item.read_at;
+        const isDeadlineAlert = String(item.reason || '').trim().toUpperCase() === 'AVVISO SCADENZA';
         const mapLink = item.location_shared && item.maps_url
           ? `<a href="${escapeHtml(item.maps_url)}" target="_blank" rel="noopener noreferrer" style="color:#8ec5ff;font-weight:800;text-decoration:none;">Apri mappa</a>`
           : '';
         const preview = String(item.message_text || '')
           .replace(/^SEGNALAZIONE VEICOLO\n?/i, '')
+          .replace(/^AVVISO SCADENZA\n?/i, '')
           .replace(/^Targa:.*\n?/gim, '')
           .replace(/^Varie\n?/gim, '')
           .replace(/^Segnalazione:.*\n?/gim, '')
@@ -6112,29 +6114,41 @@ function getOwnerParams(){
           .replace(/^Posizione:.*\n?/gim, '')
           .replace(/^Mappa:.*\n?/gim, '')
           .trim()
-          .slice(0, 120);
+          .slice(0, isDeadlineAlert ? 220 : 120);
         const senderPhone = item.sender_phone
           ? `<a href="tel:${escapeHtml(String(item.sender_phone).replace(/[^+0-9]/g, ''))}" style="color:#8ec5ff;font-weight:800;text-decoration:none;">${escapeHtml(item.sender_phone)}</a>`
           : '';
         return `
-          <div data-message-id="${item.id || ''}" style="border-radius:8px;padding:14px 14px;background:${isNew ? 'rgba(103,176,255,.08)' : 'rgba(255,255,255,.03)'};border:1px solid ${isNew ? 'rgba(103,176,255,.20)' : 'rgba(255,255,255,.06)'};">
+          <div data-message-id="${item.id || ''}" style="border-radius:${isDeadlineAlert ? '18px' : '8px'};padding:${isDeadlineAlert ? '16px 16px' : '14px 14px'};background:${isDeadlineAlert ? 'linear-gradient(135deg,rgba(255,122,0,.18),rgba(255,234,0,.08))' : (isNew ? 'rgba(103,176,255,.08)' : 'rgba(255,255,255,.03)')};border:1px solid ${isDeadlineAlert ? 'rgba(255,174,0,.48)' : (isNew ? 'rgba(103,176,255,.20)' : 'rgba(255,255,255,.06)')};box-shadow:${isDeadlineAlert ? '0 12px 34px rgba(255,122,0,.12)' : 'none'};">
             <div style="display:flex;gap:12px;align-items:flex-start;">
               ${messagesSelectionMode ? `<input type="checkbox" ${selected ? 'checked' : ''} onchange="toggleMessageSelect(${item.id})" style="margin-top:4px;">` : ''}
               <div style="flex:1;min-width:0;">
                 <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
                   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                    <strong style="font-size:1rem;">${escapeHtml(item.reason || 'Segnalazione')}</strong>
+                    <strong style="font-size:${isDeadlineAlert ? '1.08rem' : '1rem'};color:${isDeadlineAlert ? '#ffb020' : 'inherit'};letter-spacing:${isDeadlineAlert ? '.03em' : '0'};">${escapeHtml(item.reason || 'Segnalazione')}</strong>
                     <span class="expiry-badge ${isNew ? 'warn' : 'ok'}" style="min-height:30px;padding:0 10px;font-size:.8rem;${isNew ? 'background:#fff4cc;border:1px solid #f2d27a;color:#8a5a00;' : 'background:#dcfce7;border:1px solid #86efac;color:#166534;'}">${isNew ? 'NUOVO' : 'LETTO'}</span>
+                    ${isDeadlineAlert ? `<span class="expiry-badge warn" style="min-height:30px;padding:0 10px;font-size:.78rem;background:#ffedd5;border:1px solid #fb923c;color:#9a3412;">SCADENZA</span>` : ''}
                   </div>
                   <div class="muted" style="font-size:.9rem;">${fmt(item.created_at)}</div>
                 </div>
-                <div class="muted" style="margin-top:10px;line-height:1.55;font-size:1rem;">${escapeHtml(preview || 'Nessun dettaglio disponibile')}</div>
+
+                <div class="muted" style="margin-top:10px;line-height:1.55;font-size:1rem;${isDeadlineAlert ? 'color:#fff7ed;' : ''}">${escapeHtml(preview || 'Nessun dettaglio disponibile')}</div>
                 <div class="muted" style="margin-top:8px;font-size:.9rem;display:flex;flex-wrap:wrap;gap:14px;align-items:center;">${mapLink ? mapLink : ''}${senderPhone ? senderPhone : ''}</div>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
-                  <button class="btn btn-secondary open-message-detail-btn" type="button" data-message-id="${item.id || ''}">Apri</button>
-                  ${!item.read_at ? `<button class="btn btn-secondary" type="button" onclick="markMessageRead(${item.id})">Segna come letto</button>` : ''}
-                  <button class="btn btn-secondary" type="button" onclick="deleteMessage(${item.id})">Elimina</button>
-                </div>
+
+                ${isDeadlineAlert ? `
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+                    <button class="btn btn-secondary" type="button" onclick="deadlineRemindAgain(${item.id})" style="background:#ffea00;color:#000;border-color:#ffea00;">Ricordamelo ancora</button>
+                    <button class="btn btn-secondary" type="button" onclick="deadlineMarkDone(${item.id})" style="background:#16a34a;color:#fff;border-color:#16a34a;">OK, fatto</button>
+                    <button class="btn btn-secondary" type="button" onclick="deadlineDeleteWithDoubleConfirm(${item.id})" style="background:#dc2626;color:#fff;border-color:#dc2626;">Cancella</button>
+                    <button class="btn btn-secondary open-message-detail-btn" type="button" data-message-id="${item.id || ''}">Apri dettaglio</button>
+                  </div>
+                ` : `
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+                    <button class="btn btn-secondary open-message-detail-btn" type="button" data-message-id="${item.id || ''}">Apri</button>
+                    ${!item.read_at ? `<button class="btn btn-secondary" type="button" onclick="markMessageRead(${item.id})">Segna come letto</button>` : ''}
+                    <button class="btn btn-secondary" type="button" onclick="deleteMessage(${item.id})">Elimina</button>
+                  </div>
+                `}
               </div>
             </div>
           </div>
@@ -6272,6 +6286,28 @@ function getOwnerParams(){
         window.__ownerMessagesRetryTimer = setTimeout(loadOwnerMessages, 1800);
       }
     }
+
+
+    window.deadlineRemindAgain = async function(id){
+      const ok = await markMessageRead(id);
+      if (ok) {
+        alert('Va bene: questo avviso resta nello storico e potrai creare/gestire il nuovo promemoria da “Le mie scadenze”.');
+      }
+    };
+
+    window.deadlineMarkDone = async function(id){
+      if (!confirm('Confermi di aver gestito questa scadenza?')) return;
+      const ok = await markMessageRead(id);
+      if (ok) {
+        alert('Scadenza segnata come gestita.');
+      }
+    };
+
+    window.deadlineDeleteWithDoubleConfirm = async function(id){
+      if (!confirm('Vuoi cancellare questo avviso scadenza?')) return;
+      if (!confirm('Conferma definitiva: l’avviso verrà eliminato dai messaggi ricevuti. Procedo?')) return;
+      await deleteMessage(id);
+    };
 
     window.markMessageRead = async function(id){
       const numericId = Number(id);

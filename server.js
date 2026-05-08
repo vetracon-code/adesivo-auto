@@ -8081,13 +8081,14 @@ async function startServer() {
     await initDb();
     
 
+
 // TEST PUSH SCADENZA - solo Audi A8 EY 018 SW
 app.post('/api/test/deadline-push-ey018sw', async (req, res) => {
   try {
     const cleanPlate = 'EY018SW';
 
     const vehicleResult = await pool.query(
-      `SELECT code, plate, brand, vehicle_model
+      `SELECT code, plate, brand, vehicle_model, color
        FROM sticker_codes
        WHERE REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $1
        ORDER BY activated_at DESC NULLS LAST, id DESC
@@ -8103,15 +8104,83 @@ app.post('/api/test/deadline-push-ey018sw', async (req, res) => {
     }
 
     const vehicle = vehicleResult.rows[0];
+    const cleanCode = String(vehicle.code || '').trim().toUpperCase();
+    const dbPlate = String(vehicle.plate || 'EY 018 SW').trim();
 
-    const subsResult = await pool.query(
-      `SELECT id, endpoint, p256dh, auth
-       FROM push_subscriptions
-       WHERE REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $1
-       ORDER BY id DESC`,
-      [cleanPlate]
-    ).catch(async () => {
-      return await pool.query(
+    const messageText = [
+      'AVVISO SCADENZA',
+      '',
+      'Promemoria test: una scadenza importante richiede attenzione.',
+      '',
+      'Comandi disponibili: Ricordamelo ancora, OK fatto, Cancella.'
+    ].join('\n');
+
+    const inserted = await pool.query(
+      `INSERT INTO contact_message_logs
+       (code, plate, brand, vehicle_model, color, reason, message_text, location_shared, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,false,NOW())
+       RETURNING id`,
+      [
+        cleanCode,
+        dbPlate,
+        vehicle.brand || 'Audi',
+        vehicle.vehicle_model || 'A8',
+        vehicle.color || null,
+        'AVVISO SCADENZA',
+        messageText
+      ]
+    );
+
+    const insertedMessageId = inserted.rows[0]?.id || null;
+
+    const unreadRes = await pool.query(
+      `SELECT COUNT(*)::int AS unread_count
+       FROM contact_message_logs
+       WHERE code = $1
+         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
+         AND read_at IS NULL
+         AND deleted_at IS NULL`,
+      [cleanCode, cleanPlate]
+    );
+
+    const unreadCount = unreadRes.rows[0]?.unread_count || 0;
+
+    const ownerUrl =
+      `/owner-app/${encodeURIComponent(cleanCode)}/${encodeURIComponent(cleanPlate)}` +
+      `?focus=messages${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}`;
+
+    const payload = JSON.stringify({
+      title: 'AVVISO SCADENZA',
+      body: 'Hai una nuova scadenza da controllare nella tua App veicolo.',
+      url: ownerUrl,
+      targetUrl: ownerUrl,
+      tag: 'deadline-alert-ey018sw-' + Date.now(),
+      type: 'deadline_alert',
+      unreadCount,
+      messageId: insertedMessageId,
+      badge: '/icons/icon-192.png',
+      icon: '/icons/icon-192.png',
+      requireInteraction: true,
+      data: {
+        type: 'deadline_alert',
+        plate: 'EY 018 SW',
+        messageId: insertedMessageId,
+        unreadCount,
+        targetUrl: ownerUrl
+      }
+    });
+
+    let subsResult;
+    try {
+      subsResult = await pool.query(
+        `SELECT id, endpoint, p256dh, auth
+         FROM push_subscriptions
+         WHERE REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $1
+         ORDER BY id DESC`,
+        [cleanPlate]
+      );
+    } catch (e) {
+      subsResult = await pool.query(
         `SELECT id, push_endpoint AS endpoint, push_p256dh AS p256dh, push_auth AS auth
          FROM owner_device_vehicle_roles
          WHERE REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $1
@@ -8119,34 +8188,7 @@ app.post('/api/test/deadline-push-ey018sw', async (req, res) => {
          ORDER BY is_primary DESC, id DESC`,
         [cleanPlate]
       );
-    });
-
-    if (!subsResult.rows.length) {
-      return res.status(404).json({
-        success: false,
-        error: 'Nessuna subscription push trovata per EY 018 SW.'
-      });
     }
-
-    const ownerUrl = `/owner-app/${encodeURIComponent(vehicle.code)}/${encodeURIComponent(String(vehicle.plate || cleanPlate).toUpperCase().replace(/\s+/g, ''))}`;
-
-    const payload = JSON.stringify({
-      title: 'AVVISO SCADENZA',
-      body: 'Promemoria test: la revisione o una scadenza importante richiede attenzione.',
-      url: ownerUrl,
-      targetUrl: ownerUrl,
-      tag: 'deadline-test-ey018sw-' + Date.now(),
-      type: 'deadline_alert',
-      badge: '/icons/icon-192.png',
-      icon: '/icons/icon-192.png',
-      requireInteraction: true,
-      data: {
-        type: 'deadline_alert',
-        plate: 'EY 018 SW',
-        titleColor: '#ff7a00',
-        targetUrl: ownerUrl
-      }
-    });
 
     let sent = 0;
     let failed = 0;
@@ -8154,12 +8196,19 @@ app.post('/api/test/deadline-push-ey018sw', async (req, res) => {
 
     for (const row of subsResult.rows) {
       try {
+        const endpoint = row.endpoint;
+        const p256dh = row.p256dh;
+        const auth = row.auth;
+
+        if (!endpoint || !p256dh || !auth) {
+          failed += 1;
+          errors.push({ id: row.id, error: 'Subscription incompleta.' });
+          continue;
+        }
+
         const subscription = {
-          endpoint: row.endpoint,
-          keys: {
-            p256dh: row.p256dh,
-            auth: row.auth
-          }
+          endpoint,
+          keys: { p256dh, auth }
         };
 
         await webpush.sendNotification(subscription, payload);
@@ -8177,6 +8226,9 @@ app.post('/api/test/deadline-push-ey018sw', async (req, res) => {
       success: true,
       title: 'AVVISO SCADENZA',
       plate: 'EY 018 SW',
+      inserted_message_id: insertedMessageId,
+      unread_count: unreadCount,
+      push_subscriptions_found: subsResult.rows.length,
       sent,
       failed,
       errors,
@@ -8190,6 +8242,7 @@ app.post('/api/test/deadline-push-ey018sw', async (req, res) => {
     });
   }
 });
+
 
 
 
