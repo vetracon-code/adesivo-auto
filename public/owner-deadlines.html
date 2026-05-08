@@ -877,12 +877,108 @@ function setScanStatus(message, active){
   el.classList.toggle("active", !!active && !!message);
 }
 
+
+function normalizeOcrText(text){
+  return String(text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[|]/g, "I")
+    .replace(/[’`]/g, "'")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function detectDocumentLocale(text){
+  const t = normalizeOcrText(text || "");
+
+  const italianSignals = [
+    "repubblica italiana",
+    "ministero",
+    "comune",
+    "codice fiscale",
+    "tessera sanitaria",
+    "patente di guida",
+    "carta d'identita",
+    "carta identita",
+    "motorizzazione",
+    "scadenza",
+    "rilascio",
+    "nato il",
+    "valida fino"
+  ];
+
+  const usSignals = [
+    "united states",
+    "department of",
+    "driver license",
+    "expiration date",
+    "date of birth",
+    "dob"
+  ];
+
+  const euSignals = [
+    "driving licence",
+    "date of expiry",
+    "passport",
+    "surname",
+    "given names"
+  ];
+
+  const itScore = italianSignals.filter(w => t.includes(normalizeOcrText(w))).length;
+  const usScore = usSignals.filter(w => t.includes(normalizeOcrText(w))).length;
+  const euScore = euSignals.filter(w => t.includes(normalizeOcrText(w))).length;
+
+  if (usScore > itScore && usScore >= 2) {
+    return {
+      country: "US",
+      language: "en-US",
+      dateOrder: "MDY",
+      label: "Documento probabilmente USA",
+      hint: "Formato data preferito: MM-GG-AAAA"
+    };
+  }
+
+  if (itScore >= 1) {
+    return {
+      country: "IT",
+      language: "it",
+      dateOrder: "DMY",
+      label: "Documento probabilmente italiano",
+      hint: "Formato data preferito: GG-MM-AAAA"
+    };
+  }
+
+  if (euScore >= 1) {
+    return {
+      country: "EU/UK",
+      language: "en-GB",
+      dateOrder: "DMY",
+      label: "Documento probabilmente europeo/inglese",
+      hint: "Formato data preferito: GG-MM-AAAA"
+    };
+  }
+
+  // Default del progetto: Italia
+  return {
+    country: "IT",
+    language: "it",
+    dateOrder: "DMY",
+    label: "Formato italiano predefinito",
+    hint: "Formato data preferito: GG-MM-AAAA"
+  };
+}
+
+function formatDateYMD(year, month, day){
+  return String(year).padStart(4,"0") + "-" + String(month).padStart(2,"0") + "-" + String(day).padStart(2,"0");
+}
+
+
 function guessDocumentFromText(text, filename){
   const raw = String((text || "") + " " + (filename || ""));
-  const t = raw.toLowerCase();
+  const t = normalizeOcrText(raw);
 
   function hasAny(words){
-    return words.some(w => t.includes(w.toLowerCase()));
+    return words.some(w => t.includes(normalizeOcrText(w)));
   }
 
   if(hasAny(["patente di guida", "driving licence", "4b", "4a", "4c"])){
@@ -925,43 +1021,129 @@ function guessDocumentFromText(text, filename){
 }
 
 function extractCandidateDates(text){
-  const s = String(text || "").replace(/\s+/g, " ");
+  const original = String(text || "");
+  const locale = detectDocumentLocale(original);
+
+  const s = original
+    .replace(/[Oo]/g, "0")
+    .replace(/[Il]/g, "1")
+    .replace(/[,;]/g, ".")
+    .replace(/\s+/g, " ");
+
   const found = [];
 
-  const patterns = [
-    /\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/g,
-    /\b(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})\b/g,
-    /\b(0?[1-9]|1[0-2])\s*[\/\-]\s*(\d{2})\b/g
-  ];
-
+  // Date numeriche: default Italia = GG-MM-AAAA / GG/MM/AAAA / GG.MM.AAAA.
+  const numericRe = /\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/g;
   let m;
 
-  // dd/mm/yyyy
-  while((m = patterns[0].exec(s))){
-    const day = parseInt(m[1],10);
-    const month = parseInt(m[2],10);
+  while((m = numericRe.exec(s))){
+    const a = parseInt(m[1],10);
+    const b = parseInt(m[2],10);
     let year = parseInt(m[3],10);
     if(year < 100) year += year >= 70 ? 1900 : 2000;
+
+    let day, month, ambiguous = false;
+
+    if(locale.dateOrder === "MDY"){
+      month = a;
+      day = b;
+      ambiguous = a <= 12 && b <= 12;
+    } else {
+      // Italia/Europa: GG-MM-AAAA
+      day = a;
+      month = b;
+      ambiguous = a <= 12 && b <= 12;
+    }
+
     const iso = normalizeDateParts(year, month, day);
-    if(iso) found.push({iso, raw:m[0], index:m.index});
+    if(iso) {
+      found.push({
+        iso,
+        raw:m[0],
+        index:m.index,
+        locale,
+        ambiguous,
+        reasonLocale: ambiguous
+          ? "Data numerica ambigua: interpretata secondo formato " + (locale.dateOrder === "MDY" ? "MM-GG-AAAA" : "GG-MM-AAAA") + "."
+          : "Data interpretata secondo formato " + (locale.dateOrder === "MDY" ? "MM-GG-AAAA" : "GG-MM-AAAA") + "."
+      });
+    }
   }
 
-  // yyyy/mm/dd
-  while((m = patterns[1].exec(s))){
+  // ISO tecnico: AAAA-MM-GG
+  const isoRe = /\b(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})\b/g;
+  while((m = isoRe.exec(s))){
     const year = parseInt(m[1],10);
     const month = parseInt(m[2],10);
     const day = parseInt(m[3],10);
     const iso = normalizeDateParts(year, month, day);
-    if(iso) found.push({iso, raw:m[0], index:m.index});
+    if(iso) {
+      found.push({
+        iso,
+        raw:m[0],
+        index:m.index,
+        locale,
+        reasonLocale: "Data in formato ISO AAAA-MM-GG."
+      });
+    }
   }
 
-  // MM/YY, utile per carte
-  while((m = patterns[2].exec(s))){
-    const month = parseInt(m[1],10);
-    const year = 2000 + parseInt(m[2],10);
-    const lastDay = new Date(year, month, 0).getDate();
-    const iso = normalizeDateParts(year, month, lastDay);
-    if(iso) found.push({iso, raw:m[0], index:m.index, monthYear:true});
+  // Date con mese scritto: 12 maggio 2028 / 12 MAG 2028
+  const months = {
+    "gen":1,"gennaio":1,"jan":1,"january":1,
+    "feb":2,"febbraio":2,"february":2,
+    "mar":3,"marzo":3,"march":3,
+    "apr":4,"aprile":4,"april":4,
+    "mag":5,"maggio":5,"may":5,
+    "giu":6,"giugno":6,"jun":6,"june":6,
+    "lug":7,"luglio":7,"jul":7,"july":7,
+    "ago":8,"agosto":8,"aug":8,"august":8,
+    "set":9,"sett":9,"settembre":9,"sep":9,"sept":9,"september":9,
+    "ott":10,"ottobre":10,"oct":10,"october":10,
+    "nov":11,"novembre":11,"november":11,
+    "dic":12,"dicembre":12,"dec":12,"december":12
+  };
+
+  const monthNameRe = /\b(\d{1,2})\s+([A-Za-zÀ-ÿ]{3,12})\s+(\d{2,4})\b/g;
+  while((m = monthNameRe.exec(s))){
+    const day = parseInt(m[1],10);
+    const monthName = normalizeOcrText(m[2]);
+    let year = parseInt(m[3],10);
+    if(year < 100) year += year >= 70 ? 1900 : 2000;
+    const month = months[monthName];
+    const iso = normalizeDateParts(year, month, day);
+    if(iso) {
+      found.push({
+        iso,
+        raw:m[0],
+        index:m.index,
+        locale,
+        reasonLocale: "Data con mese scritto interpretata in formato giorno-mese-anno."
+      });
+    }
+  }
+
+  // MM/AA solo se sembra una carta di pagamento.
+  const normalized = normalizeOcrText(original);
+  const likelyCard = /valid|thru|visa|mastercard|credit|debit|carta/.test(normalized);
+  if(likelyCard){
+    const monthYearRe = /\b(0?[1-9]|1[0-2])\s*[\/\-]\s*(\d{2})\b/g;
+    while((m = monthYearRe.exec(s))){
+      const month = parseInt(m[1],10);
+      const year = 2000 + parseInt(m[2],10);
+      const lastDay = new Date(year, month, 0).getDate();
+      const iso = normalizeDateParts(year, month, lastDay);
+      if(iso) {
+        found.push({
+          iso,
+          raw:m[0],
+          index:m.index,
+          monthYear:true,
+          locale,
+          reasonLocale: "Formato mese/anno interpretato come scadenza carta a fine mese."
+        });
+      }
+    }
   }
 
   const byIso = new Map();
@@ -978,10 +1160,11 @@ function normalizeDateParts(year, month, day){
   if(month < 1 || month > 12) return "";
   if(day < 1 || day > 31) return "";
 
-  const d = new Date(year, month - 1, day);
+  const d = new Date(year, month - 1, day, 12, 0, 0);
   if(d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return "";
 
-  return d.toISOString().slice(0,10);
+  // Non usare toISOString qui: con il fuso orario può scalare al giorno precedente.
+  return formatDateYMD(year, month, day);
 }
 
 function rankCandidateDates(dates, fullText, guessed){
@@ -1003,6 +1186,10 @@ function rankCandidateDates(dates, fullText, guessed){
     } else {
       score -= 10;
       reason = "Data passata: potrebbe essere rilascio, decorrenza o nascita.";
+    }
+
+    if(d.reasonLocale){
+      reason += " " + d.reasonLocale;
     }
 
     const context = t.slice(Math.max(0, d.index - 50), Math.min(t.length, d.index + 70));
