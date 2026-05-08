@@ -23,6 +23,44 @@
     .panel{background:white;border:1px solid #dbe3ee;border-radius:24px;padding:20px;box-shadow:0 14px 42px rgba(15,23,42,.07)}
     h2{margin:0 0 14px;font-size:22px}
     .cats{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:14px}
+    .form-body-collapsed{display:none}
+    .form-body-open{display:block}
+    .cat.cat-pulse{
+      animation:catPulse 780ms ease-in-out 1;
+      box-shadow:0 0 0 4px rgba(255,234,0,.38),0 10px 26px rgba(15,23,42,.16);
+      border-color:#ffea00;
+    }
+    @keyframes catPulse{
+      0%{transform:scale(1);background:#f8fafc;color:#0f172a}
+      45%{transform:scale(1.045);background:#ffea00;color:#000}
+      100%{transform:scale(1);background:#f8fafc;color:#0f172a}
+    }
+    .form-close-row{
+      display:flex;
+      justify-content:flex-end;
+      margin:-2px 0 12px;
+    }
+    .close-form-btn{
+      border:0;
+      border-radius:999px;
+      background:#e2e8f0;
+      color:#0f172a;
+      padding:9px 13px;
+      font-weight:900;
+      font-size:12px;
+      cursor:pointer;
+    }
+    .add-hint{
+      background:#fffbea;
+      border:1px solid #fde68a;
+      color:#5f4b00;
+      border-radius:16px;
+      padding:12px;
+      font-size:13px;
+      font-weight:800;
+      line-height:1.4;
+      margin-bottom:14px;
+    }
     button{font-family:inherit;cursor:pointer}
     .cat{border:1px solid #dbe3ee;background:#f8fafc;color:#0f172a;border-radius:16px;padding:11px 8px;font-weight:900}
     .cat.active{background:#0f172a;color:#ffea00;border-color:#0f172a}
@@ -105,7 +143,15 @@
       <div class="panel">
         <h2>Aggiungi scadenza</h2>
         <div class="cats" id="cats"></div>
-        <div class="presets" id="presets"></div>
+        <div class="add-hint" id="addDeadlineHint">
+          Scegli una categoria per aprire il modulo di inserimento della scadenza.
+        </div>
+
+        <div id="deadlineFormBody" class="form-body-collapsed">
+          <div class="form-close-row">
+            <button class="close-form-btn" type="button" onclick="closeDeadlineForm()">Chiudi</button>
+          </div>
+          <div class="presets" id="presets"></div>
 
         <label>Nome scadenza</label>
         <input id="nameInput" placeholder="Esempio: Assicurazione auto">
@@ -209,6 +255,7 @@
           <button class="secondary" onclick="document.getElementById('restoreFileInput').click()">Importa backup</button>
           <input id="restoreFileInput" type="file" accept="application/json,.json" style="display:none" onchange="importDeadlinesFile(event)">
         </div>
+        </div><!-- deadlineFormBody -->
       </div>
 
       <div class="panel">
@@ -296,6 +343,8 @@ let currentCategory = "Auto";
 let currentPreset = "Revisione";
 let currentProfile = suggestedProfile[currentPreset] || "standard";
 let currentModalId = null;
+let deadlineFormOpened = false;
+let categoryPulseTimer = null;
 let key = "ownerDeadlines_" + (plate || "default");
 let deadlines = JSON.parse(localStorage.getItem(key) || "[]");
 
@@ -307,6 +356,8 @@ function init(){
   }
   setupBackLink();
   renderCats(); renderPresets(); renderProfiles(); applyPreset(currentPreset); renderList();
+  closeDeadlineForm();
+  setupCategoryScrollPulse();
 }
 
 
@@ -333,8 +384,99 @@ function setupBackLink(){
   };
 }
 
-function renderCats(){ cats.innerHTML = Object.keys(categories).map(c => `<button class="cat ${c===currentCategory?'active':''}" onclick="selectCat('${esc(c)}')">${esc(c)}</button>`).join(""); }
-function selectCat(c){ currentCategory=c; currentPreset=categories[c][0]; currentProfile=suggestedProfile[currentPreset]||"standard"; renderCats(); renderPresets(); renderProfiles(); applyPreset(currentPreset); }
+function renderCats(){
+  cats.innerHTML = Object.keys(categories).map(c => `<button class="cat ${c===currentCategory && deadlineFormOpened ? 'active':''}" onclick="selectCat('${esc(c)}')">${esc(c)}</button>`).join("");
+}
+function selectCat(c){
+  openDeadlineForm();
+  currentCategory=c;
+  currentPreset=categories[c][0];
+  currentProfile=suggestedProfile[currentPreset]||"standard";
+  renderCats();
+  renderPresets();
+  renderProfiles();
+  applyPreset(currentPreset);
+}
+
+function openDeadlineForm(){
+  deadlineFormOpened = true;
+  const body = document.getElementById("deadlineFormBody");
+  const hint = document.getElementById("addDeadlineHint");
+  if(body){
+    body.classList.remove("form-body-collapsed");
+    body.classList.add("form-body-open");
+  }
+  if(hint) hint.style.display = "none";
+  stopCategoryPulse();
+}
+
+function closeDeadlineForm(){
+  deadlineFormOpened = false;
+  const body = document.getElementById("deadlineFormBody");
+  const hint = document.getElementById("addDeadlineHint");
+  if(body){
+    body.classList.remove("form-body-open");
+    body.classList.add("form-body-collapsed");
+  }
+  if(hint) hint.style.display = "";
+  renderCats();
+}
+
+function startCategoryPulse(){
+  if(deadlineFormOpened) return;
+  stopCategoryPulse();
+
+  const buttons = Array.from(document.querySelectorAll("#cats .cat"));
+  if(!buttons.length) return;
+
+  let index = 0;
+  function pulseOne(){
+    buttons.forEach(b => b.classList.remove("cat-pulse"));
+    const btn = buttons[index % buttons.length];
+    if(btn){
+      btn.classList.add("cat-pulse");
+      setTimeout(() => btn.classList.remove("cat-pulse"), 760);
+    }
+    index++;
+  }
+
+  pulseOne();
+  categoryPulseTimer = setInterval(pulseOne, 900);
+
+  setTimeout(() => {
+    stopCategoryPulse();
+  }, 5400);
+}
+
+function stopCategoryPulse(){
+  if(categoryPulseTimer){
+    clearInterval(categoryPulseTimer);
+    categoryPulseTimer = null;
+  }
+  document.querySelectorAll("#cats .cat").forEach(b => b.classList.remove("cat-pulse"));
+}
+
+function setupCategoryScrollPulse(){
+  const target = document.getElementById("cats");
+  if(!target || !("IntersectionObserver" in window)) return;
+
+  let lastPulse = 0;
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if(entry.isIntersecting && entry.intersectionRatio > 0.55){
+        const now = Date.now();
+        if(now - lastPulse > 4500){
+          lastPulse = now;
+          startCategoryPulse();
+        }
+      }
+    });
+  }, { threshold:[0.55, 0.75] });
+
+  observer.observe(target);
+}
+
 function renderPresets(){ presets.innerHTML = categories[currentCategory].map(p => `<button class="preset ${p===currentPreset?'active':''}" onclick="selectPreset('${esc(p)}')"><strong>${esc(p)}</strong><span>${esc(currentCategory)}</span></button>`).join(""); }
 function selectPreset(p){ currentPreset=p; currentProfile=suggestedProfile[p]||"standard"; renderPresets(); renderProfiles(); applyPreset(p); }
 function renderProfiles(){ profiles.innerHTML = Object.entries(profilesData()).map(([k,p]) => `<button class="profile ${k===currentProfile?'active':''}" onclick="selectProfile('${k}')"><b>${esc(p.title)}</b><span>${esc(p.text)}</span></button>`).join(""); }
@@ -457,7 +599,10 @@ function saveDeadline(){
   const item = {id:Date.now(),category:currentCategory,type:currentPreset,name,owner,date,time,profile:currentProfile,alerts:selectedAlerts,notes,status:"active",createdAt:new Date().toISOString(),recurrence,extra};
   deadlines.push(item);
   persist();
-  resetForm(); renderList(); openMessage(item.id);
+  resetForm();
+  closeDeadlineForm();
+  renderList();
+  openMessage(item.id);
 }
 
 function resetForm(){
@@ -671,6 +816,7 @@ function addRecurrenceDate(dateStr, recurrence){
 }
 function editDeadline(id){
   const d=deadlines.find(x=>x.id===id); if(!d)return;
+  openDeadlineForm();
   currentCategory=d.category; currentPreset=d.type; currentProfile=d.profile;
   renderCats(); renderPresets(); renderProfiles();
   nameInput.value=d.name; ownerInput.value=d.owner||""; dateInput.value=d.date; timeInput.value=d.time||"09:00"; notesInput.value=d.notes||"";
