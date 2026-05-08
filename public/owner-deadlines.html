@@ -187,6 +187,39 @@
       font-size:14px;
       line-height:1.45;
     }
+    .scan-video,
+    .scan-captured-img{
+      display:none;
+      width:100%;
+      max-width:760px;
+      max-height:520px;
+      object-fit:contain;
+      border-radius:18px;
+      background:#000;
+      position:relative;
+      z-index:2;
+    }
+    .scan-video.active,
+    .scan-captured-img.active{
+      display:block;
+    }
+    .scan-placeholder.hidden{
+      display:none;
+    }
+    .scan-status{
+      display:none;
+      margin-top:12px;
+      background:#fffbea;
+      border:1px solid #fde68a;
+      color:#5f4b00;
+      border-radius:16px;
+      padding:12px;
+      font-size:13px;
+      font-weight:800;
+      line-height:1.45;
+    }
+    .scan-status.active{display:block}
+    .scan-canvas{display:none}
     .scan-actions{
       display:flex;
       flex-wrap:wrap;
@@ -319,19 +352,25 @@
         <div class="scan-corner bl"></div>
         <div class="scan-corner br"></div>
         <div class="scan-frame-inner">
-          <div>
+          <video id="scanVideo" class="scan-video" playsinline autoplay muted></video>
+          <img id="scanCapturedImg" class="scan-captured-img" alt="Documento acquisito">
+          <canvas id="scanCanvas" class="scan-canvas"></canvas>
+          <div id="scanPlaceholder" class="scan-placeholder">
             <strong>Posiziona qui il documento</strong>
             <span>Lascia margine attorno al documento. Evita riflessi, dita sopra le date e foto inclinate. Per carte e documenti piccoli, avvicina mantenendo tutto leggibile.</span>
           </div>
         </div>
       </div>
+      <div id="scanStatus" class="scan-status"></div>
 
       <div class="scan-actions">
-        <label class="scan-primary">
-          Carica o scatta foto
-          <input id="scanFileInput" type="file" accept="image/*,.pdf" capture="environment" style="display:none" onchange="handleScanFile(event)">
+        <button class="scan-primary" type="button" onclick="startCameraScan()">Avvia fotocamera</button>
+        <button class="scan-primary" type="button" onclick="captureCameraFrame()">Scatta foto e leggi</button>
+        <button class="scan-secondary" type="button" onclick="stopCameraScan()">Ferma camera</button>
+        <label class="scan-secondary">
+          Carica immagine
+          <input id="scanFileInput" type="file" accept="image/*" capture="environment" style="display:none" onchange="handleScanFile(event)">
         </label>
-        <button class="scan-secondary" type="button" onclick="simulateScanResults()">Simula lettura documento</button>
         <button class="scan-secondary" type="button" onclick="closeScanPanel()">Chiudi</button>
       </div>
 
@@ -601,21 +640,131 @@ function setupBackLink(){
 }
 
 
+
+let scanStream = null;
+let tesseractLoadingPromise = null;
+
 function openScanPanel(){
   const panel = document.getElementById("scanPanel");
   if(panel){
     panel.classList.add("active");
+    setScanStatus("Puoi avviare la fotocamera oppure caricare una foto già scattata.", false);
     setTimeout(() => panel.scrollIntoView({behavior:"smooth", block:"start"}), 80);
   }
 }
 
 function closeScanPanel(){
+  stopCameraScan();
+
   const panel = document.getElementById("scanPanel");
   const results = document.getElementById("scanResults");
   const grid = document.getElementById("scanResultGrid");
+  const img = document.getElementById("scanCapturedImg");
+  const video = document.getElementById("scanVideo");
+  const placeholder = document.getElementById("scanPlaceholder");
+
   if(panel) panel.classList.remove("active");
   if(results) results.classList.remove("active");
   if(grid) grid.innerHTML = "";
+  if(img){
+    img.classList.remove("active");
+    img.removeAttribute("src");
+  }
+  if(video) video.classList.remove("active");
+  if(placeholder) placeholder.classList.remove("hidden");
+  setScanStatus("", false);
+}
+
+async function startCameraScan(){
+  try {
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      alert("Fotocamera non disponibile su questo browser. Prova da Safari/Chrome aggiornato oppure usa Carica immagine.");
+      return;
+    }
+
+    stopCameraScan();
+
+    setScanStatus("Apro la fotocamera. Se il browser chiede il permesso, consenti l’accesso.", true);
+
+    const constraints = {
+      audio: false,
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      }
+    };
+
+    scanStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+    const video = document.getElementById("scanVideo");
+    const img = document.getElementById("scanCapturedImg");
+    const placeholder = document.getElementById("scanPlaceholder");
+
+    if(img){
+      img.classList.remove("active");
+      img.removeAttribute("src");
+    }
+    if(placeholder) placeholder.classList.add("hidden");
+
+    video.srcObject = scanStream;
+    video.classList.add("active");
+
+    setScanStatus("Fotocamera attiva. Inquadra bene il documento intero, poi premi “Scatta foto e leggi”.", true);
+  } catch(err) {
+    console.error(err);
+    setScanStatus("Non riesco ad attivare la fotocamera. Controlla i permessi del browser oppure usa “Carica immagine”.", true);
+    alert("Fotocamera non attivata: " + (err && err.message ? err.message : err));
+  }
+}
+
+function stopCameraScan(){
+  try {
+    if(scanStream){
+      scanStream.getTracks().forEach(t => t.stop());
+      scanStream = null;
+    }
+  } catch(e) {}
+
+  const video = document.getElementById("scanVideo");
+  if(video){
+    video.pause();
+    video.srcObject = null;
+    video.classList.remove("active");
+  }
+}
+
+async function captureCameraFrame(){
+  const video = document.getElementById("scanVideo");
+  const canvas = document.getElementById("scanCanvas");
+  const img = document.getElementById("scanCapturedImg");
+  const placeholder = document.getElementById("scanPlaceholder");
+
+  if(!video || !video.srcObject || !video.videoWidth){
+    alert("Prima avvia la fotocamera e inquadra il documento.");
+    return;
+  }
+
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+
+  canvas.width = w;
+  canvas.height = h;
+
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0, w, h);
+
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+
+  if(img){
+    img.src = dataUrl;
+    img.classList.add("active");
+  }
+  if(placeholder) placeholder.classList.add("hidden");
+
+  stopCameraScan();
+
+  await processScanImage(dataUrl, "foto-scattata.jpg");
 }
 
 function handleScanFile(event){
@@ -623,84 +772,258 @@ function handleScanFile(event){
   event.target.value = "";
   if(!file) return;
 
-  // Prima versione test: non facciamo ancora OCR reale.
-  // Mostriamo una simulazione coerente per validare UX e flusso.
-  simulateScanResults(file.name || "documento");
-}
+  if(!String(file.type || "").startsWith("image/")){
+    alert("Per ora carica una immagine/foto. Il PDF lo collegheremo in una fase successiva.");
+    return;
+  }
 
-function simulateScanResults(filename){
-  const guessed = guessDocumentFromName(filename || "");
-  const today = new Date();
+  const reader = new FileReader();
+  reader.onload = async function(){
+    const dataUrl = String(reader.result || "");
+    const img = document.getElementById("scanCapturedImg");
+    const placeholder = document.getElementById("scanPlaceholder");
 
-  const d1 = new Date(today);
-  d1.setFullYear(d1.getFullYear() + 2);
+    stopCameraScan();
 
-  const d2 = new Date(today);
-  d2.setFullYear(d2.getFullYear() - 1);
-
-  const d3 = new Date(today);
-  d3.setFullYear(d3.getFullYear() + 1);
-  d3.setMonth(d3.getMonth() + 3);
-
-  const results = [
-    {
-      date: toInputDate(d1),
-      label: "Probabile scadenza",
-      reason: guessed.reason || "Data futura vicina a parole come scadenza, validità o rinnovo.",
-      recommended: true,
-      category: guessed.category,
-      type: guessed.type,
-      profile: guessed.profile
-    },
-    {
-      date: toInputDate(d2),
-      label: "Possibile emissione / rilascio",
-      reason: "Potrebbe essere una data di rilascio o decorrenza. Verifica prima di usarla.",
-      recommended: false,
-      category: guessed.category,
-      type: guessed.type,
-      profile: guessed.profile
-    },
-    {
-      date: toInputDate(d3),
-      label: "Altra data trovata",
-      reason: "Potrebbe essere una data secondaria presente nel documento.",
-      recommended: false,
-      category: guessed.category,
-      type: guessed.type,
-      profile: guessed.profile
+    if(img){
+      img.src = dataUrl;
+      img.classList.add("active");
     }
-  ];
+    if(placeholder) placeholder.classList.add("hidden");
 
-  showScanResults(results, guessed);
+    await processScanImage(dataUrl, file.name || "documento.jpg");
+  };
+  reader.readAsDataURL(file);
 }
 
-function guessDocumentFromName(filename){
-  const f = String(filename || "").toLowerCase();
+async function processScanImage(dataUrl, filename){
+  try {
+    const results = document.getElementById("scanResults");
+    const grid = document.getElementById("scanResultGrid");
+    if(results) results.classList.remove("active");
+    if(grid) grid.innerHTML = "";
 
-  if(f.includes("patente")){
-    return {category:"Famiglia e documenti", type:"Patente", profile:"critical", reason:"Documento possibile: patente. Campo scadenza spesso associato a 4b."};
+    setScanStatus("Sto leggendo il documento. Può richiedere alcuni secondi, soprattutto da telefono.", true);
+
+    await loadTesseract();
+
+    const workerResult = await Tesseract.recognize(
+      dataUrl,
+      "ita+eng",
+      {
+        logger: function(m){
+          if(m && m.status){
+            const pct = typeof m.progress === "number" ? Math.round(m.progress * 100) : "";
+            if(m.status === "recognizing text") {
+              setScanStatus("OCR in corso: " + (pct ? pct + "%" : "lettura testo..."), true);
+            }
+          }
+        }
+      }
+    );
+
+    const text = workerResult && workerResult.data && workerResult.data.text ? workerResult.data.text : "";
+    const guessed = guessDocumentFromText(text, filename);
+    const dates = extractCandidateDates(text);
+
+    if(!dates.length){
+      setScanStatus("Non ho trovato date leggibili. Prova a rifare la foto più vicina, ben illuminata e non inclinata.", true);
+      alert("Non ho trovato date leggibili. Puoi riprovare o inserire manualmente la scadenza.");
+      return;
+    }
+
+    const ranked = rankCandidateDates(dates, text, guessed).slice(0, 3);
+
+    showScanResults(ranked.map((d, index) => ({
+      date: d.iso,
+      label: index === 0 ? "Data consigliata" : "Altra data trovata",
+      reason: d.reason,
+      recommended: index === 0,
+      category: guessed.category,
+      type: guessed.type,
+      profile: guessed.profile
+    })), guessed);
+
+    setScanStatus("Lettura completata. Scegli la data corretta tra quelle proposte.", true);
+  } catch(err) {
+    console.error(err);
+    setScanStatus("Errore durante la lettura OCR. Puoi riprovare o caricare una foto più nitida.", true);
+    alert("Errore OCR: " + (err && err.message ? err.message : err));
   }
-  if(f.includes("carta") || f.includes("identita") || f.includes("identità")){
-    return {category:"Famiglia e documenti", type:"Carta identità", profile:"critical", reason:"Documento possibile: carta d’identità. Cerco data di scadenza/validità."};
+}
+
+function loadTesseract(){
+  if(window.Tesseract) return Promise.resolve();
+  if(tesseractLoadingPromise) return tesseractLoadingPromise;
+
+  setScanStatus("Carico il motore di lettura OCR...", true);
+
+  tesseractLoadingPromise = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("Impossibile caricare Tesseract.js"));
+    document.head.appendChild(s);
+  });
+
+  return tesseractLoadingPromise;
+}
+
+function setScanStatus(message, active){
+  const el = document.getElementById("scanStatus");
+  if(!el) return;
+  el.textContent = message || "";
+  el.classList.toggle("active", !!active && !!message);
+}
+
+function guessDocumentFromText(text, filename){
+  const raw = String((text || "") + " " + (filename || ""));
+  const t = raw.toLowerCase();
+
+  function hasAny(words){
+    return words.some(w => t.includes(w.toLowerCase()));
   }
-  if(f.includes("passaporto") || f.includes("passport")){
-    return {category:"Famiglia e documenti", type:"Passaporto", profile:"critical", reason:"Documento possibile: passaporto. Cerco date of expiry/data scadenza."};
+
+  if(hasAny(["patente di guida", "driving licence", "4b", "4a", "4c"])){
+    return {category:"Famiglia e documenti", type:"Patente", profile:"critical", reason:"Documento possibile: patente. Il campo 4b è spesso la scadenza."};
   }
-  if(f.includes("sanitaria") || f.includes("tessera")){
-    return {category:"Salute", type:"Tessera sanitaria", profile:"standard", reason:"Documento possibile: tessera sanitaria. Cerco scadenza validità."};
+
+  if(hasAny(["carta d'identità", "carta identita", "carta identità", "repubblica italiana", "date of expiry"])){
+    return {category:"Famiglia e documenti", type:"Carta identità", profile:"critical", reason:"Documento possibile: carta d’identità. Cerco data di scadenza o validità."};
   }
-  if(f.includes("revisione")){
-    return {category:"Auto", type:"Revisione", profile:"insistent", reason:"Documento possibile: revisione auto. Cerco ultima/prossima revisione."};
+
+  if(hasAny(["passaporto", "passport", "date of expiry", "authority"])){
+    return {category:"Famiglia e documenti", type:"Passaporto", profile:"critical", reason:"Documento possibile: passaporto. Cerco data di scadenza."};
   }
-  if(f.includes("assicurazione") || f.includes("polizza")){
-    return {category:"Auto", type:"Assicurazione", profile:"tolerance", reason:"Documento possibile: assicurazione. Cerco data scadenza/copertura."};
+
+  if(hasAny(["tessera sanitaria", "team", "codice fiscale", "servizio sanitario"])){
+    return {category:"Salute", type:"Tessera sanitaria", profile:"standard", reason:"Documento possibile: tessera sanitaria. Cerco la data di scadenza."};
   }
-  if(f.includes("applecare") || f.includes("apple")){
-    return {category:"Pagamenti", type:"AppleCare+", profile:"monthly", reason:"Servizio possibile: AppleCare+ mensile. Avvisi leggeri mensili."};
+
+  if(hasAny(["valid thru", "good thru", "valida fino", "mastercard", "visa"])){
+    return {category:"Pagamenti", type:"Carta di credito in scadenza", profile:"important", reason:"Documento possibile: carta di pagamento. Considero solo la scadenza, non numero carta o CVV."};
+  }
+
+  if(hasAny(["revisione", "esito regolare", "motorizzazione"])){
+    return {category:"Auto", type:"Revisione", profile:"insistent", reason:"Documento possibile: revisione auto. Verifica se la data è ultima revisione o prossima revisione."};
+  }
+
+  if(hasAny(["polizza", "rca", "assicurazione", "decorrenza", "copertura"])){
+    return {category:"Auto", type:"Assicurazione", profile:"tolerance", reason:"Documento possibile: assicurazione. Cerco scadenza o fine copertura."};
+  }
+
+  if(hasAny(["applecare", "rinnovo mensile"])){
+    return {category:"Pagamenti", type:"AppleCare+", profile:"monthly", reason:"Servizio possibile: AppleCare+ mensile."};
+  }
+
+  if(hasAny(["rinnovo", "disdetta", "preavviso", "abbonamento"])){
+    return {category:"Pagamenti", type:"Disdetta abbonamento", profile:"notice", reason:"Documento possibile: contratto/abbonamento. Verifica data rinnovo e preavviso."};
   }
 
   return {category:"Famiglia e documenti", type:"Altro", profile:"standard", reason:"Documento non riconosciuto con certezza. Scegli la data corretta."};
+}
+
+function extractCandidateDates(text){
+  const s = String(text || "").replace(/\s+/g, " ");
+  const found = [];
+
+  const patterns = [
+    /\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/g,
+    /\b(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})\b/g,
+    /\b(0?[1-9]|1[0-2])\s*[\/\-]\s*(\d{2})\b/g
+  ];
+
+  let m;
+
+  // dd/mm/yyyy
+  while((m = patterns[0].exec(s))){
+    const day = parseInt(m[1],10);
+    const month = parseInt(m[2],10);
+    let year = parseInt(m[3],10);
+    if(year < 100) year += year >= 70 ? 1900 : 2000;
+    const iso = normalizeDateParts(year, month, day);
+    if(iso) found.push({iso, raw:m[0], index:m.index});
+  }
+
+  // yyyy/mm/dd
+  while((m = patterns[1].exec(s))){
+    const year = parseInt(m[1],10);
+    const month = parseInt(m[2],10);
+    const day = parseInt(m[3],10);
+    const iso = normalizeDateParts(year, month, day);
+    if(iso) found.push({iso, raw:m[0], index:m.index});
+  }
+
+  // MM/YY, utile per carte
+  while((m = patterns[2].exec(s))){
+    const month = parseInt(m[1],10);
+    const year = 2000 + parseInt(m[2],10);
+    const lastDay = new Date(year, month, 0).getDate();
+    const iso = normalizeDateParts(year, month, lastDay);
+    if(iso) found.push({iso, raw:m[0], index:m.index, monthYear:true});
+  }
+
+  const byIso = new Map();
+  found.forEach(d => {
+    if(!byIso.has(d.iso)) byIso.set(d.iso, d);
+  });
+
+  return Array.from(byIso.values());
+}
+
+function normalizeDateParts(year, month, day){
+  if(!year || !month || !day) return "";
+  if(year < 1900 || year > 2100) return "";
+  if(month < 1 || month > 12) return "";
+  if(day < 1 || day > 31) return "";
+
+  const d = new Date(year, month - 1, day);
+  if(d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return "";
+
+  return d.toISOString().slice(0,10);
+}
+
+function rankCandidateDates(dates, fullText, guessed){
+  const now = new Date();
+  now.setHours(0,0,0,0);
+
+  const t = String(fullText || "").toLowerCase();
+  const expiryWords = ["scadenza", "scade", "valid", "validità", "expiry", "thru", "4b", "rinnovo", "copertura", "prossima"];
+  const releaseWords = ["rilascio", "emissione", "decorrenza", "nascita", "birth", "born", "4a"];
+
+  return dates.map(d => {
+    const date = new Date(d.iso + "T00:00:00");
+    let score = 0;
+    let reason = "Data trovata nel documento.";
+
+    if(date >= now) {
+      score += 30;
+      reason = "Data futura: possibile scadenza.";
+    } else {
+      score -= 10;
+      reason = "Data passata: potrebbe essere rilascio, decorrenza o nascita.";
+    }
+
+    const context = t.slice(Math.max(0, d.index - 50), Math.min(t.length, d.index + 70));
+
+    if(expiryWords.some(w => context.includes(w))){
+      score += 50;
+      reason = "Vicino a parole come scadenza, validità, rinnovo o campo 4b.";
+    }
+
+    if(releaseWords.some(w => context.includes(w))){
+      score -= 25;
+      reason = "Vicino a parole come rilascio, decorrenza o nascita: verifica prima di usarla.";
+    }
+
+    if(d.monthYear && guessed && guessed.type === "Carta di credito in scadenza"){
+      score += 40;
+      reason = "Formato mese/anno tipico di carta di pagamento.";
+    }
+
+    return {...d, score, reason};
+  }).sort((a,b) => b.score - a.score);
 }
 
 function showScanResults(results, guessed){
@@ -708,7 +1031,7 @@ function showScanResults(results, guessed){
   const grid = document.getElementById("scanResultGrid");
   if(!box || !grid) return;
 
-  grid.innerHTML = results.map((r, i) => `
+  grid.innerHTML = results.map((r) => `
     <div class="scan-date-card ${r.recommended ? "recommended" : ""}">
       <strong>${formatDateIt(r.date)}</strong>
       <span>${esc(r.label)}<br>${esc(r.reason)}</span>
@@ -725,17 +1048,18 @@ function useScannedDate(date, category, type, profile){
   openDeadlineForm();
 
   currentCategory = category || "Famiglia e documenti";
-  currentPreset = type || "Altro";
+
+  if(categories[currentCategory] && categories[currentCategory].includes(type)){
+    currentPreset = type;
+  } else {
+    currentPreset = "Altro";
+  }
+
   currentProfile = profile || suggestedProfile[currentPreset] || "standard";
 
   renderCats();
   renderPresets();
   renderProfiles();
-
-  if(categories[currentCategory] && !categories[currentCategory].includes(currentPreset)){
-    currentPreset = "Altro";
-  }
-
   applyPreset(currentPreset);
 
   if(nameInput) nameInput.value = type && type !== "Altro" ? type : "Scadenza da documento";
