@@ -8079,7 +8079,121 @@ async function startServer() {
   try {
     validateRuntimeEnv();
     await initDb();
-    app.listen(PORT, () => {
+    
+
+// TEST PUSH SCADENZA - solo Audi A8 EY 018 SW
+app.post('/api/test/deadline-push-ey018sw', async (req, res) => {
+  try {
+    const cleanPlate = 'EY018SW';
+
+    const vehicleResult = await pool.query(
+      `SELECT code, plate, brand, vehicle_model
+       FROM sticker_codes
+       WHERE REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $1
+       ORDER BY activated_at DESC NULLS LAST, id DESC
+       LIMIT 1`,
+      [cleanPlate]
+    );
+
+    if (!vehicleResult.rows.length) {
+      return res.status(404).json({
+        success: false,
+        error: 'Veicolo EY 018 SW non trovato.'
+      });
+    }
+
+    const vehicle = vehicleResult.rows[0];
+
+    const subsResult = await pool.query(
+      `SELECT id, endpoint, p256dh, auth
+       FROM push_subscriptions
+       WHERE REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $1
+       ORDER BY id DESC`,
+      [cleanPlate]
+    ).catch(async () => {
+      return await pool.query(
+        `SELECT id, push_endpoint AS endpoint, push_p256dh AS p256dh, push_auth AS auth
+         FROM owner_device_vehicle_roles
+         WHERE REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $1
+           AND COALESCE(push_endpoint,'') <> ''
+         ORDER BY is_primary DESC, id DESC`,
+        [cleanPlate]
+      );
+    });
+
+    if (!subsResult.rows.length) {
+      return res.status(404).json({
+        success: false,
+        error: 'Nessuna subscription push trovata per EY 018 SW.'
+      });
+    }
+
+    const ownerUrl = `/owner-app/${encodeURIComponent(vehicle.code)}/${encodeURIComponent(String(vehicle.plate || cleanPlate).toUpperCase().replace(/\s+/g, ''))}`;
+
+    const payload = JSON.stringify({
+      title: 'AVVISO SCADENZA',
+      body: 'Promemoria test: la revisione o una scadenza importante richiede attenzione.',
+      url: ownerUrl,
+      targetUrl: ownerUrl,
+      tag: 'deadline-test-ey018sw-' + Date.now(),
+      type: 'deadline_alert',
+      badge: '/icons/icon-192.png',
+      icon: '/icons/icon-192.png',
+      requireInteraction: true,
+      data: {
+        type: 'deadline_alert',
+        plate: 'EY 018 SW',
+        titleColor: '#ff7a00',
+        targetUrl: ownerUrl
+      }
+    });
+
+    let sent = 0;
+    let failed = 0;
+    const errors = [];
+
+    for (const row of subsResult.rows) {
+      try {
+        const subscription = {
+          endpoint: row.endpoint,
+          keys: {
+            p256dh: row.p256dh,
+            auth: row.auth
+          }
+        };
+
+        await webpush.sendNotification(subscription, payload);
+        sent += 1;
+      } catch (err) {
+        failed += 1;
+        errors.push({
+          id: row.id,
+          error: err && err.message ? err.message : String(err)
+        });
+      }
+    }
+
+    return res.json({
+      success: true,
+      title: 'AVVISO SCADENZA',
+      plate: 'EY 018 SW',
+      sent,
+      failed,
+      errors,
+      targetUrl: ownerUrl
+    });
+  } catch (err) {
+    console.error('deadline push test error:', err);
+    return res.status(500).json({
+      success: false,
+      error: err && err.message ? err.message : String(err)
+    });
+  }
+});
+
+
+
+app.listen(PORT, () => {
       console.log(`Server attivo su ${BASE_URL}`);
     });
   } catch (err) {
