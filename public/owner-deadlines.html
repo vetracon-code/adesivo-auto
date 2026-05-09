@@ -512,6 +512,45 @@
     }
   </style>
 
+
+  <style id="add-deadline-title-pulse-style">
+    #addDeadlineTitle,
+    .add-deadline-title{
+      font-size:clamp(28px, 6vw, 46px) !important;
+      line-height:1.02 !important;
+      letter-spacing:-.045em !important;
+      font-weight:950 !important;
+      color:#0f172a !important;
+      margin-bottom:12px !important;
+    }
+
+    #addDeadlineTitle.add-title-pulse,
+    .add-deadline-title.add-title-pulse{
+      animation:addDeadlineTitlePulse 1.1s ease-in-out 4;
+    }
+
+    @keyframes addDeadlineTitlePulse{
+      0%,100%{
+        color:#0f172a;
+        text-shadow:none;
+        transform:scale(1);
+      }
+      45%{
+        color:#ff7a00;
+        text-shadow:0 0 18px rgba(255,122,0,.28);
+        transform:scale(1.025);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce){
+      #addDeadlineTitle.add-title-pulse,
+      .add-deadline-title.add-title-pulse{
+        animation:none;
+        color:#ff7a00 !important;
+      }
+    }
+  </style>
+
 </head>
 <body>
   <div class="topbar">
@@ -586,7 +625,7 @@
 
     <section class="grid">
       <div class="panel">
-        <h2>Aggiungi scadenza</h2>
+        <h2 id="addDeadlineTitle" class="add-deadline-title">Aggiungi scadenza</h2>
         <div class="cats" id="cats"></div>
         <div class="add-hint" id="addDeadlineHint">
           Scegli una categoria per aprire il modulo di inserimento della scadenza.
@@ -2337,6 +2376,66 @@ init();
     document.addEventListener('DOMContentLoaded', wireSoftKpiScroll);
   } else {
     wireSoftKpiScroll();
+  }
+})();
+</script>
+
+
+<script id="add-deadline-title-pulse-script">
+(function(){
+  function pulseAddDeadlineTitle(){
+    var title = document.getElementById('addDeadlineTitle') || document.querySelector('.add-deadline-title');
+    if(!title) return;
+
+    title.classList.remove('add-title-pulse');
+    void title.offsetWidth;
+    title.classList.add('add-title-pulse');
+
+    clearTimeout(window.__addDeadlineTitlePulseTimer);
+    window.__addDeadlineTitlePulseTimer = setTimeout(function(){
+      title.classList.remove('add-title-pulse');
+    }, 4700);
+  }
+
+  function setupAddDeadlineTitleObserver(){
+    var title = document.getElementById('addDeadlineTitle') || document.querySelector('.add-deadline-title');
+    if(!title) return;
+
+    var frame =
+      document.getElementById('deadlineFormBody') ||
+      title.closest('.panel') ||
+      title.parentElement;
+
+    if(!frame) return;
+
+    if(!('IntersectionObserver' in window)){
+      pulseAddDeadlineTitle();
+      return;
+    }
+
+    var lastPulse = 0;
+
+    var observer = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if(entry.isIntersecting && entry.intersectionRatio > 0.35){
+          var now = Date.now();
+          if(now - lastPulse > 4500){
+            lastPulse = now;
+            pulseAddDeadlineTitle();
+          }
+        }
+      });
+    }, {
+      threshold:[0.35, 0.55, 0.75]
+    });
+
+    observer.observe(frame);
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', setupAddDeadlineTitleObserver);
+  } else {
+    setupAddDeadlineTitleObserver();
   }
 })();
 </script>
