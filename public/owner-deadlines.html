@@ -653,7 +653,30 @@
             </div>
           </div>
 
-          <div class="inline-grid">
+          <div class="interval-wheel-box" id="medicineIntervalWheelBox">
+            <div class="interval-wheel-title">Ripeti ogni</div>
+            <div class="interval-wheel-grid">
+              <div>
+                <label>Unità</label>
+                <select id="medicineIntervalUnit" onchange="updateIntervalWheelUnit()">
+                  <option value="minutes" selected>Minuti</option>
+                  <option value="hours">Ore</option>
+                  <option value="days">Giorni</option>
+                  <option value="months">Mesi</option>
+                </select>
+              </div>
+
+              <div>
+                <label>Numero</label>
+                <div id="medicineIntervalWheel" class="interval-wheel-number" aria-label="Seleziona numero intervallo"></div>
+              </div>
+            </div>
+            <div class="interval-summary" id="medicineIntervalSummary">
+              Riceverai un avviso ogni 5 minuti.
+            </div>
+          </div>
+
+          <div class="inline-grid interval-legacy-hidden">
             <div>
               <label>Intervallo minuti</label>
               <select id="medicineIntervalMinutes" onchange="updateMedicineMode()">
@@ -827,6 +850,7 @@ function init(){
   }
   setupBackLink();
   renderCats(); renderPresets(); renderProfiles(); applyPreset(currentPreset); renderList();
+  buildIntervalWheel();
   syncDeadlinesToServer();
   closeDeadlineForm();
   setupCategoryScrollPulse();
@@ -1622,6 +1646,149 @@ function applyOtherSuggestion(){
   nameInput.value = otherSuggestionSelect.value;
 }
 
+
+let currentIntervalUnit = "minutes";
+let currentIntervalValue = 5;
+let intervalWheelScrollTimer = null;
+
+function intervalMaxForUnit(unit){
+  if(unit === "minutes") return 59;
+  if(unit === "hours") return 24;
+  if(unit === "days") return 31;
+  if(unit === "months") return 12;
+  return 59;
+}
+
+function intervalLabel(unit, value){
+  const n = Number(value || 1);
+  if(unit === "minutes") return n === 1 ? "1 minuto" : n + " minuti";
+  if(unit === "hours") return n === 1 ? "1 ora" : n + " ore";
+  if(unit === "days") return n === 1 ? "1 giorno" : n + " giorni";
+  if(unit === "months") return n === 1 ? "1 mese" : n + " mesi";
+  return n;
+}
+
+function buildIntervalWheel(){
+  const wheel = document.getElementById("medicineIntervalWheel");
+  const unitSelect = document.getElementById("medicineIntervalUnit");
+  if(!wheel || !unitSelect) return;
+
+  currentIntervalUnit = unitSelect.value || "minutes";
+  const max = intervalMaxForUnit(currentIntervalUnit);
+
+  if(currentIntervalValue > max) currentIntervalValue = max;
+  if(currentIntervalValue < 1) currentIntervalValue = 1;
+
+  wheel.innerHTML = Array.from({length:max}, (_,i)=>{
+    const n = i + 1;
+    return `<div class="interval-wheel-option ${n===Number(currentIntervalValue) ? "active" : ""}" data-value="${n}" onclick="selectIntervalWheelValue(${n}, true)">${n}</div>`;
+  }).join("");
+
+  setTimeout(() => {
+    selectIntervalWheelValue(currentIntervalValue, true);
+  }, 40);
+
+  wheel.onscroll = function(){
+    clearTimeout(intervalWheelScrollTimer);
+    intervalWheelScrollTimer = setTimeout(() => {
+      const options = Array.from(wheel.querySelectorAll(".interval-wheel-option"));
+      if(!options.length) return;
+
+      const wheelRect = wheel.getBoundingClientRect();
+      const center = wheelRect.top + wheelRect.height / 2;
+
+      let best = options[0];
+      let bestDistance = Infinity;
+
+      options.forEach(opt => {
+        const r = opt.getBoundingClientRect();
+        const c = r.top + r.height / 2;
+        const dist = Math.abs(c - center);
+        if(dist < bestDistance){
+          bestDistance = dist;
+          best = opt;
+        }
+      });
+
+      const value = Number(best.dataset.value || 1);
+      selectIntervalWheelValue(value, false);
+    }, 90);
+  };
+
+  updateIntervalSummaryAndLegacyFields();
+}
+
+function selectIntervalWheelValue(value, scrollToValue){
+  currentIntervalValue = Math.max(1, Number(value || 1));
+
+  const wheel = document.getElementById("medicineIntervalWheel");
+  if(wheel){
+    wheel.querySelectorAll(".interval-wheel-option").forEach(opt=>{
+      opt.classList.toggle("active", Number(opt.dataset.value) === Number(currentIntervalValue));
+    });
+
+    if(scrollToValue){
+      const active = wheel.querySelector('.interval-wheel-option[data-value="' + currentIntervalValue + '"]');
+      if(active){
+        active.scrollIntoView({block:"center", behavior:"smooth"});
+      }
+    }
+  }
+
+  updateIntervalSummaryAndLegacyFields();
+}
+
+function updateIntervalWheelUnit(){
+  const unitSelect = document.getElementById("medicineIntervalUnit");
+  currentIntervalUnit = unitSelect ? (unitSelect.value || "minutes") : "minutes";
+
+  if(currentIntervalUnit === "minutes") currentIntervalValue = Math.min(currentIntervalValue || 5, 59);
+  if(currentIntervalUnit === "hours") currentIntervalValue = Math.min(currentIntervalValue || 8, 24);
+  if(currentIntervalUnit === "days") currentIntervalValue = Math.min(currentIntervalValue || 1, 31);
+  if(currentIntervalUnit === "months") currentIntervalValue = Math.min(currentIntervalValue || 1, 12);
+
+  if(currentIntervalUnit === "hours" && currentIntervalValue < 1) currentIntervalValue = 8;
+  if(currentIntervalUnit === "minutes" && currentIntervalValue < 1) currentIntervalValue = 5;
+
+  buildIntervalWheel();
+  updateMedicineMode();
+}
+
+function updateIntervalSummaryAndLegacyFields(){
+  const summary = document.getElementById("medicineIntervalSummary");
+  if(summary){
+    summary.textContent = "Riceverai un avviso ogni " + intervalLabel(currentIntervalUnit, currentIntervalValue) + ".";
+  }
+
+  const minuteSelect = document.getElementById("medicineIntervalMinutes");
+  const hourSelect = document.getElementById("medicineIntervalHours");
+
+  if(currentIntervalUnit === "minutes" && minuteSelect){
+    let v = String(currentIntervalValue);
+    if(!Array.from(minuteSelect.options).some(o => o.value === v)){
+      const opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = v + " min";
+      minuteSelect.appendChild(opt);
+    }
+    minuteSelect.value = v;
+  }
+
+  if(currentIntervalUnit === "hours" && hourSelect){
+    let v = String(currentIntervalValue);
+    if(!Array.from(hourSelect.options).some(o => o.value === v)){
+      const opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = v + " ore";
+      hourSelect.appendChild(opt);
+    }
+    hourSelect.value = v;
+  }
+
+  updateMedicineMode();
+}
+
+
 function updateMedicineMode(){ updatePreview(); }
 
 function updateRecurrenceMode(){
@@ -1692,6 +1859,8 @@ function saveDeadline(){
       medicineEndDate: medicineEndDate.value || "",
       medicineFirstTime: medicineFirstTime.value || "",
       medicineIntervalHours: medicineIntervalHours.value || "",
+      medicineIntervalUnit: typeof currentIntervalUnit !== "undefined" ? currentIntervalUnit : "",
+      medicineIntervalValue: typeof currentIntervalValue !== "undefined" ? String(currentIntervalValue || "") : "",
       medicineIntervalMinutes: medicineIntervalMinutes ? (medicineIntervalMinutes.value || "") : "",
       medicineDurationMinutes: medicineDurationMinutes ? (medicineDurationMinutes.value || "") : ""
     };
@@ -1717,8 +1886,12 @@ function saveDeadline(){
 function resetForm(){
   ownerInput.value=""; dateInput.value=""; timeInput.value="09:00"; notesInput.value="";
   medicineStartDate.value=""; medicineEndDate.value=""; medicineFirstTime.value="08:00";
+  if (typeof currentIntervalUnit !== "undefined") currentIntervalUnit = "minutes";
+  if (typeof currentIntervalValue !== "undefined") currentIntervalValue = 5;
+  if (typeof medicineIntervalUnit !== "undefined") medicineIntervalUnit.value = "minutes";
   if (typeof medicineIntervalMinutes !== "undefined") medicineIntervalMinutes.value = "5";
   if (typeof medicineDurationMinutes !== "undefined") medicineDurationMinutes.value = "30";
+  try{ buildIntervalWheel(); }catch(e){}
   updateRecurrenceMode();
   applyPreset(currentPreset);
 }
