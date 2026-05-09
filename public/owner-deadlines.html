@@ -491,6 +491,27 @@
     }
   </style>
 
+
+  <style id="soft-kpi-scroll-style">
+    .kpi.soft-kpi-clickable{
+      cursor:pointer;
+      transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+
+    .kpi.soft-kpi-clickable:hover{
+      transform:translateY(-1px);
+      border-color:#ff7a00;
+      box-shadow:0 14px 34px rgba(15,23,42,.12);
+    }
+
+    .deadline.soft-kpi-highlight{
+      outline:3px solid rgba(255,122,0,.42);
+      box-shadow:0 0 0 6px rgba(255,122,0,.10),0 14px 34px rgba(15,23,42,.12);
+      transform:translateY(-1px);
+      transition:outline .25s ease, box-shadow .25s ease, transform .25s ease;
+    }
+  </style>
+
 </head>
 <body>
   <div class="topbar">
@@ -684,7 +705,7 @@
         </div><!-- deadlineFormBody -->
       </div>
 
-      <div class="panel">
+      <div class="panel" id="savedDeadlinesPanel">
         <h2>Scadenze salvate</h2>
         <div class="list" id="deadlineList"></div>
       </div>
@@ -1996,5 +2017,68 @@ function persist(){ localStorage.setItem(key, JSON.stringify(deadlines)); }
 function esc(v){ return String(v||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;"); }
 init();
 </script>
+
+<script id="soft-kpi-scroll-script">
+(function(){
+  function scrollToSavedDeadlines(){
+    var panel = document.getElementById('savedDeadlinesPanel');
+    var list = document.getElementById('deadlineList');
+
+    if (!panel || !list) return;
+
+    var y = panel.getBoundingClientRect().top + window.pageYOffset - 92;
+
+    window.scrollTo({
+      top: Math.max(0, y),
+      behavior: 'smooth'
+    });
+
+    setTimeout(function(){
+      var cards = Array.prototype.slice.call(list.querySelectorAll('.deadline'));
+
+      cards.forEach(function(card){
+        card.classList.add('soft-kpi-highlight');
+      });
+
+      setTimeout(function(){
+        cards.forEach(function(card){
+          card.classList.remove('soft-kpi-highlight');
+        });
+      }, 1800);
+    }, 380);
+  }
+
+  function wireSoftKpiScroll(){
+    var ids = ['kpiTotal', 'kpi7', 'kpi30', 'kpiExpired'];
+
+    ids.forEach(function(id){
+      var strong = document.getElementById(id);
+      if (!strong) return;
+
+      var card = strong.closest ? strong.closest('.kpi') : strong.parentElement;
+      if (!card) return;
+
+      card.classList.add('soft-kpi-clickable');
+      card.setAttribute('role', 'button');
+      card.setAttribute('tabindex', '0');
+
+      card.addEventListener('click', scrollToSavedDeadlines);
+      card.addEventListener('keydown', function(e){
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          scrollToSavedDeadlines();
+        }
+      });
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wireSoftKpiScroll);
+  } else {
+    wireSoftKpiScroll();
+  }
+})();
+</script>
+
 </body>
 </html>
