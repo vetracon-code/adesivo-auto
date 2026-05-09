@@ -551,6 +551,16 @@
     }
   </style>
 
+
+  <style id="preset-scroll-focus-style">
+    .deadline-input-focus{
+      outline:3px solid rgba(255,122,0,.38) !important;
+      box-shadow:0 0 0 7px rgba(255,122,0,.10),0 14px 34px rgba(15,23,42,.10) !important;
+      border-radius:18px !important;
+      transition:outline .22s ease, box-shadow .22s ease;
+    }
+  </style>
+
 </head>
 <body>
   <div class="topbar">
@@ -1643,8 +1653,46 @@ function setupCategoryScrollPulse(){
   observer.observe(target);
 }
 
+
+function scrollToDeadlineInputs(){
+  setTimeout(() => {
+    const preferred =
+      document.getElementById("deadlineName") ||
+      document.getElementById("deadlineDate") ||
+      document.getElementById("medicineMode") ||
+      document.getElementById("medicineIntervalWheelBox");
+
+    if(!preferred) return;
+
+    const targetBlock =
+      preferred.closest(".panel") ||
+      preferred.closest("#deadlineFormBody") ||
+      preferred.parentElement ||
+      preferred;
+
+    try {
+      const y = targetBlock.getBoundingClientRect().top + window.pageYOffset - 88;
+      window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+    } catch(e) {
+      try { targetBlock.scrollIntoView({ behavior:"smooth", block:"start" }); } catch(err) {}
+    }
+
+    try {
+      preferred.classList.add("deadline-input-focus");
+      setTimeout(() => preferred.classList.remove("deadline-input-focus"), 1800);
+    } catch(e) {}
+
+    try {
+      if(preferred.tagName !== "SELECT" && typeof preferred.focus === "function"){
+        setTimeout(() => preferred.focus({ preventScroll:true }), 500);
+      }
+    } catch(e) {}
+  }, 180);
+}
+
+
 function renderPresets(){ presets.innerHTML = categories[currentCategory].map(p => `<button class="preset ${p===currentPreset?'active':''}" onclick="selectPreset('${esc(p)}')"><strong>${esc(p)}</strong><span>${esc(currentCategory)}</span></button>`).join(""); }
-function selectPreset(p){ currentPreset=p; currentProfile=suggestedProfile[p]||"standard"; renderPresets(); renderProfiles(); applyPreset(p); }
+function selectPreset(p){ currentPreset=p; currentProfile=suggestedProfile[p]||"standard"; renderPresets(); renderProfiles(); applyPreset(p); scrollToDeadlineInputs(); }
 function renderProfiles(){ profiles.innerHTML = Object.entries(profilesData()).map(([k,p]) => `<button class="profile ${k===currentProfile?'active':''}" onclick="selectProfile('${k}')"><b>${esc(p.title)}</b><span>${esc(p.text)}</span></button>`).join(""); }
 function profilesData(){ return profiles; }
 function selectProfile(k){ currentProfile=k; renderProfiles(); updatePreview(); }
