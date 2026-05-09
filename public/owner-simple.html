@@ -6171,6 +6171,49 @@ function getOwnerParams(){
       await loadBlockedAttempts();
     }
 
+
+    function forceOpenMessageFromUrl(){
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const rawMessageId = params.get('messageId') || '';
+        const requestedMessageId = Number(rawMessageId || 0);
+
+        if (!requestedMessageId) return false;
+
+        const foundMessage = (ownerMessages || []).find(m => Number(m.id) === requestedMessageId);
+        if (!foundMessage) return false;
+
+        const target = document.getElementById('ownerMessagesSection') || document.getElementById('messagesList');
+
+        setTimeout(() => {
+          try {
+            if (target) {
+              target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
+            const card = document.querySelector('[data-message-id="' + requestedMessageId + '"]');
+            if (card) {
+              card.style.outline = '4px solid rgba(255,122,0,.48)';
+              card.style.boxShadow = '0 0 0 8px rgba(255,122,0,.14), 0 18px 44px rgba(15,23,42,.22)';
+              setTimeout(() => {
+                card.style.outline = '';
+                card.style.boxShadow = '';
+              }, 2800);
+            }
+
+            if (typeof window.openMessageDetail === 'function') {
+              window.openMessageDetail(requestedMessageId);
+            }
+          } catch(e) {}
+        }, 650);
+
+        return true;
+      } catch(e) {
+        return false;
+      }
+    }
+
+
     async function loadOwnerMessages(){
       try {
         const { code, plate } = getOwnerParams();
@@ -6208,6 +6251,10 @@ function getOwnerParams(){
         renderMessages();
 
         try {
+          forceOpenMessageFromUrl();
+        } catch(e) {}
+
+        try {
           const params = new URLSearchParams(window.location.search);
           const requestedMessageId = (() => {
             const rawMessageId = params.get('messageId') || '';
@@ -6218,14 +6265,19 @@ function getOwnerParams(){
             try {
               const openedKey = 'owner_message_opened_once_' + parsedMessageId;
 
-              // Rimuove subito messageId dall'URL: al refresh non deve riaprire lo stesso messaggio.
+              // Rimuove subito messageId dall'URL solo nei flussi normali.
+              // Per AVVISO SCADENZA lasciamo messageId disponibile per l'apertura forzata.
               const cleanUrl = new URL(window.location.href);
-              cleanUrl.searchParams.delete('messageId');
+              const isDeadlineAlertUrl = cleanUrl.searchParams.get('from') === 'deadline_alert';
 
-              const cleanSearch = cleanUrl.searchParams.toString();
-              const nextUrl = cleanUrl.pathname + (cleanSearch ? '?' + cleanSearch : '') + cleanUrl.hash;
+              if (!isDeadlineAlertUrl) {
+                cleanUrl.searchParams.delete('messageId');
 
-              window.history.replaceState({}, '', nextUrl);
+                const cleanSearch = cleanUrl.searchParams.toString();
+                const nextUrl = cleanUrl.pathname + (cleanSearch ? '?' + cleanSearch : '') + cleanUrl.hash;
+
+                window.history.replaceState({}, '', nextUrl);
+              }
 
               // Nella stessa sessione evita doppie aperture se qualche script richiama il blocco.
               if (sessionStorage.getItem(openedKey) === '1') return 0;

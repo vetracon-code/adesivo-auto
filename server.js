@@ -8147,7 +8147,7 @@ app.post('/api/test/deadline-push-ey018sw', async (req, res) => {
 
     const ownerUrl =
       `/owner-app/${encodeURIComponent(cleanCode)}/${encodeURIComponent(cleanPlate)}` +
-      `?focus=messages${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}`;
+      `?focus=messages&from=deadline_alert${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}`;
 
     const payload = JSON.stringify({
       title: 'AVVISO SCADENZA',
