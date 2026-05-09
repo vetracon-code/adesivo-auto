@@ -1657,37 +1657,53 @@ function setupCategoryScrollPulse(){
 function scrollToDeadlineInputs(){
   setTimeout(() => {
     const nameInput = document.getElementById("deadlineName");
-    const dateInput = document.getElementById("deadlineDate");
     const fallback = document.getElementById("deadlineFormBody");
+    const target = nameInput || fallback;
 
-    const target = nameInput || dateInput || fallback;
     if(!target) return;
 
-    // Porta "Nome scadenza" ben visibile nella parte alta dello schermo.
     try {
+      // Offset molto ridotto: Nome scadenza deve apparire subito in alto,
+      // pronto per la compilazione.
       const rect = target.getBoundingClientRect();
-      const y = rect.top + window.pageYOffset - 92;
+      const absoluteTop = rect.top + window.pageYOffset;
+      const topOffset = 22;
 
       window.scrollTo({
-        top: Math.max(0, y),
+        top: Math.max(0, absoluteTop - topOffset),
         behavior: "smooth"
       });
+
+      // Secondo micro-aggiustamento dopo l'animazione: su iPhone/Safari
+      // spesso il primo scroll viene "ammorbidito" e resta troppo alto/basso.
+      setTimeout(() => {
+        try {
+          const rect2 = target.getBoundingClientRect();
+          const absoluteTop2 = rect2.top + window.pageYOffset;
+
+          window.scrollTo({
+            top: Math.max(0, absoluteTop2 - topOffset),
+            behavior: "smooth"
+          });
+        } catch(e) {}
+      }, 520);
+
     } catch(e) {
-      try { target.scrollIntoView({ behavior:"smooth", block:"start" }); } catch(err) {}
+      try {
+        target.scrollIntoView({ behavior:"smooth", block:"start" });
+      } catch(err) {}
     }
 
-    // Evidenzia il campo corretto.
     try {
       target.classList.add("deadline-input-focus");
-      setTimeout(() => target.classList.remove("deadline-input-focus"), 2200);
+      setTimeout(() => target.classList.remove("deadline-input-focus"), 2400);
     } catch(e) {}
 
-    // Focus leggermente ritardato: su mobile evita scroll strani immediati.
     try {
       if(nameInput && typeof nameInput.focus === "function"){
         setTimeout(() => {
           nameInput.focus({ preventScroll:true });
-        }, 650);
+        }, 750);
       }
     } catch(e) {}
   }, 220);
