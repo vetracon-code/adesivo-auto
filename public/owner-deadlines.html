@@ -658,12 +658,14 @@
             <div class="interval-wheel-grid">
               <div>
                 <label>Unità</label>
-                <select id="medicineIntervalUnit" onchange="updateIntervalWheelUnit()">
-                  <option value="minutes" selected>Minuti</option>
-                  <option value="hours">Ore</option>
-                  <option value="days">Giorni</option>
-                  <option value="months">Mesi</option>
-                </select>
+                <div class="interval-unit-buttons" id="medicineIntervalUnitButtons">
+                  <button type="button" class="interval-unit-btn" data-unit="years" onclick="setIntervalUnit('years')">Anni</button>
+                  <button type="button" class="interval-unit-btn" data-unit="months" onclick="setIntervalUnit('months')">Mesi</button>
+                  <button type="button" class="interval-unit-btn" data-unit="days" onclick="setIntervalUnit('days')">Giorni</button>
+                  <button type="button" class="interval-unit-btn" data-unit="hours" onclick="setIntervalUnit('hours')">Ore</button>
+                  <button type="button" class="interval-unit-btn active" data-unit="minutes" onclick="setIntervalUnit('minutes')">Minuti</button>
+                </div>
+                <input id="medicineIntervalUnit" type="hidden" value="minutes">
               </div>
 
               <div>
@@ -1656,6 +1658,7 @@ function intervalMaxForUnit(unit){
   if(unit === "hours") return 24;
   if(unit === "days") return 31;
   if(unit === "months") return 12;
+  if(unit === "years") return 10;
   return 59;
 }
 
@@ -1665,15 +1668,16 @@ function intervalLabel(unit, value){
   if(unit === "hours") return n === 1 ? "1 ora" : n + " ore";
   if(unit === "days") return n === 1 ? "1 giorno" : n + " giorni";
   if(unit === "months") return n === 1 ? "1 mese" : n + " mesi";
+  if(unit === "years") return n === 1 ? "1 anno" : n + " anni";
   return n;
 }
 
 function buildIntervalWheel(){
   const wheel = document.getElementById("medicineIntervalWheel");
-  const unitSelect = document.getElementById("medicineIntervalUnit");
-  if(!wheel || !unitSelect) return;
+  const unitInput = document.getElementById("medicineIntervalUnit");
+  if(!wheel || !unitInput) return;
 
-  currentIntervalUnit = unitSelect.value || "minutes";
+  currentIntervalUnit = unitInput.value || "minutes";
   const max = intervalMaxForUnit(currentIntervalUnit);
 
   if(currentIntervalValue > max) currentIntervalValue = max;
@@ -1738,20 +1742,33 @@ function selectIntervalWheelValue(value, scrollToValue){
   updateIntervalSummaryAndLegacyFields();
 }
 
-function updateIntervalWheelUnit(){
-  const unitSelect = document.getElementById("medicineIntervalUnit");
-  currentIntervalUnit = unitSelect ? (unitSelect.value || "minutes") : "minutes";
+function setIntervalUnit(unit){
+  currentIntervalUnit = unit || "minutes";
+
+  const unitInput = document.getElementById("medicineIntervalUnit");
+  if(unitInput) unitInput.value = currentIntervalUnit;
+
+  document.querySelectorAll(".interval-unit-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.unit === currentIntervalUnit);
+  });
 
   if(currentIntervalUnit === "minutes") currentIntervalValue = Math.min(currentIntervalValue || 5, 59);
   if(currentIntervalUnit === "hours") currentIntervalValue = Math.min(currentIntervalValue || 8, 24);
   if(currentIntervalUnit === "days") currentIntervalValue = Math.min(currentIntervalValue || 1, 31);
   if(currentIntervalUnit === "months") currentIntervalValue = Math.min(currentIntervalValue || 1, 12);
+  if(currentIntervalUnit === "years") currentIntervalValue = Math.min(currentIntervalValue || 1, 10);
 
-  if(currentIntervalUnit === "hours" && currentIntervalValue < 1) currentIntervalValue = 8;
-  if(currentIntervalUnit === "minutes" && currentIntervalValue < 1) currentIntervalValue = 5;
+  if(currentIntervalValue < 1) {
+    currentIntervalValue = currentIntervalUnit === "minutes" ? 5 : 1;
+  }
 
   buildIntervalWheel();
   updateMedicineMode();
+}
+
+function updateIntervalWheelUnit(){
+  const unitInput = document.getElementById("medicineIntervalUnit");
+  setIntervalUnit(unitInput ? (unitInput.value || "minutes") : "minutes");
 }
 
 function updateIntervalSummaryAndLegacyFields(){
@@ -1783,6 +1800,13 @@ function updateIntervalSummaryAndLegacyFields(){
       hourSelect.appendChild(opt);
     }
     hourSelect.value = v;
+  }
+
+  // Compatibilità provvisoria:
+  // il motore server usa già medicineIntervalUnit/medicineIntervalValue,
+  // ma manteniamo minuti/ore valorizzati quando possibile.
+  if((currentIntervalUnit === "days" || currentIntervalUnit === "months" || currentIntervalUnit === "years") && minuteSelect){
+    minuteSelect.value = "5";
   }
 
   updateMedicineMode();
@@ -1889,6 +1913,7 @@ function resetForm(){
   if (typeof currentIntervalUnit !== "undefined") currentIntervalUnit = "minutes";
   if (typeof currentIntervalValue !== "undefined") currentIntervalValue = 5;
   if (typeof medicineIntervalUnit !== "undefined") medicineIntervalUnit.value = "minutes";
+  document.querySelectorAll(".interval-unit-btn").forEach(btn => btn.classList.toggle("active", btn.dataset.unit === "minutes"));
   if (typeof medicineIntervalMinutes !== "undefined") medicineIntervalMinutes.value = "5";
   if (typeof medicineDurationMinutes !== "undefined") medicineDurationMinutes.value = "30";
   try{ buildIntervalWheel(); }catch(e){}
