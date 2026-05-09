@@ -8247,6 +8247,439 @@ app.post('/api/test/deadline-push-ey018sw', async (req, res) => {
 
 
 
+
+
+// =====================================================
+// OWNER DEADLINES - SYNC + SCHEDULER PUSH
+// Prima versione: sincronizza le scadenze dal browser al server
+// e invia AVVISO SCADENZA su App principale quando un avviso è dovuto.
+// =====================================================
+
+async function ensureOwnerDeadlinesTables() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS owner_deadline_items (
+      id SERIAL PRIMARY KEY,
+      code TEXT,
+      plate TEXT,
+      plate_norm TEXT,
+      local_id TEXT,
+      payload JSONB NOT NULL,
+      status TEXT DEFAULT 'active',
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE (plate_norm, local_id)
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS owner_deadline_alert_sent (
+      id SERIAL PRIMARY KEY,
+      plate_norm TEXT NOT NULL,
+      local_id TEXT NOT NULL,
+      alert_key TEXT NOT NULL,
+      sent_at TIMESTAMP DEFAULT NOW(),
+      message_id INTEGER,
+      UNIQUE (plate_norm, local_id, alert_key)
+    )
+  `);
+
+  console.log('Tabelle owner_deadline_items / owner_deadline_alert_sent pronte');
+}
+
+function normalizePlateValue(v) {
+  return String(v || '').trim().toUpperCase().replace(/\s+/g, '');
+}
+
+function getRomeParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('it-IT', {
+    timeZone: 'Europe/Rome',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(date).reduce((acc, p) => {
+    acc[p.type] = p.value;
+    return acc;
+  }, {});
+
+  return {
+    y: Number(parts.year),
+    m: Number(parts.month),
+    d: Number(parts.day),
+    hh: Number(parts.hour),
+    mm: Number(parts.minute),
+    dateKey: `${parts.year}-${parts.month}-${parts.day}`,
+    minuteKey: `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`
+  };
+}
+
+function parseDateOnlyLocal(dateStr) {
+  const m = String(dateStr || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0);
+}
+
+function daysBetweenDateKeys(targetDateStr) {
+  const nowParts = getRomeParts(new Date());
+  const today = new Date(nowParts.y, nowParts.m - 1, nowParts.d, 12, 0, 0);
+  const target = parseDateOnlyLocal(targetDateStr);
+  if (!target) return null;
+  return Math.round((target - today) / 86400000);
+}
+
+function parseAlertDays(alertText) {
+  const t = String(alertText || '').toLowerCase();
+
+  if (t.includes('giorno stesso') || t.includes('giorno scadenza')) return 0;
+
+  const m = t.match(/(\d+)\s+giorn/);
+  if (m && t.includes('prima')) return Number(m[1]);
+
+  return null;
+}
+
+function shouldSendDeadlineAlert(payload, now = new Date()) {
+  if (!payload || payload.status === 'deleted' || payload.status === 'completed') return null;
+
+  const localId = String(payload.id || payload.local_id || '').trim();
+  if (!localId) return null;
+
+  const name = String(payload.name || 'Scadenza').trim();
+  const type = String(payload.type || '').trim();
+  const category = String(payload.category || '').trim();
+
+  // 1) FARMACI OGNI X MINUTI: test reale e rapido
+  if (
+    type === 'Medicine' &&
+    payload.extra &&
+    payload.extra.medicineMode === 'every_x_minutes'
+  ) {
+    const interval = Math.max(1, Number(payload.extra.medicineIntervalMinutes || 5));
+    const duration = Math.max(interval, Number(payload.extra.medicineTestDurationMinutes || 30));
+
+    const start = payload.createdAt ? new Date(payload.createdAt) : new Date();
+    if (Number.isNaN(start.getTime())) return null;
+
+    const elapsedMs = now.getTime() - start.getTime();
+    if (elapsedMs < interval * 60000) return null;
+    if (elapsedMs > duration * 60000) return null;
+
+    const slot = Math.floor(elapsedMs / (interval * 60000));
+    const alertKey = `medicine-minutes-${localId}-${interval}-${slot}`;
+
+    return {
+      alertKey,
+      title: 'AVVISO SCADENZA',
+      reason: 'AVVISO SCADENZA',
+      messageText:
+        'AVVISO SCADENZA\n\n' +
+        `Promemoria farmaco: ${name}.\n\n` +
+        `Programmazione: ogni ${interval} minuti per ${duration} minuti.\n\n` +
+        'Comandi disponibili: Ricordamelo ancora, OK fatto, Cancella.',
+      body: `Promemoria farmaco: ${name}.`
+    };
+  }
+
+  // 2) SCADENZE STANDARD: giorno stesso / X giorni prima
+  const alerts = Array.isArray(payload.alerts) ? payload.alerts : [];
+  const daysLeft = daysBetweenDateKeys(payload.date);
+  if (daysLeft === null) return null;
+
+  for (const a of alerts) {
+    const beforeDays = parseAlertDays(a);
+    if (beforeDays === null) continue;
+
+    if (daysLeft === beforeDays) {
+      const preferredTime = String(payload.time || '09:00');
+      const [hh, mm] = preferredTime.split(':').map(Number);
+      const nowParts = getRomeParts(now);
+
+      // invia dal minuto impostato in poi, una sola volta al giorno per quel tipo avviso
+      if (
+        Number.isFinite(hh) &&
+        Number.isFinite(mm) &&
+        (nowParts.hh < hh || (nowParts.hh === hh && nowParts.mm < mm))
+      ) {
+        continue;
+      }
+
+      const alertKey = `date-${localId}-${nowParts.dateKey}-${beforeDays}`;
+
+      return {
+        alertKey,
+        title: 'AVVISO SCADENZA',
+        reason: 'AVVISO SCADENZA',
+        messageText:
+          'AVVISO SCADENZA\n\n' +
+          `${name}\n\n` +
+          `Categoria: ${category || 'Scadenza'}\n` +
+          `Tipo: ${type || 'Promemoria'}\n` +
+          `Avviso programmato: ${a}\n\n` +
+          'Comandi disponibili: Ricordamelo ancora, OK fatto, Cancella.',
+        body: `${name}: ${a}.`
+      };
+    }
+  }
+
+  return null;
+}
+
+async function resolveVehicleByPlateNorm(plateNorm) {
+  const r = await pool.query(
+    `SELECT code, plate, brand, vehicle_model, color
+     FROM sticker_codes
+     WHERE REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $1
+     ORDER BY activated_at DESC NULLS LAST, id DESC
+     LIMIT 1`,
+    [plateNorm]
+  );
+
+  return r.rows[0] || null;
+}
+
+async function insertOwnerMessageAndPushDeadline({ vehicle, plateNorm, alert }) {
+  const cleanCode = String(vehicle.code || '').trim().toUpperCase();
+  const dbPlate = String(vehicle.plate || plateNorm).trim();
+
+  const inserted = await pool.query(
+    `INSERT INTO contact_message_logs
+     (code, plate, brand, vehicle_model, color, reason, message_text, location_shared, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,false,NOW())
+     RETURNING id`,
+    [
+      cleanCode,
+      dbPlate,
+      vehicle.brand || null,
+      vehicle.vehicle_model || null,
+      vehicle.color || null,
+      alert.reason || 'AVVISO SCADENZA',
+      alert.messageText
+    ]
+  );
+
+  const insertedMessageId = inserted.rows[0]?.id || null;
+
+  const unreadRes = await pool.query(
+    `SELECT COUNT(*)::int AS unread_count
+     FROM contact_message_logs
+     WHERE code = $1
+       AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2
+       AND read_at IS NULL
+       AND deleted_at IS NULL`,
+    [cleanCode, plateNorm]
+  );
+
+  const unreadCount = unreadRes.rows[0]?.unread_count || 0;
+
+  const ownerUrl =
+    `/owner-app/${encodeURIComponent(cleanCode)}/${encodeURIComponent(plateNorm)}` +
+    `?focus=messages&from=deadline_alert${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}`;
+
+  const payload = JSON.stringify({
+    title: alert.title || 'AVVISO SCADENZA',
+    body: alert.body || 'Hai una scadenza da controllare nella tua App veicolo.',
+    url: ownerUrl,
+    targetUrl: ownerUrl,
+    tag: 'deadline-alert-' + plateNorm + '-' + Date.now(),
+    type: 'deadline_alert',
+    unreadCount,
+    messageId: insertedMessageId,
+    badge: '/icons/icon-192.png',
+    icon: '/icons/icon-192.png',
+    requireInteraction: true,
+    data: {
+      type: 'deadline_alert',
+      plate: dbPlate,
+      messageId: insertedMessageId,
+      unreadCount,
+      url: ownerUrl,
+      targetUrl: ownerUrl
+    }
+  });
+
+  let subsResult;
+  try {
+    subsResult = await pool.query(
+      `SELECT id, endpoint, p256dh, auth
+       FROM push_subscriptions
+       WHERE REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $1
+       ORDER BY id DESC`,
+      [plateNorm]
+    );
+  } catch (e) {
+    subsResult = await pool.query(
+      `SELECT id, push_endpoint AS endpoint, push_p256dh AS p256dh, push_auth AS auth
+       FROM owner_device_vehicle_roles
+       WHERE REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $1
+         AND COALESCE(push_endpoint,'') <> ''
+       ORDER BY is_primary DESC, id DESC`,
+      [plateNorm]
+    );
+  }
+
+  let sent = 0;
+  let failed = 0;
+
+  for (const row of subsResult.rows) {
+    try {
+      if (!row.endpoint || !row.p256dh || !row.auth) {
+        failed += 1;
+        continue;
+      }
+
+      await webpush.sendNotification(
+        {
+          endpoint: row.endpoint,
+          keys: {
+            p256dh: row.p256dh,
+            auth: row.auth
+          }
+        },
+        payload
+      );
+
+      sent += 1;
+    } catch (err) {
+      failed += 1;
+      console.error('deadline push send error:', err.statusCode || '', err.body || err.message || err);
+    }
+  }
+
+  return { messageId: insertedMessageId, unreadCount, sent, failed };
+}
+
+app.post('/api/owner-deadlines/sync', async (req, res) => {
+  try {
+    const cleanCode = String(req.body.code || '').trim().toUpperCase();
+    const plateNorm = normalizePlateValue(req.body.plate);
+    const incoming = Array.isArray(req.body.deadlines) ? req.body.deadlines : [];
+
+    if (!plateNorm) {
+      return res.status(400).json({ success: false, error: 'Targa obbligatoria.' });
+    }
+
+    let code = cleanCode;
+    if (!code) {
+      const vehicle = await resolveVehicleByPlateNorm(plateNorm);
+      code = vehicle ? String(vehicle.code || '').trim().toUpperCase() : '';
+    }
+
+    let upserted = 0;
+
+    for (const d of incoming) {
+      if (!d || !d.id) continue;
+
+      const localId = String(d.id);
+      const status = d.status || 'active';
+
+      await pool.query(
+        `INSERT INTO owner_deadline_items
+         (code, plate, plate_norm, local_id, payload, status, updated_at)
+         VALUES ($1,$2,$3,$4,$5::jsonb,$6,NOW())
+         ON CONFLICT (plate_norm, local_id)
+         DO UPDATE SET
+           code = EXCLUDED.code,
+           plate = EXCLUDED.plate,
+           payload = EXCLUDED.payload,
+           status = EXCLUDED.status,
+           updated_at = NOW()`,
+        [
+          code || null,
+          req.body.plate || plateNorm,
+          plateNorm,
+          localId,
+          JSON.stringify(d),
+          status
+        ]
+      );
+
+      upserted += 1;
+    }
+
+    return res.json({
+      success: true,
+      synced: upserted,
+      plate: plateNorm
+    });
+  } catch (err) {
+    console.error('owner-deadlines/sync error:', err);
+    return res.status(500).json({ success: false, error: err.message || String(err) });
+  }
+});
+
+let ownerDeadlineSchedulerRunning = false;
+
+async function checkDueOwnerDeadlineAlerts() {
+  if (ownerDeadlineSchedulerRunning) return;
+  ownerDeadlineSchedulerRunning = true;
+
+  try {
+    const rows = await pool.query(
+      `SELECT id, code, plate, plate_norm, local_id, payload
+       FROM owner_deadline_items
+       WHERE COALESCE(status,'active') NOT IN ('deleted','completed')
+       ORDER BY updated_at DESC
+       LIMIT 500`
+    );
+
+    const now = new Date();
+
+    for (const row of rows.rows) {
+      try {
+        const payload = row.payload || {};
+        const alert = shouldSendDeadlineAlert(payload, now);
+        if (!alert || !alert.alertKey) continue;
+
+        const already = await pool.query(
+          `SELECT id
+           FROM owner_deadline_alert_sent
+           WHERE plate_norm = $1 AND local_id = $2 AND alert_key = $3
+           LIMIT 1`,
+          [row.plate_norm, row.local_id, alert.alertKey]
+        );
+
+        if (already.rows.length) continue;
+
+        const vehicle = await resolveVehicleByPlateNorm(row.plate_norm);
+        if (!vehicle) continue;
+
+        const result = await insertOwnerMessageAndPushDeadline({
+          vehicle,
+          plateNorm: row.plate_norm,
+          alert
+        });
+
+        await pool.query(
+          `INSERT INTO owner_deadline_alert_sent
+           (plate_norm, local_id, alert_key, message_id)
+           VALUES ($1,$2,$3,$4)
+           ON CONFLICT (plate_norm, local_id, alert_key) DO NOTHING`,
+          [row.plate_norm, row.local_id, alert.alertKey, result.messageId || null]
+        );
+
+        console.log('Deadline alert sent:', row.plate_norm, row.local_id, alert.alertKey, result);
+      } catch (innerErr) {
+        console.error('deadline scheduler item error:', innerErr.message || innerErr);
+      }
+    }
+  } catch (err) {
+    console.error('deadline scheduler error:', err.message || err);
+  } finally {
+    ownerDeadlineSchedulerRunning = false;
+  }
+}
+
+ensureOwnerDeadlinesTables()
+  .then(() => {
+    setInterval(checkDueOwnerDeadlineAlerts, 30000);
+    setTimeout(checkDueOwnerDeadlineAlerts, 8000);
+  })
+  .catch(err => console.error('ensureOwnerDeadlinesTables error:', err.message || err));
+
+
+
 app.listen(PORT, () => {
       console.log(`Server attivo su ${BASE_URL}`);
     });
