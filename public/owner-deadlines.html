@@ -617,6 +617,7 @@
             <option value="daily">Farmaco giornaliero</option>
             <option value="multiple_daily">Più volte al giorno</option>
             <option value="every_x_hours">Ogni X ore</option>
+            <option value="every_x_minutes">Ogni X minuti</option>
             <option value="antibiotic">Antibiotico / ciclo temporaneo</option>
             <option value="stock">Ricordami di ricomprarlo</option>
           </select>
@@ -648,6 +649,31 @@
                 <option value="8" selected>Ogni 8 ore</option>
                 <option value="12">Ogni 12 ore</option>
                 <option value="24">Ogni 24 ore</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="inline-grid">
+            <div>
+              <label>Intervallo minuti</label>
+              <select id="medicineIntervalMinutes" onchange="updateMedicineMode()">
+                <option value="1">Ogni 1 minuto</option>
+                <option value="2">Ogni 2 minuti</option>
+                <option value="5" selected>Ogni 5 minuti</option>
+                <option value="10">Ogni 10 minuti</option>
+                <option value="15">Ogni 15 minuti</option>
+                <option value="20">Ogni 20 minuti</option>
+                <option value="30">Ogni 30 minuti</option>
+                <option value="45">Ogni 45 minuti</option>
+              </select>
+            </div>
+            <div>
+              <label>Durata test minuti</label>
+              <select id="medicineTestDurationMinutes" onchange="updateMedicineMode()">
+                <option value="15">Per 15 minuti</option>
+                <option value="30" selected>Per 30 minuti</option>
+                <option value="60">Per 1 ora</option>
+                <option value="120">Per 2 ore</option>
               </select>
             </div>
           </div>
@@ -1630,6 +1656,11 @@ function updatePreview(){
     if (medMode === "daily") medAlerts = ["ogni giorno all’orario indicato"];
     if (medMode === "multiple_daily") medAlerts = times ? times.split(",").map(x => "ogni giorno alle " + x.trim()).filter(Boolean) : ["più volte al giorno"];
     if (medMode === "every_x_hours") medAlerts = ["ogni " + interval + " ore dalla prima dose"];
+    if (medMode === "every_x_minutes") {
+      const minutes = medicineIntervalMinutes ? (medicineIntervalMinutes.value || "5") : "5";
+      const duration = medicineTestDurationMinutes ? (medicineTestDurationMinutes.value || "30") : "30";
+      medAlerts = ["ogni " + minutes + " minuti", "per " + duration + " minuti", "richiede conferma assunzione"];
+    }
     if (medMode === "antibiotic") medAlerts = ["ogni " + interval + " ore", "fino alla data fine", "richiede conferma assunzione"];
     if (medMode === "stock") medAlerts = ["promemoria ricompra farmaco", "7 giorni prima", "3 giorni prima"];
     alertPreview.innerHTML = medAlerts.map(a => `<span class="pill">${esc(a)}</span>`).join("");
@@ -1663,6 +1694,8 @@ function saveDeadline(){
       medicineEndDate: medicineEndDate.value || "",
       medicineFirstTime: medicineFirstTime.value || "",
       medicineIntervalHours: medicineIntervalHours.value || "",
+      medicineIntervalMinutes: medicineIntervalMinutes ? (medicineIntervalMinutes.value || "") : "",
+      medicineTestDurationMinutes: medicineTestDurationMinutes ? (medicineTestDurationMinutes.value || "") : "",
       medicineDailyTimes: medicineDailyTimes.value || ""
     };
     selectedAlerts = Array.from(document.querySelectorAll("#alertPreview .pill")).map(x => x.textContent);
@@ -1687,6 +1720,8 @@ function saveDeadline(){
 function resetForm(){
   ownerInput.value=""; dateInput.value=""; timeInput.value="09:00"; notesInput.value="";
   medicineStartDate.value=""; medicineEndDate.value=""; medicineFirstTime.value="08:00"; medicineDailyTimes.value="";
+  if (typeof medicineIntervalMinutes !== "undefined") medicineIntervalMinutes.value = "5";
+  if (typeof medicineTestDurationMinutes !== "undefined") medicineTestDurationMinutes.value = "30";
   updateRecurrenceMode();
   applyPreset(currentPreset);
 }
@@ -1940,7 +1975,12 @@ function createTestMessage(){
 function buildMessage(d){
   if (d.type === "Disdetta abbonamento") return `Ricordati di inviare la comunicazione di disdetta per ${d.name} entro la data indicata. Verifica se il servizio richiede email, PEC, raccomandata o procedura nell’area clienti.`;
   if (d.type === "Permesso parcheggio residenti") return `Il permesso parcheggio residenti sta per scadere. Verifica il rinnovo comunale, i documenti richiesti e il pagamento prima della scadenza.`;
-  if (d.type === "Medicine") return `Promemoria farmaco: ${d.name}. Controlla orari, intervallo e conferma quando hai gestito l’assunzione o il promemoria.`;
+  if (d.type === "Medicine") {
+    if (d.extra && d.extra.medicineMode === "every_x_minutes") {
+      return `Promemoria farmaco: ${d.name}. Programmazione ravvicinata ogni ${d.extra.medicineIntervalMinutes || "5"} minuti per ${d.extra.medicineTestDurationMinutes || "30"} minuti. Conferma quando hai gestito l’assunzione o il promemoria.`;
+    }
+    return `Promemoria farmaco: ${d.name}. Controlla orari, intervallo e conferma quando hai gestito l’assunzione o il promemoria.`;
+  }
   if (d.recurrence === "monthly") return `Promemoria rinnovo mensile: ${d.name}. Questo avviso si ripete automaticamente ogni mese. Ti avviserò il giorno prima e il giorno stesso del rinnovo.`;
   if (d.name && d.name.indexOf("TEST") === 0) return `Questo è un messaggio TEST. Serve per verificare che l’avviso si apra nella pagina dedicata, sia leggibile completamente e mostri le azioni: Continua a ricordarmelo, Fatto, Modifica e Cancella definitivamente.`;
   return `Promemoria per ${d.name}. Controlla la scadenza e conferma quando hai completato.`;
