@@ -21,7 +21,7 @@ const stripe = process.env.STRIPE_SECRET_KEY
 
 const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || '';
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || '';
-const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:test@example.com';
+const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:prova@example.com';
 
 if (vapidPublicKey && vapidPrivateKey) {
   webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
@@ -4457,7 +4457,7 @@ app.post('/api/owner-messages/delete-many', async (req, res) => {
 });
 
 
-app.post('/api/owner-services/test-push', async (req, res) => {
+app.post('/api/owner-services/prova-push', async (req, res) => {
   try {
     const cleanCode = req.body?.code ? String(req.body.code).trim().toUpperCase() : '';
     const cleanPlate = req.body?.plate ? String(req.body.plate).trim().toUpperCase().replace(/\s+/g, '') : '';
@@ -4496,7 +4496,7 @@ app.post('/api/owner-services/test-push', async (req, res) => {
 
     const title = '[TEST] Promemoria veicolo';
     const body = `[TEST] La ${serviceLabel} della tua vettura richiede attenzione. Apri i dettagli per controllare.`;
-    const targetUrl = `/owner-dashboard.html?code=${encodeURIComponent(cleanCode)}&plate=${encodeURIComponent(cleanPlate)}&service=${encodeURIComponent(serviceType)}&testPush=1`;
+    const targetUrl = `/owner-dashboard.html?code=${encodeURIComponent(cleanCode)}&plate=${encodeURIComponent(cleanPlate)}&service=${encodeURIComponent(serviceType)}&provaPush=1`;
 
     let sentCount = 0;
 
@@ -4525,14 +4525,14 @@ app.post('/api/owner-services/test-push', async (req, res) => {
               cleanCode,
               cleanPlate,
               sub.endpoint,
-              sub.endpoint.includes('apple') ? 'apple-webpush-test' : 'fcm-webpush-test',
+              sub.endpoint.includes('apple') ? 'apple-webpush-prova' : 'fcm-webpush-prova',
               'sent',
               null
             ]
           );
         } catch (e) {}
       } catch (pushErr) {
-        console.error('owner-services/test-push error:', pushErr.statusCode || '', pushErr.body || pushErr.message || pushErr);
+        console.error('owner-services/prova-push error:', pushErr.statusCode || '', pushErr.body || pushErr.message || pushErr);
 
         try {
           await pool.query(
@@ -4542,7 +4542,7 @@ app.post('/api/owner-services/test-push', async (req, res) => {
               cleanCode,
               cleanPlate,
               sub.endpoint,
-              sub.endpoint.includes('apple') ? 'apple-webpush-test' : 'fcm-webpush-test',
+              sub.endpoint.includes('apple') ? 'apple-webpush-prova' : 'fcm-webpush-prova',
               'error',
               String(pushErr.body || pushErr.message || pushErr).slice(0, 500)
             ]
@@ -4559,8 +4559,8 @@ app.post('/api/owner-services/test-push', async (req, res) => {
 
     return res.json({ success: true, sent_count: sentCount, service_type: serviceType });
   } catch (err) {
-    console.error('owner-services/test-push fatal error:', err);
-    return res.status(500).json({ success: false, error: 'Errore invio push test.' });
+    console.error('owner-services/prova-push fatal error:', err);
+    return res.status(500).json({ success: false, error: 'Errore invio push prova.' });
   }
 });
 
@@ -8110,7 +8110,7 @@ app.post('/api/test/deadline-push-ey018sw', async (req, res) => {
     const messageText = [
       'AVVISO SCADENZA',
       '',
-      'Promemoria test: una scadenza importante richiede attenzione.',
+      'Promemoria: una scadenza importante richiede attenzione.',
       '',
       'Comandi disponibili: Ricordamelo ancora, OK fatto, Cancella.'
     ].join('\n');
@@ -8236,7 +8236,7 @@ app.post('/api/test/deadline-push-ey018sw', async (req, res) => {
       targetUrl: ownerUrl
     });
   } catch (err) {
-    console.error('deadline push test error:', err);
+    console.error('deadline push error:', err);
     return res.status(500).json({
       success: false,
       error: err && err.message ? err.message : String(err)
@@ -8350,14 +8350,14 @@ function shouldSendDeadlineAlert(payload, now = new Date()) {
   const type = String(payload.type || '').trim();
   const category = String(payload.category || '').trim();
 
-  // 1) FARMACI OGNI X MINUTI: test reale e rapido
+  // 1) FARMACI OGNI X MINUTI: verifica reale e rapido
   if (
     type === 'Medicine' &&
     payload.extra &&
     payload.extra.medicineMode === 'every_x_minutes'
   ) {
     const interval = Math.max(1, Number(payload.extra.medicineIntervalMinutes || 5));
-    const duration = Math.max(interval, Number(payload.extra.medicineTestDurationMinutes || 30));
+    const duration = Math.max(interval, Number(payload.extra.medicineDurationMinutes || 30));
 
     const start = payload.createdAt ? new Date(payload.createdAt) : new Date();
     if (Number.isNaN(start.getTime())) return null;
