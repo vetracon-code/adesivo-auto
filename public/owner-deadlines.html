@@ -641,14 +641,14 @@
             <div>
               <label>Intervallo ore</label>
               <select id="medicineIntervalHours" onchange="updateMedicineMode()">
-                <option value="1">Ogni 1 ora</option>
-                <option value="2">Ogni 2 ore</option>
-                <option value="3">Ogni 3 ore</option>
-                <option value="4">Ogni 4 ore</option>
-                <option value="6">Ogni 6 ore</option>
-                <option value="8" selected>Ogni 8 ore</option>
-                <option value="12">Ogni 12 ore</option>
-                <option value="24">Ogni 24 ore</option>
+                <option value="1">1 ora</option>
+                <option value="2">2 ore</option>
+                <option value="3">3 ore</option>
+                <option value="4">4 ore</option>
+                <option value="6">6 ore</option>
+                <option value="8" selected>8 ore</option>
+                <option value="12">12 ore</option>
+                <option value="24">24 ore</option>
               </select>
             </div>
           </div>
@@ -657,29 +657,27 @@
             <div>
               <label>Intervallo minuti</label>
               <select id="medicineIntervalMinutes" onchange="updateMedicineMode()">
-                <option value="1">Ogni 1 minuto</option>
-                <option value="2">Ogni 2 minuti</option>
-                <option value="5" selected>Ogni 5 minuti</option>
-                <option value="10">Ogni 10 minuti</option>
-                <option value="15">Ogni 15 minuti</option>
-                <option value="20">Ogni 20 minuti</option>
-                <option value="30">Ogni 30 minuti</option>
-                <option value="45">Ogni 45 minuti</option>
+                <option value="1">1 min</option>
+                <option value="2">2 min</option>
+                <option value="5" selected>5 min</option>
+                <option value="10">10 min</option>
+                <option value="15">15 min</option>
+                <option value="20">20 min</option>
+                <option value="30">30 min</option>
+                <option value="45">45 min</option>
               </select>
             </div>
             <div>
-              <label>Durata test minuti</label>
-              <select id="medicineTestDurationMinutes" onchange="updateMedicineMode()">
-                <option value="15">Per 15 minuti</option>
-                <option value="30" selected>Per 30 minuti</option>
-                <option value="60">Per 1 ora</option>
-                <option value="120">Per 2 ore</option>
+              <label>Durata promemoria</label>
+              <select id="medicineDurationMinutes" onchange="updateMedicineMode()">
+                <option value="15">15 minuti</option>
+                <option value="30" selected>30 minuti</option>
+                <option value="60">1 ora</option>
+                <option value="120">2 ore</option>
               </select>
             </div>
           </div>
 
-          <label>Orari giornalieri</label>
-          <input id="medicineDailyTimes" placeholder="Esempio: 08:00, 14:00, 22:00" oninput="updateMedicineMode()">
 
           <div class="hint-small">
             Per antibiotici o farmaci ogni X ore, imposta prima dose, intervallo e data fine. Gli avvisi restano promemoria personali e non sostituiscono indicazioni mediche.
@@ -1652,14 +1650,13 @@ function updatePreview(){
   if (currentPreset === "Medicine") {
     const medMode = medicineMode.value || "daily";
     const interval = medicineIntervalHours.value || "8";
-    const times = medicineDailyTimes.value || "";
     let medAlerts = [];
     if (medMode === "daily") medAlerts = ["ogni giorno all’orario indicato"];
     if (medMode === "multiple_daily") medAlerts = times ? times.split(",").map(x => "ogni giorno alle " + x.trim()).filter(Boolean) : ["più volte al giorno"];
     if (medMode === "every_x_hours") medAlerts = ["ogni " + interval + " ore dalla prima dose"];
     if (medMode === "every_x_minutes") {
       const minutes = medicineIntervalMinutes ? (medicineIntervalMinutes.value || "5") : "5";
-      const duration = medicineTestDurationMinutes ? (medicineTestDurationMinutes.value || "30") : "30";
+      const duration = medicineDurationMinutes ? (medicineDurationMinutes.value || "30") : "30";
       medAlerts = ["ogni " + minutes + " minuti", "per " + duration + " minuti", "richiede conferma assunzione"];
     }
     if (medMode === "antibiotic") medAlerts = ["ogni " + interval + " ore", "fino alla data fine", "richiede conferma assunzione"];
@@ -1696,8 +1693,7 @@ function saveDeadline(){
       medicineFirstTime: medicineFirstTime.value || "",
       medicineIntervalHours: medicineIntervalHours.value || "",
       medicineIntervalMinutes: medicineIntervalMinutes ? (medicineIntervalMinutes.value || "") : "",
-      medicineTestDurationMinutes: medicineTestDurationMinutes ? (medicineTestDurationMinutes.value || "") : "",
-      medicineDailyTimes: medicineDailyTimes.value || ""
+      medicineDurationMinutes: medicineDurationMinutes ? (medicineDurationMinutes.value || "") : ""
     };
     selectedAlerts = Array.from(document.querySelectorAll("#alertPreview .pill")).map(x => x.textContent);
   }
@@ -1720,9 +1716,9 @@ function saveDeadline(){
 
 function resetForm(){
   ownerInput.value=""; dateInput.value=""; timeInput.value="09:00"; notesInput.value="";
-  medicineStartDate.value=""; medicineEndDate.value=""; medicineFirstTime.value="08:00"; medicineDailyTimes.value="";
+  medicineStartDate.value=""; medicineEndDate.value=""; medicineFirstTime.value="08:00";
   if (typeof medicineIntervalMinutes !== "undefined") medicineIntervalMinutes.value = "5";
-  if (typeof medicineTestDurationMinutes !== "undefined") medicineTestDurationMinutes.value = "30";
+  if (typeof medicineDurationMinutes !== "undefined") medicineDurationMinutes.value = "30";
   updateRecurrenceMode();
   applyPreset(currentPreset);
 }
@@ -1978,7 +1974,7 @@ function buildMessage(d){
   if (d.type === "Permesso parcheggio residenti") return `Il permesso parcheggio residenti sta per scadere. Verifica il rinnovo comunale, i documenti richiesti e il pagamento prima della scadenza.`;
   if (d.type === "Medicine") {
     if (d.extra && d.extra.medicineMode === "every_x_minutes") {
-      return `Promemoria farmaco: ${d.name}. Programmazione ravvicinata ogni ${d.extra.medicineIntervalMinutes || "5"} minuti per ${d.extra.medicineTestDurationMinutes || "30"} minuti. Conferma quando hai gestito l’assunzione o il promemoria.`;
+      return `Promemoria farmaco: ${d.name}. Programmazione ogni ${d.extra.medicineIntervalMinutes || "5"} minuti per ${d.extra.medicineDurationMinutes || "30"} minuti. Conferma quando hai gestito l’assunzione o il promemoria.`;
     }
     return `Promemoria farmaco: ${d.name}. Controlla orari, intervallo e conferma quando hai gestito l’assunzione o il promemoria.`;
   }
