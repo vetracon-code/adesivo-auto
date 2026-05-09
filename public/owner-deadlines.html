@@ -19,6 +19,34 @@
     .kpi{background:white;border:1px solid #dbe3ee;border-radius:20px;padding:16px;box-shadow:0 10px 30px rgba(15,23,42,.06)}
     .kpi strong{display:block;font-size:28px}
     .kpi span{display:block;color:#64748b;font-size:13px;font-weight:800}
+    .kpi-filter{
+      width:100%;
+      text-align:left;
+      cursor:pointer;
+      font-family:inherit;
+      transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+    .kpi-filter:hover{
+      transform:translateY(-1px);
+      box-shadow:0 14px 36px rgba(15,23,42,.10);
+      border-color:#ff7a00;
+    }
+    .kpi-filter.active{
+      border-color:#ff7a00;
+      box-shadow:0 0 0 3px rgba(255,122,0,.16),0 14px 36px rgba(15,23,42,.10);
+    }
+    .deadline-filter-label{
+      display:none;
+      margin:0 0 12px;
+      background:#fff7ed;
+      border:1px solid #fed7aa;
+      color:#9a3412;
+      border-radius:16px;
+      padding:10px 12px;
+      font-size:13px;
+      font-weight:900;
+    }
+    .deadline-filter-label.active{display:block}
     .grid{display:grid;grid-template-columns:1.05fr .95fr;gap:18px;align-items:start}
     .panel{background:white;border:1px solid #dbe3ee;border-radius:24px;padding:20px;box-shadow:0 14px 42px rgba(15,23,42,.07)}
     h2{margin:0 0 14px;font-size:22px}
@@ -559,10 +587,10 @@
     </div>
 
     <section class="kpis">
-      <div class="kpi"><strong id="kpiTotal">0</strong><span>Attive</span></div>
-      <div class="kpi"><strong id="kpi7">0</strong><span>Entro 7 giorni</span></div>
-      <div class="kpi"><strong id="kpi30">0</strong><span>Entro 30 giorni</span></div>
-      <div class="kpi"><strong id="kpiExpired">0</strong><span>Scadute</span></div>
+      <button class="kpi kpi-filter active" type="button" onclick="filterDeadlines('all')"><strong id="kpiTotal">0</strong><span>Attive</span></button>
+      <button class="kpi kpi-filter" type="button" onclick="filterDeadlines('7')"><strong id="kpi7">0</strong><span>Entro 7 giorni</span></button>
+      <button class="kpi kpi-filter" type="button" onclick="filterDeadlines('30')"><strong id="kpi30">0</strong><span>Entro 30 giorni</span></button>
+      <button class="kpi kpi-filter" type="button" onclick="filterDeadlines('expired')"><strong id="kpiExpired">0</strong><span>Scadute</span></button>
     </section>
 
     <section class="grid">
@@ -684,8 +712,9 @@
         </div><!-- deadlineFormBody -->
       </div>
 
-      <div class="panel">
+      <div class="panel" id="savedDeadlinesPanel">
         <h2>Scadenze salvate</h2>
+        <div class="deadline-filter-label" id="deadlineFilterLabel"></div>
         <div class="list" id="deadlineList"></div>
       </div>
     </section>
@@ -771,6 +800,7 @@ let currentProfile = suggestedProfile[currentPreset] || "standard";
 let currentModalId = null;
 let deadlineFormOpened = false;
 let categoryPulseTimer = null;
+let currentDeadlineFilter = "all";
 let key = "ownerDeadlines_" + (plate || "default");
 let deadlines = JSON.parse(localStorage.getItem(key) || "[]");
 
@@ -1674,18 +1704,86 @@ function daysUntil(d){ const today=new Date(); today.setHours(0,0,0,0); const x=
 function color(days){ if(days<0)return"red"; if(days<=7)return"yellow"; return"green"; }
 function label(days){ if(days<0)return"Scaduta da "+Math.abs(days)+" giorni"; if(days===0)return"Scade oggi"; if(days===1)return"Scade domani"; return"Scade tra "+days+" giorni"; }
 
+function filterDeadlines(filter){
+  currentDeadlineFilter = filter || "all";
+
+  document.querySelectorAll(".kpi-filter").forEach(btn => btn.classList.remove("active"));
+
+  const indexMap = { all:0, "7":1, "30":2, expired:3 };
+  const idx = indexMap[currentDeadlineFilter] || 0;
+  const btn = document.querySelectorAll(".kpi-filter")[idx];
+  if(btn) btn.classList.add("active");
+
+  renderList();
+
+  setTimeout(() => {
+    const panel = document.getElementById("savedDeadlinesPanel");
+    if(panel) panel.scrollIntoView({ behavior:"smooth", block:"start" });
+
+    const first = document.querySelector("#deadlineList .deadline");
+    if(first) {
+      first.style.transition = "box-shadow .25s ease, transform .25s ease";
+      first.style.boxShadow = "0 0 0 4px rgba(255,122,0,.24), 0 14px 34px rgba(15,23,42,.10)";
+      first.style.transform = "translateY(-1px)";
+      setTimeout(() => {
+        first.style.boxShadow = "";
+        first.style.transform = "";
+      }, 1300);
+    }
+  }, 80);
+}
+
+function deadlineMatchesFilter(d, filter){
+  const days = daysUntil(d.date);
+
+  if(filter === "expired") return days < 0;
+  if(filter === "7") return days >= 0 && days <= 7;
+  if(filter === "30") return days >= 0 && days <= 30;
+
+  return true;
+}
+
+function filterLabelText(filter, count){
+  if(filter === "expired") return "Stai visualizzando le scadenze scadute: " + count;
+  if(filter === "7") return "Stai visualizzando le scadenze entro 7 giorni: " + count;
+  if(filter === "30") return "Stai visualizzando le scadenze entro 30 giorni: " + count;
+  return "";
+}
+
 function renderList(){
-  const active=deadlines.filter(d=>d.status!=="deleted" && d.status!=="completed");
-  kpiTotal.textContent=active.length;
-  kpi7.textContent=active.filter(d=>daysUntil(d.date)>=0&&daysUntil(d.date)<=7).length;
-  kpi30.textContent=active.filter(d=>daysUntil(d.date)>=0&&daysUntil(d.date)<=30).length;
-  kpiExpired.textContent=active.filter(d=>daysUntil(d.date)<0).length;
-  if(!active.length){ deadlineList.innerHTML='<div class="empty">Nessuna scadenza salvata.</div>'; return; }
+  const allActive = deadlines.filter(d=>d.status!=="deleted" && d.status!=="completed");
+
+  kpiTotal.textContent=allActive.length;
+  kpi7.textContent=allActive.filter(d=>daysUntil(d.date)>=0&&daysUntil(d.date)<=7).length;
+  kpi30.textContent=allActive.filter(d=>daysUntil(d.date)>=0&&daysUntil(d.date)<=30).length;
+  kpiExpired.textContent=allActive.filter(d=>daysUntil(d.date)<0).length;
+
+  const active = allActive.filter(d => deadlineMatchesFilter(d, currentDeadlineFilter));
+
+  const label = document.getElementById("deadlineFilterLabel");
+  if(label){
+    const txt = filterLabelText(currentDeadlineFilter, active.length);
+    label.textContent = txt;
+    label.classList.toggle("active", !!txt);
+  }
+
+  if(!active.length){
+    const emptyText =
+      currentDeadlineFilter === "expired" ? "Nessuna scadenza scaduta." :
+      currentDeadlineFilter === "7" ? "Nessuna scadenza entro 7 giorni." :
+      currentDeadlineFilter === "30" ? "Nessuna scadenza entro 30 giorni." :
+      "Nessuna scadenza salvata.";
+
+    deadlineList.innerHTML='<div class="empty">' + emptyText + '</div>';
+    return;
+  }
+
   deadlineList.innerHTML=active.sort((a,b)=>new Date(a.date)-new Date(b.date)).map(d=>{
     const days=daysUntil(d.date);
     return `<div class="deadline ${color(days)} ${days < 0 ? 'expired-pulse' : ''}" id="d-${d.id}">
       <h3>${esc(d.name)}</h3>
       <small>${esc(d.category)} · ${esc(d.owner || "nessun riferimento")} · ${esc(label(days))}${d.recurrence && d.recurrence !== "none" ? " · " + esc(d.recurrence === "monthly" ? "mensile" : d.recurrence === "yearly" ? "annuale" : "ricorrente") : ""}</small>
+
       <div class="deadline-actions">
         <button class="mini later" onclick="toggleProgrammedAlerts(${d.id})">Avvisi progr.</button>
         <button class="mini later" onclick="openMessage(${d.id})">Apri messaggio</button>
@@ -1713,199 +1811,7 @@ function renderList(){
         <div class="hint-small" style="margin-top:8px">Tieni premuto un avviso per eliminarlo.</div>
       </div>
     </div>`;
-  }).join("");
-}
-
-
-function exportDeadlines(){
-  const payload = {
-    app: "Contatto Veicolo",
-    module: "Le mie scadenze",
-    version: 1,
-    plate: plate || "",
-    exportedAt: new Date().toISOString(),
-    deadlines: deadlines
-  };
-
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  const safePlate = plate || "scadenze";
-  a.href = url;
-  a.download = "backup-scadenze-" + safePlate + "-" + new Date().toISOString().slice(0,10) + ".json";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-function importDeadlinesFile(event){
-  const file = event.target.files && event.target.files[0];
-  event.target.value = "";
-  if(!file) return;
-
-  const reader = new FileReader();
-  reader.onload = function(){
-    try {
-      const parsed = JSON.parse(String(reader.result || "{}"));
-      const imported = Array.isArray(parsed) ? parsed : parsed.deadlines;
-
-      if(!Array.isArray(imported)) {
-        alert("Backup non valido: elenco scadenze non trovato.");
-        return;
-      }
-
-      const valid = imported
-        .filter(x => x && x.name && x.date)
-        .map(x => ({
-          ...x,
-          id: Date.now() + Math.floor(Math.random()*1000000),
-          status: x.status || "active"
-        }));
-
-      if(!valid.length) {
-        alert("Il backup non contiene scadenze valide.");
-        return;
-      }
-
-      const existingKeys = new Set(deadlines.map(normalizeDeadlineKey));
-      const duplicates = valid.filter(x => existingKeys.has(normalizeDeadlineKey(x)));
-
-      if(duplicates.length) {
-        const choice = prompt(
-          "Ho trovato " + duplicates.length + " possibili duplicati.\n\n" +
-          "Scrivi:\n" +
-          "1 = salva tutto sostituendo le scadenze attuali\n" +
-          "2 = aggiungi solo le nuove, saltando i duplicati\n" +
-          "3 = mantieni entrambi anche se duplicati\n" +
-          "4 = annulla importazione"
-        );
-
-        if(choice === "1") {
-          if(!confirm("Confermi di voler sostituire tutte le scadenze attuali con quelle del backup?")) return;
-          deadlines = valid;
-        } else if(choice === "2") {
-          deadlines = deadlines.concat(valid.filter(x => !existingKeys.has(normalizeDeadlineKey(x))));
-        } else if(choice === "3") {
-          deadlines = deadlines.concat(valid);
-        } else {
-          return;
-        }
-      } else {
-        if(!confirm("Nessun duplicato trovato. Importare " + valid.length + " scadenze?")) return;
-        deadlines = deadlines.concat(valid);
-      }
-
-      persist();
-      renderList();
-      alert("Backup importato correttamente.");
-    } catch(e) {
-      alert("Errore lettura backup: " + e.message);
-    }
-  };
-  reader.readAsText(file);
-}
-
-function normalizeDeadlineKey(d){
-  return [
-    String(d.category || "").trim().toLowerCase(),
-    String(d.type || "").trim().toLowerCase(),
-    String(d.name || "").trim().toLowerCase(),
-    String(d.owner || "").trim().toLowerCase(),
-    String(d.date || "").trim()
-  ].join("|");
-}
-
-
-let alertHoldTimer = null;
-let alertHoldTarget = null;
-
-function toggleProgrammedAlerts(id){
-  const panel = document.getElementById("alerts-panel-" + id);
-  if(!panel) return;
-  panel.classList.toggle("active");
-}
-
-function startAlertHold(event, deadlineId, alertIndex){
-  cancelAlertHold();
-
-  const el = event && event.currentTarget ? event.currentTarget : null;
-  if(!el) return;
-
-  alertHoldTarget = { deadlineId, alertIndex, el };
-  el.classList.add("hold");
-
-  alertHoldTimer = setTimeout(() => {
-    confirmDeleteProgrammedAlert(deadlineId, alertIndex);
-    cancelAlertHold();
-  }, 850);
-}
-
-function endAlertHold(event){
-  cancelAlertHold();
-}
-
-function cancelAlertHold(event){
-  if(alertHoldTimer){
-    clearTimeout(alertHoldTimer);
-    alertHoldTimer = null;
-  }
-  if(alertHoldTarget && alertHoldTarget.el){
-    alertHoldTarget.el.classList.remove("hold");
-  }
-  alertHoldTarget = null;
-}
-
-function confirmDeleteProgrammedAlert(deadlineId, alertIndex){
-  const d = deadlines.find(x => Number(x.id) === Number(deadlineId));
-  if(!d || !Array.isArray(d.alerts) || !d.alerts.length) return;
-
-  const alertText = d.alerts[alertIndex];
-  if(!alertText) return;
-
-  const first = confirm(
-    'Vuoi eliminare questo avviso programmato?\n\n' +
-    '“' + alertText + '”'
-  );
-  if(!first) return;
-
-  const choice = prompt(
-    'Cosa vuoi eliminare?\n\n' +
-    '1 = Solo questo avviso\n' +
-    '2 = Tutti gli avvisi programmati di questa scadenza\n' +
-    '3 = Annulla'
-  );
-
-  if(choice === "1"){
-    d.alerts = d.alerts.filter((_, idx) => idx !== alertIndex);
-    persist();
-    renderList();
-
-    setTimeout(() => {
-      const panel = document.getElementById("alerts-panel-" + deadlineId);
-      if(panel) panel.classList.add("active");
-    }, 50);
-
-    alert("Avviso eliminato.");
-    return;
-  }
-
-  if(choice === "2"){
-    const second = confirm("Confermi definitivamente di voler eliminare TUTTI gli avvisi programmati di questa scadenza?");
-    if(!second) return;
-
-    d.alerts = [];
-    persist();
-    renderList();
-
-    setTimeout(() => {
-      const panel = document.getElementById("alerts-panel-" + deadlineId);
-      if(panel) panel.classList.add("active");
-    }, 50);
-
-    alert("Tutti gli avvisi programmati sono stati eliminati.");
-    return;
-  }
+  }).join('');
 }
 
 
