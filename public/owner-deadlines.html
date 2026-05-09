@@ -647,6 +647,7 @@
           </div>
           <div class="presets" id="presets"></div>
 
+        <div id="deadlineNameScrollAnchor" style="height:1px;"></div>
         <label>Nome scadenza</label>
         <input id="nameInput" placeholder="Esempio: Assicurazione auto">
 
@@ -1655,24 +1656,18 @@ function setupCategoryScrollPulse(){
 
 
 function scrollToDeadlineInputs(){
-  function findNameLabel(){
-    const labels = Array.from(document.querySelectorAll("label"));
-    return labels.find(l => String(l.textContent || "").trim().toLowerCase() === "nome scadenza") || null;
-  }
-
   function doScroll(){
+    const anchor = document.getElementById("deadlineNameScrollAnchor");
     const nameInput = document.getElementById("deadlineName");
-    const nameLabel = findNameLabel();
-    const target = nameLabel || nameInput || document.getElementById("deadlineFormBody");
+    const target = anchor || nameInput || document.getElementById("deadlineFormBody");
 
     if(!target) return;
 
     try {
       const absoluteTop = target.getBoundingClientRect().top + window.pageYOffset;
 
-      // Deve finire quasi attaccato alla parte alta visibile.
-      // 8px è volutamente aggressivo: Nome scadenza deve essere subito in alto.
-      const topOffset = 8;
+      // Posizionamento preciso: Nome scadenza deve essere il primo campo visibile.
+      const topOffset = 0;
 
       window.scrollTo({
         top: Math.max(0, absoluteTop - topOffset),
@@ -1683,19 +1678,16 @@ function scrollToDeadlineInputs(){
     }
 
     try {
-      const input = nameInput || target;
-      input.classList.add("deadline-input-focus");
-      setTimeout(() => input.classList.remove("deadline-input-focus"), 2400);
+      if(nameInput){
+        nameInput.classList.add("deadline-input-focus");
+        setTimeout(() => nameInput.classList.remove("deadline-input-focus"), 2400);
+      }
     } catch(e) {}
   }
 
-  // Primo scroll dopo il click sulla voce.
   setTimeout(doScroll, 80);
-
-  // Secondo scroll dopo il ridisegno del modulo.
   setTimeout(doScroll, 360);
 
-  // Terzo micro-aggiustamento: utile su iPhone/Safari quando il focus sposta la pagina.
   setTimeout(() => {
     doScroll();
 
