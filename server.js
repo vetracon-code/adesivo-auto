@@ -8341,7 +8341,7 @@ function parseAlertDays(alertText) {
 }
 
 function shouldSendDeadlineAlert(payload, now = new Date()) {
-  if (!payload || payload.status === 'deleted' || payload.status === 'completed') return null;
+  if (!payload || payload.status === 'deleted' || payload.status === 'completed' || payload.status === 'disabled') return null;
 
   const localId = String(payload.id || payload.local_id || '').trim();
   if (!localId) return null;
@@ -8619,7 +8619,7 @@ async function checkDueOwnerDeadlineAlerts() {
     const rows = await pool.query(
       `SELECT id, code, plate, plate_norm, local_id, payload
        FROM owner_deadline_items
-       WHERE COALESCE(status,'active') NOT IN ('deleted','completed')
+       WHERE COALESCE(status,'active') NOT IN ('deleted','completed','disabled')
        ORDER BY updated_at DESC
        LIMIT 500`
     );
@@ -8677,6 +8677,84 @@ ensureOwnerDeadlinesTables()
     setTimeout(checkDueOwnerDeadlineAlerts, 8000);
   })
   .catch(err => console.error('ensureOwnerDeadlinesTables error:', err.message || err));
+
+
+
+
+
+// Disattiva futuri avvisi di una scadenza partendo dal messaggio ricevuto
+app.post('/api/owner-deadlines/disable-from-message', async (req, res) => {
+  try {
+    const messageId = Number(req.body.messageId || 0);
+    const code = String(req.body.code || '').trim().toUpperCase();
+    const plateNorm = normalizePlateValue(req.body.plate);
+
+    if (!messageId || !plateNorm) {
+      return res.status(400).json({
+        success: false,
+        error: 'messageId e targa sono obbligatori.'
+      });
+    }
+
+    const sentRes = await pool.query(
+      `SELECT plate_norm, local_id, alert_key, message_id
+       FROM owner_deadline_alert_sent
+       WHERE message_id = $1
+         AND plate_norm = $2
+       ORDER BY sent_at DESC
+       LIMIT 1`,
+      [messageId, plateNorm]
+    );
+
+    if (!sentRes.rows.length) {
+      return res.status(404).json({
+        success: false,
+        error: 'Scadenza collegata a questo messaggio non trovata.'
+      });
+    }
+
+    const linked = sentRes.rows[0];
+
+    const updateRes = await pool.query(
+      `UPDATE owner_deadline_items
+       SET status = 'disabled',
+           updated_at = NOW()
+       WHERE plate_norm = $1
+         AND local_id = $2
+       RETURNING id, local_id, payload->>'name' AS name`,
+      [linked.plate_norm, linked.local_id]
+    );
+
+    if (!updateRes.rows.length) {
+      return res.status(404).json({
+        success: false,
+        error: 'Promemoria non trovato o già disattivato.'
+      });
+    }
+
+    await pool.query(
+      `UPDATE contact_message_logs
+       SET read_at = COALESCE(read_at, NOW())
+       WHERE id = $1
+         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2`,
+      [messageId, plateNorm]
+    );
+
+    return res.json({
+      success: true,
+      disabled: true,
+      message_id: messageId,
+      local_id: linked.local_id,
+      deadline_name: updateRes.rows[0].name || null
+    });
+  } catch (err) {
+    console.error('owner-deadlines/disable-from-message error:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || String(err)
+    });
+  }
+});
 
 
 

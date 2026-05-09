@@ -6139,7 +6139,7 @@ function getOwnerParams(){
                   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
                     <button class="btn btn-secondary" type="button" onclick="deadlineRemindAgain(${item.id})" style="background:#ffea00;color:#000;border-color:#ffea00;">Ricordamelo ancora</button>
                     <button class="btn btn-secondary" type="button" onclick="deadlineMarkDone(${item.id})" style="background:#16a34a;color:#fff;border-color:#16a34a;">OK, fatto</button>
-                    <button class="btn btn-secondary" type="button" onclick="deadlineDeleteWithDoubleConfirm(${item.id})" style="background:#dc2626;color:#fff;border-color:#dc2626;">Cancella</button>
+                    <button class="btn btn-secondary" type="button" onclick="deadlineManageAlerts(${item.id})" style="background:#f97316;color:#fff;border-color:#f97316;">Gestisci avvisi</button>
                     <button class="btn btn-secondary open-message-detail-btn" type="button" data-message-id="${item.id || ''}">Apri dettaglio</button>
                   </div>
                 ` : `
@@ -6355,10 +6355,79 @@ function getOwnerParams(){
       }
     };
 
+    window.deadlineManageAlerts = async function(id){
+      const choice = prompt(
+        'Cosa vuoi fare?\n\n' +
+        '1 = Cancella solo questo messaggio\n' +
+        '2 = Disattiva tutti i futuri avvisi di questa scadenza\n' +
+        '3 = Annulla'
+      );
+
+      if (choice === '1') {
+        if (!confirm('Vuoi cancellare solo questo messaggio?')) return;
+        if (!confirm('Conferma definitiva: cancello solo questo messaggio dai Messaggi ricevuti?')) return;
+        await deleteMessage(id);
+        return;
+      }
+
+      if (choice === '2') {
+        if (!confirm('Vuoi disattivare tutti i futuri avvisi collegati a questa scadenza?')) return;
+        if (!confirm('Conferma definitiva: non riceverai più avvisi futuri per questa scadenza. Procedo?')) return;
+
+        const msg = (ownerMessages || []).find(m => Number(m.id) === Number(id));
+
+        let code = '';
+        let plate = '';
+
+        if (msg) {
+          code = msg.code || '';
+          plate = msg.plate || '';
+        }
+
+        if (!code || !plate) {
+          try {
+            const ctx = getOwnerParams();
+            code = ctx.code || '';
+            plate = ctx.plate || '';
+          } catch(e) {}
+        }
+
+        code = String(code || '').trim().toUpperCase();
+        plate = String(plate || '').trim().toUpperCase().replace(/\s+/g, '');
+
+        if (!code || !plate || !id) {
+          alert('Dati messaggio non pronti. Premi Aggiorna App e riprova.');
+          return;
+        }
+
+        try {
+          const res = await fetch('/api/owner-deadlines/disable-from-message', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ code, plate, messageId: Number(id) })
+          });
+
+          const data = await res.json().catch(() => ({}));
+
+          if (!res.ok || !data.success) {
+            alert(data.error || 'Non sono riuscito a disattivare gli avvisi futuri.');
+            return;
+          }
+
+          await markMessageRead(id);
+          alert('Avvisi futuri disattivati per questa scadenza.');
+          setTimeout(loadOwnerMessages, 500);
+        } catch(e) {
+          console.error('Errore disattivazione avvisi futuri:', e);
+          alert('Errore durante la disattivazione degli avvisi futuri.');
+        }
+
+        return;
+      }
+    };
+
     window.deadlineDeleteWithDoubleConfirm = async function(id){
-      if (!confirm('Vuoi cancellare questo avviso scadenza?')) return;
-      if (!confirm('Conferma definitiva: l’avviso verrà eliminato dai messaggi ricevuti. Procedo?')) return;
-      await deleteMessage(id);
+      return deadlineManageAlerts(id);
     };
 
     window.markMessageRead = async function(id){
