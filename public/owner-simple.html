@@ -6121,7 +6121,7 @@ function getOwnerParams(){
         return `
           <div data-message-id="${item.id || ''}" style="border-radius:${isDeadlineAlert ? '18px' : '8px'};padding:${isDeadlineAlert ? '16px 16px' : '14px 14px'};background:${isDeadlineAlert ? 'linear-gradient(135deg,rgba(255,122,0,.18),rgba(255,234,0,.08))' : (isNew ? 'rgba(103,176,255,.08)' : 'rgba(255,255,255,.03)')};border:1px solid ${isDeadlineAlert ? 'rgba(255,174,0,.48)' : (isNew ? 'rgba(103,176,255,.20)' : 'rgba(255,255,255,.06)')};box-shadow:${isDeadlineAlert ? '0 12px 34px rgba(255,122,0,.12)' : 'none'};">
             <div style="display:flex;gap:12px;align-items:flex-start;">
-              ${messagesSelectionMode ? `<input type="checkbox" ${selected ? 'checked' : ''} onchange="toggleMessageSelect(${item.id})" style="margin-top:4px;">` : ''}
+              ${messagesSelectionMode ? `<input type="checkbox" ${selected ? 'checked' : ''} onchange="toggleMessageSelect(${item.id}, this.checked)" style="margin-top:4px;">` : ''}
               <div style="flex:1;min-width:0;">
                 <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
                   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -6765,6 +6765,26 @@ function getOwnerParams(){
       window.openMessageDetail(id);
     });
 
+window.toggleMessageSelect = function(id, checked){
+      const numericId = Number(id);
+      if (!numericId) return;
+
+      if (typeof checked === 'boolean') {
+        if (checked) selectedMessageIds.add(numericId);
+        else selectedMessageIds.delete(numericId);
+      } else {
+        if (selectedMessageIds.has(numericId)) selectedMessageIds.delete(numericId);
+        else selectedMessageIds.add(numericId);
+      }
+
+      const selectAllBtn = document.getElementById('messagesSelectAllBtn');
+      if (selectAllBtn) {
+        const allIds = (ownerMessages || []).map(m => Number(m.id)).filter(Number.isFinite);
+        const allSelected = allIds.length > 0 && allIds.every(x => selectedMessageIds.has(x));
+        selectAllBtn.textContent = allSelected ? 'Deseleziona tutti' : 'Seleziona tutti';
+      }
+    };
+
     document.getElementById('messagesSelectBtn').addEventListener('click', () => {
       messagesSelectionMode = !messagesSelectionMode;
       selectedMessageIds.clear();
@@ -6795,7 +6815,7 @@ function getOwnerParams(){
     });
 
     document.getElementById('messagesMarkReadBtn').addEventListener('click', async () => {
-      const ids = Array.from(selectedMessageIds);
+      const ids = Array.from(selectedMessageIds).map(x => Number(x)).filter(x => Number.isFinite(x));
       if (!ids.length) return;
       const { code, plate } = getOwnerParams();
       await fetch('/api/owner-messages/read-many', {
