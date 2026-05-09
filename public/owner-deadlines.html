@@ -122,6 +122,13 @@
     .deadline.yellow{border-color:#fde68a;background:#fffbea}
     .deadline.green{border-color:#bbf7d0;background:#f0fdf4}
 
+    .deadline.filtered-highlight{
+      outline:3px solid rgba(255,122,0,.42);
+      box-shadow:0 14px 34px rgba(255,122,0,.16),0 0 0 6px rgba(255,122,0,.10);
+      transform:translateY(-1px);
+      transition:outline .25s ease, box-shadow .25s ease, transform .25s ease;
+    }
+
     .deadline.expired-pulse{
       position:relative;
       border-color:#ef4444 !important;
@@ -1716,22 +1723,41 @@ function filterDeadlines(filter){
 
   renderList();
 
-  setTimeout(() => {
-    const panel = document.getElementById("savedDeadlinesPanel");
-    if(panel) panel.scrollIntoView({ behavior:"smooth", block:"start" });
+  // Aspetta che la lista sia stata ridisegnata, poi scrolla sotto in modo affidabile.
+  window.requestAnimationFrame(() => {
+    setTimeout(() => {
+      const panel = document.getElementById("savedDeadlinesPanel");
+      const list = document.getElementById("deadlineList");
 
-    const first = document.querySelector("#deadlineList .deadline");
-    if(first) {
-      first.style.transition = "box-shadow .25s ease, transform .25s ease";
-      first.style.boxShadow = "0 0 0 4px rgba(255,122,0,.24), 0 14px 34px rgba(15,23,42,.10)";
-      first.style.transform = "translateY(-1px)";
+      if(!panel || !list) return;
+
+      const y = panel.getBoundingClientRect().top + window.pageYOffset - 92;
+
+      window.scrollTo({
+        top: Math.max(0, y),
+        behavior: "smooth"
+      });
+
+      // Evidenzia tutte le card risultanti dal filtro cliccato.
+      const cards = Array.from(list.querySelectorAll(".deadline"));
+      cards.forEach(card => card.classList.add("filtered-highlight"));
+
       setTimeout(() => {
-        first.style.boxShadow = "";
-        first.style.transform = "";
-      }, 1300);
-    }
-  }, 80);
+        cards.forEach(card => card.classList.remove("filtered-highlight"));
+      }, 2200);
+
+      // Se c'è almeno una card, la porta leggermente più in vista dopo lo scroll.
+      if(cards[0]){
+        setTimeout(() => {
+          try {
+            cards[0].scrollIntoView({ behavior:"smooth", block:"center" });
+          } catch(e) {}
+        }, 420);
+      }
+    }, 120);
+  });
 }
+
 
 function deadlineMatchesFilter(d, filter){
   const days = daysUntil(d.date);
