@@ -850,7 +850,8 @@ const categories = {
   "Famiglia e documenti": ["Patente","Carta identità","Passaporto","Tessera sanitaria","Certificato sportivo","Altro"],
   "Salute": ["Medicine","Ricette","Visite","Esami","Dentista","Oculista","Rinnovo medico di base","Altro"],
   "Casa": ["Caldaia","TARI / IMU","Condominio","Luce / gas / acqua","Internet","Assicurazione casa","Altro"],
-  "Pagamenti": ["Abbonamenti","Disdetta abbonamento","Software","Dominio / hosting","PEC / firma digitale","Rate / finanziamenti","Carta di credito in scadenza","Altro"]
+  "Pagamenti": ["Abbonamenti","Disdetta abbonamento","Software","Dominio / hosting","PEC / firma digitale","Rate / finanziamenti","Carta di credito in scadenza","Altro"],
+  "Rapido": ["Tra 5 minuti","Tra 15 minuti","Tra 1 ora","Oggi","Domani","Altro"]
 };
 
 const otherSuggestions = {
@@ -858,7 +859,8 @@ const otherSuggestions = {
   "Famiglia e documenti": ["Permesso di soggiorno","SPID","Carta nazionale servizi","Firma digitale personale","PEC personale","Patentino muletto","Patentino drone","Patentino nautico","Abbonamento mezzi pubblici","Mensa scolastica","Trasporto scolastico","Retta asilo","Retta scuola","Scadenza ISEE","Dichiarazione redditi","730 / modello redditi","Altro documento familiare"],
   "Salute": ["Rinnovo medico di base","Scelta / cambio medico di base","Pediatra","Tessera sanitaria","Rinnovo piano terapeutico","Rinnovo ricetta periodica","Farmaco da assumere","Farmaco da ricomprare","Integratori","Vaccinazioni","Richiamo vaccino","Analisi del sangue","Controllo pressione","Controllo glicemia","Pulizia denti","Cambio lenti a contatto","Controllo occhiali","Scadenza esenzione ticket","Altro promemoria salute"],
   "Casa": ["Manutenzione caldaia","Controllo fumi","Manutenzione condizionatore","Cambio filtri condizionatore","Cambio filtri acqua","Depuratore acqua","Estintori casa / box","Antifurto","Videosorveglianza","Affitto","Mutuo","Rata condominio","TARI","IMU","Canone RAI","Luce","Gas","Acqua","Internet fibra","Contratto energia","Contratto gas","Scadenza contratto locazione","Rinnovo contratto affitto","Altro promemoria casa"],
-  "Pagamenti": ["Rinnovo abbonamento","Abbonamento mensile","AppleCare+","Disdetta abbonamento","Ultimo giorno utile per disdetta","Netflix / streaming","Spotify / musica","Amazon Prime","iCloud","Google Drive","Microsoft 365","Adobe","Canva","ChatGPT / servizi AI","Antivirus","VPN","Dominio web","Hosting","Server","Email professionale","PEC","Firma digitale","Palestra","Abbonamento telefono","SIM","eSIM","Rata finanziamento","Rata prestito","Carta di credito in scadenza","Bancomat in scadenza","Contratto manutenzione","Contratto consulenza","Altro pagamento ricorrente"]
+  "Pagamenti": ["Rinnovo abbonamento","Abbonamento mensile","AppleCare+","Disdetta abbonamento","Ultimo giorno utile per disdetta","Netflix / streaming","Spotify / musica","Amazon Prime","iCloud","Google Drive","Microsoft 365","Adobe","Canva","ChatGPT / servizi AI","Antivirus","VPN","Dominio web","Hosting","Server","Email professionale","PEC","Firma digitale","Palestra","Abbonamento telefono","SIM","eSIM","Rata finanziamento","Rata prestito","Carta di credito in scadenza","Bancomat in scadenza","Contratto manutenzione","Contratto consulenza","Altro pagamento ricorrente"],
+  "Rapido": ["Richiamare","Pagare","Inviare documento","Mandare messaggio","Fare una verifica","Passare in farmacia","Comprare una cosa","Controllare una pratica","Promemoria personale","Altro promemoria rapido"]
 };
 
 const profiles = {
@@ -877,7 +879,7 @@ const suggestedProfile = {
   "Patente":"critical","Carta identità":"critical","Passaporto":"critical","Tessera sanitaria":"standard","Certificato sportivo":"important",
   "Medicine":"insistent","Ricette":"important","Visite":"standard","Esami":"standard","Dentista":"soft","Oculista":"soft","Rinnovo medico di base":"critical",
   "Caldaia":"important","TARI / IMU":"standard","Condominio":"standard","Luce / gas / acqua":"standard","Internet":"soft","Assicurazione casa":"important",
-  "Abbonamenti":"soft","Abbonamento mensile":"monthly","AppleCare+":"monthly","Disdetta abbonamento":"notice","Software":"standard","Dominio / hosting":"important","PEC / firma digitale":"critical","Rate / finanziamenti":"insistent","Carta di credito in scadenza":"important","Altro":"standard"
+  "Abbonamenti":"soft","Abbonamento mensile":"monthly","AppleCare+":"monthly","Disdetta abbonamento":"notice","Software":"standard","Dominio / hosting":"important","PEC / firma digitale":"critical","Rate / finanziamenti":"insistent","Carta di credito in scadenza":"important","Tra 5 minuti":"critical","Tra 15 minuti":"important","Tra 1 ora":"important","Oggi":"standard","Domani":"standard","Altro":"standard"
 };
 
 let qs = new URLSearchParams(location.search);
@@ -1655,6 +1657,49 @@ function setupCategoryScrollPulse(){
 }
 
 
+
+function pad2(n){ return String(n).padStart(2,"0"); }
+
+function setDateTimeFromNow(minutesToAdd){
+  const d = new Date(Date.now() + (Number(minutesToAdd || 0) * 60000));
+  const yyyy = d.getFullYear();
+  const mm = pad2(d.getMonth() + 1);
+  const dd = pad2(d.getDate());
+  const hh = pad2(d.getHours());
+  const mi = pad2(d.getMinutes());
+
+  if(typeof deadlineDate !== "undefined") deadlineDate.value = `${yyyy}-${mm}-${dd}`;
+  if(typeof deadlineTime !== "undefined") deadlineTime.value = `${hh}:${mi}`;
+}
+
+function applyRapidPresetDefaults(p){
+  if(currentCategory !== "Rapido") return;
+
+  const currentName = String(deadlineName.value || "").trim();
+
+  if(!currentName || currentName === "Tra 5 minuti" || currentName === "Tra 15 minuti" || currentName === "Tra 1 ora" || currentName === "Oggi" || currentName === "Domani"){
+    if(p === "Tra 5 minuti") deadlineName.value = "Promemoria rapido";
+    else if(p === "Tra 15 minuti") deadlineName.value = "Promemoria rapido";
+    else if(p === "Tra 1 ora") deadlineName.value = "Promemoria rapido";
+    else if(p === "Oggi") deadlineName.value = "Promemoria per oggi";
+    else if(p === "Domani") deadlineName.value = "Promemoria per domani";
+    else deadlineName.value = "Promemoria rapido";
+  }
+
+  if(typeof ownerName !== "undefined" && !String(ownerName.value || "").trim()){
+    ownerName.value = "Personale";
+  }
+
+  if(p === "Tra 5 minuti") setDateTimeFromNow(5);
+  else if(p === "Tra 15 minuti") setDateTimeFromNow(15);
+  else if(p === "Tra 1 ora") setDateTimeFromNow(60);
+  else if(p === "Oggi") setDateTimeFromNow(120);
+  else if(p === "Domani") setDateTimeFromNow(24 * 60);
+
+  updatePreview();
+}
+
+
 function scrollToDeadlineInputs(){
   function doScroll(){
     const anchor = document.getElementById("deadlineNameScrollAnchor");
@@ -1699,7 +1744,7 @@ function scrollToDeadlineInputs(){
 
 
 function renderPresets(){ presets.innerHTML = categories[currentCategory].map(p => `<button class="preset ${p===currentPreset?'active':''}" onclick="selectPreset('${esc(p)}')"><strong>${esc(p)}</strong><span>${esc(currentCategory)}</span></button>`).join(""); }
-function selectPreset(p){ currentPreset=p; currentProfile=suggestedProfile[p]||"standard"; renderPresets(); renderProfiles(); applyPreset(p); scrollToDeadlineInputs(); }
+function selectPreset(p){ currentPreset=p; currentProfile=suggestedProfile[p]||"standard"; renderPresets(); renderProfiles(); applyPreset(p); applyRapidPresetDefaults(p); scrollToDeadlineInputs(); }
 function renderProfiles(){ profiles.innerHTML = Object.entries(profilesData()).map(([k,p]) => `<button class="profile ${k===currentProfile?'active':''}" onclick="selectProfile('${k}')"><b>${esc(p.title)}</b><span>${esc(p.text)}</span></button>`).join(""); }
 function profilesData(){ return profiles; }
 function selectProfile(k){ currentProfile=k; renderProfiles(); updatePreview(); }
