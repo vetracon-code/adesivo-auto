@@ -561,6 +561,149 @@
     }
   </style>
 
+
+  <style id="compact-picker-real-override">
+    #medicineIntervalWheelBox{
+      margin-top:14px !important;
+      border:1px solid #fed7aa !important;
+      background:#fff7ed !important;
+      border-radius:24px !important;
+      padding:16px !important;
+    }
+
+    #medicineIntervalWheelBox .interval-wheel-title{
+      font-size:13px !important;
+      font-weight:950 !important;
+      color:#9a3412 !important;
+      text-transform:uppercase !important;
+      letter-spacing:.04em !important;
+      margin-bottom:12px !important;
+    }
+
+    #medicineIntervalWheelBox .interval-wheel-grid{
+      display:block !important;
+    }
+
+    #medicineIntervalUnitButtons{
+      display:grid !important;
+      grid-template-columns:repeat(5,1fr) !important;
+      gap:7px !important;
+      margin-bottom:14px !important;
+    }
+
+    #medicineIntervalUnitButtons .interval-unit-btn{
+      border:1px solid #fed7aa !important;
+      background:#fff !important;
+      color:#9a3412 !important;
+      border-radius:999px !important;
+      min-height:38px !important;
+      padding:8px 6px !important;
+      font-size:12px !important;
+      font-weight:950 !important;
+      cursor:pointer !important;
+      text-align:center !important;
+      box-shadow:none !important;
+    }
+
+    #medicineIntervalUnitButtons .interval-unit-btn.active{
+      background:#ff7a00 !important;
+      color:#fff !important;
+      border-color:#ff7a00 !important;
+      box-shadow:0 8px 20px rgba(255,122,0,.24) !important;
+    }
+
+    .interval-picker-shell{
+      position:relative !important;
+      height:188px !important;
+      border:1px solid #fdba74 !important;
+      border-radius:24px !important;
+      overflow:hidden !important;
+      background:
+        linear-gradient(to bottom,
+          rgba(255,255,255,.98) 0%,
+          rgba(255,255,255,.82) 18%,
+          rgba(255,255,255,0) 40%,
+          rgba(255,255,255,0) 60%,
+          rgba(255,255,255,.82) 82%,
+          rgba(255,255,255,.98) 100%),
+        #fff !important;
+    }
+
+    .interval-picker-center{
+      position:absolute !important;
+      left:16px !important;
+      right:16px !important;
+      top:50% !important;
+      height:50px !important;
+      transform:translateY(-50%) !important;
+      border-radius:18px !important;
+      background:rgba(255,122,0,.13) !important;
+      border:1px solid rgba(255,122,0,.38) !important;
+      pointer-events:none !important;
+      z-index:3 !important;
+    }
+
+    #medicineIntervalWheel{
+      height:188px !important;
+      overflow-y:auto !important;
+      scroll-snap-type:y mandatory !important;
+      padding:70px 0 !important;
+      -webkit-overflow-scrolling:touch !important;
+      overscroll-behavior:contain !important;
+      scrollbar-width:none !important;
+      touch-action:pan-y !important;
+      position:relative !important;
+      z-index:2 !important;
+      border:0 !important;
+      border-radius:0 !important;
+      background:transparent !important;
+    }
+
+    #medicineIntervalWheel::-webkit-scrollbar{
+      display:none !important;
+    }
+
+    #medicineIntervalWheel .interval-wheel-option{
+      height:48px !important;
+      display:flex !important;
+      align-items:center !important;
+      justify-content:center !important;
+      scroll-snap-align:center !important;
+      font-weight:950 !important;
+      font-size:22px !important;
+      color:#94a3b8 !important;
+      cursor:pointer !important;
+      opacity:.52 !important;
+      transform:scale(.88) !important;
+      transition:transform .14s ease, opacity .14s ease, color .14s ease, font-size .14s ease !important;
+    }
+
+    #medicineIntervalWheel .interval-wheel-option.near{
+      color:#475569 !important;
+      font-size:25px !important;
+      opacity:.80 !important;
+      transform:scale(.95) !important;
+    }
+
+    #medicineIntervalWheel .interval-wheel-option.active{
+      color:#ff7a00 !important;
+      font-size:36px !important;
+      opacity:1 !important;
+      transform:scale(1) !important;
+    }
+
+    @media(max-width:560px){
+      #medicineIntervalUnitButtons{
+        grid-template-columns:repeat(5,1fr) !important;
+      }
+
+      #medicineIntervalUnitButtons .interval-unit-btn{
+        font-size:11px !important;
+        padding:8px 4px !important;
+      }
+    }
+  </style>
+
 </head>
 <body>
   <div class="topbar">
@@ -1788,6 +1931,7 @@ function applyOtherSuggestion(){
 let currentIntervalUnit = "minutes";
 let currentIntervalValue = 5;
 let intervalWheelScrollTimer = null;
+let intervalWheelProgrammaticScroll = false;
 
 function intervalMaxForUnit(unit){
   if(unit === "minutes") return 59;
@@ -1798,6 +1942,15 @@ function intervalMaxForUnit(unit){
   return 59;
 }
 
+function intervalDefaultForUnit(unit){
+  if(unit === "minutes") return 5;
+  if(unit === "hours") return 8;
+  if(unit === "days") return 1;
+  if(unit === "months") return 1;
+  if(unit === "years") return 1;
+  return 1;
+}
+
 function intervalLabel(unit, value){
   const n = Number(value || 1);
   if(unit === "minutes") return n === 1 ? "1 minuto" : n + " minuti";
@@ -1805,7 +1958,7 @@ function intervalLabel(unit, value){
   if(unit === "days") return n === 1 ? "1 giorno" : n + " giorni";
   if(unit === "months") return n === 1 ? "1 mese" : n + " mesi";
   if(unit === "years") return n === 1 ? "1 anno" : n + " anni";
-  return n;
+  return String(n);
 }
 
 function buildIntervalWheel(){
@@ -1813,69 +1966,94 @@ function buildIntervalWheel(){
   const unitInput = document.getElementById("medicineIntervalUnit");
   if(!wheel || !unitInput) return;
 
-  currentIntervalUnit = unitInput.value || "minutes";
+  currentIntervalUnit = unitInput.value || currentIntervalUnit || "minutes";
+
   const max = intervalMaxForUnit(currentIntervalUnit);
 
-  if(currentIntervalValue > max) currentIntervalValue = max;
-  if(currentIntervalValue < 1) currentIntervalValue = 1;
+  if(currentIntervalValue > max || currentIntervalValue < 1){
+    currentIntervalValue = intervalDefaultForUnit(currentIntervalUnit);
+  }
 
   wheel.innerHTML = Array.from({length:max}, (_,i)=>{
     const n = i + 1;
-    return `<div class="interval-wheel-option ${n===Number(currentIntervalValue) ? "active" : ""}" data-value="${n}" onclick="selectIntervalWheelValue(${n}, true)">${n}</div>`;
+    return `<div class="interval-wheel-option" data-value="${n}" onclick="selectIntervalWheelValue(${n}, true)">${n}</div>`;
   }).join("");
-
-  setTimeout(() => {
-    selectIntervalWheelValue(currentIntervalValue, true);
-  }, 40);
 
   wheel.onscroll = function(){
     clearTimeout(intervalWheelScrollTimer);
+
     intervalWheelScrollTimer = setTimeout(() => {
-      const options = Array.from(wheel.querySelectorAll(".interval-wheel-option"));
-      if(!options.length) return;
+      if(intervalWheelProgrammaticScroll) return;
 
-      const wheelRect = wheel.getBoundingClientRect();
-      const center = wheelRect.top + wheelRect.height / 2;
-
-      let best = options[0];
-      let bestDistance = Infinity;
-
-      options.forEach(opt => {
-        const r = opt.getBoundingClientRect();
-        const c = r.top + r.height / 2;
-        const dist = Math.abs(c - center);
-        if(dist < bestDistance){
-          bestDistance = dist;
-          best = opt;
-        }
-      });
-
-      const value = Number(best.dataset.value || 1);
-      selectIntervalWheelValue(value, false);
+      const value = getIntervalWheelCenteredValue();
+      if(value) selectIntervalWheelValue(value, false, true);
     }, 90);
   };
 
+  setIntervalUnitButtons();
+  setTimeout(() => selectIntervalWheelValue(currentIntervalValue, true), 80);
   updateIntervalSummaryAndLegacyFields();
 }
 
-function selectIntervalWheelValue(value, scrollToValue){
-  currentIntervalValue = Math.max(1, Number(value || 1));
+function getIntervalWheelCenteredValue(){
+  const wheel = document.getElementById("medicineIntervalWheel");
+  if(!wheel) return null;
+
+  const options = Array.from(wheel.querySelectorAll(".interval-wheel-option"));
+  if(!options.length) return null;
+
+  const wheelRect = wheel.getBoundingClientRect();
+  const center = wheelRect.top + wheelRect.height / 2;
+
+  let best = options[0];
+  let bestDistance = Infinity;
+
+  options.forEach(opt => {
+    const r = opt.getBoundingClientRect();
+    const c = r.top + r.height / 2;
+    const dist = Math.abs(c - center);
+
+    if(dist < bestDistance){
+      bestDistance = dist;
+      best = opt;
+    }
+  });
+
+  return Number(best.dataset.value || 1);
+}
+
+function selectIntervalWheelValue(value, scrollToValue, snapAfterScroll){
+  const max = intervalMaxForUnit(currentIntervalUnit);
+  currentIntervalValue = Math.max(1, Math.min(max, Number(value || 1)));
 
   const wheel = document.getElementById("medicineIntervalWheel");
+
   if(wheel){
     wheel.querySelectorAll(".interval-wheel-option").forEach(opt=>{
-      opt.classList.toggle("active", Number(opt.dataset.value) === Number(currentIntervalValue));
+      const v = Number(opt.dataset.value);
+      opt.classList.toggle("active", v === Number(currentIntervalValue));
+      opt.classList.toggle("near", Math.abs(v - Number(currentIntervalValue)) === 1);
     });
 
-    if(scrollToValue){
-      const active = wheel.querySelector('.interval-wheel-option[data-value="' + currentIntervalValue + '"]');
-      if(active){
-        active.scrollIntoView({block:"center", behavior:"smooth"});
-      }
+    const active = wheel.querySelector('.interval-wheel-option[data-value="' + currentIntervalValue + '"]');
+
+    if(active && (scrollToValue || snapAfterScroll)){
+      intervalWheelProgrammaticScroll = true;
+      active.scrollIntoView({ block:"center", behavior:"smooth" });
+
+      setTimeout(() => {
+        intervalWheelProgrammaticScroll = false;
+      }, scrollToValue ? 420 : 260);
     }
   }
 
   updateIntervalSummaryAndLegacyFields();
+}
+
+function setIntervalUnitButtons(){
+  document.querySelectorAll(".interval-unit-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.unit === currentIntervalUnit);
+  });
 }
 
 function setIntervalUnit(unit){
@@ -1884,20 +2062,13 @@ function setIntervalUnit(unit){
   const unitInput = document.getElementById("medicineIntervalUnit");
   if(unitInput) unitInput.value = currentIntervalUnit;
 
-  document.querySelectorAll(".interval-unit-btn").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.unit === currentIntervalUnit);
-  });
+  const max = intervalMaxForUnit(currentIntervalUnit);
 
-  if(currentIntervalUnit === "minutes") currentIntervalValue = Math.min(currentIntervalValue || 5, 59);
-  if(currentIntervalUnit === "hours") currentIntervalValue = Math.min(currentIntervalValue || 8, 24);
-  if(currentIntervalUnit === "days") currentIntervalValue = Math.min(currentIntervalValue || 1, 31);
-  if(currentIntervalUnit === "months") currentIntervalValue = Math.min(currentIntervalValue || 1, 12);
-  if(currentIntervalUnit === "years") currentIntervalValue = Math.min(currentIntervalValue || 1, 10);
-
-  if(currentIntervalValue < 1) {
-    currentIntervalValue = currentIntervalUnit === "minutes" ? 5 : 1;
+  if(currentIntervalValue > max || currentIntervalValue < 1){
+    currentIntervalValue = intervalDefaultForUnit(currentIntervalUnit);
   }
 
+  setIntervalUnitButtons();
   buildIntervalWheel();
   updateMedicineMode();
 }
@@ -1909,6 +2080,7 @@ function updateIntervalWheelUnit(){
 
 function updateIntervalSummaryAndLegacyFields(){
   const summary = document.getElementById("medicineIntervalSummary");
+
   if(summary){
     summary.textContent = "Riceverai un avviso ogni " + intervalLabel(currentIntervalUnit, currentIntervalValue) + ".";
   }
@@ -1917,32 +2089,29 @@ function updateIntervalSummaryAndLegacyFields(){
   const hourSelect = document.getElementById("medicineIntervalHours");
 
   if(currentIntervalUnit === "minutes" && minuteSelect){
-    let v = String(currentIntervalValue);
+    const v = String(currentIntervalValue);
+
     if(!Array.from(minuteSelect.options).some(o => o.value === v)){
       const opt = document.createElement("option");
       opt.value = v;
       opt.textContent = v + " min";
       minuteSelect.appendChild(opt);
     }
+
     minuteSelect.value = v;
   }
 
   if(currentIntervalUnit === "hours" && hourSelect){
-    let v = String(currentIntervalValue);
+    const v = String(currentIntervalValue);
+
     if(!Array.from(hourSelect.options).some(o => o.value === v)){
       const opt = document.createElement("option");
       opt.value = v;
       opt.textContent = v + " ore";
       hourSelect.appendChild(opt);
     }
-    hourSelect.value = v;
-  }
 
-  // Compatibilità provvisoria:
-  // il motore server usa già medicineIntervalUnit/medicineIntervalValue,
-  // ma manteniamo minuti/ore valorizzati quando possibile.
-  if((currentIntervalUnit === "days" || currentIntervalUnit === "months" || currentIntervalUnit === "years") && minuteSelect){
-    minuteSelect.value = "5";
+    hourSelect.value = v;
   }
 
   updateMedicineMode();
