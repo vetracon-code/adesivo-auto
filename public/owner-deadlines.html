@@ -1275,6 +1275,43 @@
   }
 </style>
 
+
+<style id="scan-date-simple-confirm-style">
+  .scan-date-actions{
+    display:grid !important;
+    grid-template-columns:1fr 1fr !important;
+    gap:10px !important;
+    margin-top:12px !important;
+  }
+
+  .scan-date-confirm,
+  .scan-date-cancel{
+    min-height:48px !important;
+    border:0 !important;
+    border-radius:16px !important;
+    font-size:15px !important;
+    font-weight:950 !important;
+    cursor:pointer !important;
+  }
+
+  .scan-date-confirm{
+    background:linear-gradient(135deg,#ff7a00,#ff9f1c) !important;
+    color:#fff !important;
+    box-shadow:0 10px 24px rgba(255,122,0,.24) !important;
+  }
+
+  .scan-date-cancel{
+    background:#e5e7eb !important;
+    color:#111827 !important;
+  }
+
+  @media(max-width:560px){
+    .scan-date-actions{
+      grid-template-columns:1fr !important;
+    }
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -1513,10 +1550,10 @@
       </div>
 
       <div class="scan-results" id="scanResults">
-        <strong>Ho trovato queste possibili date</strong>
+        <strong>Conferma la data da inserire</strong>
         <div class="scan-result-grid" id="scanResultGrid"></div>
         <div class="scan-disclaimer">
-          Controlla sempre la data prima di salvarla. La lettura automatica può sbagliare: la scelta finale resta tua.
+          Controlla la data proposta: verrà inserita solo dopo la tua conferma.
         </div>
       </div>
     </section>
@@ -1874,8 +1911,121 @@ function forceChangeScanFrameMode(){
 }
 
 
+
+function saveSelectedDeadlineBeforeScan(){
+  try{
+    window.__scanDateTargetMode = "selected_document_date";
+    window.__scanSelectedDeadlineSnapshot = {
+      category: typeof currentCategory !== "undefined" ? currentCategory : "",
+      preset: typeof currentPreset !== "undefined" ? currentPreset : "",
+      profile: typeof currentProfile !== "undefined" ? currentProfile : "",
+      name: typeof nameInput !== "undefined" && nameInput ? nameInput.value : "",
+      owner: typeof ownerInput !== "undefined" && ownerInput ? ownerInput.value : "",
+      date: typeof dateInput !== "undefined" && dateInput ? dateInput.value : "",
+      time: typeof timeInput !== "undefined" && timeInput ? timeInput.value : "",
+      notes: typeof notesInput !== "undefined" && notesInput ? notesInput.value : ""
+    };
+  }catch(e){}
+}
+
+function restoreSelectedDeadlineAfterScan(){
+  try{
+    const s = window.__scanSelectedDeadlineSnapshot || {};
+
+    if(s.category && typeof currentCategory !== "undefined") currentCategory = s.category;
+    if(s.preset && typeof currentPreset !== "undefined") currentPreset = s.preset;
+    if(s.profile && typeof currentProfile !== "undefined") currentProfile = s.profile;
+
+    if(typeof nameInput !== "undefined" && nameInput && s.name !== undefined) nameInput.value = s.name;
+    if(typeof ownerInput !== "undefined" && ownerInput && s.owner !== undefined) ownerInput.value = s.owner;
+    if(typeof timeInput !== "undefined" && timeInput && s.time !== undefined) timeInput.value = s.time || "09:00";
+    if(typeof notesInput !== "undefined" && notesInput && s.notes !== undefined) notesInput.value = s.notes;
+
+    try { renderCats(); } catch(e) {}
+    try { renderPresets(); } catch(e) {}
+    try { renderProfiles(); } catch(e) {}
+    try { updateConditionalBlocks(); } catch(e) {}
+    try { updatePreview(); } catch(e) {}
+  }catch(e){}
+}
+
+function markContextualScanDateAcquired(){
+  try{
+    const btn = document.querySelector(".contextual-scan-btn");
+    if(btn) btn.classList.add("scan-date-acquired");
+  }catch(e){}
+}
+
+function scrollToDateFieldAfterScan(){
+  setTimeout(function(){
+    try{
+      const dateEl = document.getElementById("dateInput");
+      const scanBtn = document.querySelector(".contextual-scan-btn");
+      const target = scanBtn || dateEl;
+      if(!target) return;
+
+      const absoluteTop = target.getBoundingClientRect().top + window.pageYOffset;
+      window.scrollTo({
+        top: Math.max(0, absoluteTop - 110),
+        behavior:"smooth"
+      });
+
+      if(dateEl){
+        dateEl.classList.add("date-field-focus");
+        setTimeout(function(){ dateEl.classList.remove("date-field-focus"); }, 1800);
+      }
+    }catch(e){}
+  }, 220);
+}
+
+function confirmScannedDateForSelectedDocument(date){
+  try{
+    if(!date) return;
+
+    restoreSelectedDeadlineAfterScan();
+
+    if(typeof dateInput !== "undefined" && dateInput){
+      dateInput.value = date;
+    }
+
+    window.__pendingScannedDeadlineDate = date;
+    window.__pendingScannedDeadlineAt = Date.now();
+
+    markContextualScanDateAcquired();
+
+    try { updatePreview(); } catch(e) {}
+    try { closeScanPanel(); } catch(e) {}
+
+    scrollToDateFieldAfterScan();
+
+    try {
+      setTimeout(function(){
+        alert("Data inserita nel documento selezionato.");
+      }, 180);
+    } catch(e) {}
+
+    window.__scanDateTargetMode = "";
+  }catch(e){
+    console.warn("confirmScannedDateForSelectedDocument error:", e);
+  }
+}
+
+
+
+
+function cancelScannedDateChoice(){
+  try{
+    restoreSelectedDeadlineAfterScan();
+    try { setScanStatus("Inserimento annullato. Nessuna data è stata modificata.", true); } catch(e) {}
+    try { closeScanPanel(); } catch(e) {}
+    scrollToDateFieldAfterScan();
+    window.__scanDateTargetMode = "";
+  }catch(e){}
+}
+
 function openCardScanFromDate(){
   try {
+    saveSelectedDeadlineBeforeScan();
     openScanPanel();
 
     try { forceApplyScanFrameMode(window.__desiredScanFrameMode || window.currentScanFrameMode || "card"); } catch(e) {}
@@ -2501,7 +2651,7 @@ function showScanResults(results, guessed){
       <strong>${formatDateIt(r.date)}</strong>
       <span>${esc(r.label)}<br>${esc(r.reason)}</span>
       <div class="scan-date-actions">
-        <button class="scan-date-confirm" type="button" onclick="useScannedDate('${esc(r.date)}','${esc(r.category)}','${esc(r.type)}','${esc(r.profile)}')">
+        <button class="scan-date-confirm" type="button" onclick="confirmScannedDateForSelectedDocument('${esc(r.date)}')">
           Sì, confermo
         </button>
         <button class="scan-date-cancel" type="button" onclick="cancelScannedDateChoice()">
@@ -2515,19 +2665,14 @@ function showScanResults(results, guessed){
 }
 
 
-function cancelScannedDateChoice(){
-  try {
-    setScanStatus("Nessuna data inserita. Puoi scegliere un’altra data oppure ripetere la scansione.", true);
-  } catch(e) {}
-
-  try {
-    const box = document.getElementById("scanResults");
-    if(box) box.classList.add("active");
-  } catch(e) {}
-}
 
 
 function useScannedDate(date, category, type, profile){
+  if(window.__scanDateTargetMode === "selected_document_date"){
+    confirmScannedDateForSelectedDocument(date);
+    return;
+  }
+
   openDeadlineForm();
 
   currentCategory = category || "Famiglia e documenti";
