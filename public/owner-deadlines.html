@@ -1010,6 +1010,32 @@
   }
 </style>
 
+
+<style id="scan-captured-natural-preview-style">
+  #scanCapturedImg.active{
+    width:auto !important;
+    max-width:100% !important;
+    max-height:72vh !important;
+    height:auto !important;
+    object-fit:contain !important;
+    border-radius:18px !important;
+    background:#0f172a !important;
+    box-shadow:0 16px 40px rgba(0,0,0,.24) !important;
+  }
+
+  .scan-frame.show-captured-preview{
+    min-height:0 !important;
+    padding:12px !important;
+    background:#0f172a !important;
+    align-items:center !important;
+    justify-content:center !important;
+  }
+
+  .scan-frame.show-captured-preview #scanFrameInner{
+    display:none !important;
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -1429,6 +1455,7 @@ let tesseractLoadingPromise = null;
 
 
 let currentScanFrameMode = "card";
+let scanContextMode = "general";
 
 const scanFrameModes = ["card", "large", "free"];
 
@@ -1705,6 +1732,10 @@ function openContextualScanFromDate(){
 
     openScanPanel();
 
+    // Da questo punto la scansione è contestuale:
+    // deve compilare solo Data scadenza e NON cambiare documento/categoria.
+    scanContextMode = "date_only";
+
     setTimeout(function(){
       try { applyScanFrameMode(expectedMode || "card"); } catch(e) {}
       try { setScanStatus(getExpectedScanGuideFromSelectedDeadline(expectedMode || "card"), true); } catch(e) {}
@@ -1715,12 +1746,17 @@ function openContextualScanFromDate(){
     }, 650);
 
   } catch(e) {
-    try { openScanPanel(); } catch(err) {}
+    try {
+      openScanPanel();
+      scanContextMode = "date_only";
+    } catch(err) {}
   }
 }
 
 
 function openScanPanel(){
+  scanContextMode = "general";
+  resetNaturalCapturedPreview();
   try{ applyScanFrameMode("card"); }catch(e){}
   const panel = document.getElementById("scanPanel");
   if(panel){
@@ -1732,6 +1768,7 @@ function openScanPanel(){
 
 function closeScanPanel(){
   stopCameraScan();
+  resetNaturalCapturedPreview();
 
   const panel = document.getElementById("scanPanel");
   const results = document.getElementById("scanResults");
@@ -1811,6 +1848,22 @@ function stopCameraScan(){
   }
 }
 
+
+function showNaturalCapturedPreview(){
+  try {
+    const frame = document.querySelector(".scan-frame");
+    if(frame) frame.classList.add("show-captured-preview");
+  } catch(e) {}
+}
+
+function resetNaturalCapturedPreview(){
+  try {
+    const frame = document.querySelector(".scan-frame");
+    if(frame) frame.classList.remove("show-captured-preview");
+  } catch(e) {}
+}
+
+
 async function captureCameraFrame(){
   const video = document.getElementById("scanVideo");
   const canvas = document.getElementById("scanCanvas");
@@ -1865,6 +1918,7 @@ function handleScanFile(event){
     if(img){
       img.src = dataUrl;
       img.classList.add("active");
+      showNaturalCapturedPreview();
     }
     if(placeholder) placeholder.classList.add("hidden");
 
@@ -2098,6 +2152,12 @@ function applyPendingScannedDateToForm(){
 
 function applyRecognizedDocumentToForm(scanItem, guessed){
   try {
+    if(scanContextMode === "date_only"){
+      rememberScannedDateForManualSelection(scanItem);
+      applyPendingScannedDateToForm();
+      try { setScanStatus("Data inserita nel documento selezionato. Controlla e salva la scadenza.", true); } catch(e) {}
+      return;
+    }
     if(!guessed) guessed = window.__lastScanGuessed || {};
     if(!scanItem) scanItem = {};
 
@@ -2195,7 +2255,15 @@ function installScanResultAutoFillWrapper(){
 
       setTimeout(function(){
         const item = getScanItemFromArgs(args);
-        applyRecognizedDocumentToForm(item, window.__lastScanGuessed || null);
+
+        if(scanContextMode === "date_only"){
+          rememberScannedDateForManualSelection(item);
+          applyPendingScannedDateToForm();
+          try { setScanStatus("Data inserita nel documento selezionato. Controlla e salva la scadenza.", true); } catch(e) {}
+          try { scrollToDeadlineInputs(); } catch(e) {}
+        } else {
+          applyRecognizedDocumentToForm(item, window.__lastScanGuessed || null);
+        }
       }, 180);
 
       return result;
@@ -2461,6 +2529,11 @@ function showScanResults(results, guessed){
   try {
     if(window.__lastScanResults.length){
       rememberScannedDateForManualSelection(window.__lastScanResults[0]);
+
+      if(scanContextMode === "date_only"){
+        applyPendingScannedDateToForm();
+        try { setScanStatus("Data letta dal documento. Verifica il campo Data scadenza e salva.", true); } catch(e) {}
+      }
     }
   } catch(e) {}
 
