@@ -1185,6 +1185,34 @@
   }
 </style>
 
+
+<style id="scan-preview-force-visible-restore">
+  .scan-frame.show-captured-preview{
+    min-height:260px !important;
+    padding:16px !important;
+    background:#0f172a !important;
+    align-items:center !important;
+    justify-content:center !important;
+  }
+
+  .scan-frame.show-captured-preview #scanFrameInner{
+    display:none !important;
+  }
+
+  .scan-frame.show-captured-preview #scanCapturedPreviewShell{
+    display:block !important;
+  }
+
+  .scan-frame.show-captured-preview #scanCapturedPreviewShell.active{
+    display:block !important;
+  }
+
+  #scanCapturedPreviewShell.active img,
+  #scanCapturedImg{
+    display:block !important;
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -2020,7 +2048,8 @@ function showNaturalCapturedPreview(){
   try {
     const frame = document.querySelector(".scan-frame");
     const shell = document.getElementById("scanCapturedPreviewShell");
-    const mode = currentScanFrameMode || "free";
+    const img = document.getElementById("scanCapturedImg");
+    const mode = currentScanFrameMode || "card";
 
     if(frame) frame.classList.add("show-captured-preview");
 
@@ -2028,7 +2057,15 @@ function showNaturalCapturedPreview(){
       shell.classList.add("active");
       shell.classList.remove("preview-card", "preview-large", "preview-free");
       shell.classList.add("preview-" + mode);
+      shell.style.display = "block";
     }
+
+    if(img){
+      img.classList.add("active");
+      img.style.display = "block";
+    }
+
+    window.__scanPreviewShownAt = Date.now();
   } catch(e) {}
 }
 
@@ -2326,18 +2363,21 @@ function scrollToDateFieldAfterScan(){
   setTimeout(function(){
     const dateEl = document.getElementById("dateInput");
     const scanBtn = document.querySelector(".contextual-scan-btn");
-    const target = dateEl || scanBtn;
 
+    const target = scanBtn || dateEl;
     if(!target) return;
 
     try {
       const absoluteTop = target.getBoundingClientRect().top + window.pageYOffset;
+
+      // Porta la zona Data scadenza / Scansiona automaticamente in vista,
+      // non l'inizio del modulo e non il blocco "Altro".
       window.scrollTo({
-        top: Math.max(0, absoluteTop - 86),
+        top: Math.max(0, absoluteTop - 110),
         behavior: "smooth"
       });
     } catch(e) {
-      try { target.scrollIntoView({behavior:"smooth", block:"start"}); } catch(err) {}
+      try { target.scrollIntoView({behavior:"smooth", block:"center"}); } catch(err) {}
     }
 
     try {
@@ -2346,7 +2386,7 @@ function scrollToDateFieldAfterScan(){
         setTimeout(function(){ dateEl.classList.remove("date-field-focus"); }, 2200);
       }
     } catch(e) {}
-  }, 220);
+  }, 260);
 }
 
 
@@ -2428,7 +2468,7 @@ function applyRecognizedDocumentToForm(scanItem, guessed){
 
     try { updateConditionalBlocks(); } catch(e) {}
     try { updatePreview(); } catch(e) {}
-    try { scrollToDeadlineInputs(); } catch(e) {}
+    try { scrollToDateFieldAfterScan(); } catch(e) {}
 
     const label = type ? ("Documento riconosciuto: " + type + ". Modulo compilato automaticamente.") : "Data acquisita. Completa i dati mancanti.";
     try { setScanStatus(label, true); } catch(e) {}
@@ -2745,6 +2785,11 @@ function rankCandidateDates(dates, fullText, guessed){
 
 
 function scrollToScanDateResults(){
+  const minPreviewMs = 2000;
+  const shownAt = Number(window.__scanPreviewShownAt || 0);
+  const elapsed = shownAt ? (Date.now() - shownAt) : 0;
+  const delay = Math.max(700, minPreviewMs - elapsed);
+
   setTimeout(function(){
     const targets = [
       document.getElementById("scanResults"),
@@ -2757,7 +2802,6 @@ function scrollToScanDateResults(){
     ].filter(Boolean);
 
     const target = targets[0];
-
     if(!target) return;
 
     try {
@@ -2769,7 +2813,7 @@ function scrollToScanDateResults(){
     } catch(e) {
       try { target.scrollIntoView({behavior:"smooth", block:"start"}); } catch(err) {}
     }
-  }, 2000);
+  }, delay);
 }
 
 
@@ -3027,7 +3071,22 @@ function scrollToDeadlineInputs(){
 
 
 function renderPresets(){ presets.innerHTML = categories[currentCategory].map(p => `<button class="preset ${p===currentPreset?'active':''}" onclick="selectPreset('${esc(p)}')"><strong>${esc(p)}</strong><span>${esc(currentCategory)}</span></button>`).join(""); }
-function selectPreset(p){ resetContextualScanDateAcquired(); currentPreset=p; currentProfile=suggestedProfile[p]||"standard"; renderPresets(); renderProfiles(); applyPreset(p); applyRapidPresetDefaults(p); applyPendingScannedDateToForm(); scrollToDeadlineInputs(); }
+function selectPreset(p){
+  resetContextualScanDateAcquired();
+  currentPreset=p;
+  currentProfile=suggestedProfile[p]||"standard";
+  renderPresets();
+  renderProfiles();
+  applyPreset(p);
+  applyRapidPresetDefaults(p);
+
+  if(window.__pendingScannedDeadlineDate){
+    applyPendingScannedDateToForm();
+    scrollToDateFieldAfterScan();
+  } else {
+    scrollToDeadlineInputs();
+  }
+}
 function renderProfiles(){ profiles.innerHTML = Object.entries(profilesData()).map(([k,p]) => `<button class="profile ${k===currentProfile?'active':''}" onclick="selectProfile('${k}')"><b>${esc(p.title)}</b><span>${esc(p.text)}</span></button>`).join(""); }
 function profilesData(){ return profiles; }
 function selectProfile(k){ currentProfile=k; renderProfiles(); updatePreview(); }
