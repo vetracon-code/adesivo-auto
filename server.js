@@ -4113,8 +4113,7 @@ app.post('/api/owner-dashboard', async (req, res, next) => {
           COALESCE(ip_country, '') AS ip_country,
           COALESCE(location_shared, FALSE) AS location_shared
         FROM contact_message_logs
-        WHERE code = $1
-          AND deleted_at IS NULL)
+        WHERE code = $1)
        UNION ALL
        (SELECT
           'Visualizzazione pagina' AS type,
