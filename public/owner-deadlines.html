@@ -1056,6 +1056,77 @@
   }
 </style>
 
+
+<style id="scan-preview-same-format-style">
+  .scan-captured-preview-shell{
+    display:none;
+    width:min(92%, 560px);
+    margin:0 auto;
+    border-radius:24px;
+    overflow:hidden;
+    background:#050505;
+    border:4px solid #050505;
+    outline:3px solid #ff7a00;
+    outline-offset:-10px;
+    box-shadow:
+      0 0 0 2px rgba(255,122,0,.28),
+      0 18px 46px rgba(0,0,0,.30);
+    position:relative;
+  }
+
+  .scan-captured-preview-shell.active{
+    display:block;
+  }
+
+  .scan-captured-preview-shell.preview-card{
+    aspect-ratio:85.6 / 53.98;
+  }
+
+  .scan-captured-preview-shell.preview-large{
+    aspect-ratio:.72 / 1;
+    max-width:520px;
+  }
+
+  .scan-captured-preview-shell.preview-free{
+    aspect-ratio:1.25 / 1;
+    max-width:620px;
+    border-style:dashed;
+  }
+
+  .scan-captured-preview-shell img{
+    width:100% !important;
+    height:100% !important;
+    object-fit:contain !important;
+    display:block;
+    background:#0f172a;
+    border-radius:18px;
+  }
+
+  .scan-frame.show-captured-preview{
+    min-height:0 !important;
+    padding:16px !important;
+    background:#0f172a !important;
+    align-items:center !important;
+    justify-content:center !important;
+  }
+
+  .scan-frame.show-captured-preview #scanFrameInner{
+    display:none !important;
+  }
+
+  .scan-frame.show-captured-preview #scanCapturedImg{
+    display:block !important;
+  }
+
+  @media(max-width:560px){
+    .scan-captured-preview-shell{
+      width:94%;
+      border-radius:20px;
+      outline-offset:-9px;
+    }
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -1087,7 +1158,9 @@
         <div class="scan-corner br"></div>
         <div class="scan-frame-inner scan-format-card" id="scanFrameInner">
           <video id="scanVideo" class="scan-video" playsinline autoplay muted></video>
-          <img id="scanCapturedImg" class="scan-captured-img" alt="Documento acquisito">
+          <div class="scan-captured-preview-shell" id="scanCapturedPreviewShell">
+            <img id="scanCapturedImg" class="scan-captured-img" alt="Documento acquisito">
+          </div>
           <canvas id="scanCanvas" class="scan-canvas"></canvas>
           <div id="scanPlaceholder" class="scan-placeholder">
             <strong>Posiziona qui il documento</strong>
@@ -1882,14 +1955,29 @@ function stopCameraScan(){
 function showNaturalCapturedPreview(){
   try {
     const frame = document.querySelector(".scan-frame");
+    const shell = document.getElementById("scanCapturedPreviewShell");
+    const mode = currentScanFrameMode || "free";
+
     if(frame) frame.classList.add("show-captured-preview");
+
+    if(shell){
+      shell.classList.add("active");
+      shell.classList.remove("preview-card", "preview-large", "preview-free");
+      shell.classList.add("preview-" + mode);
+    }
   } catch(e) {}
 }
 
 function resetNaturalCapturedPreview(){
   try {
     const frame = document.querySelector(".scan-frame");
+    const shell = document.getElementById("scanCapturedPreviewShell");
+
     if(frame) frame.classList.remove("show-captured-preview");
+
+    if(shell){
+      shell.classList.remove("active", "preview-card", "preview-large", "preview-free");
+    }
   } catch(e) {}
 }
 
@@ -2591,9 +2679,41 @@ function rankCandidateDates(dates, fullText, guessed){
   }).sort((a,b) => b.score - a.score);
 }
 
+
+function scrollToScanDateResults(){
+  setTimeout(function(){
+    const targets = [
+      document.getElementById("scanResults"),
+      document.getElementById("scanResultsList"),
+      document.querySelector(".scan-results"),
+      document.querySelector(".scan-result-list"),
+      document.querySelector("[data-scan-results]"),
+      document.querySelector(".ocr-results"),
+      document.querySelector(".detected-dates")
+    ].filter(Boolean);
+
+    const target = targets[0];
+
+    if(!target) return;
+
+    try {
+      const absoluteTop = target.getBoundingClientRect().top + window.pageYOffset;
+      window.scrollTo({
+        top: Math.max(0, absoluteTop - 86),
+        behavior:"smooth"
+      });
+    } catch(e) {
+      try { target.scrollIntoView({behavior:"smooth", block:"start"}); } catch(err) {}
+    }
+  }, 2000);
+}
+
+
 function showScanResults(results, guessed){
   window.__lastScanResults = Array.isArray(results) ? results : [];
   window.__lastScanGuessed = guessed || null;
+
+  try { scrollToScanDateResults(); } catch(e) {}
 
   try {
     if(window.__lastScanResults.length){
