@@ -1048,6 +1048,103 @@
   }
 </style>
 
+
+<style id="scan-format-force-switch-final">
+  #scanFrameInner.scan-format-card,
+  #scanFrameInner.scan-format-large,
+  #scanFrameInner.scan-format-free{
+    box-sizing:border-box !important;
+    margin:0 auto !important;
+    display:block !important;
+    position:relative !important;
+    overflow:hidden !important;
+    background:#050505 !important;
+    border:5px solid #050505 !important;
+    border-radius:22px !important;
+    min-height:0 !important;
+    padding:0 !important;
+  }
+
+  #scanFrameInner.scan-format-card{
+    width:min(96vw, 680px) !important;
+    height:clamp(185px, 56vw, 330px) !important;
+    max-height:330px !important;
+    aspect-ratio:85.6 / 53.98 !important;
+  }
+
+  #scanFrameInner.scan-format-large{
+    width:min(86vw, 460px) !important;
+    height:clamp(420px, 118vw, 680px) !important;
+    max-height:680px !important;
+    aspect-ratio:0.72 / 1 !important;
+  }
+
+  #scanFrameInner.scan-format-free{
+    width:min(92vw, 560px) !important;
+    height:clamp(300px, 82vw, 520px) !important;
+    max-height:520px !important;
+    aspect-ratio:1 / 1 !important;
+  }
+
+  #scanFrameInner.scan-format-card::after,
+  #scanFrameInner.scan-format-large::after,
+  #scanFrameInner.scan-format-free::after{
+    content:"" !important;
+    display:block !important;
+    position:absolute !important;
+    inset:10px !important;
+    border:4px dashed #ff7a00 !important;
+    border-radius:18px !important;
+    pointer-events:none !important;
+    z-index:10 !important;
+  }
+
+  #scanFrameInner #scanPlaceholder,
+  #scanFrameInner #scanFormatChip,
+  #scanFrameInner .scan-format-chip,
+  .scan-frame .scan-corner,
+  .scan-corner{
+    display:none !important;
+  }
+
+  #scanFrameInner #scanVideo,
+  #scanFrameInner #scanVideo.active,
+  #scanFrameInner #scanCanvas,
+  #scanFrameInner #scanCapturedImg{
+    position:absolute !important;
+    inset:0 !important;
+    width:100% !important;
+    height:100% !important;
+    object-fit:cover !important;
+    display:block !important;
+    border-radius:16px !important;
+    background:#050505 !important;
+  }
+
+  #scanFrameInner.scan-format-card #scanVideo,
+  #scanFrameInner.scan-format-card #scanVideo.active{
+    left:50% !important;
+    top:50% !important;
+    inset:auto !important;
+    transform:translate(-50%, -50%) rotate(90deg) scale(1.08) !important;
+    transform-origin:center center !important;
+  }
+
+  #scanFrameInner.scan-format-large #scanVideo,
+  #scanFrameInner.scan-format-large #scanVideo.active,
+  #scanFrameInner.scan-format-free #scanVideo,
+  #scanFrameInner.scan-format-free #scanVideo.active{
+    transform:none !important;
+  }
+
+  .scan-format-tab.active{
+    background:#ff7a00 !important;
+    color:#fff !important;
+    border-color:#ff7a00 !important;
+    box-shadow:0 8px 20px rgba(255,122,0,.22) !important;
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -1271,11 +1368,11 @@
       <div class="scan-actions">
         <button class="scan-primary" type="button" onclick="startCameraScan()">Avvia fotocamera</button>
         <button class="scan-primary" type="button" onclick="captureCameraFrame()">Leggi le date</button>
-        <button class="scan-secondary-action" type="button" onclick="changeScanFrameMode()">Cambia formato inquadratura</button>
+        <button class="scan-secondary-action" type="button" onclick="forceChangeScanFrameMode()">Cambia formato inquadratura</button>
         <div class="scan-format-tabs" id="scanFormatTabs">
-          <button class="scan-format-tab" type="button" data-mode="card" onclick="applyScanFrameMode('card')">Card</button>
-          <button class="scan-format-tab" type="button" data-mode="large" onclick="applyScanFrameMode('large')">Foglio intero</button>
-          <button class="scan-format-tab" type="button" data-mode="free" onclick="applyScanFrameMode('free')">Appunti / libero</button>
+          <button class="scan-format-tab" type="button" data-mode="card" onclick="forceApplyScanFrameMode('card')">Card</button>
+          <button class="scan-format-tab" type="button" data-mode="large" onclick="forceApplyScanFrameMode('large')">Foglio intero</button>
+          <button class="scan-format-tab" type="button" data-mode="free" onclick="forceApplyScanFrameMode('free')">Appunti / libero</button>
         </div>
         <button class="scan-secondary" type="button" onclick="stopCameraScan()">Ferma camera</button>
         <label class="scan-secondary">
@@ -1496,6 +1593,72 @@ function forceCardHorizontalFrame(){
   } catch(e) {
     console.warn("forceCardHorizontalFrame error:", e);
   }
+}
+
+
+
+function forceApplyScanFrameMode(mode){
+  const frame = document.getElementById("scanFrameInner");
+  const video = document.getElementById("scanVideo");
+  const chip = document.getElementById("scanFormatChip");
+  const placeholder = document.getElementById("scanPlaceholder");
+
+  mode = mode || "card";
+  if(!["card","large","free"].includes(mode)) mode = "card";
+
+  currentScanFrameMode = mode;
+
+  if(frame){
+    frame.classList.remove("scan-format-card", "scan-format-large", "scan-format-free");
+    frame.classList.add("scan-format-" + mode);
+
+    [
+      "width","max-width","height","min-height","max-height","aspect-ratio",
+      "padding","display","flex","position","overflow","border","outline",
+      "outline-offset","border-radius","background"
+    ].forEach(function(prop){ frame.style.removeProperty(prop); });
+  }
+
+  if(video){
+    [
+      "position","inset","left","top","width","height","min-width","min-height",
+      "max-width","max-height","object-fit","display","transform","transform-origin",
+      "border-radius","background"
+    ].forEach(function(prop){ video.style.removeProperty(prop); });
+  }
+
+  if(chip){
+    chip.textContent = mode === "card" ? "Card" : (mode === "large" ? "Foglio intero" : "Appunti / libero");
+    chip.style.display = "none";
+  }
+
+  if(placeholder) placeholder.style.display = "none";
+
+  document.querySelectorAll(".scan-format-tab").forEach(function(btn){
+    btn.classList.toggle("active", btn.dataset.mode === mode);
+  });
+
+  document.querySelectorAll(".scan-corner").forEach(function(el){
+    el.style.setProperty("display", "none", "important");
+  });
+
+  try {
+    if(mode === "card"){
+      setScanStatus("Formato Card: centra la card nel tratteggio arancione e premi Leggi le date.", true);
+    } else if(mode === "large"){
+      setScanStatus("Formato Foglio intero: inquadra tutto il documento e premi Leggi le date.", true);
+    } else {
+      setScanStatus("Formato Appunti / libero: inquadra bene le date leggibili e premi Leggi le date.", true);
+    }
+  } catch(e) {}
+}
+
+function forceChangeScanFrameMode(){
+  const order = ["card", "large", "free"];
+  const current = currentScanFrameMode || "card";
+  const idx = order.indexOf(current);
+  const next = order[(idx + 1) % order.length];
+  forceApplyScanFrameMode(next);
 }
 
 
