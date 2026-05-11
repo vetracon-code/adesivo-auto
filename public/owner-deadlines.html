@@ -906,7 +906,7 @@
         <label>Data scadenza</label>
         <input id="dateInput" type="date">
 
-        <label>Ora preferita per gli avvisi</label>
+        <label>A che ora vuoi ricevere l’avviso?</label>
         <input id="timeInput" type="time" value="09:00">
 
         <div class="conditional-box active" id="recurrenceBox">
@@ -1036,6 +1036,8 @@ const profiles = {
   insistent:{title:"Insistente",text:"Per scadenze da non ignorare.",alerts:["30 giorni prima","15 giorni prima","7 giorni prima","3 giorni prima","2 giorni prima","1 giorno prima","giorno stesso","ogni ora dalle 8:00 alle 15:00 finché non confermi"]},
   notice:{title:"Con preavviso disdetta",text:"Per contratti e abbonamenti.",alerts:["90 giorni prima del rinnovo: verifica condizioni","60 giorni prima ultimo giorno utile","30 giorni prima","15 giorni prima","7 giorni prima","3 giorni prima","1 giorno prima","ultimo giorno utile per disdire"]},
   tolerance:{title:"Con tolleranza",text:"Per scadenze con periodo successivo da verificare.",alerts:["30 giorni prima","15 giorni prima","7 giorni prima","3 giorni prima","1 giorno prima","giorno scadenza","1 giorno dopo","7 giorni dopo","14 giorni dopo","15 giorni dopo"]},
+  daily:{title:"Giornaliero",text:"Per promemoria quotidiani.",alerts:["all’orario scelto"]},
+  weekly:{title:"Settimanale",text:"Per promemoria settimanali.",alerts:["1 giorno prima","giorno stesso"]},
   monthly:{title:"Mensile leggero",text:"Per rinnovi mensili automatici.",alerts:["1 giorno prima","giorno stesso"]}
 };
 
@@ -2164,10 +2166,41 @@ function updateCustomRecurrenceSummary(){
 
   const unit = unitEl.value || "weeks";
   hintEl.textContent = "La scadenza verrà riproposta ogni " + value + " " + recurrenceUnitLabel(unit, value) + ".";
+  applyAlertProfileByRecurrence("custom");
+  renderProfiles();
 }
+
+
+function applyAlertProfileByRecurrence(mode){
+  if(!mode) return;
+
+  // I farmaci hanno logiche proprie: non forziamo i profili standard.
+  if(currentPreset === "Medicine") return;
+
+  if(mode === "daily"){
+    currentProfile = "daily";
+  } else if(mode === "weekly"){
+    currentProfile = "weekly";
+  } else if(mode === "monthly"){
+    currentProfile = "monthly";
+  } else if(mode === "yearly"){
+    currentProfile = "important";
+  } else if(mode === "custom"){
+    const unit = (typeof customRecurrenceUnit !== "undefined" && customRecurrenceUnit) ? customRecurrenceUnit.value : "weeks";
+
+    if(unit === "days") currentProfile = "daily";
+    else if(unit === "weeks") currentProfile = "weekly";
+    else if(unit === "months") currentProfile = "monthly";
+    else if(unit === "years") currentProfile = "important";
+    else currentProfile = "standard";
+  }
+}
+
 
 function updateRecurrenceMode(){
   const mode = recurrenceMode.value || "none";
+
+  applyAlertProfileByRecurrence(mode);
 
   if(document.getElementById("customRecurrenceBox")){
     customRecurrenceBox.classList.toggle("active", mode === "custom");
@@ -2190,11 +2223,7 @@ function updateRecurrenceMode(){
     updateCustomRecurrenceSummary();
   }
 
-  if (typeof recurrenceMode !== "undefined" && recurrenceMode.value === "monthly" && currentPreset !== "Medicine") {
-    currentProfile = "monthly";
-    renderProfiles();
-  }
-
+  renderProfiles();
   updatePreview();
 }
 
