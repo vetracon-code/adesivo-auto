@@ -912,13 +912,35 @@
         <div class="conditional-box active" id="recurrenceBox">
           <label>Ricorrenza della scadenza</label>
           <select id="recurrenceMode" onchange="updateRecurrenceMode()">
-            <option value="none">Nessuna, una sola volta</option>
-            <option value="monthly">Mensile</option>
-            <option value="yearly">Annuale</option>
-            <option value="custom">Personalizzata / da definire</option>
-          </select>
+              <option value="none" selected>Non si ripete</option>
+              <option value="daily">Ogni giorno</option>
+              <option value="weekly">Ogni settimana</option>
+              <option value="monthly">Ogni mese</option>
+              <option value="yearly">Ogni anno</option>
+              <option value="custom">Personalizzata</option>
+            </select>
           <div class="hint-small" id="recurrenceHint">
-            Per abbonamenti mensili come AppleCare+, cloud, streaming o software mensili, scegli “Mensile”.
+            Scegli se la scadenza deve ripetersi dopo la conferma.
+          </div>
+
+          <div class="conditional-box" id="customRecurrenceBox">
+            <label>Ricorrenza personalizzata</label>
+            <div class="inline-grid">
+              <div>
+                <label>Ogni</label>
+                <input id="customRecurrenceValue" type="number" min="1" max="99" value="2" oninput="updateRecurrenceMode()">
+              </div>
+              <div>
+                <label>Unità</label>
+                <select id="customRecurrenceUnit" onchange="updateRecurrenceMode()">
+                  <option value="days">giorni</option>
+                  <option value="weeks" selected>settimane</option>
+                  <option value="months">mesi</option>
+                  <option value="years">anni</option>
+                </select>
+              </div>
+            </div>
+            <div class="hint-small" id="customRecurrenceHint">La scadenza verrà riproposta ogni 2 settimane.</div>
           </div>
         </div>
 
@@ -2120,23 +2142,62 @@ function updateIntervalSummaryAndLegacyFields(){
 
 function updateMedicineMode(){ updatePreview(); }
 
+function recurrenceUnitLabel(unit, value){
+  const n = Number(value || 1);
+  if(unit === "days") return n === 1 ? "giorno" : "giorni";
+  if(unit === "weeks") return n === 1 ? "settimana" : "settimane";
+  if(unit === "months") return n === 1 ? "mese" : "mesi";
+  if(unit === "years") return n === 1 ? "anno" : "anni";
+  return "giorni";
+}
+
+function updateCustomRecurrenceSummary(){
+  const box = document.getElementById("customRecurrenceBox");
+  const valueEl = document.getElementById("customRecurrenceValue");
+  const unitEl = document.getElementById("customRecurrenceUnit");
+  const hintEl = document.getElementById("customRecurrenceHint");
+
+  if(!box || !valueEl || !unitEl || !hintEl) return;
+
+  const value = Math.max(1, Number(valueEl.value || 1));
+  valueEl.value = value;
+
+  const unit = unitEl.value || "weeks";
+  hintEl.textContent = "La scadenza verrà riproposta ogni " + value + " " + recurrenceUnitLabel(unit, value) + ".";
+}
+
 function updateRecurrenceMode(){
   const mode = recurrenceMode.value || "none";
 
-  if (mode === "monthly") {
+  if(document.getElementById("customRecurrenceBox")){
+    customRecurrenceBox.classList.toggle("active", mode === "custom");
+  }
+
+  if (mode === "none") {
+    recurrenceHint.innerHTML = "Questa scadenza non verrà ricreata automaticamente.";
+  } else if (mode === "daily") {
+    recurrenceHint.innerHTML = "Ricorrenza giornaliera: dopo la conferma verrà creata la scadenza del giorno successivo.";
+  } else if (mode === "weekly") {
+    recurrenceHint.innerHTML = "Ricorrenza settimanale: dopo la conferma verrà creata la scadenza della settimana successiva.";
+  } else if (mode === "monthly") {
     currentProfile = "monthly";
-    recurrenceHint.innerHTML = "Rinnovo mensile: avvisi ridotti a 1 giorno prima e giorno stesso. Dopo il rinnovo verrà proposta/creata la scadenza del mese successivo.";
+    recurrenceHint.innerHTML = "Ricorrenza mensile: avvisi ridotti a 1 giorno prima e giorno stesso. Dopo la conferma verrà creata la scadenza del mese successivo.";
     renderProfiles();
   } else if (mode === "yearly") {
-    recurrenceHint.innerHTML = "Rinnovo annuale: utile per assicurazioni, domini, PEC, software annuali, documenti e contratti.";
+    recurrenceHint.innerHTML = "Ricorrenza annuale: dopo la conferma verrà creata la scadenza dell’anno successivo.";
   } else if (mode === "custom") {
-    recurrenceHint.innerHTML = "Ricorrenza personalizzata: per ora viene salvata come impostazione da rifinire nella versione successiva.";
-  } else {
-    recurrenceHint.innerHTML = "Per abbonamenti mensili come AppleCare+, cloud, streaming o software mensili, scegli “Mensile”.";
+    recurrenceHint.innerHTML = "Ricorrenza personalizzata: definisci ogni quanti giorni, settimane, mesi o anni deve ripetersi.";
+    updateCustomRecurrenceSummary();
+  }
+
+  if (typeof recurrenceMode !== "undefined" && recurrenceMode.value === "monthly" && currentPreset !== "Medicine") {
+    currentProfile = "monthly";
+    renderProfiles();
   }
 
   updatePreview();
 }
+
 
 function updatePreview(){
   if (typeof recurrenceMode !== "undefined" && recurrenceMode.value === "monthly" && currentPreset !== "Medicine") {
@@ -2191,7 +2252,9 @@ function saveDeadline(){
       medicineIntervalUnit: typeof currentIntervalUnit !== "undefined" ? currentIntervalUnit : "",
       medicineIntervalValue: typeof currentIntervalValue !== "undefined" ? String(currentIntervalValue || "") : "",
       medicineIntervalMinutes: medicineIntervalMinutes ? (medicineIntervalMinutes.value || "") : "",
-      medicineDurationMinutes: medicineDurationMinutes ? (medicineDurationMinutes.value || "") : ""
+      medicineDurationMinutes: medicineDurationMinutes ? (medicineDurationMinutes.value || "") : "",
+      customRecurrenceValue: (typeof customRecurrenceValue !== "undefined" && customRecurrenceValue) ? (customRecurrenceValue.value || "") : "",
+      customRecurrenceUnit: (typeof customRecurrenceUnit !== "undefined" && customRecurrenceUnit) ? (customRecurrenceUnit.value || "") : ""
     };
     selectedAlerts = Array.from(document.querySelectorAll("#alertPreview .pill")).map(x => x.textContent);
   }
@@ -2521,30 +2584,54 @@ function completeDeadline(id){
 }
 
 function createNextRecurringDeadline(d){
-  if (!d || !d.date) return null;
-  const nextDate = addRecurrenceDate(d.date, d.recurrence);
-  if (!nextDate) return null;
+  const recurrence = d.recurrence || "none";
+  if(!recurrence || recurrence === "none") return null;
+
+  const base = new Date((d.date || "") + "T12:00:00");
+  if(isNaN(base.getTime())) return null;
+
+  const nextDate = new Date(base.getTime());
+
+  if(recurrence === "daily"){
+    nextDate.setDate(nextDate.getDate() + 1);
+  } else if(recurrence === "weekly"){
+    nextDate.setDate(nextDate.getDate() + 7);
+  } else if(recurrence === "monthly"){
+    nextDate.setMonth(nextDate.getMonth() + 1);
+  } else if(recurrence === "yearly"){
+    nextDate.setFullYear(nextDate.getFullYear() + 1);
+  } else if(recurrence === "custom"){
+    const extra = d.extra || {};
+    const value = Math.max(1, Number(extra.customRecurrenceValue || 1));
+    const unit = extra.customRecurrenceUnit || "weeks";
+
+    if(unit === "days") nextDate.setDate(nextDate.getDate() + value);
+    else if(unit === "weeks") nextDate.setDate(nextDate.getDate() + (value * 7));
+    else if(unit === "months") nextDate.setMonth(nextDate.getMonth() + value);
+    else if(unit === "years") nextDate.setFullYear(nextDate.getFullYear() + value);
+    else nextDate.setDate(nextDate.getDate() + value);
+  } else {
+    return null;
+  }
+
+  const yyyy = nextDate.getFullYear();
+  const mm = String(nextDate.getMonth() + 1).padStart(2, "0");
+  const dd = String(nextDate.getDate()).padStart(2, "0");
 
   return {
     ...d,
-    id: Date.now() + Math.floor(Math.random()*100000),
-    date: nextDate,
+    id: Date.now(),
+    date: `${yyyy}-${mm}-${dd}`,
     status: "active",
     createdAt: new Date().toISOString(),
     completedAt: null,
-    lastAction: "created_from_recurring",
+    confirmedAt: null,
+    lastAction: "recurrence_created",
     notes: d.notes || ""
   };
 }
 
-function addRecurrenceDate(dateStr, recurrence){
-  const d = new Date(dateStr + "T00:00:00");
-  if (isNaN(d.getTime())) return "";
-  if (recurrence === "monthly") d.setMonth(d.getMonth() + 1);
-  else if (recurrence === "yearly") d.setFullYear(d.getFullYear() + 1);
-  else return "";
-  return d.toISOString().slice(0,10);
-}
+
 function editDeadline(id){
   const d=deadlines.find(x=>x.id===id); if(!d)return;
   openDeadlineForm();
