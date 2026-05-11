@@ -901,6 +901,63 @@
   }
 </style>
 
+
+<style id="hard-force-card-horizontal-frame">
+  /* Forzatura finale: il frame Card deve essere identico al frame nero prima dell'apertura */
+  .scan-panel #scanFrameInner.scan-format-card,
+  .scan-frame #scanFrameInner.scan-format-card,
+  div#scanFrameInner.scan-format-card{
+    width:min(96%, 620px) !important;
+    max-width:620px !important;
+    aspect-ratio:85.6 / 53.98 !important;
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    padding:0 !important;
+    display:block !important;
+    flex:none !important;
+    border:5px solid #050505 !important;
+    outline:3px solid #ff7a00 !important;
+    outline-offset:-8px !important;
+    border-radius:22px !important;
+    background:#050505 !important;
+    overflow:hidden !important;
+    position:relative !important;
+  }
+
+  .scan-panel #scanFrameInner.scan-format-card::after,
+  .scan-frame #scanFrameInner.scan-format-card::after,
+  div#scanFrameInner.scan-format-card::after{
+    content:none !important;
+    display:none !important;
+  }
+
+  .scan-panel #scanFrameInner.scan-format-card #scanVideo,
+  .scan-panel #scanFrameInner.scan-format-card #scanVideo.active,
+  .scan-panel #scanFrameInner.scan-format-card #scanCanvas,
+  .scan-panel #scanFrameInner.scan-format-card #scanCapturedImg{
+    width:100% !important;
+    height:100% !important;
+    max-width:none !important;
+    max-height:none !important;
+    object-fit:cover !important;
+    display:block !important;
+    border-radius:15px !important;
+    background:#050505 !important;
+  }
+
+  .scan-panel #scanFrameInner.scan-format-card #scanPlaceholder,
+  .scan-panel #scanFrameInner.scan-format-card #scanFormatChip,
+  .scan-panel #scanFrameInner.scan-format-card .scan-format-chip{
+    display:none !important;
+  }
+
+  .scan-frame{
+    align-items:center !important;
+    justify-content:center !important;
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -1123,7 +1180,7 @@
 
       <div class="scan-actions">
         <button class="scan-primary" type="button" onclick="startCameraScan()">Avvia fotocamera</button>
-        <button class="scan-primary" type="button" onclick="captureCameraFrame()">Scatta foto e leggi</button>
+        <button class="scan-primary" type="button" onclick="captureCameraFrame()">Cattura l’immagine</button>
         <button class="scan-secondary" type="button" onclick="stopCameraScan()">Ferma camera</button>
         <label class="scan-secondary">
           Carica immagine
@@ -1290,21 +1347,67 @@ let scanStream = null;
 let tesseractLoadingPromise = null;
 
 
+
+function forceCardHorizontalFrame(){
+  try {
+    const frame = document.getElementById("scanFrameInner");
+    if(!frame) return;
+
+    frame.classList.remove("scan-format-large", "scan-format-free");
+    frame.classList.add("scan-format-card");
+
+    frame.style.width = "min(96%, 620px)";
+    frame.style.maxWidth = "620px";
+    frame.style.aspectRatio = "85.6 / 53.98";
+    frame.style.height = "auto";
+    frame.style.minHeight = "0";
+    frame.style.maxHeight = "none";
+    frame.style.padding = "0";
+    frame.style.display = "block";
+    frame.style.flex = "none";
+    frame.style.border = "5px solid #050505";
+    frame.style.outline = "3px solid #ff7a00";
+    frame.style.outlineOffset = "-8px";
+    frame.style.borderRadius = "22px";
+    frame.style.background = "#050505";
+    frame.style.overflow = "hidden";
+
+    const video = document.getElementById("scanVideo");
+    if(video){
+      video.style.width = "100%";
+      video.style.height = "100%";
+      video.style.objectFit = "cover";
+      video.style.display = "block";
+      video.style.borderRadius = "15px";
+    }
+  } catch(e) {}
+}
+
+
 function openCardScanFromDate(){
   try {
     openScanPanel();
 
+    try { applyScanFrameMode("card"); } catch(e) {}
+    forceCardHorizontalFrame();
+
     setTimeout(function(){
       try { applyScanFrameMode("card"); } catch(e) {}
+      forceCardHorizontalFrame();
       try { setScanStatus("Inquadra la card in orizzontale dentro la cornice. Poi premi Cattura l’immagine.", true); } catch(e) {}
     }, 180);
 
     setTimeout(function(){
       try { applyScanFrameMode("card"); } catch(e) {}
+      forceCardHorizontalFrame();
     }, 650);
 
+    setTimeout(function(){
+      forceCardHorizontalFrame();
+    }, 1200);
+
   } catch(e) {
-    try { openScanPanel(); } catch(err) {}
+    try { openScanPanel(); forceCardHorizontalFrame(); } catch(err) {}
   }
 }
 
@@ -1375,7 +1478,11 @@ async function startCameraScan(){
     video.srcObject = scanStream;
     video.classList.add("active");
 
-    setScanStatus("Fotocamera attiva. Inquadra bene il documento intero, poi premi “Scatta foto e leggi”.", true);
+    try { forceCardHorizontalFrame(); } catch(e) {}
+    setTimeout(function(){ try { forceCardHorizontalFrame(); } catch(e) {} }, 300);
+    setTimeout(function(){ try { forceCardHorizontalFrame(); } catch(e) {} }, 900);
+
+    setScanStatus("Fotocamera attiva. Inquadra la card in orizzontale dentro la cornice, poi premi “Cattura l’immagine”.", true);
   } catch(err) {
     console.error(err);
     setScanStatus("Non riesco ad attivare la fotocamera. Controlla i permessi del browser oppure usa “Carica immagine”.", true);
