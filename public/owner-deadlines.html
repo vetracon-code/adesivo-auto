@@ -193,7 +193,7 @@
       border-radius:999px;
       z-index:3;
     }
-    .done{background:#16a34a;color:white}.edit{background:#0f172a;color:white}.delete{background:#ef4444;color:white}.later{background:#ff7a00;color:#000}
+    .done{background:#16a34a;color:white}.edit{background:#0f172a;color:white}.delete{background:#ef4444;color:white}.later{background:#ff7a00;color:#000}.primary.confirm-insert{background:#16a34a!important;color:#fff!important;border:0!important;box-shadow:0 10px 24px rgba(22,163,74,.24)!important}
     .empty{color:#64748b;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:18px;padding:18px;text-align:center;font-weight:800}
     .note{margin-top:12px;background:#fffbea;border:1px solid #fde68a;color:#5f4b00;border-radius:16px;padding:12px;font-size:13px;line-height:1.45}
     .scan-panel{
@@ -1036,6 +1036,26 @@
   }
 </style>
 
+
+<style id="contextual-scan-after-date-style">
+  .contextual-scan-btn.scan-date-acquired{
+    opacity:.58 !important;
+    filter:saturate(.75) !important;
+    box-shadow:0 8px 20px rgba(255,122,0,.14) !important;
+  }
+
+  .contextual-scan-btn.scan-date-acquired span::after{
+    content:" · data acquisita";
+    font-weight:950;
+  }
+
+  .date-field-focus{
+    outline:3px solid rgba(255,122,0,.38) !important;
+    box-shadow:0 0 0 7px rgba(255,122,0,.10) !important;
+    border-radius:14px !important;
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -1341,6 +1361,7 @@
           <div class="pills" id="modalAlerts"></div>
         </div>
         <div class="actions">
+          <button class="primary confirm-insert" onclick="confirmInsertFromModal()">Sì, confermo inserimento</button>
           <button class="primary later" onclick="remindLater()">Continua a ricordarmelo</button>
           <button class="primary done" onclick="markDoneFromModal()">Fatto</button>
           <button class="secondary edit" onclick="editFromModal()">Modifica</button>
@@ -1725,6 +1746,15 @@ function getExpectedScanGuideFromSelectedDeadline(mode){
 
   return "Inquadra la parte del documento dove sono visibili le date. Puoi cambiare formato con Card / Documento grande / Libero.";
 }
+
+
+function resetContextualScanDateAcquired(){
+  try {
+    const btn = document.querySelector(".contextual-scan-btn");
+    if(btn) btn.classList.remove("scan-date-acquired");
+  } catch(e) {}
+}
+
 
 function openContextualScanFromDate(){
   try {
@@ -2132,6 +2162,42 @@ function rememberScannedDateForManualSelection(scanItem){
   }
 }
 
+
+function markContextualScanDateAcquired(){
+  try {
+    const btn = document.querySelector(".contextual-scan-btn");
+    if(btn) btn.classList.add("scan-date-acquired");
+  } catch(e) {}
+}
+
+function scrollToDateFieldAfterScan(){
+  setTimeout(function(){
+    const dateEl = document.getElementById("dateInput");
+    const scanBtn = document.querySelector(".contextual-scan-btn");
+    const target = dateEl || scanBtn;
+
+    if(!target) return;
+
+    try {
+      const absoluteTop = target.getBoundingClientRect().top + window.pageYOffset;
+      window.scrollTo({
+        top: Math.max(0, absoluteTop - 86),
+        behavior: "smooth"
+      });
+    } catch(e) {
+      try { target.scrollIntoView({behavior:"smooth", block:"start"}); } catch(err) {}
+    }
+
+    try {
+      if(dateEl){
+        dateEl.classList.add("date-field-focus");
+        setTimeout(function(){ dateEl.classList.remove("date-field-focus"); }, 2200);
+      }
+    } catch(e) {}
+  }, 220);
+}
+
+
 function applyPendingScannedDateToForm(){
   try {
     const date = window.__pendingScannedDeadlineDate || "";
@@ -2144,6 +2210,9 @@ function applyPendingScannedDateToForm(){
     if(typeof dateInput !== "undefined" && dateInput){
       dateInput.value = date;
     }
+
+    markContextualScanDateAcquired();
+    scrollToDateFieldAfterScan();
 
     try { updatePreview(); } catch(e) {}
   } catch(e) {}
@@ -2260,7 +2329,7 @@ function installScanResultAutoFillWrapper(){
           rememberScannedDateForManualSelection(item);
           applyPendingScannedDateToForm();
           try { setScanStatus("Data inserita nel documento selezionato. Controlla e salva la scadenza.", true); } catch(e) {}
-          try { scrollToDeadlineInputs(); } catch(e) {}
+          try { scrollToDateFieldAfterScan(); } catch(e) {}
         } else {
           applyRecognizedDocumentToForm(item, window.__lastScanGuessed || null);
         }
@@ -2775,7 +2844,7 @@ function scrollToDeadlineInputs(){
 
 
 function renderPresets(){ presets.innerHTML = categories[currentCategory].map(p => `<button class="preset ${p===currentPreset?'active':''}" onclick="selectPreset('${esc(p)}')"><strong>${esc(p)}</strong><span>${esc(currentCategory)}</span></button>`).join(""); }
-function selectPreset(p){ currentPreset=p; currentProfile=suggestedProfile[p]||"standard"; renderPresets(); renderProfiles(); applyPreset(p); applyRapidPresetDefaults(p); applyPendingScannedDateToForm(); scrollToDeadlineInputs(); }
+function selectPreset(p){ resetContextualScanDateAcquired(); currentPreset=p; currentProfile=suggestedProfile[p]||"standard"; renderPresets(); renderProfiles(); applyPreset(p); applyRapidPresetDefaults(p); applyPendingScannedDateToForm(); scrollToDeadlineInputs(); }
 function renderProfiles(){ profiles.innerHTML = Object.entries(profilesData()).map(([k,p]) => `<button class="profile ${k===currentProfile?'active':''}" onclick="selectProfile('${k}')"><b>${esc(p.title)}</b><span>${esc(p.text)}</span></button>`).join(""); }
 function profilesData(){ return profiles; }
 function selectProfile(k){ currentProfile=k; renderProfiles(); updatePreview(); }
@@ -3453,6 +3522,33 @@ function openMessage(id){
   modalAlerts.innerHTML = d.alerts.map(a=>`<span class="pill">${esc(a)}</span>`).join("");
   messageModal.style.display = "flex";
 }
+
+function confirmInsertFromModal(){
+  if(!currentModalId) return;
+
+  const d = deadlines.find(x => x.id === currentModalId);
+  if(!d) return;
+
+  if(!confirm("Confermi l’inserimento di questa scadenza?")) return;
+
+  deadlines = deadlines.map(x => {
+    if(x.id === currentModalId){
+      return {
+        ...x,
+        confirmedAt: new Date().toISOString(),
+        lastAction: "insert_confirmed"
+      };
+    }
+    return x;
+  });
+
+  persist();
+  renderList();
+  closeModal();
+
+  alert("Inserimento confermato.");
+}
+
 
 function remindLater(){ alert("Ok, l’avviso resterà attivo e continuerà a ricordartelo secondo il piano impostato."); closeModal(); }
 function markDoneFromModal(){ if(!currentModalId) return; if(!confirm("Confermi di aver completato questa scadenza?")) return; completeDeadline(currentModalId); closeModal(); }
