@@ -946,40 +946,104 @@
   }
 </style>
 
+<style id="scanner-buttons-below-frame-final">
+  /* I comandi scanner devono stare sotto l'inquadratura, non sopra */
+  .scan-panel{
+    display:none;
+  }
 
-<style id="scanner-premium-compact-buttons">
-  /* Pulsanti scanner più premium: importanti ma non invadenti */
+  .scan-panel.active{
+    display:block;
+  }
+
+  .scan-frame{
+    position:relative !important;
+    z-index:1 !important;
+    margin-bottom:14px !important;
+  }
+
   .scan-actions{
-    gap:9px !important;
+    position:relative !important;
+    z-index:2 !important;
+    bottom:auto !important;
+    top:auto !important;
+    background:transparent !important;
+    backdrop-filter:none !important;
     margin-top:12px !important;
+    padding:0 !important;
+    display:grid !important;
+    grid-template-columns:1fr 1fr !important;
+    gap:10px !important;
+    align-items:stretch !important;
   }
 
   .scan-actions .scan-primary{
-    min-height:48px !important;
-    padding:12px 16px !important;
+    min-height:50px !important;
+    padding:13px 16px !important;
     font-size:15px !important;
     font-weight:900 !important;
     border-radius:16px !important;
-    box-shadow:0 10px 24px rgba(255,122,0,.20) !important;
+    box-shadow:0 10px 24px rgba(255,122,0,.18) !important;
   }
 
-  .scan-actions button[onclick="startCameraScan()"]{
-    transform:none !important;
-    box-shadow:0 10px 24px rgba(255,122,0,.20) !important;
+  .scan-secondary-action{
+    grid-column:1 / -1 !important;
+    min-height:46px !important;
+    border-radius:16px !important;
+    font-size:14px !important;
+    font-weight:900 !important;
+    background:#0f172a !important;
+    color:#fff !important;
+    border:0 !important;
   }
 
-  .scan-actions button[onclick="captureCameraFrame()"]{
-    transform:none !important;
-    box-shadow:0 10px 24px rgba(255,122,0,.20) !important;
+  .scan-format-tabs{
+    grid-column:1 / -1 !important;
+    display:grid !important;
+    grid-template-columns:repeat(3,1fr) !important;
+    gap:8px !important;
+    margin-top:0 !important;
+  }
+
+  .scan-format-tab{
+    min-height:42px !important;
+    border-radius:14px !important;
+    font-size:13px !important;
+    font-weight:900 !important;
+    border:1px solid #cbd5e1 !important;
+    background:#fff !important;
+    color:#0f172a !important;
+  }
+
+  .scan-format-tab.active{
+    background:#ff7a00 !important;
+    color:#fff !important;
+    border-color:#ff7a00 !important;
+    box-shadow:0 8px 20px rgba(255,122,0,.22) !important;
+  }
+
+  .scan-actions .scan-secondary{
+    grid-column:1 / -1 !important;
+    min-height:42px !important;
+    border-radius:14px !important;
+    font-size:13px !important;
+    font-weight:850 !important;
   }
 
   @media(max-width:560px){
+    .scan-actions{
+      grid-template-columns:1fr 1fr !important;
+      gap:9px !important;
+    }
+
     .scan-actions .scan-primary{
       min-height:50px !important;
-      padding:13px 15px !important;
       font-size:15px !important;
       border-radius:16px !important;
-      width:100% !important;
+    }
+
+    .scan-format-tabs{
+      grid-template-columns:1fr !important;
     }
   }
 </style>
@@ -1207,6 +1271,12 @@
       <div class="scan-actions">
         <button class="scan-primary" type="button" onclick="startCameraScan()">Avvia fotocamera</button>
         <button class="scan-primary" type="button" onclick="captureCameraFrame()">Leggi le date</button>
+        <button class="scan-secondary-action" type="button" onclick="changeScanFrameMode()">Cambia formato inquadratura</button>
+        <div class="scan-format-tabs" id="scanFormatTabs">
+          <button class="scan-format-tab" type="button" data-mode="card" onclick="applyScanFrameMode('card')">Card</button>
+          <button class="scan-format-tab" type="button" data-mode="large" onclick="applyScanFrameMode('large')">Foglio intero</button>
+          <button class="scan-format-tab" type="button" data-mode="free" onclick="applyScanFrameMode('free')">Appunti / libero</button>
+        </div>
         <button class="scan-secondary" type="button" onclick="stopCameraScan()">Ferma camera</button>
         <label class="scan-secondary">
           Carica immagine
@@ -1443,7 +1513,7 @@ function openCardScanFromDate(){
       }, ms);
     });
 
-    try { setScanStatus("Inquadra la card dentro il tratteggio arancione. Poi premi Leggi le date.", true); } catch(e) {}
+    try { setScanStatus("Scegli il formato corretto, inquadra bene il documento e premi Leggi le date.", true); } catch(e) {}
 
   } catch(e) {
     try {
@@ -1530,7 +1600,7 @@ async function startCameraScan(){
     setTimeout(function(){ try { forceCardHorizontalFrame(); } catch(e) {} }, 300);
     setTimeout(function(){ try { forceCardHorizontalFrame(); } catch(e) {} }, 900);
 
-    setScanStatus("Fotocamera attiva. Inquadra la card dentro il tratteggio arancione, poi premi “Leggi le date”.", true);
+    setScanStatus("Fotocamera attiva. Scegli il formato corretto, inquadra bene il documento e premi “Leggi le date”.", true);
   } catch(err) {
     console.error(err);
     setScanStatus("Non riesco ad attivare la fotocamera. Controlla i permessi del browser oppure usa “Carica immagine”.", true);
