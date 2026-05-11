@@ -970,6 +970,46 @@
   }
 </style>
 
+
+<style id="contextual-scan-button-style">
+  .contextual-scan-btn{
+    width:100%;
+    margin-top:10px;
+    border:0;
+    border-radius:18px;
+    padding:14px 15px;
+    background:linear-gradient(135deg,#ff7a00,#ff9f1c);
+    color:#fff;
+    display:flex;
+    align-items:center;
+    justify-content:flex-start;
+    gap:12px;
+    cursor:pointer;
+    box-shadow:0 16px 34px rgba(255,122,0,.28);
+    font-weight:950;
+    text-align:left;
+  }
+  .contextual-scan-btn svg{
+    width:30px;
+    height:30px;
+    flex:0 0 auto;
+    filter:drop-shadow(0 4px 8px rgba(0,0,0,.18));
+  }
+  .contextual-scan-btn strong{
+    display:block;
+    font-size:15px;
+    line-height:1.1;
+  }
+  .contextual-scan-btn span{
+    display:block;
+    margin-top:3px;
+    font-size:12px;
+    line-height:1.2;
+    color:rgba(255,255,255,.88);
+    font-weight:800;
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -1018,7 +1058,7 @@
           <button class="scan-secondary-action" type="button" onclick="changeScanFrameMode()">Cambia inquadratura</button>
           <div class="scan-format-tabs" id="scanFormatTabs">
             <button class="scan-format-tab" type="button" data-mode="card" onclick="applyScanFrameMode('card')">Card</button>
-            <button class="scan-format-tab" type="button" data-mode="large" onclick="applyScanFrameMode('large')">Grande</button>
+            <button class="scan-format-tab" type="button" data-mode="large" onclick="applyScanFrameMode('large')">Documento grande</button>
             <button class="scan-format-tab" type="button" data-mode="free" onclick="applyScanFrameMode('free')">Libero</button>
           </div>
         <button class="scan-secondary" type="button" onclick="stopCameraScan()">Ferma camera</button>
@@ -1178,6 +1218,17 @@
 
         <label>Data scadenza</label>
         <input id="dateInput" type="date">
+        <button class="contextual-scan-btn" type="button" onclick="openContextualScanFromDate()">
+          <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
+            <rect x="10" y="12" width="44" height="40" rx="10" stroke="white" stroke-width="4"/>
+            <path d="M20 25h24M20 34h16M20 43h10" stroke="white" stroke-width="4" stroke-linecap="round"/>
+            <path d="M47 9l2.2 5.4L55 17l-5.8 2.6L47 25l-2.2-5.4L39 17l5.8-2.6L47 9z" fill="white"/>
+          </svg>
+          <div>
+            <strong>Scansiona automaticamente</strong>
+            <span>Leggi la data dal documento</span>
+          </div>
+        </button>
 
         <label>A che ora vuoi ricevere l’avviso?</label>
         <input id="timeInput" type="time" value="09:00">
@@ -1592,6 +1643,80 @@ function changeScanFrameMode(){
   const idx = scanFrameModes.indexOf(currentScanFrameMode);
   const next = scanFrameModes[(idx + 1) % scanFrameModes.length];
   applyScanFrameMode(next);
+}
+
+
+
+function getExpectedScanFrameModeFromSelectedDeadline(){
+  const preset = String(currentPreset || "").toLowerCase();
+  const category = String(currentCategory || "").toLowerCase();
+  const name = String((typeof nameInput !== "undefined" && nameInput ? nameInput.value : "") || "").toLowerCase();
+  const joined = preset + " " + category + " " + name;
+
+  if (
+    joined.includes("tessera sanitaria") ||
+    joined.includes("patente") ||
+    joined.includes("carta ident") ||
+    joined.includes("carta d'ident") ||
+    joined.includes("carta di credito") ||
+    joined.includes("bancomat") ||
+    joined.includes("pagamento") ||
+    joined.includes("codice fiscale")
+  ) {
+    return "card";
+  }
+
+  if (
+    joined.includes("revisione") ||
+    joined.includes("assicurazione") ||
+    joined.includes("polizza") ||
+    joined.includes("bollo") ||
+    joined.includes("passaporto") ||
+    joined.includes("contratto") ||
+    joined.includes("abbonamento") ||
+    joined.includes("disdetta") ||
+    joined.includes("ricevuta") ||
+    joined.includes("certificato") ||
+    category.includes("casa")
+  ) {
+    return "large";
+  }
+
+  return "free";
+}
+
+function getExpectedScanGuideFromSelectedDeadline(mode){
+  const preset = String(currentPreset || "documento").trim();
+
+  if(mode === "card"){
+    return "Inquadra " + preset + " in orizzontale dentro la cornice, come una card. Se il formato non coincide, usa Card / Documento grande / Libero.";
+  }
+
+  if(mode === "large"){
+    return "Inquadra il documento intero. Se devi leggere solo una zona con la data, puoi passare a Libero.";
+  }
+
+  return "Inquadra la parte del documento dove sono visibili le date. Puoi cambiare formato con Card / Documento grande / Libero.";
+}
+
+function openContextualScanFromDate(){
+  try {
+    const expectedMode = getExpectedScanFrameModeFromSelectedDeadline();
+
+    openScanPanel();
+
+    setTimeout(function(){
+      try { applyScanFrameMode(expectedMode || "card"); } catch(e) {}
+      try { setScanStatus(getExpectedScanGuideFromSelectedDeadline(expectedMode || "card"), true); } catch(e) {}
+    }, 160);
+
+    setTimeout(function(){
+      try { applyScanFrameMode(expectedMode || "card"); } catch(e) {}
+    }, 650);
+
+  } catch(e) {
+    try { openScanPanel(); } catch(err) {}
+  }
 }
 
 
