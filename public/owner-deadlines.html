@@ -704,6 +704,61 @@
     }
   </style>
 
+
+  <style id="scan-frame-dynamic-formats">
+    .scan-frame-inner.scan-format-card{
+      width:min(88%, 520px) !important;
+      aspect-ratio:1.586/1 !important;
+      border-color:#ff7a00 !important;
+    }
+
+    .scan-frame-inner.scan-format-large{
+      width:min(88%, 560px) !important;
+      aspect-ratio:.72/1 !important;
+      min-height:420px !important;
+      border-color:#ff9f1c !important;
+    }
+
+    .scan-frame-inner.scan-format-free{
+      width:min(90%, 660px) !important;
+      aspect-ratio:1.25/1 !important;
+      border-style:dashed !important;
+      border-color:#38bdf8 !important;
+    }
+
+    .scan-format-chip{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      margin-top:10px;
+      padding:7px 10px;
+      border-radius:999px;
+      background:rgba(255,122,0,.14);
+      color:#9a3412;
+      font-weight:950;
+      font-size:12px;
+      border:1px solid rgba(255,122,0,.28);
+    }
+
+    .scan-secondary-action{
+      border:1px solid #fed7aa;
+      background:#fff7ed;
+      color:#9a3412;
+      border-radius:999px;
+      padding:11px 15px;
+      font-weight:950;
+      cursor:pointer;
+    }
+
+    .scan-actions-row{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:12px;
+      align-items:center;
+    }
+  </style>
+
 </head>
 <body>
   <div class="topbar">
@@ -733,7 +788,7 @@
         <div class="scan-corner tr"></div>
         <div class="scan-corner bl"></div>
         <div class="scan-corner br"></div>
-        <div class="scan-frame-inner">
+        <div class="scan-frame-inner scan-format-free" id="scanFrameInner">
           <video id="scanVideo" class="scan-video" playsinline autoplay muted></video>
           <img id="scanCapturedImg" class="scan-captured-img" alt="Documento acquisito">
           <canvas id="scanCanvas" class="scan-canvas"></canvas>
@@ -741,13 +796,15 @@
             <strong>Posiziona qui il documento</strong>
             <span>Lascia margine attorno al documento. Evita riflessi, dita sopra le date e foto inclinate. Per carte e documenti piccoli, avvicina mantenendo tutto leggibile.</span>
           </div>
-        </div>
+                <div class="scan-format-chip" id="scanFormatChip">Formato libero</div>
+</div>
       </div>
       <div id="scanStatus" class="scan-status"></div>
 
       <div class="scan-actions">
         <button class="scan-primary" type="button" onclick="startCameraScan()">Avvia fotocamera</button>
         <button class="scan-primary" type="button" onclick="captureCameraFrame()">Scatta foto e leggi</button>
+          <button class="scan-secondary-action" type="button" onclick="changeScanFrameMode()">Cambia inquadratura</button>
         <button class="scan-secondary" type="button" onclick="stopCameraScan()">Ferma camera</button>
         <label class="scan-secondary">
           Carica immagine
@@ -1103,7 +1160,91 @@ function setupBackLink(){
 let scanStream = null;
 let tesseractLoadingPromise = null;
 
+
+let currentScanFrameMode = "free";
+
+const scanFrameModes = ["card", "large", "free"];
+
+function getPreferredScanFrameMode(){
+  const p = String(currentPreset || "").toLowerCase();
+  const c = String(currentCategory || "").toLowerCase();
+
+  if (
+    p.includes("patente") ||
+    p.includes("carta ident") ||
+    p.includes("tessera sanitaria") ||
+    p.includes("carta di credito") ||
+    p.includes("bancomat")
+  ) {
+    return "card";
+  }
+
+  if (
+    p.includes("passaporto") ||
+    p.includes("assicurazione") ||
+    p.includes("revisione") ||
+    p.includes("contratto") ||
+    p.includes("polizza") ||
+    p.includes("bollo") ||
+    p.includes("ricevuta") ||
+    c.includes("casa") ||
+    c.includes("pagamenti")
+  ) {
+    return "large";
+  }
+
+  return "free";
+}
+
+function scanFrameModeLabel(mode){
+  if(mode === "card") return "Formato card";
+  if(mode === "large") return "Documento grande";
+  return "Formato libero";
+}
+
+function scanFrameModeGuide(mode){
+  const p = String(currentPreset || "documento").trim();
+
+  if(mode === "card"){
+    return "Inquadra " + p + " dentro la cornice orizzontale. Allinea bene i bordi ed evita riflessi.";
+  }
+
+  if(mode === "large"){
+    return "Inquadra il documento intero. Mantieni il foglio ben illuminato e più diritto possibile.";
+  }
+
+  return "Inquadra la parte dove sono visibili le date. Usa questo formato se il documento non rientra negli altri.";
+}
+
+function applyScanFrameMode(mode){
+  currentScanFrameMode = mode || "free";
+
+  const frame = document.getElementById("scanFrameInner");
+  const chip = document.getElementById("scanFormatChip");
+
+  if(frame){
+    frame.classList.remove("scan-format-card", "scan-format-large", "scan-format-free");
+    frame.classList.add("scan-format-" + currentScanFrameMode);
+  }
+
+  if(chip){
+    chip.textContent = scanFrameModeLabel(currentScanFrameMode);
+  }
+
+  try {
+    setScanStatus(scanFrameModeGuide(currentScanFrameMode), true);
+  } catch(e) {}
+}
+
+function changeScanFrameMode(){
+  const idx = scanFrameModes.indexOf(currentScanFrameMode);
+  const next = scanFrameModes[(idx + 1) % scanFrameModes.length];
+  applyScanFrameMode(next);
+}
+
+
 function openScanPanel(){
+  try{ applyScanFrameMode(getPreferredScanFrameMode()); }catch(e){}
   const panel = document.getElementById("scanPanel");
   if(panel){
     panel.classList.add("active");
