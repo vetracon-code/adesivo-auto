@@ -1921,22 +1921,73 @@ function resetContextualScanDateAcquired(){
 }
 
 
+
+function saveContextualScanSnapshot(){
+  try {
+    window.__contextualScanSnapshot = {
+      category: currentCategory || "",
+      preset: currentPreset || "",
+      profile: currentProfile || "",
+      name: (typeof nameInput !== "undefined" && nameInput) ? (nameInput.value || "") : "",
+      owner: (typeof ownerInput !== "undefined" && ownerInput) ? (ownerInput.value || "") : "",
+      time: (typeof timeInput !== "undefined" && timeInput) ? (timeInput.value || "") : ""
+    };
+  } catch(e) {}
+}
+
+function restoreContextualScanSnapshot(){
+  try {
+    const s = window.__contextualScanSnapshot;
+    if(!s) return;
+
+    if(s.category) currentCategory = s.category;
+    if(s.preset) currentPreset = s.preset;
+    if(s.profile) currentProfile = s.profile;
+
+    try { renderCats(); } catch(e) {}
+    try { renderPresets(); } catch(e) {}
+    try { renderProfiles(); } catch(e) {}
+    try { applyPreset(currentPreset); } catch(e) {}
+
+    if(typeof nameInput !== "undefined" && nameInput && s.name){
+      nameInput.value = s.name;
+    }
+
+    if(typeof ownerInput !== "undefined" && ownerInput && s.owner){
+      ownerInput.value = s.owner;
+    }
+
+    if(typeof timeInput !== "undefined" && timeInput && s.time){
+      timeInput.value = s.time;
+    }
+
+    try { updateConditionalBlocks(); } catch(e) {}
+    try { updatePreview(); } catch(e) {}
+  } catch(e) {}
+}
+
+
 function openContextualScanFromDate(){
   try {
+    saveContextualScanSnapshot();
+
     const expectedMode = getExpectedScanFrameModeFromSelectedDeadline();
 
     openScanPanel();
 
-    // Da questo punto la scansione è contestuale:
-    // deve compilare solo Data scadenza e NON cambiare documento/categoria.
+    // openScanPanel imposta general: qui lo riportiamo subito in modalità contestuale.
     scanContextMode = "date_only";
 
     setTimeout(function(){
+      scanContextMode = "date_only";
+      restoreContextualScanSnapshot();
       try { applyScanFrameMode(expectedMode || "card"); } catch(e) {}
       try { setScanStatus(getExpectedScanGuideFromSelectedDeadline(expectedMode || "card"), true); } catch(e) {}
     }, 160);
 
     setTimeout(function(){
+      scanContextMode = "date_only";
+      restoreContextualScanSnapshot();
       try { applyScanFrameMode(expectedMode || "card"); } catch(e) {}
     }, 650);
 
@@ -2108,10 +2159,13 @@ async function captureCameraFrame(){
   if(img){
     img.src = dataUrl;
     img.classList.add("active");
+    showNaturalCapturedPreview();
   }
   if(placeholder) placeholder.classList.add("hidden");
 
+  // Lasciamo visibile la foto catturata prima di fermare la camera.
   stopCameraScan();
+  showNaturalCapturedPreview();
 
   await processScanImage(dataUrl, "foto-scattata.jpg");
 }
@@ -2392,6 +2446,10 @@ function scrollToDateFieldAfterScan(){
 
 function applyPendingScannedDateToForm(){
   try {
+    if(scanContextMode === "date_only"){
+      restoreContextualScanSnapshot();
+    }
+
     const date = window.__pendingScannedDeadlineDate || "";
     if(!date) return;
 
@@ -2414,6 +2472,7 @@ function applyPendingScannedDateToForm(){
 function applyRecognizedDocumentToForm(scanItem, guessed){
   try {
     if(scanContextMode === "date_only"){
+      restoreContextualScanSnapshot();
       rememberScannedDateForManualSelection(scanItem);
       applyPendingScannedDateToForm();
       try { setScanStatus("Data inserita nel documento selezionato. Controlla e salva la scadenza.", true); } catch(e) {}
@@ -2518,6 +2577,7 @@ function installScanResultAutoFillWrapper(){
         const item = getScanItemFromArgs(args);
 
         if(scanContextMode === "date_only"){
+          restoreContextualScanSnapshot();
           rememberScannedDateForManualSelection(item);
           applyPendingScannedDateToForm();
           try { setScanStatus("Data inserita nel documento selezionato. Controlla e salva la scadenza.", true); } catch(e) {}
@@ -2785,7 +2845,9 @@ function rankCandidateDates(dates, fullText, guessed){
 
 
 function scrollToScanDateResults(){
-  const minPreviewMs = 2000;
+  try { showNaturalCapturedPreview(); } catch(e) {}
+
+  const minPreviewMs = 2200;
   const shownAt = Number(window.__scanPreviewShownAt || 0);
   const elapsed = shownAt ? (Date.now() - shownAt) : 0;
   const delay = Math.max(700, minPreviewMs - elapsed);
@@ -2828,6 +2890,7 @@ function showScanResults(results, guessed){
       // Non inseriamo automaticamente la data, anche se è una sola.
       // L’utente deve sempre confermare quale data usare.
       if(scanContextMode === "date_only"){
+        restoreContextualScanSnapshot();
         try { setScanStatus("Data trovata. Conferma quale data vuoi inserire nella scadenza.", true); } catch(e) {}
       }
     }
@@ -2848,11 +2911,38 @@ function showScanResults(results, guessed){
   `).join("");
 
   box.classList.add("active");
+
+  // Ora che il contenitore delle date è realmente visibile,
+  // portiamo l’utente lì dopo aver lasciato vedere la foto catturata.
+  try { scrollToScanDateResults(); } catch(e) {}
 }
 
 function useScannedDate(date, category, type, profile){
   openDeadlineForm();
 
+  // Caso corretto per il pulsante sotto Data scadenza:
+  // il documento è già stato scelto prima della scansione.
+  // Qui dobbiamo inserire SOLO la data, senza cambiare categoria/tipo in Altro.
+  if(scanContextMode === "date_only"){
+    restoreContextualScanSnapshot();
+
+    window.__pendingScannedDeadlineDate = date;
+    window.__pendingScannedDeadlineAt = Date.now();
+
+    if(typeof dateInput !== "undefined" && dateInput){
+      dateInput.value = date;
+    }
+
+    markContextualScanDateAcquired();
+
+    try { updatePreview(); } catch(e) {}
+    try { setScanStatus("Data inserita nel documento selezionato. Controlla e salva la scadenza.", true); } catch(e) {}
+
+    scrollToDateFieldAfterScan();
+    return;
+  }
+
+  // Caso scanner generale: può ancora provare a compilare documento/categoria.
   currentCategory = category || "Famiglia e documenti";
 
   if(categories[currentCategory] && categories[currentCategory].includes(type)){
@@ -2868,575 +2958,15 @@ function useScannedDate(date, category, type, profile){
   renderProfiles();
   applyPreset(currentPreset);
 
-  if(nameInput) nameInput.value = type && type !== "Altro" ? type : "Scadenza da documento";
-  if(dateInput) dateInput.value = date;
-  if(notesInput) notesInput.value = "Data proposta da scansione documento. Verificare prima del salvataggio.";
-
-  closeScanPanel();
-
-  const form = document.getElementById("deadlineFormBody");
-  if(form) setTimeout(() => form.scrollIntoView({behavior:"smooth", block:"start"}), 120);
-}
-
-function toInputDate(d){
-  return d.toISOString().slice(0,10);
-}
-
-function formatDateIt(dateStr){
-  if(!dateStr) return "";
-  const parts = String(dateStr).split("-");
-  if(parts.length !== 3) return dateStr;
-  return parts[2] + "/" + parts[1] + "/" + parts[0];
-}
-
-
-function renderCats(){
-  cats.innerHTML = Object.keys(categories).map(c => `<button class="cat ${c===currentCategory && deadlineFormOpened ? 'active':''}" onclick="selectCat('${esc(c)}')">${esc(c)}</button>`).join("");
-}
-function selectCat(c){
-  openDeadlineForm();
-  currentCategory=c;
-  currentPreset=categories[c][0];
-  currentProfile=suggestedProfile[currentPreset]||"standard";
-  renderCats();
-  renderPresets();
-  renderProfiles();
-  applyPreset(currentPreset);
-}
-
-function openDeadlineForm(){
-  deadlineFormOpened = true;
-  const body = document.getElementById("deadlineFormBody");
-  const hint = document.getElementById("addDeadlineHint");
-  if(body){
-    body.classList.remove("form-body-collapsed");
-    body.classList.add("form-body-open");
-  }
-  if(hint) hint.style.display = "none";
-  stopCategoryPulse();
-}
-
-function closeDeadlineForm(){
-  deadlineFormOpened = false;
-  const body = document.getElementById("deadlineFormBody");
-  const hint = document.getElementById("addDeadlineHint");
-  if(body){
-    body.classList.remove("form-body-open");
-    body.classList.add("form-body-collapsed");
-  }
-  if(hint) hint.style.display = "";
-  renderCats();
-}
-
-function startCategoryPulse(){
-  if(deadlineFormOpened) return;
-  stopCategoryPulse();
-
-  const buttons = Array.from(document.querySelectorAll("#cats .cat"));
-  if(!buttons.length) return;
-
-  let index = 0;
-  function pulseOne(){
-    buttons.forEach(b => b.classList.remove("cat-pulse"));
-    const btn = buttons[index % buttons.length];
-    if(btn){
-      btn.classList.add("cat-pulse");
-      setTimeout(() => btn.classList.remove("cat-pulse"), 760);
-    }
-    index++;
-  }
-
-  pulseOne();
-  categoryPulseTimer = setInterval(pulseOne, 900);
-
-  setTimeout(() => {
-    stopCategoryPulse();
-  }, 5400);
-}
-
-function stopCategoryPulse(){
-  if(categoryPulseTimer){
-    clearInterval(categoryPulseTimer);
-    categoryPulseTimer = null;
-  }
-  document.querySelectorAll("#cats .cat").forEach(b => b.classList.remove("cat-pulse"));
-}
-
-function setupCategoryScrollPulse(){
-  const target = document.getElementById("cats");
-  if(!target || !("IntersectionObserver" in window)) return;
-
-  let lastPulse = 0;
-
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if(entry.isIntersecting && entry.intersectionRatio > 0.55){
-        const now = Date.now();
-        if(now - lastPulse > 4500){
-          lastPulse = now;
-          startCategoryPulse();
-        }
-      }
-    });
-  }, { threshold:[0.55, 0.75] });
-
-  observer.observe(target);
-}
-
-
-
-function pad2(n){ return String(n).padStart(2,"0"); }
-
-function setDateTimeFromNow(minutesToAdd){
-  const d = new Date(Date.now() + (Number(minutesToAdd || 0) * 60000));
-  const yyyy = d.getFullYear();
-  const mm = pad2(d.getMonth() + 1);
-  const dd = pad2(d.getDate());
-  const hh = pad2(d.getHours());
-  const mi = pad2(d.getMinutes());
-
-  if(typeof deadlineDate !== "undefined") deadlineDate.value = `${yyyy}-${mm}-${dd}`;
-  if(typeof deadlineTime !== "undefined") deadlineTime.value = `${hh}:${mi}`;
-}
-
-function applyRapidPresetDefaults(p){
-  if(currentCategory !== "Rapido") return;
-
-  const currentName = String(deadlineName.value || "").trim();
-
-  if(!currentName || currentName === "Tra 5 minuti" || currentName === "Tra 15 minuti" || currentName === "Tra 1 ora" || currentName === "Oggi" || currentName === "Domani"){
-    if(p === "Tra 5 minuti") deadlineName.value = "Promemoria rapido";
-    else if(p === "Tra 15 minuti") deadlineName.value = "Promemoria rapido";
-    else if(p === "Tra 1 ora") deadlineName.value = "Promemoria rapido";
-    else if(p === "Oggi") deadlineName.value = "Promemoria per oggi";
-    else if(p === "Domani") deadlineName.value = "Promemoria per domani";
-    else deadlineName.value = "Promemoria rapido";
-  }
-
-  if(typeof ownerName !== "undefined" && !String(ownerName.value || "").trim()){
-    ownerName.value = "Personale";
-  }
-
-  if(p === "Tra 5 minuti") setDateTimeFromNow(5);
-  else if(p === "Tra 15 minuti") setDateTimeFromNow(15);
-  else if(p === "Tra 1 ora") setDateTimeFromNow(60);
-  else if(p === "Oggi") setDateTimeFromNow(120);
-  else if(p === "Domani") setDateTimeFromNow(24 * 60);
-
-  updatePreview();
-}
-
-
-function scrollToDeadlineInputs(){
-  function doScroll(){
-    const anchor = document.getElementById("deadlineNameScrollAnchor");
-    const nameInput = document.getElementById("deadlineName");
-    const target = anchor || nameInput || document.getElementById("deadlineFormBody");
-
-    if(!target) return;
-
-    try {
-      const absoluteTop = target.getBoundingClientRect().top + window.pageYOffset;
-
-      // Margine volutamente più ampio: Nome scadenza deve restare visibile
-      // come primo campo utile, non finire nascosto sopra lo schermo.
-      const topOffset = 72;
-
-      window.scrollTo({
-        top: Math.max(0, absoluteTop - topOffset),
-        behavior: "smooth"
-      });
-    } catch(e) {
-      try { target.scrollIntoView({ behavior:"smooth", block:"start" }); } catch(err) {}
-    }
-
-    try {
-      if(nameInput){
-        nameInput.classList.add("deadline-input-focus");
-        setTimeout(() => nameInput.classList.remove("deadline-input-focus"), 2400);
-      }
-    } catch(e) {}
-  }
-
-  setTimeout(doScroll, 80);
-  setTimeout(doScroll, 360);
-
-  setTimeout(() => {
-    doScroll();
-
-    // NON forziamo più il focus automatico:
-    // su iPhone/Safari può spostare la pagina e portare sotto il campo successivo.
-  }, 760);
-}
-
-
-function renderPresets(){ presets.innerHTML = categories[currentCategory].map(p => `<button class="preset ${p===currentPreset?'active':''}" onclick="selectPreset('${esc(p)}')"><strong>${esc(p)}</strong><span>${esc(currentCategory)}</span></button>`).join(""); }
-function selectPreset(p){
-  resetContextualScanDateAcquired();
-  currentPreset=p;
-  currentProfile=suggestedProfile[p]||"standard";
-  renderPresets();
-  renderProfiles();
-  applyPreset(p);
-  applyRapidPresetDefaults(p);
-
-  if(window.__pendingScannedDeadlineDate){
-    applyPendingScannedDateToForm();
-    scrollToDateFieldAfterScan();
-  } else {
-    scrollToDeadlineInputs();
-  }
-}
-function renderProfiles(){ profiles.innerHTML = Object.entries(profilesData()).map(([k,p]) => `<button class="profile ${k===currentProfile?'active':''}" onclick="selectProfile('${k}')"><b>${esc(p.title)}</b><span>${esc(p.text)}</span></button>`).join(""); }
-function profilesData(){ return profiles; }
-function selectProfile(k){ currentProfile=k; renderProfiles(); updatePreview(); }
-
-function applyPreset(p){
-  nameInput.value = p === "Altro" ? "" : p;
-
-  if (typeof recurrenceMode !== "undefined") {
-    if (p === "AppleCare+" || p === "Abbonamento mensile") {
-      recurrenceMode.value = "monthly";
-      currentProfile = "monthly";
-    } else if (p === "Abbonamenti") {
-      recurrenceMode.value = "monthly";
-      currentProfile = "monthly";
-    } else if (recurrenceMode.value === "monthly" && currentProfile === "monthly") {
-      // lascia mensile solo se già scelto volontariamente
-    }
-    updateRecurrenceMode();
+  if(typeof dateInput !== "undefined" && dateInput){
+    dateInput.value = date;
   }
 
   updateConditionalBlocks();
   updatePreview();
+  scrollToDateFieldAfterScan();
 }
 
-function updateConditionalBlocks(){
-  otherSuggestionsBox.classList.toggle("active", currentPreset === "Altro");
-  medicineOptionsBox.classList.toggle("active", currentPreset === "Medicine");
-
-  if (currentPreset === "Altro") {
-    const opts = otherSuggestions[currentCategory] || [];
-    otherSuggestionSelect.innerHTML = '<option value="">Scegli un suggerimento...</option>' + opts.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
-  }
-}
-
-function applyOtherSuggestion(){
-  if (!otherSuggestionSelect.value) return;
-  nameInput.value = otherSuggestionSelect.value;
-}
-
-
-let currentIntervalUnit = "minutes";
-let currentIntervalValue = 5;
-let intervalWheelScrollTimer = null;
-let intervalWheelProgrammaticScroll = false;
-
-function intervalMaxForUnit(unit){
-  if(unit === "minutes") return 59;
-  if(unit === "hours") return 24;
-  if(unit === "days") return 31;
-  if(unit === "months") return 12;
-  if(unit === "years") return 10;
-  return 59;
-}
-
-function intervalDefaultForUnit(unit){
-  if(unit === "minutes") return 5;
-  if(unit === "hours") return 8;
-  if(unit === "days") return 1;
-  if(unit === "months") return 1;
-  if(unit === "years") return 1;
-  return 1;
-}
-
-function intervalLabel(unit, value){
-  const n = Number(value || 1);
-  if(unit === "minutes") return n === 1 ? "1 minuto" : n + " minuti";
-  if(unit === "hours") return n === 1 ? "1 ora" : n + " ore";
-  if(unit === "days") return n === 1 ? "1 giorno" : n + " giorni";
-  if(unit === "months") return n === 1 ? "1 mese" : n + " mesi";
-  if(unit === "years") return n === 1 ? "1 anno" : n + " anni";
-  return String(n);
-}
-
-function buildIntervalWheel(){
-  const wheel = document.getElementById("medicineIntervalWheel");
-  const unitInput = document.getElementById("medicineIntervalUnit");
-  if(!wheel || !unitInput) return;
-
-  currentIntervalUnit = unitInput.value || currentIntervalUnit || "minutes";
-
-  const max = intervalMaxForUnit(currentIntervalUnit);
-
-  if(currentIntervalValue > max || currentIntervalValue < 1){
-    currentIntervalValue = intervalDefaultForUnit(currentIntervalUnit);
-  }
-
-  wheel.innerHTML = Array.from({length:max}, (_,i)=>{
-    const n = i + 1;
-    return `<div class="interval-wheel-option" data-value="${n}" onclick="selectIntervalWheelValue(${n}, true)">${n}</div>`;
-  }).join("");
-
-  wheel.onscroll = function(){
-    clearTimeout(intervalWheelScrollTimer);
-
-    intervalWheelScrollTimer = setTimeout(() => {
-      if(intervalWheelProgrammaticScroll) return;
-
-      const value = getIntervalWheelCenteredValue();
-      if(value) selectIntervalWheelValue(value, false, true);
-    }, 90);
-  };
-
-  setIntervalUnitButtons();
-  setTimeout(() => selectIntervalWheelValue(currentIntervalValue, true), 80);
-  updateIntervalSummaryAndLegacyFields();
-}
-
-function getIntervalWheelCenteredValue(){
-  const wheel = document.getElementById("medicineIntervalWheel");
-  if(!wheel) return null;
-
-  const options = Array.from(wheel.querySelectorAll(".interval-wheel-option"));
-  if(!options.length) return null;
-
-  const wheelRect = wheel.getBoundingClientRect();
-  const center = wheelRect.top + wheelRect.height / 2;
-
-  let best = options[0];
-  let bestDistance = Infinity;
-
-  options.forEach(opt => {
-    const r = opt.getBoundingClientRect();
-    const c = r.top + r.height / 2;
-    const dist = Math.abs(c - center);
-
-    if(dist < bestDistance){
-      bestDistance = dist;
-      best = opt;
-    }
-  });
-
-  return Number(best.dataset.value || 1);
-}
-
-function selectIntervalWheelValue(value, scrollToValue, snapAfterScroll){
-  const max = intervalMaxForUnit(currentIntervalUnit);
-  currentIntervalValue = Math.max(1, Math.min(max, Number(value || 1)));
-
-  const wheel = document.getElementById("medicineIntervalWheel");
-
-  if(wheel){
-    wheel.querySelectorAll(".interval-wheel-option").forEach(opt=>{
-      const v = Number(opt.dataset.value);
-      opt.classList.toggle("active", v === Number(currentIntervalValue));
-      opt.classList.toggle("near", Math.abs(v - Number(currentIntervalValue)) === 1);
-    });
-
-    const active = wheel.querySelector('.interval-wheel-option[data-value="' + currentIntervalValue + '"]');
-
-    if(active && (scrollToValue || snapAfterScroll)){
-      intervalWheelProgrammaticScroll = true;
-      active.scrollIntoView({ block:"center", behavior:"smooth" });
-
-      setTimeout(() => {
-        intervalWheelProgrammaticScroll = false;
-      }, scrollToValue ? 420 : 260);
-    }
-  }
-
-  updateIntervalSummaryAndLegacyFields();
-}
-
-function setIntervalUnitButtons(){
-  document.querySelectorAll(".interval-unit-btn").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.unit === currentIntervalUnit);
-  });
-}
-
-function setIntervalUnit(unit){
-  currentIntervalUnit = unit || "minutes";
-
-  const unitInput = document.getElementById("medicineIntervalUnit");
-  if(unitInput) unitInput.value = currentIntervalUnit;
-
-  const max = intervalMaxForUnit(currentIntervalUnit);
-
-  if(currentIntervalValue > max || currentIntervalValue < 1){
-    currentIntervalValue = intervalDefaultForUnit(currentIntervalUnit);
-  }
-
-  setIntervalUnitButtons();
-  buildIntervalWheel();
-  updateMedicineMode();
-}
-
-function updateIntervalWheelUnit(){
-  const unitInput = document.getElementById("medicineIntervalUnit");
-  setIntervalUnit(unitInput ? (unitInput.value || "minutes") : "minutes");
-}
-
-function updateIntervalSummaryAndLegacyFields(){
-  const summary = document.getElementById("medicineIntervalSummary");
-
-  if(summary){
-    summary.textContent = "Riceverai un avviso ogni " + intervalLabel(currentIntervalUnit, currentIntervalValue) + ".";
-  }
-
-  const minuteSelect = document.getElementById("medicineIntervalMinutes");
-  const hourSelect = document.getElementById("medicineIntervalHours");
-
-  if(currentIntervalUnit === "minutes" && minuteSelect){
-    const v = String(currentIntervalValue);
-
-    if(!Array.from(minuteSelect.options).some(o => o.value === v)){
-      const opt = document.createElement("option");
-      opt.value = v;
-      opt.textContent = v + " min";
-      minuteSelect.appendChild(opt);
-    }
-
-    minuteSelect.value = v;
-  }
-
-  if(currentIntervalUnit === "hours" && hourSelect){
-    const v = String(currentIntervalValue);
-
-    if(!Array.from(hourSelect.options).some(o => o.value === v)){
-      const opt = document.createElement("option");
-      opt.value = v;
-      opt.textContent = v + " ore";
-      hourSelect.appendChild(opt);
-    }
-
-    hourSelect.value = v;
-  }
-
-  updateMedicineMode();
-}
-
-
-function updateMedicineMode(){ updatePreview(); }
-
-function recurrenceUnitLabel(unit, value){
-  const n = Number(value || 1);
-  if(unit === "days") return n === 1 ? "giorno" : "giorni";
-  if(unit === "weeks") return n === 1 ? "settimana" : "settimane";
-  if(unit === "months") return n === 1 ? "mese" : "mesi";
-  if(unit === "years") return n === 1 ? "anno" : "anni";
-  return "giorni";
-}
-
-function updateCustomRecurrenceSummary(){
-  const box = document.getElementById("customRecurrenceBox");
-  const valueEl = document.getElementById("customRecurrenceValue");
-  const unitEl = document.getElementById("customRecurrenceUnit");
-  const hintEl = document.getElementById("customRecurrenceHint");
-
-  if(!box || !valueEl || !unitEl || !hintEl) return;
-
-  const value = Math.max(1, Number(valueEl.value || 1));
-  valueEl.value = value;
-
-  const unit = unitEl.value || "weeks";
-  hintEl.textContent = "La scadenza verrà riproposta ogni " + value + " " + recurrenceUnitLabel(unit, value) + ".";
-  applyAlertProfileByRecurrence("custom");
-  renderProfiles();
-}
-
-
-function applyAlertProfileByRecurrence(mode){
-  if(!mode) return;
-
-  // I farmaci hanno logiche proprie: non forziamo i profili standard.
-  if(currentPreset === "Medicine") return;
-
-  if(mode === "daily"){
-    currentProfile = "daily";
-  } else if(mode === "weekly"){
-    currentProfile = "weekly";
-  } else if(mode === "monthly"){
-    currentProfile = "monthly";
-  } else if(mode === "yearly"){
-    currentProfile = "important";
-  } else if(mode === "custom"){
-    const unit = (typeof customRecurrenceUnit !== "undefined" && customRecurrenceUnit) ? customRecurrenceUnit.value : "weeks";
-
-    if(unit === "days") currentProfile = "daily";
-    else if(unit === "weeks") currentProfile = "weekly";
-    else if(unit === "months") currentProfile = "monthly";
-    else if(unit === "years") currentProfile = "important";
-    else currentProfile = "standard";
-  }
-}
-
-
-function updateRecurrenceMode(){
-  const mode = recurrenceMode.value || "none";
-
-  applyAlertProfileByRecurrence(mode);
-
-  if(document.getElementById("customRecurrenceBox")){
-    customRecurrenceBox.classList.toggle("active", mode === "custom");
-  }
-
-  if (mode === "none") {
-    recurrenceHint.innerHTML = "Questa scadenza non verrà ricreata automaticamente.";
-  } else if (mode === "daily") {
-    recurrenceHint.innerHTML = "Ricorrenza giornaliera: dopo la conferma verrà creata la scadenza del giorno successivo.";
-  } else if (mode === "weekly") {
-    recurrenceHint.innerHTML = "Ricorrenza settimanale: dopo la conferma verrà creata la scadenza della settimana successiva.";
-  } else if (mode === "monthly") {
-    currentProfile = "monthly";
-    recurrenceHint.innerHTML = "Ricorrenza mensile: avvisi ridotti a 1 giorno prima e giorno stesso. Dopo la conferma verrà creata la scadenza del mese successivo.";
-    renderProfiles();
-  } else if (mode === "yearly") {
-    recurrenceHint.innerHTML = "Ricorrenza annuale: dopo la conferma verrà creata la scadenza dell’anno successivo.";
-  } else if (mode === "custom") {
-    recurrenceHint.innerHTML = "Ricorrenza personalizzata: definisci ogni quanti giorni, settimane, mesi o anni deve ripetersi.";
-    updateCustomRecurrenceSummary();
-  }
-
-  renderProfiles();
-  updatePreview();
-}
-
-
-function updatePreview(){
-  if (typeof recurrenceMode !== "undefined" && recurrenceMode.value === "monthly" && currentPreset !== "Medicine") {
-    currentProfile = "monthly";
-  }
-
-  if (currentPreset === "Medicine") {
-    const medMode = medicineMode.value || "daily";
-    const interval = medicineIntervalHours.value || "8";
-    let medAlerts = [];
-    if (medMode === "daily") medAlerts = ["ogni giorno all’orario indicato"];
-    if (medMode === "multiple_daily") medAlerts = times ? times.split(",").map(x => "ogni giorno alle " + x.trim()).filter(Boolean) : ["più volte al giorno"];
-    if (medMode === "every_x_hours") medAlerts = ["ogni " + interval + " ore dalla prima dose"];
-    if (medMode === "every_x_minutes") {
-      const minutes = medicineIntervalMinutes ? (medicineIntervalMinutes.value || "5") : "5";
-      const duration = medicineDurationMinutes ? (medicineDurationMinutes.value || "30") : "30";
-      medAlerts = ["ogni " + minutes + " minuti", "per " + duration + " minuti", "richiede conferma assunzione"];
-    }
-    if (medMode === "antibiotic") medAlerts = ["ogni " + interval + " ore", "fino alla data fine", "richiede conferma assunzione"];
-    if (medMode === "stock") medAlerts = ["promemoria ricompra farmaco", "7 giorni prima", "3 giorni prima"];
-    alertPreview.innerHTML = medAlerts.map(a => `<span class="pill">${esc(a)}</span>`).join("");
-  } else {
-    alertPreview.innerHTML = profiles[currentProfile].alerts.map(a => `<span class="pill">${esc(a)}</span>`).join("");
-  }
-  specialNote.innerHTML = noteFor(currentPreset);
-}
-
-function noteFor(p){
-  if(p === "Disdetta abbonamento") return "<strong>Disdetta:</strong> ricordati di verificare il canale richiesto: email, PEC, raccomandata o area clienti. Il sistema potrà preparare una bozza di messaggio.";
-  if(p === "Assicurazione") return "<strong>Assicurazione:</strong> verifica sempre le condizioni della tua polizza. Se risulta scaduta, non circolare senza aver controllato la copertura.";
-  if(p === "Medicine") return "<strong>Medicine:</strong> promemoria personale. Non sostituisce prescrizioni, indicazioni mediche o sistemi sanitari certificati.";
-  if(p === "Rinnovo medico di base") return "<strong>Medico di base:</strong> utile per ricordare scelta, cambio o rinnovo quando previsto dalle regole locali.";
-  if(p === "Permesso parcheggio residenti") return "<strong>Parcheggio residenti:</strong> verifica per tempo rinnovo comunale, pagamento e documenti richiesti.";
-  return "<strong>Nota:</strong> potrai modificare il piano avvisi in qualsiasi momento.";
-}
 
 function saveDeadline(){
   const name=nameInput.value.trim(), owner=ownerInput.value.trim(), date=dateInput.value, time=timeInput.value, notes=notesInput.value.trim();
