@@ -1145,6 +1145,111 @@
   }
 </style>
 
+
+<style id="scan-format-live-force-final">
+  #scanFrameInner.force-mode-card,
+  #scanFrameInner.force-mode-large,
+  #scanFrameInner.force-mode-free{
+    box-sizing:border-box !important;
+    margin:0 auto !important;
+    padding:0 !important;
+    display:block !important;
+    position:relative !important;
+    overflow:hidden !important;
+    background:#050505 !important;
+    border:5px solid #050505 !important;
+    border-radius:22px !important;
+    min-height:0 !important;
+    flex:none !important;
+  }
+
+  #scanFrameInner.force-mode-card{
+    width:min(96vw, 680px) !important;
+    height:clamp(185px, 56vw, 330px) !important;
+    max-height:330px !important;
+    aspect-ratio:85.6 / 53.98 !important;
+  }
+
+  #scanFrameInner.force-mode-large{
+    width:min(86vw, 460px) !important;
+    height:clamp(420px, 118vw, 680px) !important;
+    max-height:680px !important;
+    aspect-ratio:0.72 / 1 !important;
+  }
+
+  #scanFrameInner.force-mode-free{
+    width:min(92vw, 560px) !important;
+    height:clamp(300px, 82vw, 520px) !important;
+    max-height:520px !important;
+    aspect-ratio:1 / 1 !important;
+  }
+
+  #scanFrameInner.force-mode-card::after,
+  #scanFrameInner.force-mode-large::after,
+  #scanFrameInner.force-mode-free::after{
+    content:"" !important;
+    display:block !important;
+    position:absolute !important;
+    inset:10px !important;
+    border:4px dashed #ff7a00 !important;
+    border-radius:18px !important;
+    pointer-events:none !important;
+    z-index:20 !important;
+  }
+
+  #scanFrameInner #scanVideo,
+  #scanFrameInner #scanVideo.active,
+  #scanFrameInner #scanCapturedImg{
+    position:absolute !important;
+    inset:0 !important;
+    width:100% !important;
+    height:100% !important;
+    object-fit:cover !important;
+    display:block !important;
+    background:#050505 !important;
+    border-radius:16px !important;
+  }
+
+  #scanFrameInner.force-mode-card #scanVideo,
+  #scanFrameInner.force-mode-card #scanVideo.active{
+    left:50% !important;
+    top:50% !important;
+    inset:auto !important;
+    transform:translate(-50%, -50%) rotate(90deg) scale(1.08) !important;
+    transform-origin:center center !important;
+  }
+
+  #scanFrameInner.force-mode-large #scanVideo,
+  #scanFrameInner.force-mode-large #scanVideo.active,
+  #scanFrameInner.force-mode-free #scanVideo,
+  #scanFrameInner.force-mode-free #scanVideo.active{
+    left:auto !important;
+    top:auto !important;
+    transform:none !important;
+  }
+
+  #scanFrameInner #scanPlaceholder,
+  #scanFrameInner #scanFormatChip,
+  #scanFrameInner .scan-format-chip,
+  .scan-corner{
+    display:none !important;
+  }
+
+  .scan-frame{
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    min-height:0 !important;
+    padding:12px 4px !important;
+  }
+
+  .scan-format-tab.active{
+    background:#ff7a00 !important;
+    color:#fff !important;
+    border-color:#ff7a00 !important;
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -1598,48 +1703,114 @@ function forceCardHorizontalFrame(){
 
 
 function forceApplyScanFrameMode(mode){
-  const frame = document.getElementById("scanFrameInner");
-  const video = document.getElementById("scanVideo");
-  const chip = document.getElementById("scanFormatChip");
-  const placeholder = document.getElementById("scanPlaceholder");
-
   mode = mode || "card";
   if(!["card","large","free"].includes(mode)) mode = "card";
 
   currentScanFrameMode = mode;
+  window.__desiredScanFrameMode = mode;
 
-  if(frame){
-    frame.classList.remove("scan-format-card", "scan-format-large", "scan-format-free");
-    frame.classList.add("scan-format-" + mode);
+  const frame = document.getElementById("scanFrameInner");
+  const video = document.getElementById("scanVideo");
+  const scanFrame = document.querySelector(".scan-frame");
+  const chip = document.getElementById("scanFormatChip");
+  const placeholder = document.getElementById("scanPlaceholder");
 
-    [
-      "width","max-width","height","min-height","max-height","aspect-ratio",
-      "padding","display","flex","position","overflow","border","outline",
-      "outline-offset","border-radius","background"
-    ].forEach(function(prop){ frame.style.removeProperty(prop); });
+  if(!frame) return;
+
+  frame.classList.remove(
+    "scan-format-card", "scan-format-large", "scan-format-free",
+    "force-mode-card", "force-mode-large", "force-mode-free"
+  );
+
+  frame.classList.add("scan-format-" + mode);
+  frame.classList.add("force-mode-" + mode);
+
+  const viewport = Math.max(320, window.innerWidth || 390);
+  let width, height, ratio;
+
+  if(mode === "card"){
+    ratio = 85.6 / 53.98;
+    width = Math.min(viewport * 0.96, 680);
+    height = Math.min(Math.max(width / ratio, 185), 330);
+  } else if(mode === "large"){
+    ratio = 0.72;
+    width = Math.min(viewport * 0.86, 460);
+    height = Math.min(Math.max(width / ratio, 420), 680);
+  } else {
+    ratio = 1;
+    width = Math.min(viewport * 0.92, 560);
+    height = Math.min(Math.max(width, 300), 520);
+  }
+
+  const frameStyles = {
+    "box-sizing":"border-box",
+    "width": Math.round(width) + "px",
+    "max-width": Math.round(width) + "px",
+    "height": Math.round(height) + "px",
+    "min-height": Math.round(height) + "px",
+    "max-height": Math.round(height) + "px",
+    "aspect-ratio": mode === "card" ? "85.6 / 53.98" : (mode === "large" ? "0.72 / 1" : "1 / 1"),
+    "padding":"0",
+    "margin":"0 auto",
+    "display":"block",
+    "flex":"0 0 auto",
+    "position":"relative",
+    "overflow":"hidden",
+    "background":"#050505",
+    "border":"5px solid #050505",
+    "border-radius":"22px"
+  };
+
+  Object.keys(frameStyles).forEach(function(k){
+    frame.style.setProperty(k, frameStyles[k], "important");
+  });
+
+  if(scanFrame){
+    scanFrame.style.setProperty("display", "flex", "important");
+    scanFrame.style.setProperty("align-items", "center", "important");
+    scanFrame.style.setProperty("justify-content", "center", "important");
+    scanFrame.style.setProperty("min-height", "0", "important");
+    scanFrame.style.setProperty("padding", "12px 4px", "important");
   }
 
   if(video){
-    [
-      "position","inset","left","top","width","height","min-width","min-height",
-      "max-width","max-height","object-fit","display","transform","transform-origin",
-      "border-radius","background"
-    ].forEach(function(prop){ video.style.removeProperty(prop); });
+    const baseVideoStyles = {
+      "position":"absolute",
+      "width":"100%",
+      "height":"100%",
+      "object-fit":"cover",
+      "display":"block",
+      "background":"#050505",
+      "border-radius":"16px"
+    };
+
+    Object.keys(baseVideoStyles).forEach(function(k){
+      video.style.setProperty(k, baseVideoStyles[k], "important");
+    });
+
+    if(mode === "card"){
+      video.style.setProperty("inset", "auto", "important");
+      video.style.setProperty("left", "50%", "important");
+      video.style.setProperty("top", "50%", "important");
+      video.style.setProperty("transform", "translate(-50%, -50%) rotate(90deg) scale(1.08)", "important");
+      video.style.setProperty("transform-origin", "center center", "important");
+    } else {
+      video.style.setProperty("inset", "0", "important");
+      video.style.removeProperty("left");
+      video.style.removeProperty("top");
+      video.style.setProperty("transform", "none", "important");
+    }
   }
 
-  if(chip){
-    chip.textContent = mode === "card" ? "Card" : (mode === "large" ? "Foglio intero" : "Appunti / libero");
-    chip.style.display = "none";
-  }
-
-  if(placeholder) placeholder.style.display = "none";
-
-  document.querySelectorAll(".scan-format-tab").forEach(function(btn){
-    btn.classList.toggle("active", btn.dataset.mode === mode);
-  });
+  if(chip) chip.style.setProperty("display", "none", "important");
+  if(placeholder) placeholder.style.setProperty("display", "none", "important");
 
   document.querySelectorAll(".scan-corner").forEach(function(el){
     el.style.setProperty("display", "none", "important");
+  });
+
+  document.querySelectorAll(".scan-format-tab").forEach(function(btn){
+    btn.classList.toggle("active", btn.dataset.mode === mode);
   });
 
   try {
@@ -1651,14 +1822,30 @@ function forceApplyScanFrameMode(mode){
       setScanStatus("Formato Appunti / libero: inquadra bene le date leggibili e premi Leggi le date.", true);
     }
   } catch(e) {}
+
+  window.__lastForcedScanMode = {
+    mode,
+    width: Math.round(width),
+    height: Math.round(height),
+    at: Date.now()
+  };
 }
+
 
 function forceChangeScanFrameMode(){
   const order = ["card", "large", "free"];
-  const current = currentScanFrameMode || "card";
+  const current = window.__desiredScanFrameMode || currentScanFrameMode || "card";
   const idx = order.indexOf(current);
   const next = order[(idx + 1) % order.length];
+
   forceApplyScanFrameMode(next);
+
+  // Forzatura ripetuta perché su camera già attiva Safari/iOS tende a ripristinare layout/video.
+  [80, 180, 350, 700, 1200].forEach(function(ms){
+    setTimeout(function(){
+      forceApplyScanFrameMode(next);
+    }, ms);
+  });
 }
 
 
@@ -1666,13 +1853,13 @@ function openCardScanFromDate(){
   try {
     openScanPanel();
 
-    try { applyScanFrameMode("card"); } catch(e) {}
-    forceCardHorizontalFrame();
+    try { forceApplyScanFrameMode(window.__desiredScanFrameMode || currentScanFrameMode || "card"); } catch(e) {}
+    forceApplyScanFrameMode(window.__desiredScanFrameMode || currentScanFrameMode || "card");
 
     [80, 180, 400, 800, 1300].forEach(function(ms){
       setTimeout(function(){
-        try { applyScanFrameMode("card"); } catch(e) {}
-        forceCardHorizontalFrame();
+        try { forceApplyScanFrameMode(window.__desiredScanFrameMode || currentScanFrameMode || "card"); } catch(e) {}
+        forceApplyScanFrameMode(window.__desiredScanFrameMode || currentScanFrameMode || "card");
       }, ms);
     });
 
@@ -1681,7 +1868,7 @@ function openCardScanFromDate(){
   } catch(e) {
     try {
       openScanPanel();
-      forceCardHorizontalFrame();
+      forceApplyScanFrameMode(window.__desiredScanFrameMode || currentScanFrameMode || "card");
     } catch(err) {}
   }
 }
@@ -1753,15 +1940,15 @@ async function startCameraScan(){
     video.srcObject = scanStream;
     video.classList.add("active");
 
-    try { applyScanFrameMode("card"); } catch(e) {}
-    forceCardHorizontalFrame();
-    setTimeout(function(){ forceCardHorizontalFrame(); }, 200);
-    setTimeout(function(){ forceCardHorizontalFrame(); }, 700);
-    setTimeout(function(){ forceCardHorizontalFrame(); }, 1400);
+    try { forceApplyScanFrameMode(window.__desiredScanFrameMode || currentScanFrameMode || "card"); } catch(e) {}
+    forceApplyScanFrameMode(window.__desiredScanFrameMode || currentScanFrameMode || "card");
+    setTimeout(function(){ forceApplyScanFrameMode(window.__desiredScanFrameMode || currentScanFrameMode || "card"); }, 200);
+    setTimeout(function(){ forceApplyScanFrameMode(window.__desiredScanFrameMode || currentScanFrameMode || "card"); }, 700);
+    setTimeout(function(){ forceApplyScanFrameMode(window.__desiredScanFrameMode || currentScanFrameMode || "card"); }, 1400);
 
-    try { forceCardHorizontalFrame(); } catch(e) {}
-    setTimeout(function(){ try { forceCardHorizontalFrame(); } catch(e) {} }, 300);
-    setTimeout(function(){ try { forceCardHorizontalFrame(); } catch(e) {} }, 900);
+    try { forceApplyScanFrameMode(window.__desiredScanFrameMode || currentScanFrameMode || "card"); } catch(e) {}
+    setTimeout(function(){ try { forceApplyScanFrameMode(window.__desiredScanFrameMode || currentScanFrameMode || "card"); } catch(e) {} }, 300);
+    setTimeout(function(){ try { forceApplyScanFrameMode(window.__desiredScanFrameMode || currentScanFrameMode || "card"); } catch(e) {} }, 900);
 
     setScanStatus("Fotocamera attiva. Scegli il formato corretto, inquadra bene il documento e premi “Leggi le date”.", true);
   } catch(err) {
