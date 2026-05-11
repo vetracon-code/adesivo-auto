@@ -759,6 +759,52 @@
     }
   </style>
 
+
+  <style id="scan-format-control-stronger">
+    .scan-format-chip{
+      font-size:13px !important;
+      padding:9px 13px !important;
+      background:#ff7a00 !important;
+      color:#fff !important;
+      border-color:#ff9f1c !important;
+      box-shadow:0 8px 22px rgba(255,122,0,.26) !important;
+    }
+
+    .scan-format-tabs{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-top:12px;
+      align-items:center;
+    }
+
+    .scan-format-tab{
+      border:1px solid #fed7aa;
+      background:#fff;
+      color:#9a3412;
+      border-radius:999px;
+      padding:10px 13px;
+      font-weight:950;
+      font-size:12px;
+      cursor:pointer;
+      box-shadow:0 8px 18px rgba(15,23,42,.06);
+    }
+
+    .scan-format-tab.active{
+      background:#ff7a00;
+      color:#fff;
+      border-color:#ff7a00;
+      box-shadow:0 10px 26px rgba(255,122,0,.28);
+    }
+
+    .scan-secondary-action{
+      background:#ff7a00 !important;
+      color:#fff !important;
+      border-color:#ff7a00 !important;
+      box-shadow:0 12px 28px rgba(255,122,0,.28) !important;
+    }
+  </style>
+
 </head>
 <body>
   <div class="topbar">
@@ -805,6 +851,11 @@
         <button class="scan-primary" type="button" onclick="startCameraScan()">Avvia fotocamera</button>
         <button class="scan-primary" type="button" onclick="captureCameraFrame()">Scatta foto e leggi</button>
           <button class="scan-secondary-action" type="button" onclick="changeScanFrameMode()">Cambia inquadratura</button>
+          <div class="scan-format-tabs" id="scanFormatTabs">
+            <button class="scan-format-tab" type="button" data-mode="card" onclick="applyScanFrameMode('card')">Card</button>
+            <button class="scan-format-tab" type="button" data-mode="large" onclick="applyScanFrameMode('large')">Grande</button>
+            <button class="scan-format-tab" type="button" data-mode="free" onclick="applyScanFrameMode('free')">Libero</button>
+          </div>
         <button class="scan-secondary" type="button" onclick="stopCameraScan()">Ferma camera</button>
         <label class="scan-secondary">
           Carica immagine
@@ -1165,6 +1216,126 @@ let currentScanFrameMode = "free";
 
 const scanFrameModes = ["card", "large", "free"];
 
+
+const documentRecognitionMemory = [
+  {
+    key:"tessera_sanitaria",
+    category:"Salute",
+    type:"Tessera sanitaria",
+    profile:"standard",
+    frame:"card",
+    priority:100,
+    keywords:["tessera sanitaria","team","codice fiscale","servizio sanitario","sistema sanitario","carta nazionale dei servizi","cns"],
+    reason:"Documento riconosciuto: tessera sanitaria."
+  },
+  {
+    key:"patente",
+    category:"Famiglia e documenti",
+    type:"Patente",
+    profile:"critical",
+    frame:"card",
+    priority:90,
+    keywords:["patente di guida","driving licence","ministero delle infrastrutture","4b","4a","4c"],
+    reason:"Documento riconosciuto: patente. Il campo 4b è spesso la scadenza."
+  },
+  {
+    key:"carta_identita",
+    category:"Famiglia e documenti",
+    type:"Carta identità",
+    profile:"critical",
+    frame:"card",
+    priority:70,
+    keywords:["carta d'identità","carta identita","carta identità","identity card","date of expiry"],
+    reason:"Documento riconosciuto: carta d’identità."
+  },
+  {
+    key:"passaporto",
+    category:"Famiglia e documenti",
+    type:"Passaporto",
+    profile:"critical",
+    frame:"large",
+    priority:80,
+    keywords:["passaporto","passport","repubblica italiana passaporto","passport no"],
+    reason:"Documento riconosciuto: passaporto."
+  },
+  {
+    key:"carta_pagamento",
+    category:"Pagamenti",
+    type:"Carta di credito in scadenza",
+    profile:"important",
+    frame:"card",
+    priority:75,
+    keywords:["valid thru","good thru","valida fino","mastercard","visa","bancomat","debit","credit"],
+    reason:"Documento riconosciuto: carta di pagamento."
+  },
+  {
+    key:"revisione",
+    category:"Auto",
+    type:"Revisione",
+    profile:"insistent",
+    frame:"large",
+    priority:75,
+    keywords:["revisione","esito regolare","motorizzazione","ministero delle infrastrutture"],
+    reason:"Documento riconosciuto: revisione auto."
+  },
+  {
+    key:"assicurazione",
+    category:"Auto",
+    type:"Assicurazione",
+    profile:"tolerance",
+    frame:"large",
+    priority:70,
+    keywords:["polizza","rca","assicurazione","decorrenza","copertura","contraente"],
+    reason:"Documento riconosciuto: assicurazione."
+  }
+];
+
+function normalizeDocTextForRecognition(value){
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[’`´]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function recognizeDocumentFromMemory(text, filename){
+  const raw = normalizeDocTextForRecognition((text || "") + " " + (filename || ""));
+  let best = null;
+  let bestScore = 0;
+
+  documentRecognitionMemory.forEach(doc => {
+    let score = 0;
+
+    (doc.keywords || []).forEach(k => {
+      const kk = normalizeDocTextForRecognition(k);
+      if(raw.includes(kk)) score += 10;
+    });
+
+    // Priorità forte: se c'è "tessera sanitaria", deve battere carta identità anche se OCR vede Repubblica Italiana.
+    if(doc.key === "tessera_sanitaria" && raw.includes("tessera sanitaria")) score += 80;
+    if(doc.key === "carta_identita" && raw.includes("tessera sanitaria")) score -= 100;
+
+    const finalScore = score + (doc.priority || 0) / 10;
+
+    if(score > 0 && finalScore > bestScore){
+      bestScore = finalScore;
+      best = doc;
+    }
+  });
+
+  if(!best) return null;
+
+  return {
+    category: best.category,
+    type: best.type,
+    profile: best.profile,
+    frame: best.frame,
+    reason: best.reason,
+    confidence: Math.min(99, Math.round(bestScore * 7))
+  };
+}
+
+
 function getPreferredScanFrameMode(){
   const p = String(currentPreset || "").toLowerCase();
   const c = String(currentCategory || "").toLowerCase();
@@ -1230,6 +1401,10 @@ function applyScanFrameMode(mode){
   if(chip){
     chip.textContent = scanFrameModeLabel(currentScanFrameMode);
   }
+
+  document.querySelectorAll(".scan-format-tab").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.mode === currentScanFrameMode);
+  });
 
   try {
     setScanStatus(scanFrameModeGuide(currentScanFrameMode), true);
@@ -1424,6 +1599,7 @@ async function processScanImage(dataUrl, filename){
 
     const text = workerResult && workerResult.data && workerResult.data.text ? workerResult.data.text : "";
     const guessed = guessDocumentFromText(text, filename);
+    try { if(guessed && guessed.frame) applyScanFrameMode(guessed.frame); } catch(e) {}
     const dates = extractCandidateDates(text);
 
     if(!dates.length){
@@ -1686,51 +1862,58 @@ function installScanResultAutoFillWrapper(){
 
 
 function guessDocumentFromText(text, filename){
+  const memoryGuess = recognizeDocumentFromMemory(text, filename);
+  if(memoryGuess){
+    try { applyScanFrameMode(memoryGuess.frame || "free"); } catch(e) {}
+    return memoryGuess;
+  }
+
   const raw = String((text || "") + " " + (filename || ""));
-  const t = normalizeOcrText(raw);
+  const t = raw.toLowerCase();
 
   function hasAny(words){
-    return words.some(w => t.includes(normalizeOcrText(w)));
+    return words.some(w => t.includes(w.toLowerCase()));
+  }
+
+  if(hasAny(["tessera sanitaria", "team", "codice fiscale", "servizio sanitario", "carta nazionale dei servizi", "cns"])){
+    return {category:"Salute", type:"Tessera sanitaria", profile:"standard", frame:"card", reason:"Documento possibile: tessera sanitaria. Cerco la data di scadenza."};
   }
 
   if(hasAny(["patente di guida", "driving licence", "4b", "4a", "4c"])){
-    return {category:"Famiglia e documenti", type:"Patente", profile:"critical", reason:"Documento possibile: patente. Il campo 4b è spesso la scadenza."};
+    return {category:"Famiglia e documenti", type:"Patente", profile:"critical", frame:"card", reason:"Documento possibile: patente. Il campo 4b è spesso la scadenza."};
   }
 
-  if(hasAny(["carta d'identità", "carta identita", "carta identità", "repubblica italiana", "date of expiry"])){
-    return {category:"Famiglia e documenti", type:"Carta identità", profile:"critical", reason:"Documento possibile: carta d’identità. Cerco data di scadenza o validità."};
+  if(hasAny(["carta d'identità", "carta identita", "carta identità", "identity card", "date of expiry"])){
+    return {category:"Famiglia e documenti", type:"Carta identità", profile:"critical", frame:"card", reason:"Documento possibile: carta d’identità. Cerco data di scadenza o validità."};
   }
 
-  if(hasAny(["passaporto", "passport", "date of expiry", "authority"])){
-    return {category:"Famiglia e documenti", type:"Passaporto", profile:"critical", reason:"Documento possibile: passaporto. Cerco data di scadenza."};
+  if(hasAny(["passaporto", "passport", "authority"])){
+    return {category:"Famiglia e documenti", type:"Passaporto", profile:"critical", frame:"large", reason:"Documento possibile: passaporto. Cerco data di scadenza."};
   }
 
-  if(hasAny(["tessera sanitaria", "team", "codice fiscale", "servizio sanitario"])){
-    return {category:"Salute", type:"Tessera sanitaria", profile:"standard", reason:"Documento possibile: tessera sanitaria. Cerco la data di scadenza."};
-  }
-
-  if(hasAny(["valid thru", "good thru", "valida fino", "mastercard", "visa"])){
-    return {category:"Pagamenti", type:"Carta di credito in scadenza", profile:"important", reason:"Documento possibile: carta di pagamento. Considero solo la scadenza, non numero carta o CVV."};
+  if(hasAny(["valid thru", "good thru", "valida fino", "mastercard", "visa", "bancomat"])){
+    return {category:"Pagamenti", type:"Carta di credito in scadenza", profile:"important", frame:"card", reason:"Documento possibile: carta di pagamento. Considero solo la scadenza, non numero carta o CVV."};
   }
 
   if(hasAny(["revisione", "esito regolare", "motorizzazione"])){
-    return {category:"Auto", type:"Revisione", profile:"insistent", reason:"Documento possibile: revisione auto. Verifica se la data è ultima revisione o prossima revisione."};
+    return {category:"Auto", type:"Revisione", profile:"insistent", frame:"large", reason:"Documento possibile: revisione auto. Verifica se la data è ultima revisione o prossima revisione."};
   }
 
   if(hasAny(["polizza", "rca", "assicurazione", "decorrenza", "copertura"])){
-    return {category:"Auto", type:"Assicurazione", profile:"tolerance", reason:"Documento possibile: assicurazione. Cerco scadenza o fine copertura."};
+    return {category:"Auto", type:"Assicurazione", profile:"tolerance", frame:"large", reason:"Documento possibile: assicurazione. Cerco scadenza o fine copertura."};
   }
 
   if(hasAny(["applecare", "rinnovo mensile"])){
-    return {category:"Pagamenti", type:"AppleCare+", profile:"monthly", reason:"Servizio possibile: AppleCare+ mensile."};
+    return {category:"Pagamenti", type:"AppleCare+", profile:"monthly", frame:"free", reason:"Servizio possibile: AppleCare+ mensile."};
   }
 
   if(hasAny(["rinnovo", "disdetta", "preavviso", "abbonamento"])){
-    return {category:"Pagamenti", type:"Disdetta abbonamento", profile:"notice", reason:"Documento possibile: contratto/abbonamento. Verifica data rinnovo e preavviso."};
+    return {category:"Pagamenti", type:"Disdetta abbonamento", profile:"notice", frame:"large", reason:"Documento possibile: contratto/abbonamento. Verifica data rinnovo e preavviso."};
   }
 
-  return {category:"Famiglia e documenti", type:"Altro", profile:"standard", reason:"Documento non riconosciuto con certezza. Scegli la data corretta."};
+  return {category:"Rapido", type:"Altro", profile:"standard", frame:"free", reason:"Documento non riconosciuto con certezza. Scegli la data corretta e completa i campi mancanti."};
 }
+
 
 function extractCandidateDates(text){
   const original = String(text || "");
