@@ -4105,16 +4105,27 @@ app.post('/api/owner-dashboard', async (req, res, next) => {
     );
 
     const events = await pool.query(
-      `SELECT
-         reason AS type,
-         created_at AS at,
-         COALESCE(ip_city, '') AS ip_city,
-         COALESCE(ip_region, '') AS ip_region,
-         COALESCE(ip_country, '') AS ip_country,
-         COALESCE(location_shared, FALSE) AS location_shared
-       FROM contact_message_logs
-       WHERE code = $1
-       ORDER BY created_at DESC
+      `(SELECT
+          COALESCE(reason, 'Evento') AS type,
+          created_at AS at,
+          COALESCE(ip_city, '') AS ip_city,
+          COALESCE(ip_region, '') AS ip_region,
+          COALESCE(ip_country, '') AS ip_country,
+          COALESCE(location_shared, FALSE) AS location_shared
+        FROM contact_message_logs
+        WHERE code = $1
+          AND deleted_at IS NULL)
+       UNION ALL
+       (SELECT
+          'Visualizzazione pagina' AS type,
+          viewed_at AS at,
+          COALESCE(ip_city, '') AS ip_city,
+          COALESCE(ip_region, '') AS ip_region,
+          COALESCE(ip_country, '') AS ip_country,
+          FALSE AS location_shared
+        FROM contact_page_views
+        WHERE code = $1)
+       ORDER BY at DESC
        LIMIT 200`,
       [vehicle.code]
     );
@@ -4173,7 +4184,7 @@ app.post('/api/owner-dashboard', async (req, res, next) => {
         region.includes('molise')
       ) return 'south';
 
-      return city || region || country ? 'north' : '';
+      return 'north'; // fallback: evento reale senza geolocalizzazione precisa, lo conteggiamo comunque
     }
 
     for (const ev of events.rows || []) {
