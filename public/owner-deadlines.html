@@ -1468,6 +1468,114 @@
   }
 </style>
 
+
+<style id="quick-reminder-simple-style">
+  .quick-reminder-panel{
+    display:none;
+    margin-top:14px;
+    padding:16px;
+    border-radius:22px;
+    background:#f8fafc;
+    border:1px solid rgba(15,23,42,.10);
+    box-shadow:0 14px 34px rgba(15,23,42,.08);
+  }
+
+  .quick-reminder-title{
+    font-size:1.02rem;
+    font-weight:950;
+    color:#111827;
+    margin-bottom:6px;
+  }
+
+  .quick-reminder-copy{
+    font-size:.9rem;
+    line-height:1.45;
+    color:#64748b;
+    margin-bottom:14px;
+  }
+
+  .quick-reminder-panel label{
+    color:#334155 !important;
+    font-weight:900 !important;
+    margin-top:12px !important;
+  }
+
+  .quick-reminder-panel input,
+  .quick-reminder-panel select{
+    width:100%;
+    min-height:48px;
+    border-radius:16px;
+    border:1px solid rgba(15,23,42,.12);
+    background:#fff;
+    color:#111827 !important;
+    padding:0 13px;
+    font-size:1rem;
+    font-weight:750;
+    box-sizing:border-box;
+  }
+
+  .quick-reminder-grid{
+    display:grid;
+    grid-template-columns:1fr 1.3fr;
+    gap:10px;
+    align-items:end;
+  }
+
+  .quick-reminder-summary{
+    margin-top:12px;
+    padding:12px 13px;
+    border-radius:16px;
+    background:#fff7ed;
+    border:1px solid rgba(255,122,0,.20);
+    color:#7c2d12;
+    font-size:.9rem;
+    line-height:1.45;
+    font-weight:750;
+  }
+
+  .quick-reminder-actions{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-top:14px;
+  }
+
+  .quick-reminder-confirm,
+  .quick-reminder-cancel{
+    min-height:48px;
+    border:0;
+    border-radius:16px;
+    font-weight:950;
+    cursor:pointer;
+  }
+
+  .quick-reminder-confirm{
+    background:linear-gradient(135deg,#ff7a00,#ff9f1c);
+    color:#fff;
+    box-shadow:0 10px 24px rgba(255,122,0,.22);
+  }
+
+  .quick-reminder-cancel{
+    background:#e5e7eb;
+    color:#111827;
+  }
+
+  body.quick-reminder-mode .quick-hide-in-quick-mode{
+    display:none !important;
+  }
+
+  body.quick-reminder-mode #quickReminderPanel{
+    display:block !important;
+  }
+
+  @media(max-width:560px){
+    .quick-reminder-grid,
+    .quick-reminder-actions{
+      grid-template-columns:1fr;
+    }
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -1482,6 +1590,41 @@
       <p id="deadlineHeaderInstructions">Tieni sotto controllo documenti, salute, casa, pagamenti e rinnovi. Inserisci una scadenza o leggila con la fotocamera: l’App ti avviserà nel momento più utile, senza doverci pensare.</p>
 <div class="panel add-deadline-panel" id="addDeadlinePanel">
         <h2 id="addDeadlineTitle" class="add-deadline-title">Aggiungi scadenza</h2>
+
+<div class="quick-reminder-panel" id="quickReminderPanel">
+  <div class="quick-reminder-title">Promemoria rapido</div>
+  <div class="quick-reminder-copy">Scrivi cosa vuoi ricordare, scegli tra quanto tempo ricevere l’avviso e conferma. Nessun OCR, nessun campo avanzato.</div>
+
+  <label>Ricordami di</label>
+  <input id="quickReminderText" placeholder="Esempio: chiamare Marco, prendere medicina, pagare bolletta">
+
+  <div class="quick-reminder-grid">
+    <div>
+      <label>Tra</label>
+      <input id="quickReminderValue" type="number" min="1" max="999" value="10" oninput="updateQuickReminderSummary()">
+    </div>
+    <div>
+      <label>Unità</label>
+      <select id="quickReminderUnit" onchange="updateQuickReminderLimits(); updateQuickReminderSummary();">
+        <option value="minutes">Minuti</option>
+        <option value="hours">Ore</option>
+        <option value="days">Giorni</option>
+        <option value="months">Mesi</option>
+        <option value="years">Anni</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="quick-reminder-summary" id="quickReminderSummary">
+    Ti avviserò tra 10 minuti e, se non confermi, ripeterò l’avviso ogni 5 minuti per 30 minuti.
+  </div>
+
+  <div class="quick-reminder-actions">
+    <button class="quick-reminder-confirm" type="button" onclick="saveQuickReminder()">Conferma promemoria</button>
+    <button class="quick-reminder-cancel" type="button" onclick="cancelQuickReminder()">Annulla</button>
+  </div>
+</div>
+
         <div class="cats" id="cats"></div>
         <div class="add-hint" id="addDeadlineHint">
           Scegli una categoria per aprire il modulo di inserimento della scadenza.
@@ -1494,6 +1637,7 @@
           <div class="presets" id="presets"></div>
 
         <div id="deadlineNameScrollAnchor" style="height:1px;"></div>
+        <div id="quickAdvancedFormWrap" class="quick-hide-in-quick-mode">
         <label>Nome scadenza</label>
         <input id="nameInput" placeholder="Esempio: Assicurazione auto">
 
@@ -1680,6 +1824,8 @@
 
         <label>Note facoltative</label>
         <textarea id="notesInput" placeholder="Codice cliente, riferimento pratica, link area clienti, email disdetta, ecc."></textarea>
+
+        </div>
 
         <div class="actions">
           <button class="primary" onclick="saveDeadline()">Salva scadenza</button>
@@ -3501,6 +3647,219 @@ function updateCustomRecurrencePanel(){
         }
       });
     }
+  });
+})();
+
+
+
+function isQuickReminderCategory(){
+  try{
+    return String(currentCategory || "").trim().toLowerCase() === "rapido";
+  }catch(e){
+    return false;
+  }
+}
+
+function quickReminderClampValue(){
+  const unitEl = document.getElementById("quickReminderUnit");
+  const valueEl = document.getElementById("quickReminderValue");
+  if(!unitEl || !valueEl) return 1;
+
+  const unit = unitEl.value || "minutes";
+  const maxMap = { minutes: 240, hours: 72, days: 31, months: 24, years: 10 };
+  const max = maxMap[unit] || 999;
+
+  valueEl.max = String(max);
+  let value = Number(valueEl.value || 1);
+  if(!Number.isFinite(value) || value < 1) value = 1;
+  if(value > max) value = max;
+  valueEl.value = String(value);
+
+  return value;
+}
+
+function quickReminderUnitLabel(unit, value){
+  const n = Number(value || 1);
+  if(unit === "minutes") return n === 1 ? "minuto" : "minuti";
+  if(unit === "hours") return n === 1 ? "ora" : "ore";
+  if(unit === "days") return n === 1 ? "giorno" : "giorni";
+  if(unit === "months") return n === 1 ? "mese" : "mesi";
+  if(unit === "years") return n === 1 ? "anno" : "anni";
+  return "minuti";
+}
+
+function getQuickReminderRepeatPlan(value, unit){
+  value = Number(value || 1);
+
+  if(unit === "minutes"){
+    if(value <= 30) return { profile:"urgent", alerts:["Al momento", "Dopo 5 minuti", "Dopo 10 minuti", "Dopo 30 minuti"], text:"se non confermi, ripeterò l’avviso ogni 5 minuti per 30 minuti." };
+    return { profile:"important", alerts:["Al momento", "Dopo 15 minuti", "Dopo 30 minuti", "Dopo 60 minuti"], text:"se non confermi, ripeterò l’avviso ogni 15 minuti per 1 ora." };
+  }
+
+  if(unit === "hours"){
+    if(value <= 24) return { profile:"important", alerts:["Al momento", "Dopo 1 ora", "Dopo 2 ore", "Dopo 4 ore"], text:"se non confermi, ripeterò l’avviso ogni ora per 4 ore." };
+    return { profile:"standard", alerts:["Al momento", "Dopo 6 ore", "Dopo 12 ore"], text:"se non confermi, farò alcuni richiami nelle ore successive." };
+  }
+
+  if(unit === "days"){
+    if(value <= 7) return { profile:"standard", alerts:["Al momento", "Dopo 1 giorno", "Dopo 2 giorni", "Dopo 3 giorni"], text:"se non confermi, ripeterò l’avviso una volta al giorno per 3 giorni." };
+    return { profile:"soft", alerts:["Al momento", "Dopo 2 giorni", "Dopo 7 giorni"], text:"se non confermi, farò richiami leggeri nei giorni successivi." };
+  }
+
+  if(unit === "months"){
+    return { profile:"important", alerts:["7 giorni prima", "3 giorni prima", "Il giorno stesso"], text:"ti avviserò 7 giorni prima, 3 giorni prima e il giorno stesso." };
+  }
+
+  if(unit === "years"){
+    return { profile:"important", alerts:["30 giorni prima", "7 giorni prima", "Il giorno stesso"], text:"ti avviserò 30 giorni prima, 7 giorni prima e il giorno stesso." };
+  }
+
+  return { profile:"standard", alerts:["Al momento"], text:"ti invierò un avviso al momento scelto." };
+}
+
+function updateQuickReminderLimits(){
+  quickReminderClampValue();
+}
+
+function updateQuickReminderSummary(){
+  const unitEl = document.getElementById("quickReminderUnit");
+  const summaryEl = document.getElementById("quickReminderSummary");
+  if(!unitEl || !summaryEl) return;
+
+  const unit = unitEl.value || "minutes";
+  const value = quickReminderClampValue();
+  const plan = getQuickReminderRepeatPlan(value, unit);
+  summaryEl.textContent = `Ti avviserò tra ${value} ${quickReminderUnitLabel(unit, value)} e ${plan.text}`;
+}
+
+function toggleQuickReminderMode(){
+  const active = isQuickReminderCategory();
+  document.body.classList.toggle("quick-reminder-mode", active);
+
+  if(active){
+    updateQuickReminderLimits();
+    updateQuickReminderSummary();
+
+    setTimeout(function(){
+      try{
+        const input = document.getElementById("quickReminderText");
+        if(input) input.focus();
+      }catch(e){}
+    }, 150);
+  }
+}
+
+function computeQuickReminderDate(value, unit){
+  const d = new Date();
+  value = Number(value || 1);
+
+  if(unit === "minutes") d.setMinutes(d.getMinutes() + value);
+  else if(unit === "hours") d.setHours(d.getHours() + value);
+  else if(unit === "days") d.setDate(d.getDate() + value);
+  else if(unit === "months") d.setMonth(d.getMonth() + value);
+  else if(unit === "years") d.setFullYear(d.getFullYear() + value);
+
+  return d;
+}
+
+function toLocalDateInputValue(d){
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function toLocalTimeInputValue(d){
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mi}`;
+}
+
+function saveQuickReminder(){
+  const textEl = document.getElementById("quickReminderText");
+  const valueEl = document.getElementById("quickReminderValue");
+  const unitEl = document.getElementById("quickReminderUnit");
+
+  const reminderText = String(textEl ? textEl.value : "").trim();
+  if(!reminderText){
+    alert("Scrivi cosa vuoi ricordare.");
+    if(textEl) textEl.focus();
+    return;
+  }
+
+  const unit = unitEl ? unitEl.value : "minutes";
+  const value = quickReminderClampValue();
+  const due = computeQuickReminderDate(value, unit);
+  const plan = getQuickReminderRepeatPlan(value, unit);
+
+  const item = {
+    id: Date.now(),
+    category: "Rapido",
+    type: "Promemoria rapido",
+    name: reminderText,
+    owner: "Promemoria rapido",
+    date: toLocalDateInputValue(due),
+    time: toLocalTimeInputValue(due),
+    profile: plan.profile,
+    alerts: plan.alerts,
+    notes: `Creato come promemoria rapido: tra ${value} ${quickReminderUnitLabel(unit, value)}. ${plan.text}`,
+    status: "active",
+    createdAt: new Date().toISOString(),
+    recurrence: "none",
+    extra: {
+      quickReminder: true,
+      quickValue: value,
+      quickUnit: unit,
+      repeatPlanText: plan.text
+    }
+  };
+
+  deadlines.push(item);
+  persist();
+
+  if(textEl) textEl.value = "";
+  if(valueEl) valueEl.value = "10";
+  if(unitEl) unitEl.value = "minutes";
+  updateQuickReminderSummary();
+
+  closeDeadlineForm();
+  renderList();
+  showSimpleSaveConfirmation();
+}
+
+function cancelQuickReminder(){
+  const textEl = document.getElementById("quickReminderText");
+  const valueEl = document.getElementById("quickReminderValue");
+  const unitEl = document.getElementById("quickReminderUnit");
+
+  if(textEl) textEl.value = "";
+  if(valueEl) valueEl.value = "10";
+  if(unitEl) unitEl.value = "minutes";
+
+  updateQuickReminderSummary();
+  closeDeadlineForm();
+}
+
+(function(){
+  const oldRenderPresets = window.renderPresets;
+  window.renderPresets = function(){
+    if(typeof oldRenderPresets === "function"){
+      oldRenderPresets();
+    }
+    toggleQuickReminderMode();
+  };
+
+  const oldRenderCats = window.renderCats;
+  window.renderCats = function(){
+    if(typeof oldRenderCats === "function"){
+      oldRenderCats();
+    }
+    toggleQuickReminderMode();
+  };
+
+  document.addEventListener("DOMContentLoaded", function(){
+    toggleQuickReminderMode();
+    updateQuickReminderSummary();
   });
 })();
 
