@@ -1593,6 +1593,26 @@
   }
 </style>
 
+
+<style id="hard-close-deadline-panel-style">
+  body.deadline-form-force-closed #deadlineFormBody,
+  body.deadline-form-force-closed #quickReminderPanel{
+    display:none !important;
+    visibility:hidden !important;
+    height:0 !important;
+    max-height:0 !important;
+    min-height:0 !important;
+    overflow:hidden !important;
+    padding:0 !important;
+    margin:0 !important;
+    pointer-events:none !important;
+  }
+
+  body.deadline-form-force-closed #addDeadlinePanel{
+    display:none !important;
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -3079,15 +3099,33 @@ function selectCat(c){
 
 
 function hardCloseDeadlineForm(){
+  try { window.__deadlineFormForceClosed = true; } catch(e) {}
+
   try { quickReminderEditingId = null; } catch(e) {}
 
   try {
     document.body.classList.remove("quick-reminder-mode");
+    document.body.classList.add("deadline-form-force-closed");
   } catch(e) {}
 
   try {
-    const panel = document.getElementById("quickReminderPanel");
-    if(panel) panel.style.display = "";
+    currentCategory = "";
+    currentPreset = "";
+  } catch(e) {}
+
+  try {
+    const quickPanel = document.getElementById("quickReminderPanel");
+    if(quickPanel){
+      quickPanel.style.display = "none";
+      quickPanel.style.visibility = "hidden";
+      quickPanel.style.height = "0";
+      quickPanel.style.overflow = "hidden";
+    }
+
+    const titleEl = quickPanel ? quickPanel.querySelector(".quick-reminder-title") : null;
+    const confirmBtn = quickPanel ? quickPanel.querySelector(".quick-reminder-confirm") : null;
+    if(titleEl) titleEl.textContent = "Promemoria rapido";
+    if(confirmBtn) confirmBtn.textContent = "Conferma promemoria";
   } catch(e) {}
 
   try {
@@ -3100,28 +3138,41 @@ function hardCloseDeadlineForm(){
   } catch(e) {}
 
   try {
-    const quickPanel = document.getElementById("quickReminderPanel");
-    const titleEl = quickPanel ? quickPanel.querySelector(".quick-reminder-title") : null;
-    const confirmBtn = quickPanel ? quickPanel.querySelector(".quick-reminder-confirm") : null;
-    if(titleEl) titleEl.textContent = "Promemoria rapido";
-    if(confirmBtn) confirmBtn.textContent = "Conferma promemoria";
-  } catch(e) {}
-
-  try {
     const body = document.getElementById("deadlineFormBody");
-    if(body) body.classList.add("form-body-collapsed");
+    if(body){
+      body.classList.add("form-body-collapsed");
+      body.style.display = "none";
+      body.style.maxHeight = "0";
+      body.style.overflow = "hidden";
+    }
   } catch(e) {}
 
   try {
     const panel = document.getElementById("addDeadlinePanel");
-    if(panel) panel.classList.remove("active", "open", "expanded");
+    if(panel){
+      panel.classList.remove("active", "open", "expanded");
+      panel.style.display = "none";
+    }
   } catch(e) {}
 
   try {
-    if(typeof closeDeadlineForm === "function") {
-      closeDeadlineForm();
-    }
+    const hint = document.getElementById("addDeadlineHint");
+    if(hint) hint.textContent = "Scegli una categoria per aprire il modulo di inserimento della scadenza.";
   } catch(e) {}
+
+  try { renderList(); } catch(e) {}
+
+  setTimeout(function(){
+    try {
+      const panel = document.getElementById("addDeadlinePanel");
+      const body = document.getElementById("deadlineFormBody");
+      const quickPanel = document.getElementById("quickReminderPanel");
+
+      if(panel) panel.style.display = "none";
+      if(body) body.style.display = "none";
+      if(quickPanel) quickPanel.style.display = "none";
+    } catch(e) {}
+  }, 80);
 
   try {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -3130,6 +3181,15 @@ function hardCloseDeadlineForm(){
 
 
 function openDeadlineForm(){
+  try {
+    window.__deadlineFormForceClosed = false;
+    document.body.classList.remove("deadline-form-force-closed");
+    const panel = document.getElementById("addDeadlinePanel");
+    const body = document.getElementById("deadlineFormBody");
+    if(panel) panel.style.display = "";
+    if(body) body.style.display = "";
+  } catch(e) {}
+
   deadlineFormOpened = true;
   const body = document.getElementById("deadlineFormBody");
   const hint = document.getElementById("addDeadlineHint");
