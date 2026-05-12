@@ -1924,6 +1924,22 @@
   }
 </style>
 
+
+<style id="deadline-push-target-scroll-style">
+  .deadline-push-target{
+    outline:4px solid rgba(255,122,0,.75) !important;
+    box-shadow:0 0 0 8px rgba(255,122,0,.18), 0 18px 44px rgba(15,23,42,.18) !important;
+    transform:scale(1.015) !important;
+    transition:all .22s ease !important;
+  }
+
+  @media(max-width:560px){
+    .deadline-push-target{
+      transform:scale(1.01) !important;
+    }
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -5544,59 +5560,102 @@ init();
 })();
 </script>
 
-
 <script id="open-deadline-from-push-script">
 (function(){
+  var alreadyOpenedDeadlineFromPush = false;
+
   function getDeadlineIdFromUrl(){
     try{
-      const params = new URLSearchParams(window.location.search || "");
+      var params = new URLSearchParams(window.location.search || "");
       return params.get("deadlineId") || params.get("deadline_id") || "";
     }catch(e){
       return "";
     }
   }
 
+  function findDeadlineElement(id){
+    return document.getElementById("d-" + id)
+      || document.getElementById("deadline-" + id)
+      || document.querySelector('[data-deadline-id="' + id + '"]');
+  }
+
+  function scrollPreciselyToDeadline(id){
+    var el = findDeadlineElement(id);
+    if(!el) return false;
+
+    try{
+      document.querySelectorAll(".deadline-push-target").forEach(function(x){
+        x.classList.remove("deadline-push-target");
+      });
+    }catch(e){}
+
+    try{
+      el.classList.add("deadline-push-target");
+      el.scrollIntoView({ behavior:"smooth", block:"center", inline:"nearest" });
+
+      setTimeout(function(){
+        try { el.scrollIntoView({ behavior:"smooth", block:"center", inline:"nearest" }); } catch(e) {}
+      }, 450);
+
+      setTimeout(function(){
+        try { el.scrollIntoView({ behavior:"auto", block:"center", inline:"nearest" }); } catch(e) {}
+      }, 1100);
+
+      setTimeout(function(){
+        try { el.classList.remove("deadline-push-target"); } catch(e) {}
+      }, 5000);
+
+      return true;
+    }catch(e){
+      return false;
+    }
+  }
+
   function openDeadlineFromPush(){
     try{
-      const id = getDeadlineIdFromUrl();
+      var id = getDeadlineIdFromUrl();
       if(!id) return;
 
       if(typeof deadlines === "undefined" || !Array.isArray(deadlines)) return;
 
-      const d = deadlines.find(x => String(x.id) === String(id));
+      var d = deadlines.find(function(x){ return String(x.id) === String(id); });
       if(!d) return;
 
       try { renderList(); } catch(e) {}
 
       setTimeout(function(){
-        try{
-          const el = document.getElementById("d-" + id);
-          if(el && el.scrollIntoView){
-            el.scrollIntoView({ behavior:"smooth", block:"center" });
-            el.classList.add("deadline-just-saved");
-            setTimeout(function(){ el.classList.remove("deadline-just-saved"); }, 2600);
-          }
-        }catch(e){}
+        var scrolled = scrollPreciselyToDeadline(id);
 
-        try{
-          if(typeof openMessage === "function"){
-            openMessage(d.id);
-          }
-        }catch(e){
-          console.warn("openDeadlineFromPush openMessage error:", e);
+        if(scrolled && !alreadyOpenedDeadlineFromPush){
+          alreadyOpenedDeadlineFromPush = true;
+
+          /*
+            Prima porta l'utente esattamente sulla card.
+            Poi apre il dettaglio, così si capisce a quale avviso appartiene.
+          */
+          setTimeout(function(){
+            try{
+              if(typeof openMessage === "function"){
+                openMessage(d.id);
+              }
+            }catch(e){
+              console.warn("openDeadlineFromPush openMessage error:", e);
+            }
+          }, 900);
         }
-      }, 450);
+      }, 500);
     }catch(e){
       console.warn("openDeadlineFromPush error:", e);
     }
   }
 
   document.addEventListener("DOMContentLoaded", function(){
-    setTimeout(openDeadlineFromPush, 600);
-    setTimeout(openDeadlineFromPush, 1400);
+    setTimeout(openDeadlineFromPush, 500);
+    setTimeout(openDeadlineFromPush, 1200);
+    setTimeout(openDeadlineFromPush, 2200);
   });
 
-  setTimeout(openDeadlineFromPush, 1000);
+  setTimeout(openDeadlineFromPush, 900);
 })();
 </script>
 
