@@ -5508,11 +5508,11 @@ function cancelDelete(){
 }
 function deleteFromModal(){
   if(!currentModalId) return;
-  deadlines = deadlines.filter(d=>d.id!==currentModalId);
+  const idToDelete = currentModalId;
+  deadlines = deadlines.map(d => String(d.id) === String(idToDelete) ? {...d, status:"deleted", deletedAt:new Date().toISOString()} : d);
   persist();
   renderList();
-  document.body.classList.remove("delete-confirm-active");
-  restoreConfirmDeleteBoxPosition();
+  syncSingleDeadlineStatusToServer(idToDelete, "deleted");
   closeModal();
 }
 function closeModal(){
@@ -5534,6 +5534,7 @@ function completeDeadline(id){
 
   persist();
   renderList();
+  syncSingleDeadlineStatusToServer(id, "completed");
 }
 
 function createNextRecurringDeadline(d){
@@ -5646,6 +5647,45 @@ function editDeadline(id){
     } catch(e) {}
   }, 120);
 }
+
+async function syncSingleDeadlineStatusToServer(deadlineId, status){
+  try{
+    if(typeof deadlines === "undefined" || !Array.isArray(deadlines)) return;
+
+    const d = deadlines.find(x => String(x.id) === String(deadlineId));
+    if(!d) return;
+
+    const payload = {
+      code: typeof code !== "undefined" ? code : "",
+      plate: typeof plate !== "undefined" ? plate : "",
+      deadlineId: String(deadlineId),
+      status: status,
+      deadline: Object.assign({}, d, { status: status })
+    };
+
+    try{
+      const params = new URLSearchParams(window.location.search || "");
+      if(!payload.code) payload.code = params.get("code") || "";
+      if(!payload.plate) payload.plate = params.get("plate") || "";
+    }catch(e){}
+
+    try{
+      if(!payload.code) payload.code = localStorage.getItem("owner_saved_code") || "";
+      if(!payload.plate) payload.plate = localStorage.getItem("owner_saved_plate") || "";
+    }catch(e){}
+
+    if(!payload.plate) return;
+
+    await fetch("/api/owner-deadlines/update-status", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify(payload)
+    });
+  }catch(e){
+    console.warn("syncSingleDeadlineStatusToServer error:", e);
+  }
+}
+
 function persist(){
   localStorage.setItem(key, JSON.stringify(deadlines));
   syncDeadlinesToServer();

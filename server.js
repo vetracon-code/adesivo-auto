@@ -8673,7 +8673,11 @@ app.post('/api/owner-deadlines/sync', async (req, res) => {
       if (!d || !d.id) continue;
 
       const localId = String(d.id);
-      const status = d.status || 'active';
+      const status = ['deleted','completed','disabled','active'].includes(String(d.status || '').toLowerCase())
+        ? String(d.status || '').toLowerCase()
+        : 'active';
+
+      d.status = status;
 
       await pool.query(
         `INSERT INTO owner_deadline_items
@@ -8883,6 +8887,104 @@ app.post('/api/owner-deadlines/stop-quick-reminders', async (req, res) => {
     return res.status(500).json({
       success: false,
       error: err.message || String(err)
+    });
+  }
+});
+
+
+
+app.post('/api/owner-deadlines/update-status', async (req, res) => {
+  try {
+    const plateNorm = normalizePlateValue(req.body.plate);
+    const cleanCode = String(req.body.code || '').trim().toUpperCase();
+    const localId = String(req.body.deadlineId || req.body.local_id || '').trim();
+    const wantedStatus = String(req.body.status || '').trim().toLowerCase();
+
+    const allowed = new Set(['completed', 'deleted', 'disabled', 'active']);
+    if (!plateNorm || !localId || !allowed.has(wantedStatus)) {
+      return res.status(400).json({
+        success:false,
+        error:'plate, deadlineId e status valido sono obbligatori.'
+      });
+    }
+
+    const jsonStatus = JSON.stringify(wantedStatus);
+
+    const updateRes = await pool.query(
+      `UPDATE owner_deadline_items
+       SET status = $3,
+           payload = jsonb_set(
+             jsonb_set(
+               COALESCE(payload, '{}'::jsonb),
+               '{status}',
+               $4::jsonb,
+               true
+             ),
+             CASE
+               WHEN $3 = 'completed' THEN '{completedAt}'
+               WHEN $3 = 'deleted' THEN '{deletedAt}'
+               ELSE '{statusUpdatedAt}'
+             END,
+             to_jsonb(NOW()::text),
+             true
+           ),
+           updated_at = NOW()
+       WHERE plate_norm = $1
+         AND local_id = $2
+       RETURNING local_id, status, payload->>'name' AS name`,
+      [plateNorm, localId, wantedStatus, jsonStatus]
+    );
+
+    let deletedMessages = 0;
+
+    if (wantedStatus === 'completed' || wantedStatus === 'deleted' || wantedStatus === 'disabled') {
+      const msgRes = await pool.query(
+        `SELECT DISTINCT message_id
+         FROM owner_deadline_alert_sent
+         WHERE plate_norm = $1
+           AND local_id = $2
+           AND message_id IS NOT NULL`,
+        [plateNorm, localId]
+      );
+
+      const messageIds = msgRes.rows.map(r => Number(r.message_id)).filter(Boolean);
+
+      if (messageIds.length) {
+        const delRes = await pool.query(
+          `UPDATE contact_message_logs
+           SET deleted_at = COALESCE(deleted_at, NOW()),
+               read_at = COALESCE(read_at, NOW())
+           WHERE id = ANY($1::int[])
+             AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2`,
+          [messageIds, plateNorm]
+        );
+
+        deletedMessages = delRes.rowCount || 0;
+      }
+    }
+
+    if (!updateRes.rows.length) {
+      // Se il record non esiste ancora sul server ma arriva dal client,
+      // non generiamo errore critico: probabilmente non era mai stato sincronizzato.
+      return res.json({
+        success:true,
+        updated:0,
+        deleted_messages:deletedMessages,
+        warning:'Record server non trovato; nessuna scadenza attiva da fermare.'
+      });
+    }
+
+    return res.json({
+      success:true,
+      updated:updateRes.rowCount || 0,
+      deleted_messages:deletedMessages,
+      item:updateRes.rows[0]
+    });
+  } catch (err) {
+    console.error('owner-deadlines/update-status error:', err);
+    return res.status(500).json({
+      success:false,
+      error:err.message || String(err)
     });
   }
 });
