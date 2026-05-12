@@ -5544,5 +5544,61 @@ init();
 })();
 </script>
 
+
+<script id="open-deadline-from-push-script">
+(function(){
+  function getDeadlineIdFromUrl(){
+    try{
+      const params = new URLSearchParams(window.location.search || "");
+      return params.get("deadlineId") || params.get("deadline_id") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function openDeadlineFromPush(){
+    try{
+      const id = getDeadlineIdFromUrl();
+      if(!id) return;
+
+      if(typeof deadlines === "undefined" || !Array.isArray(deadlines)) return;
+
+      const d = deadlines.find(x => String(x.id) === String(id));
+      if(!d) return;
+
+      try { renderList(); } catch(e) {}
+
+      setTimeout(function(){
+        try{
+          const el = document.getElementById("d-" + id);
+          if(el && el.scrollIntoView){
+            el.scrollIntoView({ behavior:"smooth", block:"center" });
+            el.classList.add("deadline-just-saved");
+            setTimeout(function(){ el.classList.remove("deadline-just-saved"); }, 2600);
+          }
+        }catch(e){}
+
+        try{
+          if(typeof openMessage === "function"){
+            openMessage(d.id);
+          }
+        }catch(e){
+          console.warn("openDeadlineFromPush openMessage error:", e);
+        }
+      }, 450);
+    }catch(e){
+      console.warn("openDeadlineFromPush error:", e);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    setTimeout(openDeadlineFromPush, 600);
+    setTimeout(openDeadlineFromPush, 1400);
+  });
+
+  setTimeout(openDeadlineFromPush, 1000);
+})();
+</script>
+
 </body>
 </html>

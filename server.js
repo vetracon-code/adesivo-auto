@@ -8407,6 +8407,8 @@ function shouldSendDeadlineAlert(payload, now = new Date()) {
 
     return {
       alertKey,
+      localId,
+      deadlineId: localId,
       title: 'PROMEMORIA RAPIDO',
       reason: 'PROMEMORIA RAPIDO',
       messageText:
@@ -8453,6 +8455,8 @@ function shouldSendDeadlineAlert(payload, now = new Date()) {
 
         return {
           alertKey,
+          localId,
+          deadlineId: localId,
           title: 'PROMEMORIA RAPIDO',
           reason: 'PROMEMORIA RAPIDO',
           messageText:
@@ -8493,6 +8497,8 @@ function shouldSendDeadlineAlert(payload, now = new Date()) {
 
       return {
         alertKey,
+        localId,
+        deadlineId: localId,
         title: 'AVVISO SCADENZA',
         reason: 'AVVISO SCADENZA',
         messageText:
@@ -8557,9 +8563,13 @@ async function insertOwnerMessageAndPushDeadline({ vehicle, plateNorm, alert }) 
 
   const unreadCount = unreadRes.rows[0]?.unread_count || 0;
 
+  const deadlineId = alert.localId || alert.deadlineId || '';
+
   const ownerUrl =
-    `/owner-app/${encodeURIComponent(cleanCode)}/${encodeURIComponent(plateNorm)}` +
-    `?focus=messages&from=deadline_alert${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}`;
+    `/owner-deadlines.html?code=${encodeURIComponent(cleanCode)}` +
+    `&plate=${encodeURIComponent(plateNorm)}` +
+    `${deadlineId ? `&deadlineId=${encodeURIComponent(deadlineId)}` : ''}` +
+    `&from=deadline_push${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}`;
 
   const payload = JSON.stringify({
     title: alert.title || 'AVVISO SCADENZA',
