@@ -2386,7 +2386,7 @@
         </div><!-- deadlineFormBody -->
       </div>
 
-      <span class="vehicle-pill" id="vehiclePill">Audi A8 · EY 018 SW</span>
+      <span class="vehicle-pill" id="vehiclePill">Il tuo veicolo</span>
     </section>
 
     <section class="scan-panel" id="scanPanel">
@@ -2496,7 +2496,7 @@
   </div>
 
 <script>
-const allowedPlate = "EY018SW";
+const allowedPlate = "il tuo veicolo";
 
 const categories = {
   "Auto": ["Revisione","Assicurazione","Bollo","Cambio gomme","ZTL / parcheggio","Permesso parcheggio residenti","Manutenzione","Altro"],
@@ -2550,7 +2550,32 @@ let deadlines = JSON.parse(localStorage.getItem(key) || "[]");
 
 function init(){
   if (plate !== allowedPlate) {
-    document.getElementById("app").innerHTML = '<div class="locked">Pagina disponibile per Audi A8 · EY 018 SW.</div>';
+    const currentPlateForLocked = String(
+      (typeof plate !== "undefined" && plate) ||
+      window.plate ||
+      window.__OWNER_PLATE__ ||
+      new URLSearchParams(window.location.search || "").get("plate") ||
+      sessionStorage.getItem("owner_deadlines_plate") ||
+      localStorage.getItem("owner_deadlines_plate") ||
+      localStorage.getItem("owner_saved_plate") ||
+      ""
+    ).replace(/\s+/g, "").toUpperCase();
+
+    const currentCodeForLocked = String(
+      (typeof code !== "undefined" && code) ||
+      window.code ||
+      window.__OWNER_CODE__ ||
+      new URLSearchParams(window.location.search || "").get("code") ||
+      sessionStorage.getItem("owner_deadlines_code") ||
+      localStorage.getItem("owner_deadlines_code") ||
+      localStorage.getItem("owner_saved_code") ||
+      ""
+    ).trim();
+
+    document.getElementById("app").innerHTML =
+      '<div class="locked">Pagina disponibile per ' +
+      (currentPlateForLocked || 'il tuo veicolo') +
+      '.</div>';
     return;
   }
   setupBackLink();
@@ -5470,7 +5495,7 @@ function confirmDeleteProgrammedAlert(deadlineId, alertIndex){
 function createExampleMessage(){
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
   const date = tomorrow.toISOString().slice(0,10);
-  const item = {id: Date.now(), category: "Auto", type: "Permesso parcheggio residenti", name: "Rinnovo parcheggio residenti", owner: "Audi A8 EY 018 SW", date, time: "09:00", profile: "important", alerts: profiles.important.alerts, notes: "Promemoria di esempio per verificare apertura, lettura completa e gestione dell’avviso.", status: "active", createdAt: new Date().toISOString(), isExample: true};
+  const item = {id: Date.now(), category: "Auto", type: "Permesso parcheggio residenti", name: "Rinnovo parcheggio residenti", owner: "il tuo veicolo", date, time: "09:00", profile: "important", alerts: profiles.important.alerts, notes: "Promemoria di esempio per verificare apertura, lettura completa e gestione dell’avviso.", status: "active", createdAt: new Date().toISOString(), isExample: true};
   deadlines.push(item); persist(); renderList(); showSimpleSaveConfirmation();
 }
 
@@ -6045,6 +6070,140 @@ init();
   });
 
   window.syncDeadlineStatusFromServer = syncDeadlineStatusFromServer;
+})();
+</script>
+
+
+<script id="owner-deadlines-dynamic-vehicle-label">
+(function(){
+  function cleanPlate(v){
+    return String(v || "").replace(/\s+/g, "").toUpperCase();
+  }
+
+  function getDeadlineVehicleParams(){
+    var out = { code:"", plate:"", brand:"", model:"" };
+
+    try{
+      var params = new URLSearchParams(window.location.search || "");
+      out.code = params.get("code") || "";
+      out.plate = params.get("plate") || "";
+      out.brand = params.get("brand") || "";
+      out.model = params.get("model") || "";
+    }catch(e){}
+
+    try{
+      out.code = out.code || sessionStorage.getItem("owner_deadlines_code") || localStorage.getItem("owner_deadlines_code") || localStorage.getItem("owner_saved_code") || "";
+      out.plate = out.plate || sessionStorage.getItem("owner_deadlines_plate") || localStorage.getItem("owner_deadlines_plate") || localStorage.getItem("owner_saved_plate") || "";
+    }catch(e){}
+
+    out.code = String(out.code || "").trim();
+    out.plate = cleanPlate(out.plate);
+    out.brand = String(out.brand || "").trim();
+    out.model = String(out.model || "").trim();
+
+    return out;
+  }
+
+  async function fetchVehicleLabel(p){
+    var label = p.plate ? ("Pagina disponibile per " + p.plate) : "Pagina disponibile per il tuo veicolo";
+
+    try{
+      if(!p.code && !p.plate) return label;
+
+      var res = await fetch("/api/owner-deadlines/feature-status", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          code:p.code || "",
+          plate:p.plate || ""
+        })
+      });
+
+      var out = await res.json().catch(function(){ return null; });
+
+      if(out && out.success){
+        var plate = cleanPlate(out.plate || p.plate);
+        var brand = String(out.brand || "").trim();
+        var model = String(out.vehicle_model || "").trim();
+
+        if(brand || model || plate){
+          label = "Pagina disponibile per " + [brand, model, plate].filter(Boolean).join(" ");
+        }
+      }
+    }catch(e){}
+
+    return label;
+  }
+
+  function replaceTextNode(el, label, plate){
+    if(!el || !el.childNodes || el.children.length > 0) return;
+
+    var txt = el.textContent || "";
+    if(!txt) return;
+
+    var mustFix =
+      txt.includes("Pagina disponibile per") ||
+      txt.includes("Audi A8") ||
+      txt.includes("EY018SW") ||
+      txt.includes("EY 018 SW") ||
+      txt.includes("il tuo veicolo");
+
+    if(!mustFix) return;
+
+    el.textContent = txt
+      .replace(/Pagina disponibile per\s+Audi A8\s+EY\s*018\s*SW/gi, label)
+      .replace(/Pagina disponibile per\s+Audi A8\s+EY018SW/gi, label)
+      .replace(/Pagina disponibile per\s+il tuo veicolo/gi, label)
+      .replace(/Pagina disponibile per\s+[A-Z0-9 ]{5,20}/gi, label)
+      .replace(/Audi A8\s+EY\s*018\s*SW/gi, plate || "il tuo veicolo")
+      .replace(/Audi A8\s+EY018SW/gi, plate || "il tuo veicolo")
+      .replace(/EY\s*018\s*SW/gi, plate || "il tuo veicolo")
+      .replace(/EY018SW/gi, plate || "il tuo veicolo")
+      .replace(/il tuo veicolo/gi, plate || "il tuo veicolo");
+  }
+
+  async function applyDynamicVehicleLabel(){
+    var p = getDeadlineVehicleParams();
+
+    try{
+      if(p.code){
+        window.code = p.code;
+        window.__OWNER_CODE__ = p.code;
+        localStorage.setItem("owner_saved_code", p.code);
+        localStorage.setItem("owner_deadlines_code", p.code);
+      }
+
+      if(p.plate){
+        window.plate = p.plate;
+        window.__OWNER_PLATE__ = p.plate;
+        localStorage.setItem("owner_saved_plate", p.plate);
+        localStorage.setItem("owner_deadlines_plate", p.plate);
+      }
+    }catch(e){}
+
+    var label = await fetchVehicleLabel(p);
+    var plate = p.plate || "";
+
+    document.querySelectorAll("body *").forEach(function(el){
+      replaceTextNode(el, label, plate);
+    });
+
+    try{
+      document.title = "Le mie scadenze" + (plate ? " · " + plate : "");
+    }catch(e){}
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", applyDynamicVehicleLabel);
+  }else{
+    setTimeout(applyDynamicVehicleLabel, 50);
+  }
+
+  setTimeout(applyDynamicVehicleLabel, 400);
+  setTimeout(applyDynamicVehicleLabel, 1200);
+  setTimeout(applyDynamicVehicleLabel, 2500);
+
+  window.applyDynamicVehicleLabel = applyDynamicVehicleLabel;
 })();
 </script>
 
