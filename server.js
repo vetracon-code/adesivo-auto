@@ -8572,24 +8572,39 @@ async function insertOwnerMessageAndPushDeadline({ vehicle, plateNorm, alert }) 
     `&from=deadline_push${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}`;
 
   const payload = JSON.stringify({
-    title: alert.title || 'AVVISO SCADENZA',
-    body: alert.body || 'Hai una scadenza da controllare nella tua App veicolo.',
+    title: alert.title || 'PROMEMORIA IMPORTANTE',
+    body: alert.body || 'Hai una scadenza importante da controllare nella tua App veicolo.',
     url: ownerUrl,
     targetUrl: ownerUrl,
-    tag: 'deadline-alert-' + plateNorm + '-' + Date.now(),
+
+    // Tag stabile per questo avviso: se viene reinviato, aggiorna/renotifica invece di creare confusione.
+    tag: alert.alertKey ? `deadline-alert-${plateNorm}-${alert.alertKey}` : 'deadline-alert-' + plateNorm + '-' + Date.now(),
+
     type: 'deadline_alert',
     unreadCount,
     messageId: insertedMessageId,
     badge: '/icons/icon-192.png',
     icon: '/icons/icon-192.png',
+
+    // Massima insistenza consentita dal browser/sistema operativo.
     requireInteraction: true,
+    renotify: true,
+    silent: false,
+    timestamp: Date.now(),
+    vibrate: [220, 120, 220, 120, 320],
+
     data: {
       type: 'deadline_alert',
+      priority: 'high',
+      persistent: true,
+      requireInteraction: true,
       plate: dbPlate,
       messageId: insertedMessageId,
       unreadCount,
       url: ownerUrl,
-      targetUrl: ownerUrl
+      targetUrl: ownerUrl,
+      deadlineId: alert.localId || alert.deadlineId || null,
+      alertKey: alert.alertKey || null
     }
   });
 
