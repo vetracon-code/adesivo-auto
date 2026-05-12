@@ -2244,6 +2244,7 @@ let currentCategory = "Auto";
 let currentPreset = "Revisione";
 let currentProfile = suggestedProfile[currentPreset] || "standard";
 let currentModalId = null;
+let editingDeadlineId = null;
 let deadlineFormOpened = false;
 let categoryPulseTimer = null;
 let key = "ownerDeadlines_" + (plate || "default");
@@ -4504,8 +4505,37 @@ function saveDeadline(){
     extra.customRecurrence = customRecurrenceData;
   }
 
-  const item = {id:Date.now(),category:currentCategory,type:currentPreset,name,owner,date,time,profile:currentProfile,alerts:selectedAlerts,notes,status:"active",createdAt:new Date().toISOString(),recurrence,extra};
-  deadlines.push(item);
+  const existing = editingDeadlineId
+    ? deadlines.find(x => String(x.id) === String(editingDeadlineId))
+    : null;
+
+  const item = {
+    id: editingDeadlineId || Date.now(),
+    category: currentCategory,
+    type: currentPreset,
+    name,
+    owner,
+    date,
+    time,
+    profile: currentProfile,
+    alerts: selectedAlerts,
+    notes,
+    status: existing?.status || "active",
+    createdAt: existing?.createdAt || new Date().toISOString(),
+    updatedAt: editingDeadlineId ? new Date().toISOString() : undefined,
+    recurrence,
+    extra
+  };
+
+  if(editingDeadlineId){
+    const idx = deadlines.findIndex(x => String(x.id) === String(editingDeadlineId));
+    if(idx >= 0) deadlines[idx] = item;
+    else deadlines.push(item);
+    editingDeadlineId = null;
+  } else {
+    deadlines.push(item);
+  }
+
   persist();
   resetForm();
   closeDeadlineForm();
@@ -4514,6 +4544,9 @@ function saveDeadline(){
 }
 
 function resetForm(){
+  editingDeadlineId = null;
+  try { setDeadlineEditModeUI(false); } catch(e) {}
+
   ownerInput.value=""; dateInput.value=""; timeInput.value="09:00"; notesInput.value="";
   medicineStartDate.value=""; medicineEndDate.value=""; medicineFirstTime.value="08:00";
   if (typeof currentIntervalUnit !== "undefined") currentIntervalUnit = "minutes";
@@ -4899,21 +4932,90 @@ function addRecurrenceDate(dateStr, recurrence){
   else return "";
   return d.toISOString().slice(0,10);
 }
+
+function setDeadlineEditModeUI(active){
+  try{
+    const title = document.getElementById("addDeadlineTitle");
+    if(title) title.textContent = active ? "Modifica avviso" : "Aggiungi scadenza";
+  }catch(e){}
+
+  try{
+    const saveBtn = document.querySelector('#deadlineFormBody .actions .primary, #deadlineFormBody button.primary');
+    if(saveBtn) saveBtn.textContent = active ? "Conferma modifica" : "Salva scadenza";
+  }catch(e){}
+}
+
+
 function editDeadline(id){
+  const d = deadlines.find(x => String(x.id) === String(id));
+  if(!d) return;
+
+  try { closeModal(); } catch(e) {}
+
+  if(typeof isQuickReminderItem === "function" && isQuickReminderItem(d)){
+    openQuickReminderEditor(id);
+    return;
+  }
+
+  editingDeadlineId = d.id;
+
   try {
-    const quickItem = deadlines.find(x => String(x.id) === String(id));
-    if (isQuickReminderItem(quickItem)) {
-      openQuickReminderEditor(id);
-      return;
+    document.body.classList.remove("quick-reminder-mode");
+    document.body.classList.remove("quick-save-closed");
+    document.body.classList.remove("deadline-form-force-closed");
+    window.__deadlineFormForceClosed = false;
+  } catch(e) {}
+
+  try {
+    const panel = document.getElementById("addDeadlinePanel");
+    const body = document.getElementById("deadlineFormBody");
+    const quickPanel = document.getElementById("quickReminderPanel");
+
+    if(panel) panel.style.display = "";
+    if(body){
+      body.style.display = "";
+      body.style.visibility = "";
+      body.style.height = "";
+      body.style.maxHeight = "";
+      body.style.overflow = "";
+      body.classList.remove("form-body-collapsed");
+    }
+    if(quickPanel) quickPanel.style.display = "none";
+  } catch(e) {}
+
+  currentCategory = d.category || "Altro";
+  currentPreset = d.type || d.name || "Altro";
+  currentProfile = d.profile || "standard";
+
+  try { renderCats(); } catch(e) {}
+  try { renderPresets(); } catch(e) {}
+  try { renderProfiles(); } catch(e) {}
+  try { applyPreset(currentPreset); } catch(e) {}
+
+  openDeadlineForm();
+  setDeadlineEditModeUI(true);
+
+  try {
+    nameInput.value = d.name || "";
+    ownerInput.value = d.owner || "";
+    dateInput.value = d.date || "";
+    timeInput.value = d.time || "09:00";
+    notesInput.value = d.notes || "";
+
+    if(typeof recurrenceMode !== "undefined" && recurrenceMode){
+      recurrenceMode.value = d.recurrence || "none";
     }
   } catch(e) {}
 
-  const d=deadlines.find(x=>x.id===id); if(!d)return;
-  openDeadlineForm();
-  currentCategory=d.category; currentPreset=d.type; currentProfile=d.profile;
-  renderCats(); renderPresets(); renderProfiles();
-  nameInput.value=d.name; ownerInput.value=d.owner||""; dateInput.value=d.date; timeInput.value=d.time||"09:00"; notesInput.value=d.notes||"";
-  updateConditionalBlocks(); updatePreview(); window.scrollTo({top:0,behavior:"smooth"});
+  try { updateRecurrenceMode(); } catch(e) {}
+  try { updatePreview(); } catch(e) {}
+
+  setTimeout(function(){
+    try {
+      const form = document.getElementById("addDeadlinePanel") || document.getElementById("deadlineFormBody");
+      if(form && form.scrollIntoView) form.scrollIntoView({behavior:"smooth", block:"start"});
+    } catch(e) {}
+  }, 120);
 }
 function persist(){
   localStorage.setItem(key, JSON.stringify(deadlines));
