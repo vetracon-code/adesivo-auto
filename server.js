@@ -8382,6 +8382,90 @@ function shouldSendDeadlineAlert(payload, now = new Date()) {
     };
   }
 
+
+  // 2) PROMEMORIA RAPIDI: usa extra.dueAt come orario reale del promemoria
+  // Esempi gestiti:
+  // - Tra 10 minuti
+  // - Oggi alle 10:00
+  // - Domani alle 09:00
+  // - Data scelta + ora
+  if (
+    payload.extra &&
+    payload.extra.quickReminder === true &&
+    payload.extra.dueAt
+  ) {
+    const due = new Date(payload.extra.dueAt);
+    if (Number.isNaN(due.getTime())) return null;
+
+    if (now.getTime() < due.getTime()) return null;
+
+    const alertKey = `quick-due-${localId}`;
+
+    const whenLabel = payload.extra.quickWhenMode === 'absolute'
+      ? String(payload.notes || '').replace(/^Promemoria rapido:\s*/i, '').split('.')[0]
+      : String(payload.notes || '').replace(/^Promemoria rapido:\s*/i, '').split('.')[0];
+
+    return {
+      alertKey,
+      title: 'PROMEMORIA RAPIDO',
+      reason: 'PROMEMORIA RAPIDO',
+      messageText:
+        'PROMEMORIA RAPIDO\n\n' +
+        `${name}\n\n` +
+        (whenLabel ? `Quando: ${whenLabel}\n\n` : '') +
+        'Comandi disponibili: Ricordamelo ancora, OK fatto, Cancella.',
+      body: `${name}`
+    };
+  }
+
+  // 3) RICHIAMI PROMEMORIA RAPIDI: Dopo X minuti / ore / giorni
+  // Li inviamo solo se sono presenti negli alerts e dopo l'orario principale.
+  if (
+    payload.extra &&
+    payload.extra.quickReminder === true &&
+    payload.extra.dueAt &&
+    Array.isArray(payload.alerts)
+  ) {
+    const due = new Date(payload.extra.dueAt);
+    if (!Number.isNaN(due.getTime()) && now.getTime() >= due.getTime()) {
+      for (const a of payload.alerts) {
+        const t = String(a || '').toLowerCase();
+
+        if (t.includes('al momento')) continue;
+
+        let offsetMs = null;
+
+        let m = t.match(/dopo\s+(\d+)\s+minut/);
+        if (m) offsetMs = Number(m[1]) * 60000;
+
+        m = t.match(/dopo\s+(\d+)\s+or/);
+        if (m) offsetMs = Number(m[1]) * 3600000;
+
+        m = t.match(/dopo\s+(\d+)\s+giorn/);
+        if (m) offsetMs = Number(m[1]) * 86400000;
+
+        if (offsetMs === null) continue;
+
+        const dueReminder = new Date(due.getTime() + offsetMs);
+        if (now.getTime() < dueReminder.getTime()) continue;
+
+        const alertKey = `quick-followup-${localId}-${offsetMs}`;
+
+        return {
+          alertKey,
+          title: 'PROMEMORIA RAPIDO',
+          reason: 'PROMEMORIA RAPIDO',
+          messageText:
+            'PROMEMORIA RAPIDO\n\n' +
+            `${name}\n\n` +
+            `Richiamo programmato: ${a}\n\n` +
+            'Comandi disponibili: Ricordamelo ancora, OK fatto, Cancella.',
+          body: `${name}: ${a}.`
+        };
+      }
+    }
+  }
+
   // 2) SCADENZE STANDARD: giorno stesso / X giorni prima
   const alerts = Array.isArray(payload.alerts) ? payload.alerts : [];
   const daysLeft = daysBetweenDateKeys(payload.date);
