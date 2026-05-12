@@ -1642,104 +1642,6 @@
   }
 </style>
 
-
-<style id="clean-delete-confirm-style">
-  .clean-delete-overlay{
-    position:fixed !important;
-    inset:0 !important;
-    z-index:99999 !important;
-    display:none;
-    align-items:center !important;
-    justify-content:center !important;
-    padding:20px !important;
-    background:rgba(15,23,42,.58) !important;
-    backdrop-filter:blur(8px) !important;
-    -webkit-backdrop-filter:blur(8px) !important;
-  }
-
-  .clean-delete-overlay.active{
-    display:flex !important;
-  }
-
-  .clean-delete-card{
-    width:min(420px, calc(100vw - 32px)) !important;
-    border-radius:24px !important;
-    background:#ffffff !important;
-    border:1px solid rgba(15,23,42,.10) !important;
-    box-shadow:0 28px 80px rgba(15,23,42,.34) !important;
-    padding:22px !important;
-    text-align:center !important;
-  }
-
-  .clean-delete-title{
-    font-size:1.08rem !important;
-    line-height:1.35 !important;
-    font-weight:950 !important;
-    color:#111827 !important;
-    margin:0 0 18px !important;
-  }
-
-  .clean-delete-actions{
-    display:grid !important;
-    grid-template-columns:1fr !important;
-    gap:10px !important;
-  }
-
-  .clean-delete-confirm,
-  .clean-delete-cancel{
-    width:100% !important;
-    min-height:50px !important;
-    border:0 !important;
-    border-radius:16px !important;
-    font-size:.96rem !important;
-    font-weight:950 !important;
-    cursor:pointer !important;
-  }
-
-  .clean-delete-confirm{
-    background:#dc2626 !important;
-    color:#ffffff !important;
-    box-shadow:0 12px 26px rgba(220,38,38,.24) !important;
-  }
-
-  .clean-delete-cancel{
-    background:#e5e7eb !important;
-    color:#111827 !important;
-  }
-</style>
-
-
-<style id="hide-old-delete-confirm-block">
-  #deleteConfirmBox,
-  .delete-confirm-box,
-  .delete-confirm,
-  .modal-delete-confirm,
-  [data-delete-confirm="true"]{
-    display:none !important;
-    visibility:hidden !important;
-    height:0 !important;
-    max-height:0 !important;
-    overflow:hidden !important;
-    pointer-events:none !important;
-  }
-</style>
-
-
-<style id="hide-old-delete-confirm-block-final">
-  .old-delete-confirm-hidden,
-  .old-delete-confirm-hidden *{
-    display:none !important;
-    visibility:hidden !important;
-    height:0 !important;
-    max-height:0 !important;
-    min-height:0 !important;
-    padding:0 !important;
-    margin:0 !important;
-    overflow:hidden !important;
-    pointer-events:none !important;
-  }
-</style>
-
 </head>
 <body>
   <div class="topbar">
@@ -2101,7 +2003,7 @@
         </div>
         <div class="confirm-delete" id="confirmDeleteBox">
           <strong>Confermi di voler cancellare definitivamente questo avviso?</strong>
-          <div class="actions old-delete-confirm-hidden">
+          <div class="actions">
             <button class="primary delete" onclick="deleteFromModal()">Sì, cancella per sempre</button>
             <button class="secondary" onclick="cancelDelete()">No, mantieni l’avviso</button>
           </div>
@@ -4716,66 +4618,8 @@ function remindLater(){ alert("Ok, l’avviso resterà attivo e continuerà a ri
 function markDoneFromModal(){ if(!currentModalId) return; if(!confirm("Confermi di aver completato questa scadenza?")) return; completeDeadline(currentModalId); closeModal(); }
 function editFromModal(){ if(!currentModalId) return; const id = currentModalId; closeModal(); editDeadline(id); }
 function askDeleteFromModal(){ confirmDeleteBox.style.display = "block"; }
-function cancelDelete(){
-  try { cancelCleanDeleteDeadline(); } catch(e) {}
-  try { closeModal(); } catch(e) {}
-}
-
-let cleanDeleteDeadlineId = null;
-
-function requestCleanDeleteDeadline(id){
-  cleanDeleteDeadlineId = id;
-
-  try { closeModal(); } catch(e) {}
-
-  const overlay = document.getElementById("cleanDeleteOverlay");
-  if(overlay){
-    overlay.classList.add("active");
-  }
-}
-
-function cancelCleanDeleteDeadline(){
-  cleanDeleteDeadlineId = null;
-
-  const overlay = document.getElementById("cleanDeleteOverlay");
-  if(overlay){
-    overlay.classList.remove("active");
-  }
-}
-
-function confirmCleanDeleteDeadline(){
-  if(cleanDeleteDeadlineId === null || cleanDeleteDeadlineId === undefined){
-    cancelCleanDeleteDeadline();
-    return;
-  }
-
-  deadlines = deadlines.filter(d => String(d.id) !== String(cleanDeleteDeadlineId));
-  persist();
-
-  const deletedId = cleanDeleteDeadlineId;
-  cleanDeleteDeadlineId = null;
-
-  const overlay = document.getElementById("cleanDeleteOverlay");
-  if(overlay){
-    overlay.classList.remove("active");
-  }
-
-  try { closeModal(); } catch(e) {}
-  try { renderList(); } catch(e) {}
-
-  try {
-    const list = document.getElementById("list") || document.getElementById("deadlinesList") || document.querySelector(".list");
-    if(list && list.scrollIntoView) list.scrollIntoView({behavior:"smooth", block:"start"});
-  } catch(e) {}
-}
-
-
-function deleteFromModal(){
-  if(!currentModalId) return;
-  const id = currentModalId;
-  try { closeModal(); } catch(e) {}
-  requestCleanDeleteDeadline(id);
-}
+function cancelDelete(){ confirmDeleteBox.style.display = "none"; }
+function deleteFromModal(){ if(!currentModalId) return; deadlines = deadlines.filter(d=>d.id!==currentModalId); persist(); renderList(); closeModal(); }
 function closeModal(){ messageModal.style.display = "none"; currentModalId = null; }
 messageModal.addEventListener("click", function(e){ if(e.target === messageModal) closeModal(); });
 
@@ -4988,17 +4832,6 @@ init();
   }
 })();
 </script>
-
-
-<div class="clean-delete-overlay" id="cleanDeleteOverlay" aria-modal="true" role="dialog">
-  <div class="clean-delete-card">
-    <div class="clean-delete-title">Confermi di voler cancellare definitivamente questo avviso?</div>
-    <div class="clean-delete-actions">
-      <button class="clean-delete-confirm" type="button" onclick="confirmCleanDeleteDeadline()">Sì, cancella per sempre</button>
-      <button class="clean-delete-cancel" type="button" onclick="cancelCleanDeleteDeadline()">No, mantieni l’avviso</button>
-    </div>
-  </div>
-</div>
 
 </body>
 </html>
