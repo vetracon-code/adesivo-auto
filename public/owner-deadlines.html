@@ -1576,6 +1576,23 @@
   }
 </style>
 
+
+<style id="quick-reminder-edit-fix-style">
+  body.quick-reminder-mode #presets,
+  body.quick-reminder-mode #addDeadlineHint,
+  body.quick-reminder-mode #deadlineFormBody > .actions{
+    display:none !important;
+  }
+
+  body.quick-reminder-mode #deadlineFormBody{
+    display:block !important;
+  }
+
+  body.quick-reminder-mode #quickReminderPanel{
+    display:block !important;
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -1620,8 +1637,8 @@
   </div>
 
   <div class="quick-reminder-actions">
-    <button class="quick-reminder-confirm" type="button" onclick="saveQuickReminder()">Conferma promemoria</button>
-    <button class="quick-reminder-cancel" type="button" onclick="cancelQuickReminder()">Annulla</button>
+    <button class="quick-reminder-confirm" type="button" onclick="saveQuickReminderEditOrNew()">Conferma promemoria</button>
+    <button class="quick-reminder-cancel" type="button" onclick="cancelQuickReminderEditOrNew()">Annulla</button>
   </div>
 </div>
 
@@ -3775,7 +3792,147 @@ function toLocalTimeInputValue(d){
   return `${hh}:${mi}`;
 }
 
+
+let quickReminderEditingId = null;
+
+function isQuickReminderItem(d){
+  return !!(d && (d.category === "Rapido" || (d.extra && d.extra.quickReminder)));
+}
+
+function openQuickReminderEditor(deadlineId){
+  const d = deadlines.find(x => String(x.id) === String(deadlineId));
+  if(!d) return;
+
+  quickReminderEditingId = d.id;
+  currentCategory = "Rapido";
+
+  openDeadlineForm();
+
+  document.body.classList.add("quick-reminder-mode");
+
+  try { renderCats(); } catch(e) {}
+  try { renderPresets(); } catch(e) {}
+
+  const panel = document.getElementById("quickReminderPanel");
+  const textEl = document.getElementById("quickReminderText");
+  const valueEl = document.getElementById("quickReminderValue");
+  const unitEl = document.getElementById("quickReminderUnit");
+  const titleEl = panel ? panel.querySelector(".quick-reminder-title") : null;
+  const confirmBtn = panel ? panel.querySelector(".quick-reminder-confirm") : null;
+
+  if(panel) panel.style.display = "block";
+  if(titleEl) titleEl.textContent = "Modifica promemoria rapido";
+  if(confirmBtn) confirmBtn.textContent = "Conferma modifica";
+
+  if(textEl) textEl.value = d.name || "";
+
+  const extra = d.extra || {};
+  if(valueEl) valueEl.value = String(extra.quickValue || 10);
+  if(unitEl) unitEl.value = extra.quickUnit || "minutes";
+
+  try { updateQuickReminderLimits(); } catch(e) {}
+  try { updateQuickReminderSummary(); } catch(e) {}
+
+  setTimeout(function(){
+    try{
+      if(panel && panel.scrollIntoView) panel.scrollIntoView({behavior:"smooth", block:"center"});
+      if(textEl) textEl.focus();
+    }catch(e){}
+  }, 120);
+}
+
+function resetQuickReminderPanelState(){
+  const panel = document.getElementById("quickReminderPanel");
+  const titleEl = panel ? panel.querySelector(".quick-reminder-title") : null;
+  const confirmBtn = panel ? panel.querySelector(".quick-reminder-confirm") : null;
+  const textEl = document.getElementById("quickReminderText");
+  const valueEl = document.getElementById("quickReminderValue");
+  const unitEl = document.getElementById("quickReminderUnit");
+
+  quickReminderEditingId = null;
+
+  if(titleEl) titleEl.textContent = "Promemoria rapido";
+  if(confirmBtn) confirmBtn.textContent = "Conferma promemoria";
+  if(textEl) textEl.value = "";
+  if(valueEl) valueEl.value = "10";
+  if(unitEl) unitEl.value = "minutes";
+
+  try { updateQuickReminderSummary(); } catch(e) {}
+}
+
+function saveQuickReminderEditOrNew(){
+  const textEl = document.getElementById("quickReminderText");
+  const valueEl = document.getElementById("quickReminderValue");
+  const unitEl = document.getElementById("quickReminderUnit");
+
+  const reminderText = String(textEl ? textEl.value : "").trim();
+  if(!reminderText){
+    alert("Scrivi cosa vuoi ricordare.");
+    if(textEl) textEl.focus();
+    return;
+  }
+
+  const unit = unitEl ? unitEl.value : "minutes";
+  const value = quickReminderClampValue();
+  const due = computeQuickReminderDate(value, unit);
+  const plan = getQuickReminderRepeatPlan(value, unit);
+
+  const payload = {
+    category: "Rapido",
+    type: "Promemoria rapido",
+    name: reminderText,
+    owner: "Promemoria rapido",
+    date: toLocalDateInputValue(due),
+    time: toLocalTimeInputValue(due),
+    profile: plan.profile,
+    alerts: plan.alerts,
+    notes: `Promemoria rapido: tra ${value} ${quickReminderUnitLabel(unit, value)}. ${plan.text}`,
+    status: "active",
+    recurrence: "none",
+    extra: {
+      quickReminder: true,
+      quickValue: value,
+      quickUnit: unit,
+      repeatPlanText: plan.text,
+      dueAt: due.toISOString()
+    }
+  };
+
+  if(quickReminderEditingId !== null && quickReminderEditingId !== undefined){
+    const idx = deadlines.findIndex(x => String(x.id) === String(quickReminderEditingId));
+    if(idx >= 0){
+      deadlines[idx] = {
+        ...deadlines[idx],
+        ...payload,
+        updatedAt: new Date().toISOString()
+      };
+    }
+  } else {
+    deadlines.push({
+      id: Date.now(),
+      ...payload,
+      createdAt: new Date().toISOString()
+    });
+  }
+
+  persist();
+  resetQuickReminderPanelState();
+  closeDeadlineForm();
+  renderList();
+  showSimpleSaveConfirmation();
+}
+
+function cancelQuickReminderEditOrNew(){
+  resetQuickReminderPanelState();
+  closeDeadlineForm();
+}
+
+
 function saveQuickReminder(){
+  return saveQuickReminderEditOrNew();
+}
+
+function saveQuickReminderLegacy(){
   const textEl = document.getElementById("quickReminderText");
   const valueEl = document.getElementById("quickReminderValue");
   const unitEl = document.getElementById("quickReminderUnit");
@@ -3828,6 +3985,10 @@ function saveQuickReminder(){
 }
 
 function cancelQuickReminder(){
+  return cancelQuickReminderEditOrNew();
+}
+
+function cancelQuickReminderLegacy(){
   const textEl = document.getElementById("quickReminderText");
   const valueEl = document.getElementById("quickReminderValue");
   const unitEl = document.getElementById("quickReminderUnit");
@@ -4248,6 +4409,14 @@ function addRecurrenceDate(dateStr, recurrence){
   return d.toISOString().slice(0,10);
 }
 function editDeadline(id){
+  try {
+    const quickItem = deadlines.find(x => String(x.id) === String(id));
+    if (isQuickReminderItem(quickItem)) {
+      openQuickReminderEditor(id);
+      return;
+    }
+  } catch(e) {}
+
   const d=deadlines.find(x=>x.id===id); if(!d)return;
   openDeadlineForm();
   currentCategory=d.category; currentPreset=d.type; currentProfile=d.profile;
