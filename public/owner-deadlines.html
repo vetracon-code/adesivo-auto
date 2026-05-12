@@ -1613,6 +1613,35 @@
   }
 </style>
 
+
+<style id="deadline-just-saved-highlight-style">
+  .deadline-just-saved{
+    outline:3px solid rgba(255,122,0,.72) !important;
+    box-shadow:0 0 0 8px rgba(255,122,0,.14), 0 18px 38px rgba(15,23,42,.16) !important;
+    transition:box-shadow .25s ease, outline .25s ease !important;
+  }
+</style>
+
+
+<style id="quick-save-force-close-style">
+  body.quick-save-closed #quickReminderPanel,
+  body.quick-save-closed #deadlineFormBody{
+    display:none !important;
+    visibility:hidden !important;
+    height:0 !important;
+    max-height:0 !important;
+    min-height:0 !important;
+    overflow:hidden !important;
+    padding:0 !important;
+    margin:0 !important;
+    pointer-events:none !important;
+  }
+
+  body.quick-save-closed #addDeadlinePanel{
+    display:none !important;
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -3184,6 +3213,7 @@ function openDeadlineForm(){
   try {
     window.__deadlineFormForceClosed = false;
     document.body.classList.remove("deadline-form-force-closed");
+    document.body.classList.remove("quick-save-closed");
     const panel = document.getElementById("addDeadlinePanel");
     const body = document.getElementById("deadlineFormBody");
     if(panel) panel.style.display = "";
@@ -3972,6 +4002,101 @@ function resetQuickReminderPanelState(){
   try { updateQuickReminderSummary(); } catch(e) {}
 }
 
+
+function scrollToSavedDeadline(deadlineId){
+  setTimeout(function(){
+    try{
+      let el = document.querySelector(`[data-deadline-id="${deadlineId}"]`) ||
+               document.getElementById(`deadline-${deadlineId}`);
+
+      if(!el){
+        const btns = Array.from(document.querySelectorAll("button, .mini, .edit"));
+        const btn = btns.find(b => String(b.getAttribute("onclick") || "").includes(`editDeadline(${deadlineId})`));
+        if(btn) el = btn.closest(".deadline-card, .item, .card, li, div");
+      }
+
+      if(el){
+        el.scrollIntoView({ behavior:"smooth", block:"center" });
+        el.classList.add("deadline-just-saved");
+        setTimeout(function(){ el.classList.remove("deadline-just-saved"); }, 2600);
+      }
+    }catch(e){}
+  }, 300);
+}
+
+
+
+function forceCloseAfterQuickSave(savedId){
+  function closeNow(){
+    try {
+      document.body.classList.remove("quick-reminder-mode");
+      document.body.classList.add("quick-save-closed");
+      document.body.classList.add("deadline-form-force-closed");
+      window.__deadlineFormForceClosed = true;
+    } catch(e) {}
+
+    try {
+      quickReminderEditingId = null;
+      currentCategory = "";
+      currentPreset = "";
+    } catch(e) {}
+
+    try {
+      const quickPanel = document.getElementById("quickReminderPanel");
+      if(quickPanel){
+        quickPanel.style.display = "none";
+        quickPanel.style.visibility = "hidden";
+        quickPanel.style.height = "0";
+        quickPanel.style.maxHeight = "0";
+        quickPanel.style.overflow = "hidden";
+      }
+    } catch(e) {}
+
+    try {
+      const body = document.getElementById("deadlineFormBody");
+      if(body){
+        body.classList.add("form-body-collapsed");
+        body.style.display = "none";
+        body.style.visibility = "hidden";
+        body.style.height = "0";
+        body.style.maxHeight = "0";
+        body.style.overflow = "hidden";
+      }
+    } catch(e) {}
+
+    try {
+      const panel = document.getElementById("addDeadlinePanel");
+      if(panel){
+        panel.classList.remove("active", "open", "expanded");
+        panel.style.display = "none";
+      }
+    } catch(e) {}
+  }
+
+  closeNow();
+
+  try { renderList(); } catch(e) {}
+
+  [80, 250, 600, 1000].forEach(function(ms){
+    setTimeout(function(){
+      closeNow();
+      try { renderList(); } catch(e) {}
+    }, ms);
+  });
+
+  setTimeout(function(){
+    try { scrollToSavedDeadline(savedId); } catch(e) {}
+
+    if(!document.querySelector(`[data-deadline-id="${savedId}"]`)){
+      try {
+        const list = document.getElementById("list") || document.getElementById("deadlinesList") || document.querySelector(".list");
+        if(list && list.scrollIntoView) list.scrollIntoView({ behavior:"smooth", block:"start" });
+      } catch(e) {}
+    }
+  }, 1150);
+}
+
+
 function saveQuickReminderEditOrNew(){
   const textEl = document.getElementById("quickReminderText");
   const valueEl = document.getElementById("quickReminderValue");
@@ -4010,6 +4135,8 @@ function saveQuickReminderEditOrNew(){
     }
   };
 
+  let savedId = quickReminderEditingId;
+
   if(quickReminderEditingId !== null && quickReminderEditingId !== undefined){
     const idx = deadlines.findIndex(x => String(x.id) === String(quickReminderEditingId));
     if(idx >= 0){
@@ -4018,20 +4145,29 @@ function saveQuickReminderEditOrNew(){
         ...payload,
         updatedAt: new Date().toISOString()
       };
+      savedId = deadlines[idx].id;
     }
   } else {
+    savedId = Date.now();
     deadlines.push({
-      id: Date.now(),
+      id: savedId,
       ...payload,
       createdAt: new Date().toISOString()
     });
   }
 
   persist();
-  resetQuickReminderPanelState();
-  closeDeadlineForm();
-  renderList();
-  showSimpleSaveConfirmation();
+
+  try { resetQuickReminderPanelState(); } catch(e) {}
+
+  const textReset = document.getElementById("quickReminderText");
+  const valueReset = document.getElementById("quickReminderValue");
+  const unitReset = document.getElementById("quickReminderUnit");
+  if(textReset) textReset.value = "";
+  if(valueReset) valueReset.value = "10";
+  if(unitReset) unitReset.value = "minutes";
+
+  forceCloseAfterQuickSave(savedId);
 }
 
 function cancelQuickReminderEditOrNew(){
