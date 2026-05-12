@@ -10794,8 +10794,8 @@ document.addEventListener('DOMContentLoaded', function () {
     var out = { code:"", plate:"" };
 
     try{
-      if(typeof getOwnerParams === "function"){
-        var p = getOwnerParams() || {};
+      if(typeof window.getOwnerParams === "function"){
+        var p = window.getOwnerParams() || {};
         out.code = p.code || "";
         out.plate = p.plate || "";
       }
@@ -10816,9 +10816,12 @@ document.addEventListener('DOMContentLoaded', function () {
     }catch(e){}
 
     try{
-      out.code = out.code || localStorage.getItem("owner_saved_code") || "";
-      out.plate = out.plate || localStorage.getItem("owner_saved_plate") || "";
+      out.code = out.code || localStorage.getItem("owner_saved_code") || localStorage.getItem("owner_code") || "";
+      out.plate = out.plate || localStorage.getItem("owner_saved_plate") || localStorage.getItem("owner_plate") || "";
     }catch(e){}
+
+    out.code = String(out.code || "").trim();
+    out.plate = String(out.plate || "").trim().toUpperCase();
 
     return out;
   }
@@ -10827,12 +10830,18 @@ document.addEventListener('DOMContentLoaded', function () {
     var p = getOwnerDeadlinesParams();
 
     try{
-      if(p.code) localStorage.setItem("owner_saved_code", p.code);
-      if(p.plate) localStorage.setItem("owner_saved_plate", p.plate);
-      if(p.code) localStorage.setItem("owner_deadlines_code", p.code);
-      if(p.plate) localStorage.setItem("owner_deadlines_plate", p.plate);
-      if(p.code) sessionStorage.setItem("owner_deadlines_code", p.code);
-      if(p.plate) sessionStorage.setItem("owner_deadlines_plate", p.plate);
+      if(p.code){
+        localStorage.setItem("owner_saved_code", p.code);
+        localStorage.setItem("owner_deadlines_code", p.code);
+        sessionStorage.setItem("owner_deadlines_code", p.code);
+      }
+
+      if(p.plate){
+        localStorage.setItem("owner_saved_plate", p.plate);
+        localStorage.setItem("owner_deadlines_plate", p.plate);
+        sessionStorage.setItem("owner_deadlines_plate", p.plate);
+      }
+
       sessionStorage.setItem("owner_deadlines_from_owner_app", "1");
     }catch(e){}
 
@@ -10842,9 +10851,11 @@ document.addEventListener('DOMContentLoaded', function () {
     if(p.code) qs.push("code=" + encodeURIComponent(p.code));
     if(p.plate) qs.push("plate=" + encodeURIComponent(p.plate));
     qs.push("from=owner-app");
+    qs.push("v=direct-open");
 
     url += "?" + qs.join("&");
-    window.location.href = url;
+
+    window.location.assign(url);
   };
 
   async function updateOwnerDeadlinesBottomBlock(){
@@ -10869,7 +10880,6 @@ document.addEventListener('DOMContentLoaded', function () {
       });
 
       var out = await res.json().catch(function(){ return null; });
-
       block.style.display = (out && out.success && out.enabled) ? "block" : "none";
     }catch(e){
       console.warn("updateOwnerDeadlinesBottomBlock error:", e);
@@ -10877,16 +10887,37 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  window.updateOwnerDeadlinesBottomBlock = updateOwnerDeadlinesBottomBlock;
+  function bindOwnerDeadlinesButton(){
+    var btn =
+      document.getElementById("ownerDeadlinesBottomBtn") ||
+      document.getElementById("ownerDeadlinesOpenBtn") ||
+      document.querySelector(".owner-deadlines-open-btn");
+    if(!btn) return;
 
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", updateOwnerDeadlinesBottomBlock);
-  }else{
-    setTimeout(updateOwnerDeadlinesBottomBlock, 250);
+    btn.onclick = function(ev){
+      if(ev && ev.preventDefault) ev.preventDefault();
+      window.openOwnerDeadlinesPage();
+      return false;
+    };
   }
 
-  setTimeout(updateOwnerDeadlinesBottomBlock, 1000);
-  setTimeout(updateOwnerDeadlinesBottomBlock, 2500);
+  window.updateOwnerDeadlinesBottomBlock = updateOwnerDeadlinesBottomBlock;
+  window.bindOwnerDeadlinesButton = bindOwnerDeadlinesButton;
+
+  function initOwnerDeadlinesBottom(){
+    bindOwnerDeadlinesButton();
+    updateOwnerDeadlinesBottomBlock();
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", initOwnerDeadlinesBottom);
+  }else{
+    setTimeout(initOwnerDeadlinesBottom, 100);
+  }
+
+  setTimeout(initOwnerDeadlinesBottom, 600);
+  setTimeout(initOwnerDeadlinesBottom, 1600);
+  setTimeout(initOwnerDeadlinesBottom, 3000);
 })();
 </script>
 
