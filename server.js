@@ -9181,6 +9181,73 @@ app.post('/api/admin/deadline-cleanup-flag/status', async (req, res) => {
 });
 
 
+
+app.post('/api/owner-deadlines/feature-status', async (req, res) => {
+  try {
+    const plateNorm = normalizePlateValue(req.body.plate);
+    const cleanCode = String(req.body.code || '').trim().toUpperCase();
+
+    if (!plateNorm && !cleanCode) {
+      return res.status(400).json({
+        success:false,
+        enabled:false,
+        error:'Targa o codice obbligatorio.'
+      });
+    }
+
+    const params = [];
+    const where = [];
+
+    if (plateNorm) {
+      params.push(plateNorm);
+      where.push(`REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $${params.length}`);
+    }
+
+    if (cleanCode) {
+      params.push(cleanCode);
+      where.push(`UPPER(COALESCE(code,'')) = $${params.length}`);
+    }
+
+    const r = await pool.query(
+      `SELECT code, plate, brand, vehicle_model,
+              COALESCE(enable_deadline_message_cleanup, FALSE) AS enable_deadline_message_cleanup
+       FROM sticker_codes
+       WHERE ${where.join(' OR ')}
+       ORDER BY activated_at DESC NULLS LAST, id DESC
+       LIMIT 1`,
+      params
+    );
+
+    if (!r.rows.length) {
+      return res.json({
+        success:true,
+        found:false,
+        enabled:false
+      });
+    }
+
+    const row = r.rows[0];
+
+    return res.json({
+      success:true,
+      found:true,
+      enabled: row.enable_deadline_message_cleanup === true,
+      code: row.code || cleanCode || '',
+      plate: row.plate || plateNorm || '',
+      brand: row.brand || '',
+      vehicle_model: row.vehicle_model || ''
+    });
+  } catch (err) {
+    console.error('owner-deadlines/feature-status error:', err);
+    return res.status(500).json({
+      success:false,
+      enabled:false,
+      error:err.message || String(err)
+    });
+  }
+});
+
+
 app.post('/api/owner-deadlines/message-link-status', async (req, res) => {
   try {
     const messageId = Number(req.body.messageId || 0);
