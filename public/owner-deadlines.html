@@ -1827,6 +1827,64 @@
   }
 </style>
 
+
+<style id="quick-reminder-when-mode-style">
+  .quick-when-tabs{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    margin:12px 0 8px;
+  }
+
+  .quick-when-tab{
+    min-height:42px;
+    border:1px solid rgba(15,23,42,.12);
+    border-radius:14px;
+    background:#ffffff;
+    color:#334155;
+    font-weight:950;
+    cursor:pointer;
+  }
+
+  .quick-when-tab.active{
+    background:#111827;
+    color:#ffffff;
+    border-color:#111827;
+    box-shadow:0 10px 22px rgba(15,23,42,.16);
+  }
+
+  .quick-when-section{
+    display:none;
+  }
+
+  .quick-when-section.active{
+    display:block;
+  }
+
+  .quick-date-custom{
+    display:none;
+    margin-top:10px;
+  }
+
+  .quick-date-custom.active{
+    display:block;
+  }
+
+  .quick-reminder-time-grid{
+    display:grid;
+    grid-template-columns:1.2fr 1fr;
+    gap:10px;
+    align-items:end;
+  }
+
+  @media(max-width:560px){
+    .quick-when-tabs,
+    .quick-reminder-time-grid{
+      grid-template-columns:1fr;
+    }
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -1849,20 +1907,50 @@
   <label>Ricordami di</label>
   <input id="quickReminderText" placeholder="Esempio: chiamare Marco, prendere medicina, pagare bolletta">
 
-  <div class="quick-reminder-grid">
-    <div>
-      <label>Tra</label>
-      <input id="quickReminderValue" type="number" min="1" max="999" value="10" oninput="updateQuickReminderSummary()">
+  <label>Quando?</label>
+  <div class="quick-when-tabs">
+    <button class="quick-when-tab active" id="quickWhenRelativeBtn" type="button" onclick="setQuickReminderWhenMode('relative')">Tra un tempo</button>
+    <button class="quick-when-tab" id="quickWhenAbsoluteBtn" type="button" onclick="setQuickReminderWhenMode('absolute')">A un orario</button>
+  </div>
+
+  <div class="quick-when-section active" id="quickRelativeSection">
+    <div class="quick-reminder-grid">
+      <div>
+        <label>Tra</label>
+        <input id="quickReminderValue" type="number" min="1" max="999" value="10" oninput="updateQuickReminderSummary()">
+      </div>
+      <div>
+        <label>Unità</label>
+        <select id="quickReminderUnit" onchange="updateQuickReminderLimits(); updateQuickReminderSummary();">
+          <option value="minutes">Minuti</option>
+          <option value="hours">Ore</option>
+          <option value="days">Giorni</option>
+          <option value="months">Mesi</option>
+          <option value="years">Anni</option>
+        </select>
+      </div>
     </div>
-    <div>
-      <label>Unità</label>
-      <select id="quickReminderUnit" onchange="updateQuickReminderLimits(); updateQuickReminderSummary();">
-        <option value="minutes">Minuti</option>
-        <option value="hours">Ore</option>
-        <option value="days">Giorni</option>
-        <option value="months">Mesi</option>
-        <option value="years">Anni</option>
-      </select>
+  </div>
+
+  <div class="quick-when-section" id="quickAbsoluteSection">
+    <div class="quick-reminder-time-grid">
+      <div>
+        <label>Giorno</label>
+        <select id="quickReminderDayMode" onchange="updateQuickReminderAbsoluteDateVisibility(); updateQuickReminderSummary();">
+          <option value="today">Oggi</option>
+          <option value="tomorrow">Domani</option>
+          <option value="custom">Scegli data</option>
+        </select>
+      </div>
+      <div>
+        <label>Ora</label>
+        <input id="quickReminderTime" type="time" value="10:00" onchange="updateQuickReminderSummary()">
+      </div>
+    </div>
+
+    <div class="quick-date-custom" id="quickReminderCustomDateWrap">
+      <label>Data</label>
+      <input id="quickReminderCustomDate" type="date" onchange="updateQuickReminderSummary()">
     </div>
   </div>
 
@@ -4005,6 +4093,102 @@ function isQuickReminderCategory(){
   }
 }
 
+
+let quickReminderWhenMode = "relative";
+
+function setQuickReminderWhenMode(mode){
+  quickReminderWhenMode = mode === "absolute" ? "absolute" : "relative";
+
+  const relBtn = document.getElementById("quickWhenRelativeBtn");
+  const absBtn = document.getElementById("quickWhenAbsoluteBtn");
+  const relSec = document.getElementById("quickRelativeSection");
+  const absSec = document.getElementById("quickAbsoluteSection");
+
+  if(relBtn) relBtn.classList.toggle("active", quickReminderWhenMode === "relative");
+  if(absBtn) absBtn.classList.toggle("active", quickReminderWhenMode === "absolute");
+  if(relSec) relSec.classList.toggle("active", quickReminderWhenMode === "relative");
+  if(absSec) absSec.classList.toggle("active", quickReminderWhenMode === "absolute");
+
+  updateQuickReminderAbsoluteDateVisibility();
+  updateQuickReminderSummary();
+}
+
+function updateQuickReminderAbsoluteDateVisibility(){
+  const dayModeEl = document.getElementById("quickReminderDayMode");
+  const wrap = document.getElementById("quickReminderCustomDateWrap");
+  const dateEl = document.getElementById("quickReminderCustomDate");
+
+  const mode = dayModeEl ? dayModeEl.value : "today";
+  if(wrap) wrap.classList.toggle("active", mode === "custom");
+
+  if(mode === "custom" && dateEl && !dateEl.value){
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    dateEl.value = toLocalDateInputValue(tomorrow);
+  }
+}
+
+function computeQuickReminderAbsoluteDate(){
+  const dayModeEl = document.getElementById("quickReminderDayMode");
+  const timeEl = document.getElementById("quickReminderTime");
+  const customDateEl = document.getElementById("quickReminderCustomDate");
+
+  const dayMode = dayModeEl ? dayModeEl.value : "today";
+  const timeValue = timeEl && timeEl.value ? timeEl.value : "10:00";
+  const parts = timeValue.split(":");
+  const hh = Number(parts[0] || 10);
+  const mm = Number(parts[1] || 0);
+
+  let d = new Date();
+
+  if(dayMode === "tomorrow"){
+    d.setDate(d.getDate() + 1);
+  } else if(dayMode === "custom" && customDateEl && customDateEl.value){
+    const [y,m,day] = customDateEl.value.split("-").map(Number);
+    d = new Date(y, (m || 1) - 1, day || 1);
+  }
+
+  d.setHours(hh, mm, 0, 0);
+
+  // Se scelgo oggi ma l'orario è già passato, lo sposto automaticamente a domani.
+  if(dayMode === "today" && d.getTime() <= Date.now()){
+    d.setDate(d.getDate() + 1);
+  }
+
+  return d;
+}
+
+function quickReminderAbsoluteDayLabel(d){
+  const today = new Date();
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const a = toLocalDateInputValue(d);
+  const t = toLocalDateInputValue(today);
+  const tm = toLocalDateInputValue(tomorrow);
+
+  if(a === t) return "oggi";
+  if(a === tm) return "domani";
+
+  return d.toLocaleDateString("it-IT", { day:"2-digit", month:"2-digit", year:"numeric" });
+}
+
+function getQuickReminderPlanForAbsolute(d){
+  const diffMs = d.getTime() - Date.now();
+  const diffMin = Math.max(1, Math.round(diffMs / 60000));
+
+  if(diffMin <= 120){
+    return { profile:"important", alerts:["Al momento", "Dopo 15 minuti", "Dopo 30 minuti", "Dopo 60 minuti"], text:"se non confermi, ripeterò l’avviso ogni 15 minuti per 1 ora." };
+  }
+
+  if(diffMin <= 1440){
+    return { profile:"important", alerts:["Al momento", "Dopo 1 ora", "Dopo 2 ore", "Dopo 4 ore"], text:"se non confermi, ripeterò l’avviso ogni ora per 4 ore." };
+  }
+
+  return { profile:"standard", alerts:["Al momento", "Dopo 1 giorno", "Dopo 2 giorni", "Dopo 3 giorni"], text:"se non confermi, ripeterò l’avviso una volta al giorno per 3 giorni." };
+}
+
+
 function quickReminderClampValue(){
   const unitEl = document.getElementById("quickReminderUnit");
   const valueEl = document.getElementById("quickReminderValue");
@@ -4067,9 +4251,18 @@ function updateQuickReminderLimits(){
 }
 
 function updateQuickReminderSummary(){
-  const unitEl = document.getElementById("quickReminderUnit");
   const summaryEl = document.getElementById("quickReminderSummary");
-  if(!unitEl || !summaryEl) return;
+  if(!summaryEl) return;
+
+  if(quickReminderWhenMode === "absolute"){
+    const due = computeQuickReminderAbsoluteDate();
+    const plan = getQuickReminderPlanForAbsolute(due);
+    summaryEl.textContent = `Ti avviserò ${quickReminderAbsoluteDayLabel(due)} alle ${toLocalTimeInputValue(due)} e ${plan.text}`;
+    return;
+  }
+
+  const unitEl = document.getElementById("quickReminderUnit");
+  if(!unitEl) return;
 
   const unit = unitEl.value || "minutes";
   const value = quickReminderClampValue();
@@ -4155,10 +4348,28 @@ function openQuickReminderEditor(deadlineId){
   if(textEl) textEl.value = d.name || "";
 
   const extra = d.extra || {};
+
+  try {
+    if(extra.quickWhenMode === "absolute"){
+      setQuickReminderWhenMode("absolute");
+      const dayEl = document.getElementById("quickReminderDayMode");
+      const timeEl = document.getElementById("quickReminderTime");
+      const customDateEl = document.getElementById("quickReminderCustomDate");
+
+      if(dayEl) dayEl.value = extra.quickDayMode || "today";
+      if(timeEl) timeEl.value = extra.quickTime || d.time || "10:00";
+      if(customDateEl) customDateEl.value = extra.quickCustomDate || d.date || "";
+      updateQuickReminderAbsoluteDateVisibility();
+    } else {
+      setQuickReminderWhenMode("relative");
+    }
+  } catch(e) {}
+
   if(valueEl) valueEl.value = String(extra.quickValue || 10);
   if(unitEl) unitEl.value = extra.quickUnit || "minutes";
 
   try { updateQuickReminderLimits(); } catch(e) {}
+  try { setQuickReminderWhenMode("relative"); } catch(e) {}
   try { updateQuickReminderSummary(); } catch(e) {}
 
   setTimeout(function(){
@@ -4295,10 +4506,23 @@ function saveQuickReminderEditOrNew(){
     return;
   }
 
-  const unit = unitEl ? unitEl.value : "minutes";
-  const value = quickReminderClampValue();
-  const due = computeQuickReminderDate(value, unit);
-  const plan = getQuickReminderRepeatPlan(value, unit);
+  let value = 10;
+  let unit = "minutes";
+  let due;
+  let plan;
+  let noteWhen = "";
+
+  if(quickReminderWhenMode === "absolute"){
+    due = computeQuickReminderAbsoluteDate();
+    plan = getQuickReminderPlanForAbsolute(due);
+    noteWhen = `${quickReminderAbsoluteDayLabel(due)} alle ${toLocalTimeInputValue(due)}`;
+  } else {
+    unit = unitEl ? unitEl.value : "minutes";
+    value = quickReminderClampValue();
+    due = computeQuickReminderDate(value, unit);
+    plan = getQuickReminderRepeatPlan(value, unit);
+    noteWhen = `tra ${value} ${quickReminderUnitLabel(unit, value)}`;
+  }
 
   const payload = {
     category: "Rapido",
@@ -4309,13 +4533,17 @@ function saveQuickReminderEditOrNew(){
     time: toLocalTimeInputValue(due),
     profile: plan.profile,
     alerts: plan.alerts,
-    notes: `Promemoria rapido: tra ${value} ${quickReminderUnitLabel(unit, value)}. ${plan.text}`,
+    notes: `Promemoria rapido: ${noteWhen}. ${plan.text}`,
     status: "active",
     recurrence: "none",
     extra: {
       quickReminder: true,
+      quickWhenMode: quickReminderWhenMode,
       quickValue: value,
       quickUnit: unit,
+      quickDayMode: (document.getElementById("quickReminderDayMode") || {}).value || "today",
+      quickTime: (document.getElementById("quickReminderTime") || {}).value || "10:00",
+      quickCustomDate: (document.getElementById("quickReminderCustomDate") || {}).value || "",
       repeatPlanText: plan.text,
       dueAt: due.toISOString()
     }
@@ -4349,9 +4577,19 @@ function saveQuickReminderEditOrNew(){
   const textReset = document.getElementById("quickReminderText");
   const valueReset = document.getElementById("quickReminderValue");
   const unitReset = document.getElementById("quickReminderUnit");
+  const dayReset = document.getElementById("quickReminderDayMode");
+  const timeReset = document.getElementById("quickReminderTime");
+  const customDateReset = document.getElementById("quickReminderCustomDate");
+
   if(textReset) textReset.value = "";
   if(valueReset) valueReset.value = "10";
   if(unitReset) unitReset.value = "minutes";
+  if(dayReset) dayReset.value = "today";
+  if(timeReset) timeReset.value = "10:00";
+  if(customDateReset) customDateReset.value = "";
+
+  quickReminderWhenMode = "relative";
+  try { setQuickReminderWhenMode("relative"); } catch(e) {}
 
   forceCloseAfterQuickSave(savedId);
 }
