@@ -1885,6 +1885,45 @@
   }
 </style>
 
+
+<style id="deadline-when-label-direct-style">
+  .deadline-when-label{
+    display:inline-flex;
+    align-items:center;
+    justify-content:flex-start;
+    gap:6px;
+    margin:8px 0 4px;
+    padding:7px 10px;
+    border-radius:999px;
+    background:#fff7ed;
+    border:1px solid rgba(255,122,0,.22);
+    color:#7c2d12;
+    font-size:.82rem;
+    line-height:1.25;
+    font-weight:900;
+    width:fit-content;
+    max-width:100%;
+  }
+  .deadline-when-label.quick{
+    background:#ecfdf5;
+    border-color:rgba(22,163,74,.22);
+    color:#14532d;
+  }
+  .deadline-when-label.expired{
+    background:#fef2f2;
+    border-color:rgba(220,38,38,.22);
+    color:#7f1d1d;
+  }
+  @media(max-width:560px){
+    .deadline-when-label{
+      width:100%;
+      justify-content:center;
+      text-align:center;
+      border-radius:14px;
+    }
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -4802,6 +4841,99 @@ function daysUntil(d){ const today=new Date(); today.setHours(0,0,0,0); const x=
 function color(days){ if(days<0)return"red"; if(days<=7)return"yellow"; return"green"; }
 function label(days){ if(days<0)return"Scaduta da "+Math.abs(days)+" giorni"; if(days===0)return"Scade oggi"; if(days===1)return"Scade domani"; return"Scade tra "+days+" giorni"; }
 
+
+function parseDeadlineDateTime(d){
+  if(!d) return null;
+
+  if(d.extra && d.extra.dueAt){
+    const fromExtra = new Date(d.extra.dueAt);
+    if(!Number.isNaN(fromExtra.getTime())) return fromExtra;
+  }
+
+  if(!d.date) return null;
+
+  const time = d.time || "09:00";
+  const parts = String(d.date).split("-").map(Number);
+  const t = String(time).split(":").map(Number);
+
+  if(parts.length < 3) return null;
+
+  const dt = new Date(
+    parts[0],
+    (parts[1] || 1) - 1,
+    parts[2] || 1,
+    t[0] || 0,
+    t[1] || 0,
+    0,
+    0
+  );
+
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+function sameCalendarDate(a,b){
+  return a.getFullYear() === b.getFullYear()
+    && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate();
+}
+
+function friendlyDeadlineDay(dt){
+  const today = new Date();
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  if(sameCalendarDate(dt, today)) return "oggi";
+  if(sameCalendarDate(dt, tomorrow)) return "domani";
+
+  return dt.toLocaleDateString("it-IT", {
+    day:"2-digit",
+    month:"2-digit",
+    year:"numeric"
+  });
+}
+
+function friendlyRemainingTime(dt){
+  const diffMs = dt.getTime() - Date.now();
+  const past = diffMs < 0;
+  const absMs = Math.abs(diffMs);
+
+  const minutes = Math.round(absMs / 60000);
+  const hours = Math.round(absMs / 3600000);
+  const days = Math.ceil(absMs / 86400000);
+
+  let value;
+  if(minutes < 1) value = "adesso";
+  else if(minutes < 60) value = `${minutes} ${minutes === 1 ? "minuto" : "minuti"}`;
+  else if(hours < 24) value = `${hours} ${hours === 1 ? "ora" : "ore"}`;
+  else value = `${days} ${days === 1 ? "giorno" : "giorni"}`;
+
+  if(value === "adesso") return past ? "scaduto ora" : "adesso";
+  return past ? `scaduto da ${value}` : `tra ${value}`;
+}
+
+function deadlineWhenLabel(d){
+  const dt = parseDeadlineDateTime(d);
+  if(!dt) return "";
+
+  const hh = String(dt.getHours()).padStart(2, "0");
+  const mm = String(dt.getMinutes()).padStart(2, "0");
+  const isQuick = !!(d && (d.category === "Rapido" || (d.extra && d.extra.quickReminder)));
+
+  if(isQuick){
+    return `Avviso: ${friendlyDeadlineDay(dt)} alle ${hh}:${mm} · ${friendlyRemainingTime(dt)}`;
+  }
+
+  return `Scadenza: ${friendlyDeadlineDay(dt)} alle ${hh}:${mm} · ${friendlyRemainingTime(dt)}`;
+}
+
+function deadlineWhenClass(d){
+  const dt = parseDeadlineDateTime(d);
+  const isQuick = !!(d && (d.category === "Rapido" || (d.extra && d.extra.quickReminder)));
+  const expired = !!(dt && dt.getTime() < Date.now());
+  return `${isQuick ? " quick" : ""}${expired ? " expired" : ""}`;
+}
+
+
 function renderList(){
   const active=deadlines.filter(d=>d.status!=="deleted" && d.status!=="completed");
   kpiTotal.textContent=active.length;
@@ -4814,6 +4946,7 @@ function renderList(){
     return `<div class="deadline ${color(days)} ${days < 0 ? 'expired-pulse' : ''}" id="d-${d.id}">
       <h3>${esc(d.name)}</h3>
       <small>${esc(d.category)} · ${esc(d.owner || "nessun riferimento")} · ${esc(label(days))}${d.recurrence && d.recurrence !== "none" ? " · " + esc(d.recurrence === "monthly" ? "mensile" : d.recurrence === "yearly" ? "annuale" : "ricorrente") : ""}</small>
+      <div class="deadline-when-label${deadlineWhenClass(d)}">${esc(deadlineWhenLabel(d))}</div>
       <div class="deadline-actions">
         <button class="mini later" onclick="toggleProgrammedAlerts(${d.id})">Avvisi progr.</button>
         <button class="mini later" onclick="openMessage(${d.id})">Apri messaggio</button>
