@@ -5901,5 +5901,73 @@ init();
 })();
 </script>
 
+
+<script id="sync-deadline-status-from-server-script">
+(function(){
+  async function syncDeadlineStatusFromServer(){
+    try{
+      if(typeof deadlines === "undefined" || !Array.isArray(deadlines)) return;
+
+      var params = new URLSearchParams(window.location.search || "");
+      var codeValue = params.get("code") || "";
+      var plateValue = params.get("plate") || "";
+
+      try {
+        if(!codeValue && typeof code !== "undefined") codeValue = code;
+        if(!plateValue && typeof plate !== "undefined") plateValue = plate;
+      } catch(e) {}
+
+      if(!plateValue) return;
+
+      var res = await fetch("/api/owner-deadlines/status-list", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ code: codeValue, plate: plateValue })
+      });
+
+      var out = await res.json().catch(function(){ return null; });
+      if(!out || !out.success || !Array.isArray(out.items)) return;
+
+      var inactive = new Set(
+        out.items
+          .filter(function(x){
+            return ["completed","deleted","disabled"].includes(String(x.status || "").toLowerCase());
+          })
+          .map(function(x){ return String(x.local_id); })
+      );
+
+      if(!inactive.size) return;
+
+      var changed = false;
+      deadlines = deadlines.map(function(d){
+        if(d && inactive.has(String(d.id))){
+          changed = true;
+          return Object.assign({}, d, {
+            status:"completed",
+            completedFromMessage:true,
+            completedAt: d.completedAt || new Date().toISOString()
+          });
+        }
+        return d;
+      });
+
+      if(changed){
+        try { localStorage.setItem(key, JSON.stringify(deadlines)); } catch(e) {}
+        try { renderList(); } catch(e) {}
+      }
+    }catch(e){
+      console.warn("syncDeadlineStatusFromServer error:", e);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    setTimeout(syncDeadlineStatusFromServer, 700);
+    setTimeout(syncDeadlineStatusFromServer, 2200);
+  });
+
+  window.syncDeadlineStatusFromServer = syncDeadlineStatusFromServer;
+})();
+</script>
+
 </body>
 </html>

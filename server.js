@@ -8413,10 +8413,9 @@ function shouldSendDeadlineAlert(payload, now = new Date()) {
             alertKey,
             localId,
             deadlineId: localId,
-            title: 'PROMEMORIA RAPIDO',
-            reason: 'PROMEMORIA RAPIDO',
+            title: name || 'PROMEMORIA IMPORTANTE',
+            reason: name || 'Promemoria rapido',
             messageText:
-              'PROMEMORIA RAPIDO\n\n' +
               `${name}\n\n` +
               `Richiamo automatico: ogni ${value} ${unit === 'hours' ? 'ore' : unit === 'days' ? 'giorni' : 'minuti'} finché non lo segni come fatto o lo cancelli.\n\n` +
               'Comandi disponibili: Ricordamelo ancora, OK fatto, Cancella.',
@@ -8453,10 +8452,9 @@ function shouldSendDeadlineAlert(payload, now = new Date()) {
       alertKey,
       localId,
       deadlineId: localId,
-      title: 'PROMEMORIA RAPIDO',
-      reason: 'PROMEMORIA RAPIDO',
+      title: name || 'PROMEMORIA IMPORTANTE',
+      reason: name || 'Promemoria rapido',
       messageText:
-        'PROMEMORIA RAPIDO\n\n' +
         `${name}\n\n` +
         (whenLabel ? `Quando: ${whenLabel}\n\n` : '') +
         'Comandi disponibili: Ricordamelo ancora, OK fatto, Cancella.',
@@ -8786,6 +8784,37 @@ ensureOwnerDeadlinesTables()
 
 
 // Disattiva futuri avvisi di una scadenza partendo dal messaggio ricevuto
+
+app.post('/api/owner-deadlines/status-list', async (req, res) => {
+  try {
+    const plateNorm = normalizePlateValue(req.body.plate);
+    const cleanCode = String(req.body.code || '').trim().toUpperCase();
+
+    if (!plateNorm) {
+      return res.status(400).json({ success:false, error:'Targa obbligatoria.' });
+    }
+
+    const rows = await pool.query(
+      `SELECT local_id, status, updated_at, payload->>'name' AS name
+       FROM owner_deadline_items
+       WHERE plate_norm = $1
+          OR ($2 <> '' AND code = $2)
+       ORDER BY updated_at DESC
+       LIMIT 1000`,
+      [plateNorm, cleanCode]
+    );
+
+    return res.json({
+      success:true,
+      items: rows.rows
+    });
+  } catch (err) {
+    console.error('owner-deadlines/status-list error:', err);
+    return res.status(500).json({ success:false, error: err.message || String(err) });
+  }
+});
+
+
 app.post('/api/owner-deadlines/disable-from-message', async (req, res) => {
   try {
     const messageId = Number(req.body.messageId || 0);
@@ -8820,7 +8849,18 @@ app.post('/api/owner-deadlines/disable-from-message', async (req, res) => {
 
     const updateRes = await pool.query(
       `UPDATE owner_deadline_items
-       SET status = 'disabled',
+       SET status = 'completed',
+           payload = jsonb_set(
+             jsonb_set(
+               COALESCE(payload, '{}'::jsonb),
+               '{status}',
+               '"completed"'::jsonb,
+               true
+             ),
+             '{completedFromMessageAt}',
+             to_jsonb(NOW()::text),
+             true
+           ),
            updated_at = NOW()
        WHERE plate_norm = $1
          AND local_id = $2
