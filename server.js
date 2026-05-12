@@ -8558,10 +8558,10 @@ async function insertOwnerMessageAndPushDeadline({ vehicle, plateNorm, alert }) 
   const deadlineId = alert.localId || alert.deadlineId || '';
 
   const ownerUrl =
-    `/owner-deadlines.html?code=${encodeURIComponent(cleanCode)}` +
-    `&plate=${encodeURIComponent(plateNorm)}` +
-    `${deadlineId ? `&deadlineId=${encodeURIComponent(deadlineId)}` : ''}` +
-    `&from=deadline_push${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}`;
+    `/owner-app/${encodeURIComponent(cleanCode)}/${encodeURIComponent(plateNorm)}` +
+    `?focus=messages&from=deadline_alert` +
+    `${insertedMessageId ? `&messageId=${encodeURIComponent(insertedMessageId)}` : ''}` +
+    `${deadlineId ? `&deadlineId=${encodeURIComponent(deadlineId)}` : ''}`;
 
   const payload = JSON.stringify({
     title: alert.title || 'PROMEMORIA IMPORTANTE',
