@@ -1734,6 +1734,99 @@
   }
 </style>
 
+
+<style id="force-delete-confirm-body-center-style">
+  body.delete-confirm-active::before{
+    content:"" !important;
+    position:fixed !important;
+    inset:0 !important;
+    z-index:999990 !important;
+    background:rgba(15,23,42,.58) !important;
+    backdrop-filter:blur(7px) !important;
+    -webkit-backdrop-filter:blur(7px) !important;
+  }
+
+  body.delete-confirm-active #deadlineModal,
+  body.delete-confirm-active .modal,
+  body.delete-confirm-active .modal-card,
+  body.delete-confirm-active .deadline-modal-card{
+    opacity:.12 !important;
+    filter:blur(1.4px) grayscale(.25) !important;
+    pointer-events:none !important;
+  }
+
+  body.delete-confirm-active #confirmDeleteBox{
+    display:block !important;
+    position:fixed !important;
+    left:50% !important;
+    top:50% !important;
+    right:auto !important;
+    bottom:auto !important;
+    transform:translate(-50%, -50%) !important;
+    z-index:1000000 !important;
+
+    width:min(430px, calc(100vw - 32px)) !important;
+    max-width:min(430px, calc(100vw - 32px)) !important;
+
+    margin:0 !important;
+    padding:24px !important;
+    border-radius:24px !important;
+    background:#ffffff !important;
+    border:1px solid rgba(15,23,42,.10) !important;
+    box-shadow:0 34px 90px rgba(15,23,42,.42) !important;
+    text-align:center !important;
+
+    opacity:1 !important;
+    filter:none !important;
+    pointer-events:auto !important;
+  }
+
+  body.delete-confirm-active #confirmDeleteBox,
+  body.delete-confirm-active #confirmDeleteBox *{
+    color:#111827 !important;
+    text-shadow:none !important;
+  }
+
+  body.delete-confirm-active #confirmDeleteBox strong{
+    display:block !important;
+    font-size:1.08rem !important;
+    line-height:1.35 !important;
+    font-weight:950 !important;
+    color:#111827 !important;
+    margin-bottom:18px !important;
+  }
+
+  body.delete-confirm-active #confirmDeleteBox .actions{
+    display:grid !important;
+    grid-template-columns:1fr !important;
+    gap:10px !important;
+    margin-top:0 !important;
+  }
+
+  body.delete-confirm-active #confirmDeleteBox button{
+    width:100% !important;
+    min-height:50px !important;
+    border:0 !important;
+    border-radius:16px !important;
+    font-size:.96rem !important;
+    font-weight:950 !important;
+    cursor:pointer !important;
+  }
+
+  body.delete-confirm-active #confirmDeleteBox button.delete,
+  body.delete-confirm-active #confirmDeleteBox .primary.delete{
+    background:#dc2626 !important;
+    color:#ffffff !important;
+    box-shadow:0 12px 26px rgba(220,38,38,.24) !important;
+  }
+
+  body.delete-confirm-active #confirmDeleteBox button.secondary,
+  body.delete-confirm-active #confirmDeleteBox .secondary{
+    background:#e5e7eb !important;
+    color:#111827 !important;
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -4709,10 +4802,47 @@ function openMessage(id){
 function remindLater(){ alert("Ok, l’avviso resterà attivo e continuerà a ricordartelo secondo il piano impostato."); closeModal(); }
 function markDoneFromModal(){ if(!currentModalId) return; if(!confirm("Confermi di aver completato questa scadenza?")) return; completeDeadline(currentModalId); closeModal(); }
 function editFromModal(){ if(!currentModalId) return; const id = currentModalId; closeModal(); editDeadline(id); }
-function askDeleteFromModal(){ confirmDeleteBox.style.display = "block"; document.body.classList.add("delete-confirm-active"); }
+
+let confirmDeleteOriginalParent = null;
+let confirmDeleteOriginalNext = null;
+
+function moveConfirmDeleteBoxToBody(){
+  const box = document.getElementById("confirmDeleteBox");
+  if(!box) return;
+
+  if(!confirmDeleteOriginalParent){
+    confirmDeleteOriginalParent = box.parentNode;
+    confirmDeleteOriginalNext = box.nextSibling;
+  }
+
+  if(box.parentNode !== document.body){
+    document.body.appendChild(box);
+  }
+}
+
+function restoreConfirmDeleteBoxPosition(){
+  const box = document.getElementById("confirmDeleteBox");
+  if(!box || !confirmDeleteOriginalParent) return;
+
+  try{
+    if(confirmDeleteOriginalNext && confirmDeleteOriginalNext.parentNode === confirmDeleteOriginalParent){
+      confirmDeleteOriginalParent.insertBefore(box, confirmDeleteOriginalNext);
+    } else {
+      confirmDeleteOriginalParent.appendChild(box);
+    }
+  }catch(e){}
+}
+
+
+function askDeleteFromModal(){
+  moveConfirmDeleteBoxToBody();
+  confirmDeleteBox.style.display = "block";
+  document.body.classList.add("delete-confirm-active");
+}
 function cancelDelete(){
   confirmDeleteBox.style.display = "none";
   document.body.classList.remove("delete-confirm-active");
+  restoreConfirmDeleteBoxPosition();
 }
 function deleteFromModal(){
   if(!currentModalId) return;
@@ -4720,9 +4850,13 @@ function deleteFromModal(){
   persist();
   renderList();
   document.body.classList.remove("delete-confirm-active");
+  restoreConfirmDeleteBoxPosition();
   closeModal();
 }
 function closeModal(){
+  try { document.body.classList.remove("delete-confirm-active"); } catch(e) {}
+  try { restoreConfirmDeleteBoxPosition(); } catch(e) {}
+
   try { document.body.classList.remove("delete-confirm-active"); } catch(e) {}
  messageModal.style.display = "none"; currentModalId = null; }
 messageModal.addEventListener("click", function(e){ if(e.target === messageModal) closeModal(); });
