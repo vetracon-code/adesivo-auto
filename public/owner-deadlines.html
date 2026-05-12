@@ -1642,6 +1642,98 @@
   }
 </style>
 
+
+<style id="delete-confirm-centered-overlay-style">
+  /*
+    Restyle conferma cancellazione:
+    - frame sopra tutto
+    - centrato nella pagina
+    - dettaglio avviso sotto sbiadito quando la conferma è aperta
+  */
+
+  body.delete-confirm-active .modal-card,
+  body.delete-confirm-active .deadline-modal-card,
+  body.delete-confirm-active #deadlineModal .modal-card,
+  body.delete-confirm-active #deadlineModalContent,
+  body.delete-confirm-active #modalBody{
+    opacity:.18 !important;
+    filter:blur(1.2px) grayscale(.15) !important;
+    pointer-events:none !important;
+    transition:opacity .18s ease, filter .18s ease !important;
+  }
+
+  body.delete-confirm-active #confirmDeleteBox,
+  body.delete-confirm-active .confirm-delete-box{
+    opacity:1 !important;
+    filter:none !important;
+    pointer-events:auto !important;
+  }
+
+  #confirmDeleteBox{
+    position:fixed !important;
+    left:50% !important;
+    top:50% !important;
+    transform:translate(-50%, -50%) !important;
+    z-index:999999 !important;
+
+    width:min(420px, calc(100vw - 32px)) !important;
+    margin:0 !important;
+    padding:22px !important;
+
+    border-radius:24px !important;
+    background:#ffffff !important;
+    border:1px solid rgba(15,23,42,.10) !important;
+    box-shadow:0 30px 90px rgba(15,23,42,.38) !important;
+    text-align:center !important;
+  }
+
+  #confirmDeleteBox,
+  #confirmDeleteBox *{
+    color:#111827 !important;
+    text-shadow:none !important;
+  }
+
+  #confirmDeleteBox p,
+  #confirmDeleteBox div,
+  #confirmDeleteBox strong{
+    font-size:1.08rem !important;
+    line-height:1.35 !important;
+    font-weight:950 !important;
+    color:#111827 !important;
+  }
+
+  #confirmDeleteBox .actions,
+  #confirmDeleteBox [class*="actions"]{
+    display:grid !important;
+    grid-template-columns:1fr !important;
+    gap:10px !important;
+    margin-top:18px !important;
+  }
+
+  #confirmDeleteBox button{
+    width:100% !important;
+    min-height:50px !important;
+    border:0 !important;
+    border-radius:16px !important;
+    font-size:.96rem !important;
+    font-weight:950 !important;
+    cursor:pointer !important;
+  }
+
+  #confirmDeleteBox button.delete,
+  #confirmDeleteBox .primary.delete{
+    background:#dc2626 !important;
+    color:#ffffff !important;
+    box-shadow:0 12px 26px rgba(220,38,38,.24) !important;
+  }
+
+  #confirmDeleteBox button.secondary,
+  #confirmDeleteBox .secondary{
+    background:#e5e7eb !important;
+    color:#111827 !important;
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -4617,10 +4709,22 @@ function openMessage(id){
 function remindLater(){ alert("Ok, l’avviso resterà attivo e continuerà a ricordartelo secondo il piano impostato."); closeModal(); }
 function markDoneFromModal(){ if(!currentModalId) return; if(!confirm("Confermi di aver completato questa scadenza?")) return; completeDeadline(currentModalId); closeModal(); }
 function editFromModal(){ if(!currentModalId) return; const id = currentModalId; closeModal(); editDeadline(id); }
-function askDeleteFromModal(){ confirmDeleteBox.style.display = "block"; }
-function cancelDelete(){ confirmDeleteBox.style.display = "none"; }
-function deleteFromModal(){ if(!currentModalId) return; deadlines = deadlines.filter(d=>d.id!==currentModalId); persist(); renderList(); closeModal(); }
-function closeModal(){ messageModal.style.display = "none"; currentModalId = null; }
+function askDeleteFromModal(){ confirmDeleteBox.style.display = "block"; document.body.classList.add("delete-confirm-active"); }
+function cancelDelete(){
+  confirmDeleteBox.style.display = "none";
+  document.body.classList.remove("delete-confirm-active");
+}
+function deleteFromModal(){
+  if(!currentModalId) return;
+  deadlines = deadlines.filter(d=>d.id!==currentModalId);
+  persist();
+  renderList();
+  document.body.classList.remove("delete-confirm-active");
+  closeModal();
+}
+function closeModal(){
+  try { document.body.classList.remove("delete-confirm-active"); } catch(e) {}
+ messageModal.style.display = "none"; currentModalId = null; }
 messageModal.addEventListener("click", function(e){ if(e.target === messageModal) closeModal(); });
 
 function completeDeadline(id){
