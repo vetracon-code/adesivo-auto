@@ -8673,9 +8673,30 @@ app.post('/api/owner-deadlines/sync', async (req, res) => {
       if (!d || !d.id) continue;
 
       const localId = String(d.id);
-      const status = ['deleted','completed','disabled','active'].includes(String(d.status || '').toLowerCase())
+      let status = ['deleted','completed','disabled','active'].includes(String(d.status || '').toLowerCase())
         ? String(d.status || '').toLowerCase()
         : 'active';
+
+      const existingStatusRes = await pool.query(
+        `SELECT status
+         FROM owner_deadline_items
+         WHERE plate_norm = $1
+           AND local_id = $2
+         LIMIT 1`,
+        [plateNorm, localId]
+      );
+
+      const existingStatus = String(existingStatusRes.rows[0]?.status || '').toLowerCase();
+
+      // Protezione anti-riattivazione:
+      // se il server ha già completato/cancellato/disabilitato una scadenza,
+      // un vecchio localStorage non può riportarla ad active.
+      if (
+        ['completed','deleted','disabled'].includes(existingStatus) &&
+        status === 'active'
+      ) {
+        status = existingStatus;
+      }
 
       d.status = status;
 
