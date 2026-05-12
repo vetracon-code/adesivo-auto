@@ -8383,6 +8383,50 @@ function shouldSendDeadlineAlert(payload, now = new Date()) {
   }
 
 
+  // 2) RICHIAMI PROMEMORIA RAPIDI: ripeti finché non confermo.
+  // Questo blocco deve stare PRIMA del primo avviso rapido:
+  // dopo il primo intervallo deve generare quick-repeat, non continuare a restituire quick-due già inviato.
+  if (
+    payload.extra &&
+    payload.extra.quickReminder === true &&
+    payload.extra.dueAt &&
+    payload.extra.repeatUntilHandled === true
+  ) {
+    const due = new Date(payload.extra.dueAt);
+    if (!Number.isNaN(due.getTime()) && now.getTime() >= due.getTime()) {
+      const value = Math.max(1, Number(payload.extra.repeatIntervalValue || 5));
+      const unit = String(payload.extra.repeatIntervalUnit || 'minutes');
+
+      let intervalMs = value * 60000;
+      if (unit === 'hours') intervalMs = value * 3600000;
+      if (unit === 'days') intervalMs = value * 86400000;
+
+      const elapsed = now.getTime() - due.getTime();
+
+      if (elapsed >= intervalMs) {
+        const slot = Math.floor(elapsed / intervalMs);
+
+        if (slot >= 1) {
+          const alertKey = `quick-repeat-${localId}-${intervalMs}-${slot}`;
+
+          return {
+            alertKey,
+            localId,
+            deadlineId: localId,
+            title: 'PROMEMORIA RAPIDO',
+            reason: 'PROMEMORIA RAPIDO',
+            messageText:
+              'PROMEMORIA RAPIDO\n\n' +
+              `${name}\n\n` +
+              `Richiamo automatico: ogni ${value} ${unit === 'hours' ? 'ore' : unit === 'days' ? 'giorni' : 'minuti'} finché non lo segni come fatto o lo cancelli.\n\n` +
+              'Comandi disponibili: Ricordamelo ancora, OK fatto, Cancella.',
+            body: `${name}: promemoria ancora attivo.`
+          };
+        }
+      }
+    }
+  }
+
   // 2) PROMEMORIA RAPIDI: usa extra.dueAt come orario reale del promemoria
   // Esempi gestiti:
   // - Tra 10 minuti
@@ -8418,47 +8462,6 @@ function shouldSendDeadlineAlert(payload, now = new Date()) {
         'Comandi disponibili: Ricordamelo ancora, OK fatto, Cancella.',
       body: `${name}`
     };
-  }
-
-  // 3) RICHIAMI PROMEMORIA RAPIDI: ripeti finché non confermo.
-  // Il ciclo termina quando l'utente segna l'avviso come completato o lo cancella.
-  if (
-    payload.extra &&
-    payload.extra.quickReminder === true &&
-    payload.extra.dueAt &&
-    payload.extra.repeatUntilHandled === true
-  ) {
-    const due = new Date(payload.extra.dueAt);
-    if (!Number.isNaN(due.getTime()) && now.getTime() >= due.getTime()) {
-      const value = Math.max(1, Number(payload.extra.repeatIntervalValue || 5));
-      const unit = String(payload.extra.repeatIntervalUnit || 'minutes');
-
-      let intervalMs = value * 60000;
-      if (unit === 'hours') intervalMs = value * 3600000;
-      if (unit === 'days') intervalMs = value * 86400000;
-
-      const elapsed = now.getTime() - due.getTime();
-      if (elapsed < intervalMs) return null;
-
-      const slot = Math.floor(elapsed / intervalMs);
-      if (slot < 1) return null;
-
-      const alertKey = `quick-repeat-${localId}-${intervalMs}-${slot}`;
-
-      return {
-        alertKey,
-        localId,
-        deadlineId: localId,
-        title: 'PROMEMORIA RAPIDO',
-        reason: 'PROMEMORIA RAPIDO',
-        messageText:
-          'PROMEMORIA RAPIDO\n\n' +
-          `${name}\n\n` +
-          `Richiamo automatico: ogni ${value} ${unit === 'hours' ? 'ore' : unit === 'days' ? 'giorni' : 'minuti'} finché non lo segni come fatto o lo cancelli.\n\n` +
-          'Comandi disponibili: Ricordamelo ancora, OK fatto, Cancella.',
-        body: `${name}: promemoria ancora attivo.`
-      };
-    }
   }
 
   // 2) SCADENZE STANDARD: giorno stesso / X giorni prima
