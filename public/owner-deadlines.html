@@ -2545,45 +2545,63 @@ let currentModalId = null;
 let editingDeadlineId = null;
 let deadlineFormOpened = false;
 let categoryPulseTimer = null;
-let key = "ownerDeadlines_" + (plate || "default");
+let key = "ownerDeadlines_" + (plate || code || "default");
 let deadlines = JSON.parse(localStorage.getItem(key) || "[]");
 
 function init(){
-  if (plate !== allowedPlate) {
-    const currentPlateForLocked = String(
-      (typeof plate !== "undefined" && plate) ||
-      window.plate ||
-      window.__OWNER_PLATE__ ||
-      new URLSearchParams(window.location.search || "").get("plate") ||
-      sessionStorage.getItem("owner_deadlines_plate") ||
-      localStorage.getItem("owner_deadlines_plate") ||
-      localStorage.getItem("owner_saved_plate") ||
-      ""
-    ).replace(/\s+/g, "").toUpperCase();
+  const ownerDeadlineAccess = typeof getOwnerDeadlineAccessParams === "function"
+    ? getOwnerDeadlineAccessParams()
+    : { code:"", plate:"" };
 
-    const currentCodeForLocked = String(
-      (typeof code !== "undefined" && code) ||
-      window.code ||
-      window.__OWNER_CODE__ ||
-      new URLSearchParams(window.location.search || "").get("code") ||
-      sessionStorage.getItem("owner_deadlines_code") ||
-      localStorage.getItem("owner_deadlines_code") ||
-      localStorage.getItem("owner_saved_code") ||
-      ""
-    ).trim();
+  if(ownerDeadlineAccess.code){
+    code = String(ownerDeadlineAccess.code || "").toUpperCase().trim();
+    try {
+      window.code = code;
+      window.__OWNER_CODE__ = code;
+      localStorage.setItem("owner_saved_code", code);
+      localStorage.setItem("owner_deadlines_code", code);
+      sessionStorage.setItem("owner_deadlines_code", code);
+    } catch(e) {}
+  }
 
+  if(ownerDeadlineAccess.plate){
+    plate = String(ownerDeadlineAccess.plate || "").toUpperCase().replace(/\s+/g,"");
+    try {
+      window.plate = plate;
+      window.__OWNER_PLATE__ = plate;
+      localStorage.setItem("owner_saved_plate", plate);
+      localStorage.setItem("owner_deadlines_plate", plate);
+      sessionStorage.setItem("owner_deadlines_plate", plate);
+    } catch(e) {}
+  }
+
+  if(!code && !plate){
     document.getElementById("app").innerHTML =
-      '<div class="locked">Pagina disponibile per ' +
-      (currentPlateForLocked || 'il tuo veicolo') +
-      '.</div>';
+      '<div class="locked">Pagina disponibile solo dalla tua App veicolo.</div>';
     return;
   }
+
+  key = "ownerDeadlines_" + (plate || code || "default");
+  try {
+    deadlines = JSON.parse(localStorage.getItem(key) || "[]");
+  } catch(e) {
+    deadlines = [];
+  }
+
   setupBackLink();
   renderCats(); renderPresets(); renderProfiles(); applyPreset(currentPreset); renderList();
   buildIntervalWheel();
   syncDeadlinesToServer();
   closeDeadlineForm();
   setupCategoryScrollPulse();
+
+  try {
+    if(typeof applyDynamicVehicleLabel === "function") applyDynamicVehicleLabel();
+  } catch(e) {}
+
+  try {
+    if(typeof updateVehiclePill === "function") updateVehiclePill();
+  } catch(e) {}
 }
 
 
@@ -6073,137 +6091,55 @@ init();
 })();
 </script>
 
-
-<script id="owner-deadlines-dynamic-vehicle-label">
+<script id="owner-deadlines-light-vehicle-label">
 (function(){
-  function cleanPlate(v){
-    return String(v || "").replace(/\s+/g, "").toUpperCase();
-  }
+  function cleanPlate(v){ return String(v || "").replace(/\s+/g, "").toUpperCase(); }
 
-  function getDeadlineVehicleParams(){
-    var out = { code:"", plate:"", brand:"", model:"" };
-
+  async function updateVehiclePill(){
     try{
-      var params = new URLSearchParams(window.location.search || "");
-      out.code = params.get("code") || "";
-      out.plate = params.get("plate") || "";
-      out.brand = params.get("brand") || "";
-      out.model = params.get("model") || "";
-    }catch(e){}
+      var p = typeof getOwnerDeadlineAccessParams === "function"
+        ? getOwnerDeadlineAccessParams()
+        : { code:"", plate:"" };
 
-    try{
-      out.code = out.code || sessionStorage.getItem("owner_deadlines_code") || localStorage.getItem("owner_deadlines_code") || localStorage.getItem("owner_saved_code") || "";
-      out.plate = out.plate || sessionStorage.getItem("owner_deadlines_plate") || localStorage.getItem("owner_deadlines_plate") || localStorage.getItem("owner_saved_plate") || "";
-    }catch(e){}
+      var plate = cleanPlate(p.plate);
+      var label = plate || "Il tuo veicolo";
 
-    out.code = String(out.code || "").trim();
-    out.plate = cleanPlate(out.plate);
-    out.brand = String(out.brand || "").trim();
-    out.model = String(out.model || "").trim();
-
-    return out;
-  }
-
-  async function fetchVehicleLabel(p){
-    var label = p.plate ? ("Pagina disponibile per " + p.plate) : "Pagina disponibile per il tuo veicolo";
-
-    try{
-      if(!p.code && !p.plate) return label;
-
-      var res = await fetch("/api/owner-deadlines/feature-status", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          code:p.code || "",
-          plate:p.plate || ""
-        })
-      });
-
-      var out = await res.json().catch(function(){ return null; });
-
-      if(out && out.success){
-        var plate = cleanPlate(out.plate || p.plate);
-        var brand = String(out.brand || "").trim();
-        var model = String(out.vehicle_model || "").trim();
-
-        if(brand || model || plate){
-          label = "Pagina disponibile per " + [brand, model, plate].filter(Boolean).join(" ");
+      try{
+        if(p.code || plate){
+          var res = await fetch("/api/owner-deadlines/feature-status", {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({ code:p.code || "", plate:plate || "" })
+          });
+          var out = await res.json().catch(function(){ return null; });
+          if(out && out.success){
+            var parts = [
+              String(out.brand || "").trim(),
+              String(out.vehicle_model || "").trim(),
+              cleanPlate(out.plate || plate)
+            ].filter(Boolean);
+            if(parts.length) label = parts.join(" ");
+          }
         }
-      }
-    }catch(e){}
+      }catch(e){}
 
-    return label;
-  }
+      var pill = document.getElementById("vehiclePill");
+      if(pill) pill.textContent = label;
 
-  function replaceTextNode(el, label, plate){
-    if(!el || !el.childNodes || el.children.length > 0) return;
-
-    var txt = el.textContent || "";
-    if(!txt) return;
-
-    var mustFix =
-      txt.includes("Pagina disponibile per") ||
-      txt.includes("Audi A8") ||
-      txt.includes("EY018SW") ||
-      txt.includes("EY 018 SW") ||
-      txt.includes("il tuo veicolo");
-
-    if(!mustFix) return;
-
-    el.textContent = txt
-      .replace(/Pagina disponibile per\s+Audi A8\s+EY\s*018\s*SW/gi, label)
-      .replace(/Pagina disponibile per\s+Audi A8\s+EY018SW/gi, label)
-      .replace(/Pagina disponibile per\s+il tuo veicolo/gi, label)
-      .replace(/Pagina disponibile per\s+[A-Z0-9 ]{5,20}/gi, label)
-      .replace(/Audi A8\s+EY\s*018\s*SW/gi, plate || "il tuo veicolo")
-      .replace(/Audi A8\s+EY018SW/gi, plate || "il tuo veicolo")
-      .replace(/EY\s*018\s*SW/gi, plate || "il tuo veicolo")
-      .replace(/EY018SW/gi, plate || "il tuo veicolo")
-      .replace(/il tuo veicolo/gi, plate || "il tuo veicolo");
-  }
-
-  async function applyDynamicVehicleLabel(){
-    var p = getDeadlineVehicleParams();
-
-    try{
-      if(p.code){
-        window.code = p.code;
-        window.__OWNER_CODE__ = p.code;
-        localStorage.setItem("owner_saved_code", p.code);
-        localStorage.setItem("owner_deadlines_code", p.code);
-      }
-
-      if(p.plate){
-        window.plate = p.plate;
-        window.__OWNER_PLATE__ = p.plate;
-        localStorage.setItem("owner_saved_plate", p.plate);
-        localStorage.setItem("owner_deadlines_plate", p.plate);
-      }
-    }catch(e){}
-
-    var label = await fetchVehicleLabel(p);
-    var plate = p.plate || "";
-
-    document.querySelectorAll("body *").forEach(function(el){
-      replaceTextNode(el, label, plate);
-    });
-
-    try{
       document.title = "Le mie scadenze" + (plate ? " · " + plate : "");
-    }catch(e){}
+    }catch(e){
+      console.warn("updateVehiclePill error:", e);
+    }
   }
 
   if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", applyDynamicVehicleLabel);
+    document.addEventListener("DOMContentLoaded", updateVehiclePill);
   }else{
-    setTimeout(applyDynamicVehicleLabel, 50);
+    setTimeout(updateVehiclePill, 80);
   }
 
-  setTimeout(applyDynamicVehicleLabel, 400);
-  setTimeout(applyDynamicVehicleLabel, 1200);
-  setTimeout(applyDynamicVehicleLabel, 2500);
-
-  window.applyDynamicVehicleLabel = applyDynamicVehicleLabel;
+  setTimeout(updateVehiclePill, 500);
+  setTimeout(updateVehiclePill, 1500);
 })();
 </script>
 
