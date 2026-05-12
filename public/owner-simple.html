@@ -6848,6 +6848,24 @@ function getOwnerParams(){
 
 
     window.deleteMessage = async function(id){
+      try{
+        const msg = (ownerMessages || []).find(m => Number(m.id) === Number(id));
+        if(msg && typeof window.checkDeadlineMessageLink === "function"){
+          const link = await window.checkDeadlineMessageLink(msg);
+          if(link && link.linked && !["completed","deleted","disabled"].includes(String(link.status || "").toLowerCase())){
+            const completeToo = confirm("Questo messaggio è collegato a una scadenza/promemoria attivo.\n\nVuoi segnare l’avviso come FATTO e cancellare tutti i messaggi collegati?\n\nOK = Fatto e cancella tutto\nAnnulla = cancella solo questo messaggio");
+            if(completeToo){
+              window.__currentMessageDetailItem = msg;
+              window.__pendingDeadlineDoneMessageId = msg.id;
+              await window.confirmDeadlineMessageDone();
+              return;
+            }
+          }
+        }
+      }catch(e){
+        console.warn("deleteMessage deadline precheck error:", e);
+      }
+
       const msg = (ownerMessages || []).find(m => Number(m.id) === Number(id));
 
       let code = '';
@@ -7021,27 +7039,70 @@ function getOwnerParams(){
       }
     };
 
-    window.updateDeadlineDoneButtonVisibility = function(item){
+
+    window.checkDeadlineMessageLink = async function(item){
+      try{
+        if(!item || !item.id) return { linked:false };
+
+        const params = new URLSearchParams(window.location.search || "");
+        const ownerParams = typeof getOwnerParams === "function" ? getOwnerParams() : {};
+        const plateValue =
+          params.get("plate") ||
+          ownerParams.plate ||
+          item.plate ||
+          window.plate ||
+          window.__OWNER_PLATE__ ||
+          localStorage.getItem("owner_saved_plate") ||
+          "";
+
+        if(!plateValue) return { linked:false };
+
+        const res = await fetch("/api/owner-deadlines/message-link-status", {
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body: JSON.stringify({
+            messageId: item.id,
+            plate: plateValue
+          })
+        });
+
+        const out = await res.json().catch(function(){ return null; });
+        if(!out || !out.success) return { linked:false };
+
+        return out;
+      }catch(e){
+        console.warn("checkDeadlineMessageLink error:", e);
+        return { linked:false };
+      }
+    };
+
+
+    window.updateDeadlineDoneButtonVisibility = async function(item){
       try{
         const wrap = document.getElementById("msgDetailDoneWrap");
         if(!wrap) return;
 
+        wrap.style.display = "none";
+
+        const link = await window.checkDeadlineMessageLink(item);
+
+        if(link && link.linked && !["completed","deleted","disabled"].includes(String(link.status || "").toLowerCase())){
+          wrap.style.display = "block";
+
+          const btn = document.getElementById("msgDetailDoneBtn");
+          if(btn && link.name){
+            btn.textContent = "Fatto ✅";
+            btn.title = "Completa: " + link.name;
+          }
+          return;
+        }
+
         const raw = String((item && item.message_text) || "");
         const reason = String((item && item.reason) || "");
-        const combined = (reason + "\n" + raw).toLowerCase();
+        const combined = (reason + "
+" + raw).toLowerCase();
 
-        let fromDeadlineUrl = false;
-        try{
-          const params = new URLSearchParams(window.location.search || "");
-          fromDeadlineUrl =
-            params.get("from") === "deadline_alert" ||
-            params.get("from") === "deadline_push" ||
-            !!params.get("deadlineId") ||
-            !!params.get("messageId");
-        }catch(e){}
-
-        const isDeadline =
-          fromDeadlineUrl ||
+        const isDeadlineByText =
           combined.includes("comandi disponibili") ||
           combined.includes("promemoria") ||
           combined.includes("avviso scadenza") ||
@@ -7050,7 +7111,7 @@ function getOwnerParams(){
           combined.includes("finché non lo segni come fatto") ||
           combined.includes("quando:");
 
-        wrap.style.display = isDeadline ? "block" : "none";
+        wrap.style.display = isDeadlineByText ? "block" : "none";
       }catch(e){
         console.warn("updateDeadlineDoneButtonVisibility error:", e);
       }

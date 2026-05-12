@@ -9020,6 +9020,63 @@ app.post('/api/owner-deadlines/status-list', async (req, res) => {
 });
 
 
+
+app.post('/api/owner-deadlines/message-link-status', async (req, res) => {
+  try {
+    const messageId = Number(req.body.messageId || 0);
+    const plateNorm = normalizePlateValue(req.body.plate);
+
+    if (!messageId || !plateNorm) {
+      return res.status(400).json({
+        success: false,
+        linked: false,
+        error: 'messageId e targa sono obbligatori.'
+      });
+    }
+
+    const linkedRes = await pool.query(
+      `SELECT s.plate_norm, s.local_id, s.alert_key, s.message_id,
+              i.status,
+              i.payload->>'name' AS name
+       FROM owner_deadline_alert_sent s
+       LEFT JOIN owner_deadline_items i
+         ON i.plate_norm = s.plate_norm
+        AND i.local_id = s.local_id
+       WHERE s.message_id = $1
+         AND s.plate_norm = $2
+       ORDER BY s.sent_at DESC
+       LIMIT 1`,
+      [messageId, plateNorm]
+    );
+
+    if (!linkedRes.rows.length) {
+      return res.json({
+        success: true,
+        linked: false
+      });
+    }
+
+    const row = linkedRes.rows[0];
+
+    return res.json({
+      success: true,
+      linked: true,
+      local_id: row.local_id,
+      alert_key: row.alert_key,
+      status: row.status || 'active',
+      name: row.name || null
+    });
+  } catch (err) {
+    console.error('owner-deadlines/message-link-status error:', err);
+    return res.status(500).json({
+      success: false,
+      linked: false,
+      error: err.message || String(err)
+    });
+  }
+});
+
+
 app.post('/api/owner-deadlines/disable-from-message', async (req, res) => {
   try {
     const messageId = Number(req.body.messageId || 0);
