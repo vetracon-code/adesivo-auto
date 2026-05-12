@@ -1391,6 +1391,83 @@
   }
 </style>
 
+
+<style id="custom-recurrence-ui-style">
+  .custom-recurrence-panel{
+    margin-top:12px !important;
+    padding:14px !important;
+    border-radius:18px !important;
+    background:#f8fafc !important;
+    border:1px solid rgba(15,23,42,.10) !important;
+    box-shadow:0 10px 24px rgba(15,23,42,.06) !important;
+  }
+
+  .custom-recurrence-title{
+    font-size:.9rem !important;
+    font-weight:950 !important;
+    color:#111827 !important;
+    margin-bottom:10px !important;
+  }
+
+  .custom-recurrence-grid{
+    display:grid !important;
+    grid-template-columns:1fr 1fr !important;
+    gap:12px !important;
+    align-items:end !important;
+  }
+
+  .custom-recurrence-panel label{
+    color:#334155 !important;
+    font-weight:900 !important;
+  }
+
+  .custom-recurrence-panel select{
+    color:#111827 !important;
+    background:#fff !important;
+  }
+
+  .custom-recurrence-summary{
+    margin-top:10px !important;
+    color:#64748b !important;
+    font-size:.86rem !important;
+    line-height:1.45 !important;
+  }
+
+  .custom-recurrence-actions{
+    display:grid !important;
+    grid-template-columns:1fr 1fr !important;
+    gap:10px !important;
+    margin-top:12px !important;
+  }
+
+  .custom-recurrence-confirm,
+  .custom-recurrence-cancel{
+    min-height:44px !important;
+    border:0 !important;
+    border-radius:14px !important;
+    font-weight:950 !important;
+    cursor:pointer !important;
+  }
+
+  .custom-recurrence-confirm{
+    background:linear-gradient(135deg,#ff7a00,#ff9f1c) !important;
+    color:#fff !important;
+    box-shadow:0 10px 24px rgba(255,122,0,.20) !important;
+  }
+
+  .custom-recurrence-cancel{
+    background:#e5e7eb !important;
+    color:#111827 !important;
+  }
+
+  @media(max-width:560px){
+    .custom-recurrence-grid,
+    .custom-recurrence-actions{
+      grid-template-columns:1fr !important;
+    }
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -1550,12 +1627,44 @@
           <label>Ricorrenza della scadenza</label>
           <select id="recurrenceMode" onchange="updateRecurrenceMode()">
             <option value="none">Nessuna, una sola volta</option>
+            <option value="daily">Giornaliera</option>
+            <option value="weekly">Settimanale</option>
             <option value="monthly">Mensile</option>
             <option value="yearly">Annuale</option>
-            <option value="custom">Personalizzata / da definire</option>
+            <option value="custom">Personalizzata</option>
           </select>
           <div class="hint-small" id="recurrenceHint">
-            Per abbonamenti mensili come AppleCare+, cloud, streaming o software mensili, scegli “Mensile”.
+            Scegli ogni quanto ripetere questa scadenza.
+          </div>
+
+          <div class="custom-recurrence-panel" id="customRecurrencePanel" style="display:none;">
+            <div class="custom-recurrence-title">Ripeti ogni</div>
+
+            <div class="custom-recurrence-grid">
+              <div>
+                <label>Tipo intervallo</label>
+                <select id="customRecurrenceUnit" onchange="updateCustomRecurrenceValues()">
+                  <option value="days">Giorni</option>
+                  <option value="weeks">Settimane</option>
+                  <option value="months">Mesi</option>
+                  <option value="years">Anni</option>
+                </select>
+              </div>
+
+              <div>
+                <label>Valore</label>
+                <select id="customRecurrenceValue"></select>
+              </div>
+            </div>
+
+            <div class="custom-recurrence-summary" id="customRecurrenceSummary">
+              Imposta ogni quanti giorni, settimane, mesi o anni ripetere la scadenza.
+            </div>
+
+            <div class="custom-recurrence-actions">
+              <button class="custom-recurrence-confirm" type="button" onclick="confirmCustomRecurrence()">Conferma</button>
+              <button class="custom-recurrence-cancel" type="button" onclick="cancelCustomRecurrence()">Annulla</button>
+            </div>
           </div>
         </div>
 
@@ -3248,6 +3357,154 @@ function showSimpleSaveConfirmation(){
 }
 
 
+
+let customRecurrenceConfirmed = false;
+let customRecurrenceData = null;
+
+function customRecurrenceMaxByUnit(unit){
+  if(unit === "days") return 31;
+  if(unit === "weeks") return 5;
+  if(unit === "months") return 11;
+  if(unit === "years") return 10;
+  return 31;
+}
+
+function customRecurrenceUnitLabel(unit, value){
+  const n = Number(value || 1);
+  if(unit === "days") return n === 1 ? "giorno" : "giorni";
+  if(unit === "weeks") return n === 1 ? "settimana" : "settimane";
+  if(unit === "months") return n === 1 ? "mese" : "mesi";
+  if(unit === "years") return n === 1 ? "anno" : "anni";
+  return "giorni";
+}
+
+function updateCustomRecurrenceValues(){
+  const unitEl = document.getElementById("customRecurrenceUnit");
+  const valueEl = document.getElementById("customRecurrenceValue");
+  const summaryEl = document.getElementById("customRecurrenceSummary");
+  if(!unitEl || !valueEl) return;
+
+  const unit = unitEl.value || "days";
+  const max = customRecurrenceMaxByUnit(unit);
+  const previous = Number(valueEl.value || 1);
+  const value = Math.min(Math.max(previous || 1, 1), max);
+
+  valueEl.innerHTML = "";
+  for(let i = 1; i <= max; i++){
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = String(i);
+    if(i === value) opt.selected = true;
+    valueEl.appendChild(opt);
+  }
+
+  customRecurrenceConfirmed = false;
+  customRecurrenceData = null;
+
+  if(summaryEl){
+    summaryEl.textContent = `Scegli un valore e premi Conferma. Intervallo disponibile: da 1 a ${max} ${customRecurrenceUnitLabel(unit, max)}.`;
+  }
+}
+
+function confirmCustomRecurrence(){
+  const unitEl = document.getElementById("customRecurrenceUnit");
+  const valueEl = document.getElementById("customRecurrenceValue");
+  const summaryEl = document.getElementById("customRecurrenceSummary");
+  if(!unitEl || !valueEl) return;
+
+  const unit = unitEl.value || "days";
+  const value = Number(valueEl.value || 1);
+
+  customRecurrenceConfirmed = true;
+  customRecurrenceData = {
+    unit,
+    value,
+    label: `Ogni ${value} ${customRecurrenceUnitLabel(unit, value)}`
+  };
+
+  if(summaryEl){
+    summaryEl.textContent = `Confermato: ripeti ${customRecurrenceData.label.toLowerCase()}.`;
+  }
+
+  try { updatePreview(); } catch(e) {}
+}
+
+function cancelCustomRecurrence(){
+  const mode = document.getElementById("recurrenceMode");
+  const panel = document.getElementById("customRecurrencePanel");
+  const summaryEl = document.getElementById("customRecurrenceSummary");
+
+  customRecurrenceConfirmed = false;
+  customRecurrenceData = null;
+
+  if(mode) mode.value = "none";
+  if(panel) panel.style.display = "none";
+  if(summaryEl){
+    summaryEl.textContent = "Imposta ogni quanti giorni, settimane, mesi o anni ripetere la scadenza.";
+  }
+
+  try { updateRecurrenceMode(); } catch(e) {}
+  try { updatePreview(); } catch(e) {}
+}
+
+function updateCustomRecurrencePanel(){
+  const mode = document.getElementById("recurrenceMode");
+  const panel = document.getElementById("customRecurrencePanel");
+  const hint = document.getElementById("recurrenceHint");
+  if(!mode || !panel) return;
+
+  const value = mode.value || "none";
+  panel.style.display = value === "custom" ? "block" : "none";
+
+  if(value !== "custom"){
+    customRecurrenceConfirmed = false;
+    customRecurrenceData = null;
+  }
+
+  if(hint){
+    if(value === "none") hint.textContent = "La scadenza verrà salvata una sola volta.";
+    if(value === "daily") hint.textContent = "La scadenza verrà ripetuta ogni giorno.";
+    if(value === "weekly") hint.textContent = "La scadenza verrà ripetuta ogni settimana.";
+    if(value === "monthly") hint.textContent = "La scadenza verrà ripetuta ogni mese.";
+    if(value === "yearly") hint.textContent = "La scadenza verrà ripetuta ogni anno.";
+    if(value === "custom") hint.textContent = "Imposta un intervallo personalizzato e confermalo prima di salvare.";
+  }
+
+  if(value === "custom"){
+    updateCustomRecurrenceValues();
+  }
+}
+
+(function(){
+  const previousUpdateRecurrenceMode = window.updateRecurrenceMode;
+  window.updateRecurrenceMode = function(){
+    if(typeof previousUpdateRecurrenceMode === "function"){
+      try { previousUpdateRecurrenceMode(); } catch(e) {}
+    }
+    updateCustomRecurrencePanel();
+  };
+
+  document.addEventListener("DOMContentLoaded", function(){
+    updateCustomRecurrencePanel();
+
+    const valueEl = document.getElementById("customRecurrenceValue");
+    if(valueEl){
+      valueEl.addEventListener("change", function(){
+        customRecurrenceConfirmed = false;
+        customRecurrenceData = null;
+        const unitEl = document.getElementById("customRecurrenceUnit");
+        const summaryEl = document.getElementById("customRecurrenceSummary");
+        const unit = unitEl ? unitEl.value : "days";
+        const value = Number(valueEl.value || 1);
+        if(summaryEl){
+          summaryEl.textContent = `Valore selezionato: ogni ${value} ${customRecurrenceUnitLabel(unit, value)}. Premi Conferma per applicarlo.`;
+        }
+      });
+    }
+  });
+})();
+
+
 function saveDeadline(){
   const name=nameInput.value.trim(), owner=ownerInput.value.trim(), date=dateInput.value, time=timeInput.value, notes=notesInput.value.trim();
   if(!name) return alert("Inserisci il nome della scadenza.");
@@ -3276,6 +3533,17 @@ function saveDeadline(){
   if (recurrence === "monthly" && currentPreset !== "Medicine") {
     selectedAlerts = profiles.monthly.alerts;
     currentProfile = "monthly";
+  }
+
+
+  if (recurrence === "custom") {
+    if (!customRecurrenceConfirmed || !customRecurrenceData) {
+      alert("Conferma la ricorrenza personalizzata prima di salvare la scadenza.");
+      const panel = document.getElementById("customRecurrencePanel");
+      if(panel && panel.scrollIntoView) panel.scrollIntoView({ behavior:"smooth", block:"center" });
+      return;
+    }
+    extra.customRecurrence = customRecurrenceData;
   }
 
   const item = {id:Date.now(),category:currentCategory,type:currentPreset,name,owner,date,time,profile:currentProfile,alerts:selectedAlerts,notes,status:"active",createdAt:new Date().toISOString(),recurrence,extra};
