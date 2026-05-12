@@ -3121,5 +3121,154 @@ window.fixQrUrl = async function(code){
 })();
 </script>
 
+
+<style id="deadline-cleanup-admin-style">
+  .deadline-cleanup-admin-panel{
+    margin:26px 0;
+    padding:20px;
+    border-radius:22px;
+    background:#0f172a;
+    color:#fff;
+    box-shadow:0 18px 50px rgba(15,23,42,.22);
+    border:1px solid rgba(255,255,255,.10);
+  }
+  .deadline-cleanup-admin-panel h2{
+    margin:0 0 8px;
+    color:#fff;
+    font-size:22px;
+  }
+  .deadline-cleanup-admin-panel p{
+    margin:0 0 16px;
+    color:#cbd5e1;
+    line-height:1.45;
+  }
+  .deadline-cleanup-admin-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+  }
+  .deadline-cleanup-admin-panel input{
+    width:100%;
+    min-height:44px;
+    border-radius:12px;
+    border:1px solid rgba(255,255,255,.12);
+    background:rgba(255,255,255,.08);
+    color:#fff;
+    padding:0 12px;
+    font-weight:800;
+  }
+  .deadline-cleanup-admin-panel input::placeholder{color:#94a3b8}
+  .deadline-cleanup-admin-actions{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-top:12px;
+  }
+  .deadline-cleanup-admin-actions button{
+    border:0;
+    border-radius:999px;
+    padding:12px 16px;
+    font-weight:950;
+    cursor:pointer;
+  }
+  .deadline-cleanup-on{background:#16a34a;color:#fff}
+  .deadline-cleanup-off{background:#dc2626;color:#fff}
+  .deadline-cleanup-check{background:#e5e7eb;color:#111827}
+  #deadlineCleanupAdminResult{
+    margin-top:14px;
+    padding:12px 14px;
+    border-radius:14px;
+    background:rgba(255,255,255,.08);
+    color:#e2e8f0;
+    font-weight:800;
+    white-space:pre-wrap;
+  }
+  @media(max-width:700px){
+    .deadline-cleanup-admin-grid{grid-template-columns:1fr}
+  }
+</style>
+
+<div class="deadline-cleanup-admin-panel" id="deadlineCleanupAdminPanel">
+  <h2>Gestione avanzata promemoria</h2>
+  <p>
+    Attiva questa funzione solo sulle vetture test o su clienti selezionati.
+    Quando è attiva, il pulsante Elimina sui messaggi collegati a una scadenza può chiudere l’avviso e cancellare tutti i messaggi collegati.
+  </p>
+
+  <div class="deadline-cleanup-admin-grid">
+    <input id="deadlineCleanupPlateInput" placeholder="Targa, es. EY018SW">
+    <input id="deadlineCleanupCodeInput" placeholder="Codice adesivo/App, facoltativo">
+  </div>
+
+  <div class="deadline-cleanup-admin-actions">
+    <button class="deadline-cleanup-check" type="button" onclick="checkDeadlineCleanupFlag()">Verifica stato</button>
+    <button class="deadline-cleanup-on" type="button" onclick="setDeadlineCleanupFlag(true)">Abilita per questa vettura</button>
+    <button class="deadline-cleanup-off" type="button" onclick="setDeadlineCleanupFlag(false)">Disabilita</button>
+  </div>
+
+  <div id="deadlineCleanupAdminResult">Inserisci una targa e verifica lo stato.</div>
+</div>
+
+<script id="deadline-cleanup-admin-script">
+async function callDeadlineCleanupAdmin(enabledMode){
+  const plate = document.getElementById('deadlineCleanupPlateInput')?.value || '';
+  const code = document.getElementById('deadlineCleanupCodeInput')?.value || '';
+  const result = document.getElementById('deadlineCleanupAdminResult');
+
+  if(result) result.textContent = 'Operazione in corso...';
+
+  const url = enabledMode === null
+    ? '/api/admin/deadline-cleanup-flag/status'
+    : '/api/admin/deadline-cleanup-flag';
+
+  const body = enabledMode === null
+    ? { plate, code }
+    : { plate, code, enabled: enabledMode };
+
+  try{
+    const res = await fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+
+    const out = await res.json().catch(() => null);
+
+    if(!out || !out.success){
+      if(result) result.textContent = (out && out.error) || 'Errore operazione.';
+      return;
+    }
+
+    const rows = out.items || [];
+    if(!rows.length){
+      if(result) result.textContent = 'Nessuna vettura trovata.';
+      return;
+    }
+
+    if(result){
+      result.textContent = rows.map(function(x){
+        const status = x.enable_deadline_message_cleanup ? 'ATTIVA' : 'NON ATTIVA';
+        return `${x.plate || '-'} · ${x.code || '-'} · ${x.brand || ''} ${x.vehicle_model || ''}\nGestione avanzata promemoria: ${status}`;
+      }).join('\n\n');
+    }
+  }catch(e){
+    if(result) result.textContent = 'Errore collegamento: ' + (e.message || e);
+  }
+}
+
+function checkDeadlineCleanupFlag(){
+  return callDeadlineCleanupAdmin(null);
+}
+
+function setDeadlineCleanupFlag(enabled){
+  const ok = confirm(enabled
+    ? 'Confermi di ABILITARE la gestione avanzata dei messaggi/scadenze per questa vettura?'
+    : 'Confermi di DISABILITARE la gestione avanzata dei messaggi/scadenze per questa vettura?'
+  );
+  if(!ok) return;
+  return callDeadlineCleanupAdmin(enabled);
+}
+</script>
+
 </body>
 </html>

@@ -8283,6 +8283,11 @@ async function ensureOwnerDeadlinesTables() {
     )
   `);
 
+  await pool.query(`
+    ALTER TABLE sticker_codes
+    ADD COLUMN IF NOT EXISTS enable_deadline_message_cleanup BOOLEAN DEFAULT FALSE
+  `);
+
   console.log('Tabelle owner_deadline_items / owner_deadline_alert_sent pronte');
 }
 
@@ -9042,6 +9047,140 @@ app.post('/api/owner-deadlines/status-list', async (req, res) => {
 
 
 
+
+async function isDeadlineMessageCleanupEnabled({ plateNorm, code }) {
+  const cleanPlate = normalizePlateValue(plateNorm);
+  const cleanCode = String(code || '').trim().toUpperCase();
+
+  if (!cleanPlate && !cleanCode) return false;
+
+  const params = [];
+  const where = [];
+
+  if (cleanPlate) {
+    params.push(cleanPlate);
+    where.push(`REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $${params.length}`);
+  }
+
+  if (cleanCode) {
+    params.push(cleanCode);
+    where.push(`UPPER(COALESCE(code,'')) = $${params.length}`);
+  }
+
+  const q = `
+    SELECT COALESCE(enable_deadline_message_cleanup, FALSE) AS enabled
+    FROM sticker_codes
+    WHERE ${where.join(' OR ')}
+    ORDER BY activated_at DESC NULLS LAST, id DESC
+    LIMIT 1
+  `;
+
+  const r = await pool.query(q, params);
+  return r.rows[0]?.enabled === true;
+}
+
+
+
+app.post('/api/admin/deadline-cleanup-flag', async (req, res) => {
+  try {
+    const plateNorm = normalizePlateValue(req.body.plate);
+    const cleanCode = String(req.body.code || '').trim().toUpperCase();
+    const enabled = req.body.enabled === true || req.body.enabled === 'true' || req.body.enabled === 1 || req.body.enabled === '1';
+
+    if (!plateNorm && !cleanCode) {
+      return res.status(400).json({
+        success:false,
+        error:'Inserisci targa o codice.'
+      });
+    }
+
+    const params = [];
+    const where = [];
+
+    if (plateNorm) {
+      params.push(plateNorm);
+      where.push(`REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $${params.length}`);
+    }
+
+    if (cleanCode) {
+      params.push(cleanCode);
+      where.push(`UPPER(COALESCE(code,'')) = $${params.length}`);
+    }
+
+    params.push(enabled);
+    const enabledParam = `$${params.length}`;
+
+    const r = await pool.query(
+      `UPDATE sticker_codes
+       SET enable_deadline_message_cleanup = ${enabledParam}
+       WHERE ${where.join(' OR ')}
+       RETURNING code, plate, brand, vehicle_model, enable_deadline_message_cleanup`,
+      params
+    );
+
+    return res.json({
+      success:true,
+      updated:r.rowCount || 0,
+      enabled,
+      items:r.rows
+    });
+  } catch (err) {
+    console.error('admin/deadline-cleanup-flag error:', err);
+    return res.status(500).json({
+      success:false,
+      error:err.message || String(err)
+    });
+  }
+});
+
+app.post('/api/admin/deadline-cleanup-flag/status', async (req, res) => {
+  try {
+    const plateNorm = normalizePlateValue(req.body.plate);
+    const cleanCode = String(req.body.code || '').trim().toUpperCase();
+
+    if (!plateNorm && !cleanCode) {
+      return res.status(400).json({
+        success:false,
+        error:'Inserisci targa o codice.'
+      });
+    }
+
+    const params = [];
+    const where = [];
+
+    if (plateNorm) {
+      params.push(plateNorm);
+      where.push(`REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $${params.length}`);
+    }
+
+    if (cleanCode) {
+      params.push(cleanCode);
+      where.push(`UPPER(COALESCE(code,'')) = $${params.length}`);
+    }
+
+    const r = await pool.query(
+      `SELECT code, plate, brand, vehicle_model, COALESCE(enable_deadline_message_cleanup, FALSE) AS enable_deadline_message_cleanup
+       FROM sticker_codes
+       WHERE ${where.join(' OR ')}
+       ORDER BY activated_at DESC NULLS LAST, id DESC
+       LIMIT 20`,
+      params
+    );
+
+    return res.json({
+      success:true,
+      items:r.rows
+    });
+  } catch (err) {
+    console.error('admin/deadline-cleanup-flag/status error:', err);
+    return res.status(500).json({
+      success:false,
+      error:err.message || String(err)
+    });
+  }
+});
+
+
 app.post('/api/owner-deadlines/message-link-status', async (req, res) => {
   try {
     const messageId = Number(req.body.messageId || 0);
@@ -9052,6 +9191,19 @@ app.post('/api/owner-deadlines/message-link-status', async (req, res) => {
         success: false,
         linked: false,
         error: 'messageId e targa sono obbligatori.'
+      });
+    }
+
+    const cleanupEnabled = await isDeadlineMessageCleanupEnabled({
+      plateNorm,
+      code: req.body.code || ''
+    });
+
+    if (!cleanupEnabled) {
+      return res.json({
+        success: true,
+        linked: false,
+        enabled: false
       });
     }
 
@@ -9108,6 +9260,18 @@ app.post('/api/owner-deadlines/disable-from-message', async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'messageId e targa sono obbligatori.'
+      });
+    }
+
+    const cleanupEnabled = await isDeadlineMessageCleanupEnabled({
+      plateNorm,
+      code
+    });
+
+    if (!cleanupEnabled) {
+      return res.status(403).json({
+        success: false,
+        error: 'La chiusura massiva degli avvisi non è abilitata per questa vettura.'
       });
     }
 
