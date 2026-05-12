@@ -6910,6 +6910,153 @@ function getOwnerParams(){
       }
     };
 
+
+    window.__currentMessageDetailItem = null;
+    window.__pendingDeadlineDoneMessageId = null;
+
+    window.getOwnerPlateForDeadlineDone = function(){
+      try{
+        const params = new URLSearchParams(window.location.search || "");
+        const ownerParams = typeof getOwnerParams === "function" ? getOwnerParams() : {};
+        return params.get("plate") || ownerParams.plate || window.plate || window.__OWNER_PLATE__ || localStorage.getItem("owner_saved_plate") || "";
+      }catch(e){
+        return "";
+      }
+    };
+
+    window.getOwnerCodeForDeadlineDone = function(){
+      try{
+        const params = new URLSearchParams(window.location.search || "");
+        const ownerParams = typeof getOwnerParams === "function" ? getOwnerParams() : {};
+        return params.get("code") || ownerParams.code || window.code || window.__OWNER_CODE__ || localStorage.getItem("owner_saved_code") || "";
+      }catch(e){
+        return "";
+      }
+    };
+
+    window.requestDeadlineMessageDoneFromDetail = function(){
+      const item = window.__currentMessageDetailItem;
+      if(!item || !item.id){
+        alert("Messaggio non riconosciuto.");
+        return;
+      }
+
+      window.__pendingDeadlineDoneMessageId = item.id;
+
+      const overlay = document.getElementById("deadlineDoneConfirmOverlay");
+      if(overlay) overlay.style.display = "flex";
+    };
+
+    window.cancelDeadlineMessageDone = function(){
+      window.__pendingDeadlineDoneMessageId = null;
+      const overlay = document.getElementById("deadlineDoneConfirmOverlay");
+      if(overlay) overlay.style.display = "none";
+    };
+
+    window.confirmDeadlineMessageDone = async function(){
+      const messageId = window.__pendingDeadlineDoneMessageId;
+
+      if(!messageId){
+        window.cancelDeadlineMessageDone();
+        alert("Messaggio non riconosciuto.");
+        return;
+      }
+
+      try{
+        const res = await fetch("/api/owner-deadlines/disable-from-message", {
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body: JSON.stringify({
+            messageId: messageId,
+            code: window.getOwnerCodeForDeadlineDone(),
+            plate: window.getOwnerPlateForDeadlineDone()
+          })
+        });
+
+        const out = await res.json().catch(function(){ return null; });
+
+        if(!out || !out.success){
+          alert((out && out.error) || "Non sono riuscito a completare questo avviso.");
+          return;
+        }
+
+        window.cancelDeadlineMessageDone();
+
+        try{
+          const modal = document.getElementById("messageDetailModal");
+          if(modal) modal.style.display = "none";
+        }catch(e){}
+
+        try{
+          if(out.message_ids && Array.isArray(out.message_ids)){
+            const ids = out.message_ids.map(String);
+            document.querySelectorAll("[data-message-id]").forEach(function(el){
+              if(ids.includes(String(el.getAttribute("data-message-id") || ""))){
+                el.remove();
+              }
+            });
+          }
+        }catch(e){}
+
+        try{
+          if(typeof loadMessages === "function") await loadMessages();
+        }catch(e){}
+
+        try{
+          if(typeof loadOwnerMessages === "function") await loadOwnerMessages();
+        }catch(e){}
+
+        try{
+          if(typeof refreshMessages === "function") await refreshMessages();
+        }catch(e){}
+
+        try{
+          if(typeof renderMessages === "function") renderMessages();
+        }catch(e){}
+
+        alert("Avviso segnato come fatto. Messaggi collegati cancellati.");
+      }catch(e){
+        console.error("confirmDeadlineMessageDone error:", e);
+        alert("Errore durante il completamento dell’avviso.");
+      }
+    };
+
+    window.updateDeadlineDoneButtonVisibility = function(item){
+      try{
+        const wrap = document.getElementById("msgDetailDoneWrap");
+        if(!wrap) return;
+
+        const raw = String((item && item.message_text) || "");
+        const reason = String((item && item.reason) || "");
+        const combined = (reason + "\n" + raw).toLowerCase();
+
+        let fromDeadlineUrl = false;
+        try{
+          const params = new URLSearchParams(window.location.search || "");
+          fromDeadlineUrl =
+            params.get("from") === "deadline_alert" ||
+            params.get("from") === "deadline_push" ||
+            !!params.get("deadlineId") ||
+            !!params.get("messageId");
+        }catch(e){}
+
+        const isDeadline =
+          fromDeadlineUrl ||
+          combined.includes("comandi disponibili") ||
+          combined.includes("promemoria") ||
+          combined.includes("avviso scadenza") ||
+          combined.includes("promemoria importante") ||
+          combined.includes("richiamo automatico") ||
+          combined.includes("finché non lo segni come fatto") ||
+          combined.includes("quando:");
+
+        wrap.style.display = isDeadline ? "block" : "none";
+      }catch(e){
+        console.warn("updateDeadlineDoneButtonVisibility error:", e);
+      }
+    };
+
+
     window.openMessageDetail = async function(id){
       const numericId = Number(id);
       const item = (ownerMessages || []).find(m => Number(m.id) === numericId);
@@ -10910,151 +11057,5 @@ document.addEventListener('DOMContentLoaded', function () {
     </div>
   </div>
 </div>
-
-
-<script id="deadline-message-native-done-script">
-(function(){
-  window.__currentMessageDetailItem = null;
-  window.__pendingDeadlineDoneMessageId = null;
-
-  function getOwnerPlateForDeadlineDone(){
-    try{
-      const params = new URLSearchParams(window.location.search || "");
-      const ownerParams = typeof getOwnerParams === "function" ? getOwnerParams() : {};
-      return params.get("plate") || ownerParams.plate || window.plate || window.__OWNER_PLATE__ || localStorage.getItem("owner_saved_plate") || "";
-    }catch(e){
-      return "";
-    }
-  }
-
-  function getOwnerCodeForDeadlineDone(){
-    try{
-      const params = new URLSearchParams(window.location.search || "");
-      const ownerParams = typeof getOwnerParams === "function" ? getOwnerParams() : {};
-      return params.get("code") || ownerParams.code || window.code || window.__OWNER_CODE__ || localStorage.getItem("owner_saved_code") || "";
-    }catch(e){
-      return "";
-    }
-  }
-
-  window.requestDeadlineMessageDoneFromDetail = function(){
-    const item = window.__currentMessageDetailItem;
-    if(!item || !item.id){
-      alert("Messaggio non riconosciuto.");
-      return;
-    }
-
-    window.__pendingDeadlineDoneMessageId = item.id;
-
-    const overlay = document.getElementById("deadlineDoneConfirmOverlay");
-    if(overlay) overlay.style.display = "flex";
-  };
-
-  window.cancelDeadlineMessageDone = function(){
-    window.__pendingDeadlineDoneMessageId = null;
-    const overlay = document.getElementById("deadlineDoneConfirmOverlay");
-    if(overlay) overlay.style.display = "none";
-  };
-
-  window.confirmDeadlineMessageDone = async function(){
-    const messageId = window.__pendingDeadlineDoneMessageId;
-
-    if(!messageId){
-      cancelDeadlineMessageDone();
-      alert("Messaggio non riconosciuto.");
-      return;
-    }
-
-    try{
-      const res = await fetch("/api/owner-deadlines/disable-from-message", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({
-          messageId: messageId,
-          code: getOwnerCodeForDeadlineDone(),
-          plate: getOwnerPlateForDeadlineDone()
-        })
-      });
-
-      const out = await res.json().catch(function(){ return null; });
-
-      if(!out || !out.success){
-        alert((out && out.error) || "Non sono riuscito a completare questo avviso.");
-        return;
-      }
-
-      cancelDeadlineMessageDone();
-
-      try{
-        const modal = document.getElementById("messageDetailModal");
-        if(modal) modal.style.display = "none";
-      }catch(e){}
-
-      try{
-        if(out.message_ids && Array.isArray(out.message_ids)){
-          const ids = out.message_ids.map(String);
-          document.querySelectorAll("[data-message-id]").forEach(function(el){
-            if(ids.includes(String(el.getAttribute("data-message-id") || ""))){
-              el.remove();
-            }
-          });
-        }
-      }catch(e){}
-
-      try{
-        if(typeof loadMessages === "function") await loadMessages();
-      }catch(e){}
-
-      try{
-        if(typeof refreshMessages === "function") await refreshMessages();
-      }catch(e){}
-
-      try{
-        if(typeof renderMessages === "function") renderMessages();
-      }catch(e){}
-
-      alert("Avviso segnato come fatto. Messaggi collegati cancellati.");
-    }catch(e){
-      console.error("confirmDeadlineMessageDone error:", e);
-      alert("Errore durante il completamento dell’avviso.");
-    }
-  };
-
-  window.updateDeadlineDoneButtonVisibility = function(item){
-    try{
-      const wrap = document.getElementById("msgDetailDoneWrap");
-      if(!wrap) return;
-
-      const raw = String((item && item.message_text) || "");
-      const reason = String((item && item.reason) || "");
-      const combined = (reason + "\n" + raw).toLowerCase();
-
-      let fromDeadlineUrl = false;
-      try{
-        const params = new URLSearchParams(window.location.search || "");
-        fromDeadlineUrl =
-          params.get("from") === "deadline_alert" ||
-          params.get("from") === "deadline_push" ||
-          !!params.get("deadlineId");
-      }catch(e){}
-
-      const isDeadline =
-        fromDeadlineUrl ||
-        combined.includes("comandi disponibili") ||
-        combined.includes("promemoria") ||
-        combined.includes("avviso scadenza") ||
-        combined.includes("promemoria importante") ||
-        combined.includes("richiamo automatico") ||
-        combined.includes("finché non lo segni come fatto") ||
-        combined.includes("quando:");
-
-      wrap.style.display = isDeadline ? "block" : "none";
-    }catch(e){
-      console.warn("updateDeadlineDoneButtonVisibility error:", e);
-    }
-  };
-})();
-</script>
-
 </body>
 </html>
