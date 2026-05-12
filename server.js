@@ -8785,6 +8785,109 @@ ensureOwnerDeadlinesTables()
 
 // Disattiva futuri avvisi di una scadenza partendo dal messaggio ricevuto
 
+
+app.post('/api/owner-deadlines/stop-quick-reminders', async (req, res) => {
+  try {
+    const plateNorm = normalizePlateValue(req.body.plate);
+    const cleanCode = String(req.body.code || '').trim().toUpperCase();
+    const nameContains = String(req.body.nameContains || '').trim().toLowerCase();
+
+    if (!plateNorm && !cleanCode) {
+      return res.status(400).json({
+        success: false,
+        error: 'Serve almeno targa o codice.'
+      });
+    }
+
+    const params = [];
+    let where = [];
+
+    if (plateNorm) {
+      params.push(plateNorm);
+      where.push(`plate_norm = $${params.length}`);
+    }
+
+    if (cleanCode) {
+      params.push(cleanCode);
+      where.push(`UPPER(COALESCE(code,'')) = $${params.length}`);
+    }
+
+    let nameFilter = '';
+    if (nameContains) {
+      params.push('%' + nameContains + '%');
+      nameFilter = `AND LOWER(COALESCE(payload->>'name','')) LIKE $${params.length}`;
+    }
+
+    const whereSql = where.length ? '(' + where.join(' OR ') + ')' : 'TRUE';
+
+    const updateSql = `
+      UPDATE owner_deadline_items
+      SET status = 'completed',
+          payload = jsonb_set(
+            jsonb_set(
+              COALESCE(payload, '{}'::jsonb),
+              '{status}',
+              '"completed"'::jsonb,
+              true
+            ),
+            '{emergencyStoppedAt}',
+            to_jsonb(NOW()::text),
+            true
+          ),
+          updated_at = NOW()
+      WHERE ${whereSql}
+        ${nameFilter}
+        AND COALESCE(status,'active') NOT IN ('deleted','completed','disabled')
+        AND COALESCE((payload->'extra'->>'quickReminder')::boolean, false) = true
+      RETURNING local_id, payload->>'name' AS name
+    `;
+
+    const updated = await pool.query(updateSql, params);
+
+    const localIds = updated.rows.map(r => String(r.local_id)).filter(Boolean);
+
+    let deletedMessages = 0;
+
+    if (localIds.length) {
+      const msgRes = await pool.query(
+        `SELECT DISTINCT message_id
+         FROM owner_deadline_alert_sent
+         WHERE local_id = ANY($1::text[])
+           AND message_id IS NOT NULL`,
+        [localIds]
+      );
+
+      const messageIds = msgRes.rows.map(r => Number(r.message_id)).filter(Boolean);
+
+      if (messageIds.length) {
+        const delRes = await pool.query(
+          `UPDATE contact_message_logs
+           SET deleted_at = COALESCE(deleted_at, NOW()),
+               read_at = COALESCE(read_at, NOW())
+           WHERE id = ANY($1::int[])`,
+          [messageIds]
+        );
+
+        deletedMessages = delRes.rowCount || 0;
+      }
+    }
+
+    return res.json({
+      success: true,
+      stopped: updated.rowCount || 0,
+      deleted_messages: deletedMessages,
+      items: updated.rows
+    });
+  } catch (err) {
+    console.error('owner-deadlines/stop-quick-reminders error:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || String(err)
+    });
+  }
+});
+
+
 app.post('/api/owner-deadlines/status-list', async (req, res) => {
   try {
     const plateNorm = normalizePlateValue(req.body.plate);
