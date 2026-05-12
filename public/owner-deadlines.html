@@ -1940,6 +1940,81 @@
   }
 </style>
 
+
+<style id="quick-repeat-redesign-style">
+  .quick-repeat-box{
+    margin-top:14px;
+    padding:13px;
+    border:1px solid rgba(15,23,42,.10);
+    border-radius:18px;
+    background:#f8fafc;
+  }
+
+  .quick-repeat-title{
+    font-size:.88rem;
+    font-weight:950;
+    color:#0f172a;
+    margin-bottom:8px;
+  }
+
+  .quick-repeat-options{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:8px;
+  }
+
+  .quick-repeat-option{
+    width:100%;
+    min-height:42px;
+    border:1px solid rgba(15,23,42,.12);
+    border-radius:14px;
+    background:#ffffff;
+    color:#334155;
+    font-weight:900;
+    text-align:left;
+    padding:10px 12px;
+    cursor:pointer;
+  }
+
+  .quick-repeat-option.active{
+    background:#111827;
+    color:#ffffff;
+    border-color:#111827;
+    box-shadow:0 10px 22px rgba(15,23,42,.16);
+  }
+
+  .quick-repeat-custom{
+    display:none;
+    margin-top:12px;
+    padding-top:12px;
+    border-top:1px dashed rgba(15,23,42,.16);
+  }
+
+  .quick-repeat-custom.active{
+    display:block;
+  }
+
+  .quick-repeat-grid{
+    display:grid;
+    grid-template-columns:1fr 1.2fr;
+    gap:10px;
+  }
+
+  .quick-repeat-note{
+    margin-top:10px;
+    font-size:.84rem;
+    line-height:1.45;
+    color:#64748b;
+    font-weight:800;
+  }
+
+  @media(max-width:560px){
+    .quick-repeat-grid{
+      grid-template-columns:1fr;
+    }
+  }
+</style>
+
 </head>
 <body>
   <div class="topbar">
@@ -2012,6 +2087,47 @@
   <div class="quick-reminder-summary" id="quickReminderSummary">
     Ti avviserò tra 10 minuti e, se non confermi, ripeterò l’avviso ogni 5 minuti per 30 minuti.
   </div>
+
+  <div class="quick-repeat-box" id="quickRepeatBox">
+    <div class="quick-repeat-title">Ripetizione</div>
+
+    <div class="quick-repeat-options">
+      <button class="quick-repeat-option active" type="button" data-repeat="once" onclick="setQuickRepeatMode('once')">
+        Una sola volta
+      </button>
+      <button class="quick-repeat-option" type="button" data-repeat="5m" onclick="setQuickRepeatMode('5m')">
+        Ogni 5 minuti finché non confermo
+      </button>
+      <button class="quick-repeat-option" type="button" data-repeat="15m" onclick="setQuickRepeatMode('15m')">
+        Ogni 15 minuti finché non confermo
+      </button>
+      <button class="quick-repeat-option" type="button" data-repeat="custom" onclick="setQuickRepeatMode('custom')">
+        Personalizzata
+      </button>
+    </div>
+
+    <div class="quick-repeat-custom" id="quickRepeatCustomBox">
+      <div class="quick-repeat-grid">
+        <div>
+          <label>Ripeti ogni</label>
+          <input id="quickRepeatValue" type="number" min="5" max="999" value="10" oninput="updateQuickReminderSummary()">
+        </div>
+        <div>
+          <label>Unità</label>
+          <select id="quickRepeatUnit" onchange="updateQuickRepeatLimits(); updateQuickReminderSummary();">
+            <option value="minutes">Minuti</option>
+            <option value="hours">Ore</option>
+            <option value="days">Giorni</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="quick-repeat-note">
+      Potrai fermarlo segnandolo come fatto o cancellandolo.
+    </div>
+  </div>
+
 
   <div class="quick-reminder-actions">
     <button class="quick-reminder-confirm" type="button" onclick="saveQuickReminderEditOrNew()">Conferma promemoria</button>
@@ -4151,6 +4267,107 @@ function isQuickReminderCategory(){
 
 let quickReminderWhenMode = "relative";
 
+
+let quickRepeatMode = "once";
+
+function setQuickRepeatMode(mode){
+  quickRepeatMode = ["once","5m","15m","custom"].includes(mode) ? mode : "once";
+
+  document.querySelectorAll(".quick-repeat-option").forEach(function(btn){
+    btn.classList.toggle("active", btn.dataset.repeat === quickRepeatMode);
+  });
+
+  const customBox = document.getElementById("quickRepeatCustomBox");
+  if(customBox) customBox.classList.toggle("active", quickRepeatMode === "custom");
+
+  updateQuickRepeatLimits();
+  updateQuickReminderSummary();
+}
+
+function updateQuickRepeatLimits(){
+  const unitEl = document.getElementById("quickRepeatUnit");
+  const valueEl = document.getElementById("quickRepeatValue");
+  if(!unitEl || !valueEl) return;
+
+  const unit = unitEl.value || "minutes";
+
+  if(unit === "minutes"){
+    valueEl.min = "5";
+    valueEl.max = "120";
+    if(Number(valueEl.value || 0) < 5) valueEl.value = "5";
+    if(Number(valueEl.value || 0) > 120) valueEl.value = "120";
+  } else if(unit === "hours"){
+    valueEl.min = "1";
+    valueEl.max = "24";
+    if(Number(valueEl.value || 0) < 1) valueEl.value = "1";
+    if(Number(valueEl.value || 0) > 24) valueEl.value = "24";
+  } else {
+    valueEl.min = "1";
+    valueEl.max = "30";
+    if(Number(valueEl.value || 0) < 1) valueEl.value = "1";
+    if(Number(valueEl.value || 0) > 30) valueEl.value = "30";
+  }
+}
+
+function quickRepeatUnitLabel(unit, value){
+  value = Number(value || 1);
+  if(unit === "minutes") return value === 1 ? "minuto" : "minuti";
+  if(unit === "hours") return value === 1 ? "ora" : "ore";
+  if(unit === "days") return value === 1 ? "giorno" : "giorni";
+  return unit;
+}
+
+function getQuickRepeatPlan(){
+  if(quickRepeatMode === "once"){
+    return {
+      repeat: false,
+      mode: "once",
+      intervalValue: 0,
+      intervalUnit: "",
+      alerts: ["Al momento"],
+      text: "una sola volta."
+    };
+  }
+
+  if(quickRepeatMode === "5m"){
+    return {
+      repeat: true,
+      mode: "5m",
+      intervalValue: 5,
+      intervalUnit: "minutes",
+      alerts: ["Al momento", "Ripeti ogni 5 minuti finché non confermo"],
+      text: "poi ripeterò l’avviso ogni 5 minuti finché non lo segni come fatto o lo cancelli."
+    };
+  }
+
+  if(quickRepeatMode === "15m"){
+    return {
+      repeat: true,
+      mode: "15m",
+      intervalValue: 15,
+      intervalUnit: "minutes",
+      alerts: ["Al momento", "Ripeti ogni 15 minuti finché non confermo"],
+      text: "poi ripeterò l’avviso ogni 15 minuti finché non lo segni come fatto o lo cancelli."
+    };
+  }
+
+  const unitEl = document.getElementById("quickRepeatUnit");
+  const valueEl = document.getElementById("quickRepeatValue");
+  const unit = unitEl ? unitEl.value : "minutes";
+  updateQuickRepeatLimits();
+  const value = Math.max(Number(valueEl ? valueEl.value : 10) || 10, unit === "minutes" ? 5 : 1);
+
+  return {
+    repeat: true,
+    mode: "custom",
+    intervalValue: value,
+    intervalUnit: unit,
+    alerts: ["Al momento", `Ripeti ogni ${value} ${quickRepeatUnitLabel(unit, value)} finché non confermo`],
+    text: `poi ripeterò l’avviso ogni ${value} ${quickRepeatUnitLabel(unit, value)} finché non lo segni come fatto o lo cancelli.`
+  };
+}
+
+
 function setQuickReminderWhenMode(mode){
   quickReminderWhenMode = mode === "absolute" ? "absolute" : "relative";
 
@@ -4309,10 +4526,11 @@ function updateQuickReminderSummary(){
   const summaryEl = document.getElementById("quickReminderSummary");
   if(!summaryEl) return;
 
+  const repeatPlan = getQuickRepeatPlan();
+
   if(quickReminderWhenMode === "absolute"){
     const due = computeQuickReminderAbsoluteDate();
-    const plan = getQuickReminderPlanForAbsolute(due);
-    summaryEl.textContent = `Ti avviserò ${quickReminderAbsoluteDayLabel(due)} alle ${toLocalTimeInputValue(due)} e ${plan.text}`;
+    summaryEl.textContent = `Ti avviserò ${quickReminderAbsoluteDayLabel(due)} alle ${toLocalTimeInputValue(due)}; ${repeatPlan.text}`;
     return;
   }
 
@@ -4321,8 +4539,7 @@ function updateQuickReminderSummary(){
 
   const unit = unitEl.value || "minutes";
   const value = quickReminderClampValue();
-  const plan = getQuickReminderRepeatPlan(value, unit);
-  summaryEl.textContent = `Ti avviserò tra ${value} ${quickReminderUnitLabel(unit, value)} e ${plan.text}`;
+  summaryEl.textContent = `Ti avviserò tra ${value} ${quickReminderUnitLabel(unit, value)}; ${repeatPlan.text}`;
 }
 
 function toggleQuickReminderMode(){
@@ -4404,6 +4621,17 @@ function openQuickReminderEditor(deadlineId){
 
   const extra = d.extra || {};
 
+
+  try {
+    setQuickRepeatMode(extra.repeatMode || "once");
+    const rv = document.getElementById("quickRepeatValue");
+    const ru = document.getElementById("quickRepeatUnit");
+    if(rv && extra.repeatIntervalValue) rv.value = String(extra.repeatIntervalValue);
+    if(ru && extra.repeatIntervalUnit) ru.value = String(extra.repeatIntervalUnit);
+    updateQuickRepeatLimits();
+    updateQuickReminderSummary();
+  } catch(e) {}
+
   try {
     if(extra.quickWhenMode === "absolute"){
       setQuickReminderWhenMode("absolute");
@@ -4425,6 +4653,7 @@ function openQuickReminderEditor(deadlineId){
 
   try { updateQuickReminderLimits(); } catch(e) {}
   try { setQuickReminderWhenMode("relative"); } catch(e) {}
+  try { setQuickRepeatMode("once"); } catch(e) {}
   try { updateQuickReminderSummary(); } catch(e) {}
 
   setTimeout(function(){
@@ -4566,6 +4795,7 @@ function saveQuickReminderEditOrNew(){
   let due;
   let plan;
   let noteWhen = "";
+  const repeatPlan = getQuickRepeatPlan();
 
   if(quickReminderWhenMode === "absolute"){
     due = computeQuickReminderAbsoluteDate();
@@ -4578,6 +4808,12 @@ function saveQuickReminderEditOrNew(){
     plan = getQuickReminderRepeatPlan(value, unit);
     noteWhen = `tra ${value} ${quickReminderUnitLabel(unit, value)}`;
   }
+
+  plan = {
+    ...plan,
+    alerts: repeatPlan.alerts,
+    text: repeatPlan.text
+  };
 
   const payload = {
     category: "Rapido",
@@ -4599,6 +4835,10 @@ function saveQuickReminderEditOrNew(){
       quickDayMode: (document.getElementById("quickReminderDayMode") || {}).value || "today",
       quickTime: (document.getElementById("quickReminderTime") || {}).value || "10:00",
       quickCustomDate: (document.getElementById("quickReminderCustomDate") || {}).value || "",
+      repeatMode: repeatPlan.mode,
+      repeatUntilHandled: repeatPlan.repeat,
+      repeatIntervalValue: repeatPlan.intervalValue,
+      repeatIntervalUnit: repeatPlan.intervalUnit,
       repeatPlanText: plan.text,
       dueAt: due.toISOString()
     }
@@ -4644,7 +4884,9 @@ function saveQuickReminderEditOrNew(){
   if(customDateReset) customDateReset.value = "";
 
   quickReminderWhenMode = "relative";
+  quickRepeatMode = "once";
   try { setQuickReminderWhenMode("relative"); } catch(e) {}
+  try { setQuickRepeatMode("once"); } catch(e) {}
 
   forceCloseAfterQuickSave(savedId);
 }

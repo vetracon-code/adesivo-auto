@@ -8420,53 +8420,44 @@ function shouldSendDeadlineAlert(payload, now = new Date()) {
     };
   }
 
-  // 3) RICHIAMI PROMEMORIA RAPIDI: Dopo X minuti / ore / giorni
-  // Li inviamo solo se sono presenti negli alerts e dopo l'orario principale.
+  // 3) RICHIAMI PROMEMORIA RAPIDI: ripeti finché non confermo.
+  // Il ciclo termina quando l'utente segna l'avviso come completato o lo cancella.
   if (
     payload.extra &&
     payload.extra.quickReminder === true &&
     payload.extra.dueAt &&
-    Array.isArray(payload.alerts)
+    payload.extra.repeatUntilHandled === true
   ) {
     const due = new Date(payload.extra.dueAt);
     if (!Number.isNaN(due.getTime()) && now.getTime() >= due.getTime()) {
-      for (const a of payload.alerts) {
-        const t = String(a || '').toLowerCase();
+      const value = Math.max(1, Number(payload.extra.repeatIntervalValue || 5));
+      const unit = String(payload.extra.repeatIntervalUnit || 'minutes');
 
-        if (t.includes('al momento')) continue;
+      let intervalMs = value * 60000;
+      if (unit === 'hours') intervalMs = value * 3600000;
+      if (unit === 'days') intervalMs = value * 86400000;
 
-        let offsetMs = null;
+      const elapsed = now.getTime() - due.getTime();
+      if (elapsed < intervalMs) return null;
 
-        let m = t.match(/dopo\s+(\d+)\s+minut/);
-        if (m) offsetMs = Number(m[1]) * 60000;
+      const slot = Math.floor(elapsed / intervalMs);
+      if (slot < 1) return null;
 
-        m = t.match(/dopo\s+(\d+)\s+or/);
-        if (m) offsetMs = Number(m[1]) * 3600000;
+      const alertKey = `quick-repeat-${localId}-${intervalMs}-${slot}`;
 
-        m = t.match(/dopo\s+(\d+)\s+giorn/);
-        if (m) offsetMs = Number(m[1]) * 86400000;
-
-        if (offsetMs === null) continue;
-
-        const dueReminder = new Date(due.getTime() + offsetMs);
-        if (now.getTime() < dueReminder.getTime()) continue;
-
-        const alertKey = `quick-followup-${localId}-${offsetMs}`;
-
-        return {
-          alertKey,
-          localId,
-          deadlineId: localId,
-          title: 'PROMEMORIA RAPIDO',
-          reason: 'PROMEMORIA RAPIDO',
-          messageText:
-            'PROMEMORIA RAPIDO\n\n' +
-            `${name}\n\n` +
-            `Richiamo programmato: ${a}\n\n` +
-            'Comandi disponibili: Ricordamelo ancora, OK fatto, Cancella.',
-          body: `${name}: ${a}.`
-        };
-      }
+      return {
+        alertKey,
+        localId,
+        deadlineId: localId,
+        title: 'PROMEMORIA RAPIDO',
+        reason: 'PROMEMORIA RAPIDO',
+        messageText:
+          'PROMEMORIA RAPIDO\n\n' +
+          `${name}\n\n` +
+          `Richiamo automatico: ogni ${value} ${unit === 'hours' ? 'ore' : unit === 'days' ? 'giorni' : 'minuti'} finché non lo segni come fatto o lo cancelli.\n\n` +
+          'Comandi disponibili: Ricordamelo ancora, OK fatto, Cancella.',
+        body: `${name}: promemoria ancora attivo.`
+      };
     }
   }
 
