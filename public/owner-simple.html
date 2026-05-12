@@ -6754,6 +6754,101 @@ function getOwnerParams(){
 
 
     window.deleteMessage = async function(id){
+      // deleteMessage all-or-single deadline precheck
+      try {
+        const msg = (ownerMessages || []).find(m => Number(m.id) === Number(id));
+
+        if (msg) {
+          let code = msg.code || '';
+          let plate = msg.plate || '';
+
+          if (!code || !plate) {
+            try {
+              const ctx = typeof getOwnerParams === "function" ? getOwnerParams() : {};
+              code = code || ctx.code || '';
+              plate = plate || ctx.plate || '';
+            } catch(e) {}
+          }
+
+          if (plate) {
+            const linkRes = await fetch('/api/owner-deadlines/message-link-status', {
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({
+                messageId: id,
+                plate
+              })
+            });
+
+            const link = await linkRes.json().catch(() => null);
+
+            if (
+              link &&
+              link.success &&
+              link.linked &&
+              !['completed','deleted','disabled'].includes(String(link.status || '').toLowerCase())
+            ) {
+              const name = link.name ? `\n\nAvviso collegato: ${link.name}` : '';
+
+              const deleteAll = confirm(
+                'Questo messaggio è collegato a un avviso/scadenza attiva.' +
+                name +
+                '\n\nVuoi eliminare TUTTI i messaggi collegati a questo avviso?' +
+                '\n\nOK = elimina TUTTI e chiudi definitivamente l’avviso' +
+                '\nAnnulla = elimina SOLO questo messaggio'
+              );
+
+              if (deleteAll) {
+                const finalConfirm = confirm(
+                  'Confermi la chiusura definitiva dell’avviso?' +
+                  '\n\nQuesta azione cancellerà tutti i messaggi collegati e rimuoverà la scadenza salvata.' +
+                  '\n\nOK = confermo' +
+                  '\nAnnulla = non procedere'
+                );
+
+                if (!finalConfirm) return;
+
+                const doneRes = await fetch('/api/owner-deadlines/disable-from-message', {
+                  method:'POST',
+                  headers:{'Content-Type':'application/json'},
+                  body: JSON.stringify({
+                    messageId: id,
+                    code,
+                    plate
+                  })
+                });
+
+                const done = await doneRes.json().catch(() => null);
+
+                if (!done || !done.success) {
+                  alert((done && done.error) || 'Non sono riuscito a chiudere questo avviso.');
+                  return;
+                }
+
+                try {
+                  if (done.message_ids && Array.isArray(done.message_ids)) {
+                    const ids = done.message_ids.map(String);
+                    ownerMessages = (ownerMessages || []).filter(m => !ids.includes(String(m.id)));
+                  } else {
+                    ownerMessages = (ownerMessages || []).filter(m => Number(m.id) !== Number(id));
+                  }
+                } catch(e) {}
+
+                try { renderMessages(); } catch(e) {}
+                try { await loadOwnerMessages(); } catch(e) {}
+
+                alert('Avviso chiuso. Messaggi collegati cancellati.');
+                return;
+              }
+
+              // Se l'utente sceglie "solo questo", si prosegue con la cancellazione standard sotto.
+            }
+          }
+        }
+      } catch(e) {
+        console.warn("deleteMessage all-or-single deadline precheck error:", e);
+      }
+
       const msg = (ownerMessages || []).find(m => Number(m.id) === Number(id));
 
       let code = '';
