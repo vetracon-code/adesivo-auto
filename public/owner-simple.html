@@ -10798,5 +10798,166 @@ document.addEventListener('DOMContentLoaded', function () {
   }catch(e){}
 })();
 </script>
+
+<script id="deadline-message-done-button-script">
+(function(){
+  function getOwnerPlateForDeadlineDone(){
+    try{
+      const params = new URLSearchParams(window.location.search || "");
+      return params.get("plate") || window.plate || window.__OWNER_PLATE__ || localStorage.getItem("owner_saved_plate") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function getOwnerCodeForDeadlineDone(){
+    try{
+      const params = new URLSearchParams(window.location.search || "");
+      return params.get("code") || window.code || window.__OWNER_CODE__ || localStorage.getItem("owner_saved_code") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  async function markDeadlineMessageDoneAndDeleteAll(messageId){
+    try{
+      if(!messageId){
+        alert("Messaggio non riconosciuto.");
+        return;
+      }
+
+      const ok = confirm("Segnare questo avviso come FATTO e cancellare tutti i messaggi collegati?");
+      if(!ok) return;
+
+      const res = await fetch("/api/owner-deadlines/disable-from-message", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({
+          messageId: messageId,
+          code: getOwnerCodeForDeadlineDone(),
+          plate: getOwnerPlateForDeadlineDone()
+        })
+      });
+
+      const out = await res.json().catch(function(){ return null; });
+
+      if(!out || !out.success){
+        alert((out && out.error) || "Non sono riuscito a completare questo avviso.");
+        return;
+      }
+
+      try{
+        const modal = document.getElementById("messageDetailModal");
+        if(modal) modal.style.display = "none";
+      }catch(e){}
+
+      try{
+        if(typeof loadMessages === "function") await loadMessages();
+      }catch(e){}
+
+      try{
+        if(typeof refreshMessages === "function") await refreshMessages();
+      }catch(e){}
+
+      try{
+        if(out.message_ids && Array.isArray(out.message_ids)){
+          const ids = out.message_ids.map(String);
+          document.querySelectorAll("[data-message-id]").forEach(function(el){
+            if(ids.includes(String(el.getAttribute("data-message-id") || ""))){
+              el.remove();
+            }
+          });
+        }
+      }catch(e){}
+
+      alert("Avviso segnato come fatto. Messaggi collegati cancellati.");
+    }catch(e){
+      console.error("markDeadlineMessageDoneAndDeleteAll error:", e);
+      alert("Errore durante il completamento dell’avviso.");
+    }
+  }
+
+  function injectDoneButtonIntoMessageDetail(){
+    try{
+      const modal = document.getElementById("messageDetailModal");
+      if(!modal || modal.style.display === "none") return;
+
+      const text = (modal.innerText || "").toLowerCase();
+      const isDeadline =
+        text.includes("comandi disponibili") ||
+        text.includes("promemoria") ||
+        text.includes("avviso scadenza") ||
+        text.includes("promemoria importante");
+
+      if(!isDeadline) return;
+      if(document.getElementById("deadlineDoneDeleteAllBtn")) return;
+
+      let id = null;
+
+      try{
+        const params = new URLSearchParams(window.location.search || "");
+        id = params.get("messageId") || params.get("message_id");
+      }catch(e){}
+
+      if(!id && window.__lastOpenedMessageId) id = window.__lastOpenedMessageId;
+      if(!id) return;
+
+      let actions =
+        modal.querySelector(".modal-actions") ||
+        modal.querySelector(".actions") ||
+        modal.querySelector("[class*='actions']");
+
+      if(!actions){
+        actions = document.createElement("div");
+        actions.className = "modal-actions";
+        actions.style.cssText = "display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;";
+        const card = modal.querySelector(".modal-card") || modal.querySelector("div") || modal;
+        card.appendChild(actions);
+      }
+
+      const btn = document.createElement("button");
+      btn.id = "deadlineDoneDeleteAllBtn";
+      btn.type = "button";
+      btn.textContent = "Fatto";
+      btn.style.cssText = "background:#16a34a;color:#fff;border:0;border-radius:999px;padding:12px 18px;font-weight:950;box-shadow:0 10px 24px rgba(22,163,74,.25);cursor:pointer;";
+      btn.onclick = function(){
+        markDeadlineMessageDoneAndDeleteAll(id);
+      };
+
+      actions.insertBefore(btn, actions.firstChild || null);
+    }catch(e){
+      console.warn("injectDoneButtonIntoMessageDetail error:", e);
+    }
+  }
+
+  window.markDeadlineMessageDoneAndDeleteAll = markDeadlineMessageDoneAndDeleteAll;
+  window.injectDoneButtonIntoMessageDetail = injectDoneButtonIntoMessageDetail;
+
+  setInterval(function(){
+    try { injectDoneButtonIntoMessageDetail(); } catch(e) {}
+  }, 700);
+
+  document.addEventListener("click", function(){
+    setTimeout(injectDoneButtonIntoMessageDetail, 250);
+    setTimeout(injectDoneButtonIntoMessageDetail, 900);
+  }, true);
+
+  setTimeout(function(){
+    const oldOpen = window.openMessageDetail;
+    if(typeof oldOpen === "function" && !oldOpen.__deadlineDoneWrapped){
+      const wrapped = async function(id){
+        window.__lastOpenedMessageId = id;
+        const result = await oldOpen.apply(this, arguments);
+        setTimeout(injectDoneButtonIntoMessageDetail, 250);
+        setTimeout(injectDoneButtonIntoMessageDetail, 900);
+        return result;
+      };
+      wrapped.__deadlineDoneWrapped = true;
+      window.openMessageDetail = wrapped;
+    }
+  }, 800);
+})();
+</script>
+
 </body>
 </html>

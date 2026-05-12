@@ -8875,17 +8875,40 @@ app.post('/api/owner-deadlines/disable-from-message', async (req, res) => {
       });
     }
 
-    await pool.query(
-      `UPDATE contact_message_logs
-       SET read_at = COALESCE(read_at, NOW())
-       WHERE id = $1
-         AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2`,
-      [messageId, plateNorm]
+    const allMessagesRes = await pool.query(
+      `SELECT DISTINCT message_id
+       FROM owner_deadline_alert_sent
+       WHERE plate_norm = $1
+         AND local_id = $2
+         AND message_id IS NOT NULL`,
+      [linked.plate_norm, linked.local_id]
     );
+
+    const messageIds = allMessagesRes.rows
+      .map(r => Number(r.message_id))
+      .filter(Boolean);
+
+    let deletedMessages = 0;
+
+    if (messageIds.length) {
+      const delRes = await pool.query(
+        `UPDATE contact_message_logs
+         SET deleted_at = COALESCE(deleted_at, NOW()),
+             read_at = COALESCE(read_at, NOW())
+         WHERE id = ANY($1::int[])
+           AND REPLACE(UPPER(COALESCE(plate,'')), ' ', '') = $2`,
+        [messageIds, plateNorm]
+      );
+
+      deletedMessages = delRes.rowCount || 0;
+    }
 
     return res.json({
       success: true,
+      completed: true,
       disabled: true,
+      deleted_messages: deletedMessages,
+      message_ids: messageIds,
       message_id: messageId,
       local_id: linked.local_id,
       deadline_name: updateRes.rows[0].name || null
