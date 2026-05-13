@@ -9137,6 +9137,106 @@ app.post('/api/debug/followme/subscription-diagnosis', express.json(), async (re
 });
 
 
+
+app.post('/api/debug/followme/link-latest-device', express.json(), async (req, res) => {
+  try {
+    const key = String(req.body?.key || '').trim();
+    const expected = process.env.FOLLOWME_DEBUG_KEY || process.env.ADMIN_PASSWORD || '';
+
+    if (!expected || key !== expected) {
+      return res.status(401).json({
+        success: false,
+        error: 'Chiave debug non valida.'
+      });
+    }
+
+    const code = normalizeFollowMeCode(req.body?.code || 'FM-DEMO');
+
+    const projectRes = await pool.query(
+      `SELECT id, code, label
+       FROM followme_projects
+       WHERE code = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!projectRes.rows.length) {
+      return res.status(404).json({
+        success: false,
+        error: 'Follow Me QR non trovato.'
+      });
+    }
+
+    const project = projectRes.rows[0];
+
+    const latestSub = await pool.query(
+      `SELECT id, code, plate, endpoint, p256dh, auth, user_agent, updated_at,
+              COALESCE(product_type,'vehicle') AS product_type
+       FROM push_subscriptions
+       WHERE endpoint IS NOT NULL
+         AND p256dh IS NOT NULL
+         AND auth IS NOT NULL
+       ORDER BY 
+         CASE WHEN endpoint LIKE 'https://web.push.apple.com/%' THEN 0 ELSE 1 END,
+         updated_at DESC NULLS LAST,
+         id DESC
+       LIMIT 1`
+    );
+
+    if (!latestSub.rows.length) {
+      return res.status(404).json({
+        success: false,
+        error: 'Nessuna subscription esistente trovata.'
+      });
+    }
+
+    const sub = latestSub.rows[0];
+
+    const inserted = await pool.query(
+      `INSERT INTO followme_push_subscriptions
+       (project_id, code, endpoint, p256dh, auth, user_agent, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,NOW())
+       ON CONFLICT (project_id, endpoint)
+       DO UPDATE SET
+         p256dh = EXCLUDED.p256dh,
+         auth = EXCLUDED.auth,
+         user_agent = EXCLUDED.user_agent,
+         updated_at = NOW()
+       RETURNING id, project_id, code, updated_at, LEFT(endpoint, 90) AS endpoint_preview`,
+      [
+        project.id,
+        project.code,
+        sub.endpoint,
+        sub.p256dh,
+        sub.auth,
+        sub.user_agent || null
+      ]
+    );
+
+    return res.json({
+      success: true,
+      mode: 'linked_existing_push_subscription_to_followme',
+      followme_project: project,
+      source_subscription: {
+        id: sub.id,
+        code: sub.code,
+        plate: sub.plate,
+        product_type: sub.product_type,
+        updated_at: sub.updated_at,
+        endpoint_preview: String(sub.endpoint || '').slice(0, 90)
+      },
+      saved_followme_subscription: inserted.rows[0]
+    });
+  } catch (err) {
+    console.error('debug followme link-latest-device error:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || String(err)
+    });
+  }
+});
+
+
 app.post('/api/debug/followme/test-push', express.json(), async (req, res) => {
   try {
     const key = String(req.body?.key || '').trim();
