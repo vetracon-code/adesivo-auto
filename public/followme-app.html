@@ -788,6 +788,11 @@ async function enableNotifications(){
   }
 }
 
+function forceReloadFollowMeApp(){
+  const cleanUrl = window.location.origin + window.location.pathname + "?v=pwa-refresh-" + Date.now();
+  window.location.replace(cleanUrl);
+}
+
 async function tripleRefreshFollowMe(){
   const btn = document.getElementById("refreshDataBtn");
   const original = btn ? btn.textContent : "Aggiorna dati";
@@ -807,6 +812,13 @@ async function tripleRefreshFollowMe(){
     await loadStatus();
 
     toast("Dati aggiornati.");
+
+    // Nella PWA iPhone il refresh dei dati non basta sempre ad aggiornare HTML/JS.
+    // Dopo i 3 aggiornamenti facciamo anche un reload reale con cache-buster.
+    setTimeout(function(){
+      forceReloadFollowMeApp();
+    }, 450);
+
   }catch(err){
     console.error("tripleRefreshFollowMe error:", err);
     toast("Errore aggiornamento dati.");

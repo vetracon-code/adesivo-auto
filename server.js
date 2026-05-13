@@ -8843,6 +8843,10 @@ app.get('/fm/manifest/:code.json', async (req, res) => {
 
 
 app.get('/fm/app/:code', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
   return res.sendFile(path.join(__dirname, 'public', 'followme-app.html'));
 });
 
