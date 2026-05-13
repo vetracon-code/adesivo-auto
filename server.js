@@ -8055,6 +8055,11 @@ async function initDb() {
     `);
 
 
+
+    await pool.query("ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS existing_qr_url TEXT");
+    await pool.query("ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS existing_qr_status TEXT");
+    await pool.query("ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS existing_qr_updated_at TIMESTAMPTZ");
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS followme_push_subscriptions (
         id SERIAL PRIMARY KEY,
@@ -8955,7 +8960,9 @@ app.get('/api/followme/:code/status', async (req, res) => {
         public_id: project.public_id,
         label: project.label,
         active_url: project.active_url,
-        status: project.status
+        status: project.status,
+        existing_qr_url: project.existing_qr_url || '',
+        existing_qr_status: project.existing_qr_status || ''
       },
       stats:{
         total_scans: totalRes.rows[0]?.total || 0,
@@ -8968,6 +8975,76 @@ app.get('/api/followme/:code/status', async (req, res) => {
     return res.status(500).json({ success:false, error:err.message || String(err) });
   }
 });
+
+
+app.post('/api/followme/:code/update-existing-qr', express.json(), async (req, res) => {
+  try {
+    const code = normalizeFollowMeCode(req.params.code);
+    const rawUrl = String(req.body?.existing_qr_url || '').trim();
+
+    if (!rawUrl) {
+      return res.status(400).json({
+        success:false,
+        error:'URL del QR esistente obbligatorio.'
+      });
+    }
+
+    let url = rawUrl;
+    if (!/^https?:\/\//i.test(url)) {
+      url = 'https://' + url;
+    }
+
+    let status = 'external_not_controllable';
+
+    try {
+      const parsed = new URL(url);
+      const path = parsed.pathname || '';
+
+      if (path.match(/^\/fm\/u\/[^\/?#]+/i) || url.includes('/fm/u/')) {
+        status = 'followme_compatible';
+      } else if (parsed.hostname.includes('adesivo-auto.onrender.com')) {
+        status = 'same_domain_review_required';
+      }
+    } catch(e) {
+      return res.status(400).json({
+        success:false,
+        error:'URL non valido.'
+      });
+    }
+
+    const updated = await pool.query(
+      `UPDATE followme_projects
+       SET existing_qr_url = $2,
+           existing_qr_status = $3,
+           existing_qr_updated_at = NOW(),
+           updated_at = NOW()
+       WHERE code = $1
+       RETURNING code, public_id, label, active_url, existing_qr_url, existing_qr_status`,
+      [code, url, status]
+    );
+
+    if (!updated.rows.length) {
+      return res.status(404).json({
+        success:false,
+        error:'Follow Me QR non trovato.'
+      });
+    }
+
+    return res.json({
+      success:true,
+      project: updated.rows[0],
+      compatible: status === 'followme_compatible',
+      status
+    });
+  } catch (err) {
+    console.error('followme update-existing-qr error:', err);
+    return res.status(500).json({
+      success:false,
+      error: err.message || String(err)
+    });
+  }
+});
+
 
 app.post('/api/followme/:code/update-url', express.json(), async (req, res) => {
   try {

@@ -300,6 +300,28 @@
       <button class="btn" onclick="updateUrl()">Aggiorna QR</button>
     </section>
 
+    <section class="card row" id="qrDownloadBlock">
+      <div class="label">Scarica il tuo QR</div>
+      <div class="empty">
+        Questo è il QR dinamico Follow Me. Il QR resta sempre uguale: cambi tu la destinazione dall’App.
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <a class="btn secondary" id="downloadQrPng" href="/followme/qrs/followme-FMDEMO-qr.png" download="followme-FMDEMO-qr.png" style="display:flex;align-items:center;justify-content:center;text-decoration:none;">Scarica PNG</a>
+        <a class="btn secondary" id="downloadQrSvg" href="/followme/qrs/followme-FMDEMO-qr.svg" download="followme-FMDEMO-qr.svg" style="display:flex;align-items:center;justify-content:center;text-decoration:none;">Scarica SVG</a>
+      </div>
+      <a class="btn" id="openQrPreview" href="/followme/qrs/followme-FMDEMO-qr.png" target="_blank" style="display:flex;align-items:center;justify-content:center;text-decoration:none;">Apri anteprima QR</a>
+      <div class="empty" id="qrPublicLink">Link QR: https://adesivo-auto.onrender.com/fm/u/FMDEMO</div>
+    </section>
+
+    <section class="card row">
+      <div class="label">Hai già un QR?</div>
+      <div class="empty" id="existingQrInfo">
+        Puoi usare un QR già stampato solo se il link contenuto nel QR punta a Follow Me o a un dominio gestibile.
+      </div>
+      <input id="existingQrUrl" placeholder="Incolla qui il link contenuto nel QR esistente">
+      <button class="btn secondary" onclick="saveExistingQr()">Collega QR esistente</button>
+    </section>
+
     <section class="card">
       <div class="stats">
         <div class="stat">
@@ -431,6 +453,22 @@ async function loadStatus(){
   document.getElementById("totalScans").textContent = data.stats.total_scans || 0;
   document.getElementById("currentScans").textContent = data.stats.current_url_scans || 0;
 
+  const existingInput = document.getElementById("existingQrUrl");
+  const existingInfo = document.getElementById("existingQrInfo");
+  if(existingInput) existingInput.value = data.project.existing_qr_url || "";
+  if(existingInfo){
+    const s = data.project.existing_qr_status || "";
+    if(!data.project.existing_qr_url){
+      existingInfo.textContent = "Puoi usare un QR già stampato solo se il link contenuto nel QR punta a Follow Me o a un dominio gestibile.";
+    }else if(s === "followme_compatible"){
+      existingInfo.textContent = "QR esistente collegato: questo QR è compatibile con i redirect Follow Me.";
+    }else if(s === "same_domain_review_required"){
+      existingInfo.textContent = "QR sullo stesso dominio: verifica tecnica richiesta prima di considerarlo pienamente attivo.";
+    }else{
+      existingInfo.textContent = "Attenzione: questo QR sembra esterno. Non possiamo cambiarne la destinazione se non punta a un sistema che controlliamo.";
+    }
+  }
+
   const list = document.getElementById("historyList");
   const rows = data.history || [];
 
@@ -448,6 +486,36 @@ async function loadStatus(){
       <button class="btn small secondary" onclick="reactivateUrl('${encodeURIComponent(x.url)}')">Riattiva</button>
     </div>
   `).join("");
+}
+
+async function saveExistingQr(){
+  const existingQrUrl = document.getElementById("existingQrUrl").value.trim();
+
+  if(!existingQrUrl){
+    toast("Incolla il link contenuto nel QR esistente.");
+    return;
+  }
+
+  const res = await fetch("/api/followme/" + encodeURIComponent(CODE) + "/update-existing-qr", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({ existing_qr_url: existingQrUrl })
+  });
+
+  const data = await res.json().catch(()=>null);
+
+  if(!res.ok || !data || !data.success){
+    toast((data && data.error) || "Errore salvataggio QR esistente.");
+    return;
+  }
+
+  if(data.compatible){
+    toast("QR esistente collegato ai redirect Follow Me.");
+  }else{
+    toast("QR salvato, ma potrebbe non essere controllabile.");
+  }
+
+  loadStatus();
 }
 
 async function updateUrl(){
