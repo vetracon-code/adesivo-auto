@@ -8054,6 +8054,22 @@ async function initDb() {
       )
     `);
 
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS followme_push_subscriptions (
+        id SERIAL PRIMARY KEY,
+        project_id INTEGER REFERENCES followme_projects(id) ON DELETE CASCADE,
+        code TEXT NOT NULL,
+        endpoint TEXT NOT NULL,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        user_agent TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(project_id, endpoint)
+      )
+    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS followme_scan_logs (
         id SERIAL PRIMARY KEY,
@@ -8728,12 +8744,11 @@ async function sendFollowMeScanPush(project) {
   try {
     const subs = await pool.query(
       `SELECT endpoint, p256dh, auth
-       FROM push_subscriptions
-       WHERE code = $1
-         AND COALESCE(product_type,'vehicle') = 'follow_me'
+       FROM followme_push_subscriptions
+       WHERE project_id = $1
        ORDER BY updated_at DESC
        LIMIT 20`,
-      [project.code]
+      [project.id]
     );
 
     const payload = JSON.stringify({
@@ -8763,7 +8778,7 @@ async function sendFollowMeScanPush(project) {
         );
       } catch (err) {
         if (err && (err.statusCode === 404 || err.statusCode === 410)) {
-          await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]);
+          await pool.query('DELETE FROM followme_push_subscriptions WHERE endpoint = $1', [sub.endpoint]);
         } else {
           console.error('followme push error:', err.statusCode || '', err.body || err.message || err);
         }
@@ -9001,123 +9016,8 @@ app.post('/api/followme/:code/subscribe', express.json(), async (req, res) => {
       return res.status(400).json({ success:false, error:'Dati subscription mancanti.' });
     }
 
-    const exists = await pool.query(
-      `SELECT code FROM followme_projects WHERE code = $1 LIMIT 1`,
-      [code]
-    );
-
-    if (!exists.rows.length) {
-      return res.status(404).json({ success:false, error:'Follow Me QR non trovato.' });
-    }
-
-    await pool.query(
-      `INSERT INTO push_subscriptions
-       (code, plate, endpoint, p256dh, auth, user_agent, updated_at, product_type)
-       VALUES ($1,$2,$3,$4,$5,$6,NOW(),'follow_me')
-       ON CONFLICT (endpoint)
-       DO UPDATE SET
-         code = EXCLUDED.code,
-         plate = EXCLUDED.plate,
-         p256dh = EXCLUDED.p256dh,
-         auth = EXCLUDED.auth,
-         user_agent = EXCLUDED.user_agent,
-         product_type = 'follow_me',
-         updated_at = NOW()`,
-      [
-        code,
-        'FOLLOWME',
-        subscription.endpoint,
-        subscription.keys.p256dh,
-        subscription.keys.auth,
-        req.headers['user-agent'] || null
-      ]
-    );
-
-    return res.json({ success:true });
-  } catch (err) {
-    console.error('followme subscribe error:', err);
-    return res.status(500).json({ success:false, error:err.message || String(err) });
-  }
-});
-
-
-app.post('/api/debug/followme/create-demo', express.json(), async (req, res) => {
-  try {
-    const key = String(req.body?.key || '').trim();
-    const expected = process.env.FOLLOWME_DEBUG_KEY || process.env.ADMIN_PASSWORD || '';
-
-    if (!expected || key !== expected) {
-      return res.status(401).json({
-        success:false,
-        error:'Chiave debug non valida.'
-      });
-    }
-
-    const code = normalizeFollowMeCode(req.body?.code || 'FM-DEMO');
-    const publicId = normalizeFollowMePublicId(req.body?.public_id || 'FMDEMO');
-    const label = String(req.body?.label || 'Follow Me Demo').trim();
-    const activeUrl = normalizeUrlForFollowMe(req.body?.active_url || 'https://app-me.it');
-
-    const inserted = await pool.query(
-      `INSERT INTO followme_projects
-       (code, public_id, label, active_url, status, updated_at)
-       VALUES ($1,$2,$3,$4,'active',NOW())
-       ON CONFLICT (code)
-       DO UPDATE SET
-         public_id = EXCLUDED.public_id,
-         label = EXCLUDED.label,
-         active_url = EXCLUDED.active_url,
-         status = 'active',
-         updated_at = NOW()
-       RETURNING *`,
-      [code, publicId, label, activeUrl]
-    );
-
-    await pool.query(
-      `INSERT INTO followme_url_history
-       (project_id, url, activated_at, scan_count)
-       VALUES ($1,$2,NOW(),0)
-       ON CONFLICT (project_id, url)
-       DO NOTHING`,
-      [inserted.rows[0].id, activeUrl]
-    );
-
-    const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
-
-    return res.json({
-      success:true,
-      project: inserted.rows[0],
-      public_url: `${baseUrl.replace(/\/$/, '')}/fm/u/${encodeURIComponent(publicId)}`,
-      owner_url: `${baseUrl.replace(/\/$/, '')}/fm/app/${encodeURIComponent(code)}`
-    });
-  } catch (err) {
-    console.error('debug followme create-demo error:', err);
-    return res.status(500).json({
-      success:false,
-      error: err.message || String(err)
-    });
-  }
-});
-
-
-
-
-app.post('/api/debug/followme/test-push-any-device', express.json(), async (req, res) => {
-  try {
-    const key = String(req.body?.key || '').trim();
-    const expected = process.env.FOLLOWME_DEBUG_KEY || process.env.ADMIN_PASSWORD || '';
-
-    if (!expected || key !== expected) {
-      return res.status(401).json({
-        success: false,
-        error: 'Chiave debug non valida.'
-      });
-    }
-
-    const code = normalizeFollowMeCode(req.body?.code || 'FM-DEMO');
-
     const projectRes = await pool.query(
-      `SELECT *
+      `SELECT id, code
        FROM followme_projects
        WHERE code = $1
        LIMIT 1`,
@@ -9125,189 +9025,35 @@ app.post('/api/debug/followme/test-push-any-device', express.json(), async (req,
     );
 
     if (!projectRes.rows.length) {
-      return res.status(404).json({
-        success: false,
-        error: 'Follow Me QR non trovato.'
-      });
+      return res.status(404).json({ success:false, error:'Follow Me QR non trovato.' });
     }
 
     const project = projectRes.rows[0];
 
-    const subsRes = await pool.query(
-      `SELECT id, code, plate, endpoint, p256dh, auth, updated_at, COALESCE(product_type,'vehicle') AS product_type
-       FROM push_subscriptions
-       WHERE endpoint IS NOT NULL
-         AND p256dh IS NOT NULL
-         AND auth IS NOT NULL
-       ORDER BY updated_at DESC NULLS LAST, id DESC
-       LIMIT 5`
-    );
-
-    const payload = JSON.stringify({
-      title: req.body?.title || 'Follow Me QR 👀',
-      body: req.body?.body || 'Notifica di prova inviata usando un dispositivo già registrato.',
-      url: `/fm/app/${encodeURIComponent(code)}?focus=test-any-device`,
-      targetUrl: `/fm/app/${encodeURIComponent(code)}?focus=test-any-device`,
-      type: 'followme_test_any_device',
-      icon: '/followme/icons/icon-192.png',
-      badge: '/followme/icons/icon-192.png',
-      timestamp: Date.now(),
-      data: {
-        type: 'followme_test_any_device',
+    await pool.query(
+      `INSERT INTO followme_push_subscriptions
+       (project_id, code, endpoint, p256dh, auth, user_agent, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,NOW())
+       ON CONFLICT (project_id, endpoint)
+       DO UPDATE SET
+         p256dh = EXCLUDED.p256dh,
+         auth = EXCLUDED.auth,
+         user_agent = EXCLUDED.user_agent,
+         updated_at = NOW()`,
+      [
+        project.id,
         code,
-        url: `/fm/app/${encodeURIComponent(code)}?focus=test-any-device`
-      }
-    });
+        subscription.endpoint,
+        subscription.keys.p256dh,
+        subscription.keys.auth,
+        req.headers['user-agent'] || null
+      ]
+    );
 
-    let sent = 0;
-    let failed = 0;
-    const results = [];
-
-    for (const sub of subsRes.rows) {
-      try {
-        await webpush.sendNotification(
-          {
-            endpoint: sub.endpoint,
-            keys: {
-              p256dh: sub.p256dh,
-              auth: sub.auth
-            }
-          },
-          payload
-        );
-
-        sent++;
-        results.push({
-          id: sub.id,
-          ok: true,
-          original_code: sub.code,
-          original_plate: sub.plate,
-          original_product_type: sub.product_type,
-          endpoint_preview: String(sub.endpoint || '').slice(0, 70)
-        });
-      } catch (err) {
-        failed++;
-        results.push({
-          id: sub.id,
-          ok: false,
-          original_code: sub.code,
-          original_plate: sub.plate,
-          original_product_type: sub.product_type,
-          statusCode: err.statusCode || null,
-          error: err.body || err.message || String(err),
-          endpoint_preview: String(sub.endpoint || '').slice(0, 70)
-        });
-
-        if (err && (err.statusCode === 404 || err.statusCode === 410)) {
-          await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]);
-        }
-      }
-    }
-
-    return res.json({
-      success: true,
-      mode: 'any_existing_device',
-      followme_code: code,
-      followme_label: project.label,
-      subscriptions_found: subsRes.rows.length,
-      sent,
-      failed,
-      results
-    });
+    return res.json({ success:true, saved:true, table:'followme_push_subscriptions' });
   } catch (err) {
-    console.error('debug followme test-push-any-device error:', err);
-    return res.status(500).json({
-      success: false,
-      error: err.message || String(err)
-    });
-  }
-});
-
-
-
-app.post('/api/debug/followme/subscription-diagnosis', express.json(), async (req, res) => {
-  try {
-    const key = String(req.body?.key || '').trim();
-    const expected = process.env.FOLLOWME_DEBUG_KEY || process.env.ADMIN_PASSWORD || '';
-
-    if (!expected || key !== expected) {
-      return res.status(401).json({
-        success: false,
-        error: 'Chiave debug non valida.'
-      });
-    }
-
-    const code = normalizeFollowMeCode(req.body?.code || 'FM-DEMO');
-
-    const projectRes = await pool.query(
-      `SELECT id, code, public_id, label, active_url, status
-       FROM followme_projects
-       WHERE code = $1
-       LIMIT 1`,
-      [code]
-    );
-
-    const normalSubs = await pool.query(
-      `SELECT id, code, plate, updated_at, COALESCE(product_type,'vehicle') AS product_type,
-              LEFT(endpoint, 90) AS endpoint_preview
-       FROM push_subscriptions
-       WHERE code = $1
-          OR COALESCE(product_type,'vehicle') = 'follow_me'
-          OR plate = 'FOLLOWME'
-       ORDER BY updated_at DESC NULLS LAST, id DESC
-       LIMIT 30`,
-      [code]
-    );
-
-    const latestAll = await pool.query(
-      `SELECT id, code, plate, updated_at, COALESCE(product_type,'vehicle') AS product_type,
-              LEFT(endpoint, 90) AS endpoint_preview
-       FROM push_subscriptions
-       ORDER BY updated_at DESC NULLS LAST, id DESC
-       LIMIT 15`
-    );
-
-    let dedicatedExists = false;
-    let dedicatedSubs = { rows: [] };
-
-    const tableCheck = await pool.query(
-      `SELECT EXISTS (
-        SELECT 1
-        FROM information_schema.tables
-        WHERE table_name = 'followme_push_subscriptions'
-      ) AS exists`
-    );
-
-    dedicatedExists = tableCheck.rows[0]?.exists === true;
-
-    if (dedicatedExists && projectRes.rows.length) {
-      dedicatedSubs = await pool.query(
-        `SELECT id, project_id, code, updated_at,
-                LEFT(endpoint, 90) AS endpoint_preview
-         FROM followme_push_subscriptions
-         WHERE project_id = $1 OR code = $2
-         ORDER BY updated_at DESC NULLS LAST, id DESC
-         LIMIT 30`,
-        [projectRes.rows[0].id, code]
-      );
-    }
-
-    return res.json({
-      success: true,
-      code,
-      project_found: projectRes.rows.length > 0,
-      project: projectRes.rows[0] || null,
-      followme_push_subscriptions_table_exists: dedicatedExists,
-      matches_in_push_subscriptions: normalSubs.rows,
-      matches_in_followme_push_subscriptions: dedicatedSubs.rows,
-      latest_push_subscriptions_any_product: latestAll.rows
-    });
-  } catch (err) {
-    console.error('debug followme subscription-diagnosis error:', err);
-    return res.status(500).json({
-      success: false,
-      error: err.message || String(err)
-    });
+    console.error('followme subscribe error:', err);
+    return res.status(500).json({ success:false, error:err.message || String(err) });
   }
 });
 
@@ -9344,18 +9090,17 @@ app.post('/api/debug/followme/test-push', express.json(), async (req, res) => {
     const project = projectRes.rows[0];
 
     const subsRes = await pool.query(
-      `SELECT id, endpoint, p256dh, auth, updated_at, product_type
-       FROM push_subscriptions
-       WHERE code = $1
-         AND COALESCE(product_type, 'vehicle') = 'follow_me'
+      `SELECT id, endpoint, p256dh, auth, updated_at
+       FROM followme_push_subscriptions
+       WHERE project_id = $1
        ORDER BY updated_at DESC
        LIMIT 20`,
-      [code]
+      [project.id]
     );
 
     const payload = JSON.stringify({
-      title: req.body?.title || 'Test Follow Me 👀',
-      body: req.body?.body || 'Questa è una notifica di prova dal tuo Dynamic QR.',
+      title: req.body?.title || 'Follow Me QR 👀',
+      body: req.body?.body || 'Notifica Follow Me dedicata.',
       url: `/fm/app/${encodeURIComponent(code)}?focus=test-push`,
       targetUrl: `/fm/app/${encodeURIComponent(code)}?focus=test-push`,
       type: 'followme_test_push',
@@ -9390,7 +9135,7 @@ app.post('/api/debug/followme/test-push', express.json(), async (req, res) => {
         results.push({
           id: sub.id,
           ok: true,
-          endpoint_preview: String(sub.endpoint || '').slice(0, 60)
+          endpoint_preview: String(sub.endpoint || '').slice(0, 70)
         });
       } catch (err) {
         failed++;
@@ -9400,17 +9145,18 @@ app.post('/api/debug/followme/test-push', express.json(), async (req, res) => {
           ok: false,
           statusCode: err.statusCode || null,
           error: err.body || err.message || String(err),
-          endpoint_preview: String(sub.endpoint || '').slice(0, 60)
+          endpoint_preview: String(sub.endpoint || '').slice(0, 70)
         });
 
         if (err && (err.statusCode === 404 || err.statusCode === 410)) {
-          await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]);
+          await pool.query('DELETE FROM followme_push_subscriptions WHERE endpoint = $1', [sub.endpoint]);
         }
       }
     }
 
     return res.json({
       success: true,
+      mode: 'followme_dedicated',
       code,
       label: project.label,
       subscriptions_found: subsRes.rows.length,
