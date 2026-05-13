@@ -9101,6 +9101,129 @@ app.post('/api/debug/followme/create-demo', express.json(), async (req, res) => 
 
 
 
+
+app.post('/api/debug/followme/test-push-any-device', express.json(), async (req, res) => {
+  try {
+    const key = String(req.body?.key || '').trim();
+    const expected = process.env.FOLLOWME_DEBUG_KEY || process.env.ADMIN_PASSWORD || '';
+
+    if (!expected || key !== expected) {
+      return res.status(401).json({
+        success: false,
+        error: 'Chiave debug non valida.'
+      });
+    }
+
+    const code = normalizeFollowMeCode(req.body?.code || 'FM-DEMO');
+
+    const projectRes = await pool.query(
+      `SELECT *
+       FROM followme_projects
+       WHERE code = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!projectRes.rows.length) {
+      return res.status(404).json({
+        success: false,
+        error: 'Follow Me QR non trovato.'
+      });
+    }
+
+    const project = projectRes.rows[0];
+
+    const subsRes = await pool.query(
+      `SELECT id, code, plate, endpoint, p256dh, auth, updated_at, COALESCE(product_type,'vehicle') AS product_type
+       FROM push_subscriptions
+       WHERE endpoint IS NOT NULL
+         AND p256dh IS NOT NULL
+         AND auth IS NOT NULL
+       ORDER BY updated_at DESC NULLS LAST, id DESC
+       LIMIT 5`
+    );
+
+    const payload = JSON.stringify({
+      title: req.body?.title || 'Follow Me QR 👀',
+      body: req.body?.body || 'Notifica di prova inviata usando un dispositivo già registrato.',
+      url: `/fm/app/${encodeURIComponent(code)}?focus=test-any-device`,
+      targetUrl: `/fm/app/${encodeURIComponent(code)}?focus=test-any-device`,
+      type: 'followme_test_any_device',
+      icon: '/followme/icons/icon-192.png',
+      badge: '/followme/icons/icon-192.png',
+      timestamp: Date.now(),
+      data: {
+        type: 'followme_test_any_device',
+        code,
+        url: `/fm/app/${encodeURIComponent(code)}?focus=test-any-device`
+      }
+    });
+
+    let sent = 0;
+    let failed = 0;
+    const results = [];
+
+    for (const sub of subsRes.rows) {
+      try {
+        await webpush.sendNotification(
+          {
+            endpoint: sub.endpoint,
+            keys: {
+              p256dh: sub.p256dh,
+              auth: sub.auth
+            }
+          },
+          payload
+        );
+
+        sent++;
+        results.push({
+          id: sub.id,
+          ok: true,
+          original_code: sub.code,
+          original_plate: sub.plate,
+          original_product_type: sub.product_type,
+          endpoint_preview: String(sub.endpoint || '').slice(0, 70)
+        });
+      } catch (err) {
+        failed++;
+        results.push({
+          id: sub.id,
+          ok: false,
+          original_code: sub.code,
+          original_plate: sub.plate,
+          original_product_type: sub.product_type,
+          statusCode: err.statusCode || null,
+          error: err.body || err.message || String(err),
+          endpoint_preview: String(sub.endpoint || '').slice(0, 70)
+        });
+
+        if (err && (err.statusCode === 404 || err.statusCode === 410)) {
+          await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]);
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      mode: 'any_existing_device',
+      followme_code: code,
+      followme_label: project.label,
+      subscriptions_found: subsRes.rows.length,
+      sent,
+      failed,
+      results
+    });
+  } catch (err) {
+    console.error('debug followme test-push-any-device error:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || String(err)
+    });
+  }
+});
+
+
 app.post('/api/debug/followme/test-push', express.json(), async (req, res) => {
   try {
     const key = String(req.body?.key || '').trim();
