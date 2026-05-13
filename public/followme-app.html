@@ -311,6 +311,28 @@
       text-decoration:underline;
     }
 
+
+    .history-item.active-current{
+      border: 1px solid rgba(200,255,46,.75) !important;
+      box-shadow:
+        0 0 0 1px rgba(200,255,46,.14) inset,
+        0 10px 24px rgba(200,255,46,.08);
+      background:
+        linear-gradient(135deg, rgba(200,255,46,.10), rgba(255,255,255,.045)),
+        rgba(255,255,255,.04);
+    }
+    .active-now-btn{
+      border:0;
+      border-radius:999px;
+      padding:8px 12px;
+      font-weight:900;
+      color:#101018;
+      background:#c8ff2e;
+      box-shadow:0 10px 24px rgba(200,255,46,.22);
+      cursor:default;
+      white-space:nowrap;
+    }
+
 </style>
 </head>
 <body>
@@ -320,16 +342,7 @@
       <h1>Follow Me<span>Il QR che cambia con te.</span></h1>
       <p>Decidi dove porta il tuo QR. Ogni scansione viene registrata e ti arriva una notifica.</p>
     </section>
-
-    <section class="card">
-      <div class="topline">
-        <div class="label">Destinazione attuale</div>
-        <div class="status-dot" id="statusText">Attivo</div>
-      </div>
-      <div class="current-url" id="activeUrl">Caricamento...</div>
-    </section>
-
-    <section class="card row">
+<section class="card row">
       <div class="label">Dove vuoi mandare chi ti scansiona?</div>
       <input id="newUrl" placeholder="Incolla qui un link: https://instagram.com/...">
       <button class="btn" onclick="updateUrl()">Aggiorna QR</button>
@@ -489,7 +502,8 @@ async function loadStatus(){
     return;
   }
 
-  document.getElementById("activeUrl").textContent = data.project.active_url || "Nessun link impostato.";
+  const activeUrlEl = document.getElementById("activeUrl");
+  if(activeUrlEl) activeUrlEl.textContent = data.project.active_url || "Nessun link impostato.";
   document.getElementById("newUrl").value = data.project.active_url || "";
   document.getElementById("totalScans").textContent = data.stats.total_scans || 0;
   document.getElementById("currentScans").textContent = data.stats.current_url_scans || 0;
@@ -719,6 +733,21 @@ function urlBase64ToUint8Array(base64String){
   const outputArray = new Uint8Array(rawData.length);
   for(let i=0;i<rawData.length;++i) outputArray[i] = rawData.charCodeAt(i);
   return outputArray;
+}
+
+
+function normalizeFollowMeUrlForCompare(v){
+  return String(v || "").trim().replace(/\/+$/,"");
+}
+
+function isFollowMeActiveHistoryUrl(itemUrl){
+  try{
+    const active = normalizeFollowMeUrlForCompare(window.__followMeActiveUrl || "");
+    const current = normalizeFollowMeUrlForCompare(itemUrl || "");
+    return !!active && !!current && active === current;
+  }catch(e){
+    return false;
+  }
 }
 
 function escapeHtml(s){
