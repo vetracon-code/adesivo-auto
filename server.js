@@ -8992,6 +8992,66 @@ app.post('/api/followme/:code/subscribe', express.json(), async (req, res) => {
   }
 });
 
+
+app.post('/api/debug/followme/create-demo', express.json(), async (req, res) => {
+  try {
+    const key = String(req.body?.key || '').trim();
+    const expected = process.env.FOLLOWME_DEBUG_KEY || process.env.ADMIN_PASSWORD || '';
+
+    if (!expected || key !== expected) {
+      return res.status(401).json({
+        success:false,
+        error:'Chiave debug non valida.'
+      });
+    }
+
+    const code = normalizeFollowMeCode(req.body?.code || 'FM-DEMO');
+    const publicId = normalizeFollowMePublicId(req.body?.public_id || 'FMDEMO');
+    const label = String(req.body?.label || 'Follow Me Demo').trim();
+    const activeUrl = normalizeUrlForFollowMe(req.body?.active_url || 'https://app-me.it');
+
+    const inserted = await pool.query(
+      `INSERT INTO followme_projects
+       (code, public_id, label, active_url, status, updated_at)
+       VALUES ($1,$2,$3,$4,'active',NOW())
+       ON CONFLICT (code)
+       DO UPDATE SET
+         public_id = EXCLUDED.public_id,
+         label = EXCLUDED.label,
+         active_url = EXCLUDED.active_url,
+         status = 'active',
+         updated_at = NOW()
+       RETURNING *`,
+      [code, publicId, label, activeUrl]
+    );
+
+    await pool.query(
+      `INSERT INTO followme_url_history
+       (project_id, url, activated_at, scan_count)
+       VALUES ($1,$2,NOW(),0)
+       ON CONFLICT (project_id, url)
+       DO NOTHING`,
+      [inserted.rows[0].id, activeUrl]
+    );
+
+    const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+
+    return res.json({
+      success:true,
+      project: inserted.rows[0],
+      public_url: `${baseUrl.replace(/\/$/, '')}/fm/u/${encodeURIComponent(publicId)}`,
+      owner_url: `${baseUrl.replace(/\/$/, '')}/fm/app/${encodeURIComponent(code)}`
+    });
+  } catch (err) {
+    console.error('debug followme create-demo error:', err);
+    return res.status(500).json({
+      success:false,
+      error: err.message || String(err)
+    });
+  }
+});
+
+
 app.post('/api/admin/followme/create', requireAdmin, express.json(), async (req, res) => {
   try {
     let code = normalizeFollowMeCode(req.body?.code) || makeFollowMeCode();
