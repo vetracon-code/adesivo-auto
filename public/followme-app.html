@@ -341,6 +341,7 @@
       <button class="btn secondary" id="installHelpBtn" onclick="showInstallHelp()">Come salvo l’App?</button>
       <button class="btn" id="notifyBtn" onclick="enableNotifications()">Attiva notifiche</button>
       <button class="btn secondary" onclick="loadStatus()">Aggiorna dati</button>
+      <pre id="pushDebugBox" style="white-space:pre-wrap;background:rgba(0,0,0,.32);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:12px;color:#c8ff2e;font-size:.78rem;line-height:1.35;display:none;"></pre>
     </section>
   </main>
 
@@ -480,62 +481,124 @@ function reactivateUrl(encoded){
   updateUrl();
 }
 
+function pushDebugLog(msg){
+  try{
+    const box = document.getElementById("pushDebugBox");
+    if(!box) return;
+    box.style.display = "block";
+    box.textContent += String(msg) + "\n";
+  }catch(e){}
+}
+
+function resetPushDebug(){
+  try{
+    const box = document.getElementById("pushDebugBox");
+    if(box){
+      box.style.display = "block";
+      box.textContent = "";
+    }
+  }catch(e){}
+}
+
 async function enableNotifications(){
+  resetPushDebug();
+
   try{
     CODE = getCode();
 
+    pushDebugLog("CODE: " + CODE);
+    pushDebugLog("UserAgent: " + navigator.userAgent);
+    pushDebugLog("isIos: " + isIos());
+    pushDebugLog("isStandalone: " + isStandalone());
+    pushDebugLog("Notification in window: " + ("Notification" in window));
+    pushDebugLog("Notification.permission iniziale: " + (("Notification" in window) ? Notification.permission : "non disponibile"));
+    pushDebugLog("serviceWorker supportato: " + ("serviceWorker" in navigator));
+    pushDebugLog("PushManager supportato: " + ("PushManager" in window));
+
     if(isIos() && !isStandalone()){
       showInstallHelp();
+      pushDebugLog("STOP: iPhone non in modalità Home Screen/PWA.");
       toast("Su iPhone salva prima l’App nella schermata Home.");
       return;
     }
 
     if(!("serviceWorker" in navigator) || !("PushManager" in window)){
+      pushDebugLog("STOP: ServiceWorker o PushManager non disponibili.");
       toast("Notifiche non supportate su questo dispositivo.");
       return;
     }
 
+    pushDebugLog("Registro service worker...");
     const reg = await navigator.serviceWorker.register("/service-worker.js");
     await navigator.serviceWorker.ready;
+    pushDebugLog("Service worker pronto.");
 
-    const permission = await Notification.requestPermission();
+    let permission = Notification.permission;
+    pushDebugLog("Permission prima della richiesta: " + permission);
 
     if(permission !== "granted"){
+      pushDebugLog("Chiedo autorizzazione iOS/browser...");
+      permission = await Notification.requestPermission();
+      pushDebugLog("Permission dopo richiesta: " + permission);
+    }else{
+      pushDebugLog("Permission già granted: nessun popup iOS verrà mostrato.");
+    }
+
+    if(permission !== "granted"){
+      pushDebugLog("STOP: notifiche non autorizzate.");
       toast("Notifiche non autorizzate.");
       return;
     }
 
+    pushDebugLog("Recupero VAPID public key...");
     const vapidRes = await fetch("/api/vapid-public-key");
+    pushDebugLog("VAPID status: " + vapidRes.status);
     const vapidData = await vapidRes.json();
+    pushDebugLog("VAPID presente: " + !!vapidData.publicKey);
 
-    // Se esiste già una subscription per questo dominio, la riutilizziamo
-    // e la salviamo anche come subscription Follow Me.
+    pushDebugLog("Controllo subscription esistente...");
     let sub = await reg.pushManager.getSubscription();
 
-    if(!sub){
+    if(sub){
+      pushDebugLog("Subscription esistente trovata.");
+    }else{
+      pushDebugLog("Nessuna subscription esistente. Creo nuova subscription...");
       sub = await reg.pushManager.subscribe({
         userVisibleOnly:true,
         applicationServerKey:urlBase64ToUint8Array(vapidData.publicKey)
       });
+      pushDebugLog("Nuova subscription creata.");
     }
+
+    const subJson = sub.toJSON ? sub.toJSON() : sub;
+    pushDebugLog("Endpoint preview: " + String(subJson.endpoint || "").slice(0, 80));
+    pushDebugLog("Invio subscription al server Follow Me...");
 
     const res = await fetch("/api/followme/" + encodeURIComponent(CODE) + "/subscribe", {
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ subscription:sub })
+      body:JSON.stringify({ subscription:subJson })
     });
 
-    const data = await res.json().catch(()=>null);
+    pushDebugLog("Server subscribe status: " + res.status);
+
+    const data = await res.json().catch(function(err){
+      pushDebugLog("Errore parsing JSON server: " + err.message);
+      return null;
+    });
+
+    pushDebugLog("Risposta server: " + JSON.stringify(data));
 
     if(!res.ok || !data || !data.success){
-      console.warn("Follow Me subscribe server error:", data);
       toast((data && data.error) || "Errore salvataggio notifiche.");
       return;
     }
 
     toast("Notifiche attive per Follow Me.");
+    pushDebugLog("OK: subscription Follow Me salvata.");
   }catch(err){
     console.error("Follow Me enableNotifications error:", err);
+    pushDebugLog("ERRORE: " + (err && err.stack ? err.stack : (err.message || err)));
     toast("Errore notifiche: " + (err.message || err));
   }
 }
