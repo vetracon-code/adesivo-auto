@@ -481,46 +481,63 @@ function reactivateUrl(encoded){
 }
 
 async function enableNotifications(){
-  if(isIos() && !isStandalone()){
-    showInstallHelp();
-    toast("Su iPhone salva prima l’App nella schermata Home.");
-    return;
+  try{
+    CODE = getCode();
+
+    if(isIos() && !isStandalone()){
+      showInstallHelp();
+      toast("Su iPhone salva prima l’App nella schermata Home.");
+      return;
+    }
+
+    if(!("serviceWorker" in navigator) || !("PushManager" in window)){
+      toast("Notifiche non supportate su questo dispositivo.");
+      return;
+    }
+
+    const reg = await navigator.serviceWorker.register("/service-worker.js");
+    await navigator.serviceWorker.ready;
+
+    const permission = await Notification.requestPermission();
+
+    if(permission !== "granted"){
+      toast("Notifiche non autorizzate.");
+      return;
+    }
+
+    const vapidRes = await fetch("/api/vapid-public-key");
+    const vapidData = await vapidRes.json();
+
+    // Se esiste già una subscription per questo dominio, la riutilizziamo
+    // e la salviamo anche come subscription Follow Me.
+    let sub = await reg.pushManager.getSubscription();
+
+    if(!sub){
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly:true,
+        applicationServerKey:urlBase64ToUint8Array(vapidData.publicKey)
+      });
+    }
+
+    const res = await fetch("/api/followme/" + encodeURIComponent(CODE) + "/subscribe", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ subscription:sub })
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      console.warn("Follow Me subscribe server error:", data);
+      toast((data && data.error) || "Errore salvataggio notifiche.");
+      return;
+    }
+
+    toast("Notifiche attive per Follow Me.");
+  }catch(err){
+    console.error("Follow Me enableNotifications error:", err);
+    toast("Errore notifiche: " + (err.message || err));
   }
-
-  if(!("serviceWorker" in navigator) || !("PushManager" in window)){
-    toast("Notifiche non supportate su questo dispositivo.");
-    return;
-  }
-
-  const reg = await navigator.serviceWorker.register("/service-worker.js");
-  const permission = await Notification.requestPermission();
-
-  if(permission !== "granted"){
-    toast("Notifiche non autorizzate.");
-    return;
-  }
-
-  const vapidRes = await fetch("/api/vapid-public-key");
-  const vapidData = await vapidRes.json();
-
-  const sub = await reg.pushManager.subscribe({
-    userVisibleOnly:true,
-    applicationServerKey:urlBase64ToUint8Array(vapidData.publicKey)
-  });
-
-  const res = await fetch("/api/followme/" + encodeURIComponent(CODE) + "/subscribe", {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({ subscription:sub })
-  });
-
-  const data = await res.json().catch(()=>null);
-  if(!res.ok || !data || !data.success){
-    toast((data && data.error) || "Errore attivazione notifiche.");
-    return;
-  }
-
-  toast("Notifiche attive.");
 }
 
 function urlBase64ToUint8Array(base64String){
