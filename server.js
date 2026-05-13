@@ -9224,6 +9224,94 @@ app.post('/api/debug/followme/test-push-any-device', express.json(), async (req,
 });
 
 
+
+app.post('/api/debug/followme/subscription-diagnosis', express.json(), async (req, res) => {
+  try {
+    const key = String(req.body?.key || '').trim();
+    const expected = process.env.FOLLOWME_DEBUG_KEY || process.env.ADMIN_PASSWORD || '';
+
+    if (!expected || key !== expected) {
+      return res.status(401).json({
+        success: false,
+        error: 'Chiave debug non valida.'
+      });
+    }
+
+    const code = normalizeFollowMeCode(req.body?.code || 'FM-DEMO');
+
+    const projectRes = await pool.query(
+      `SELECT id, code, public_id, label, active_url, status
+       FROM followme_projects
+       WHERE code = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    const normalSubs = await pool.query(
+      `SELECT id, code, plate, updated_at, COALESCE(product_type,'vehicle') AS product_type,
+              LEFT(endpoint, 90) AS endpoint_preview
+       FROM push_subscriptions
+       WHERE code = $1
+          OR COALESCE(product_type,'vehicle') = 'follow_me'
+          OR plate = 'FOLLOWME'
+       ORDER BY updated_at DESC NULLS LAST, id DESC
+       LIMIT 30`,
+      [code]
+    );
+
+    const latestAll = await pool.query(
+      `SELECT id, code, plate, updated_at, COALESCE(product_type,'vehicle') AS product_type,
+              LEFT(endpoint, 90) AS endpoint_preview
+       FROM push_subscriptions
+       ORDER BY updated_at DESC NULLS LAST, id DESC
+       LIMIT 15`
+    );
+
+    let dedicatedExists = false;
+    let dedicatedSubs = { rows: [] };
+
+    const tableCheck = await pool.query(
+      `SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_name = 'followme_push_subscriptions'
+      ) AS exists`
+    );
+
+    dedicatedExists = tableCheck.rows[0]?.exists === true;
+
+    if (dedicatedExists && projectRes.rows.length) {
+      dedicatedSubs = await pool.query(
+        `SELECT id, project_id, code, updated_at,
+                LEFT(endpoint, 90) AS endpoint_preview
+         FROM followme_push_subscriptions
+         WHERE project_id = $1 OR code = $2
+         ORDER BY updated_at DESC NULLS LAST, id DESC
+         LIMIT 30`,
+        [projectRes.rows[0].id, code]
+      );
+    }
+
+    return res.json({
+      success: true,
+      code,
+      project_found: projectRes.rows.length > 0,
+      project: projectRes.rows[0] || null,
+      followme_push_subscriptions_table_exists: dedicatedExists,
+      matches_in_push_subscriptions: normalSubs.rows,
+      matches_in_followme_push_subscriptions: dedicatedSubs.rows,
+      latest_push_subscriptions_any_product: latestAll.rows
+    });
+  } catch (err) {
+    console.error('debug followme subscription-diagnosis error:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || String(err)
+    });
+  }
+});
+
+
 app.post('/api/debug/followme/test-push', express.json(), async (req, res) => {
   try {
     const key = String(req.body?.key || '').trim();
