@@ -8025,6 +8025,49 @@ async function initDb() {
       ON owner_invites (code, plate, created_at DESC)
     `);
 
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS followme_projects (
+        id SERIAL PRIMARY KEY,
+        code TEXT UNIQUE NOT NULL,
+        public_id TEXT UNIQUE NOT NULL,
+        label TEXT,
+        owner_name TEXT,
+        owner_email TEXT,
+        owner_phone TEXT,
+        active_url TEXT,
+        status TEXT DEFAULT 'active',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS followme_url_history (
+        id SERIAL PRIMARY KEY,
+        project_id INTEGER REFERENCES followme_projects(id) ON DELETE CASCADE,
+        url TEXT NOT NULL,
+        activated_at TIMESTAMPTZ DEFAULT NOW(),
+        last_used_at TIMESTAMPTZ,
+        scan_count INTEGER DEFAULT 0,
+        UNIQUE(project_id, url)
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS followme_scan_logs (
+        id SERIAL PRIMARY KEY,
+        project_id INTEGER REFERENCES followme_projects(id) ON DELETE CASCADE,
+        url TEXT,
+        ip_address TEXT,
+        user_agent TEXT,
+        referrer TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await pool.query("ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS product_type TEXT DEFAULT 'vehicle'");
+
     await pool.query("ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS invite_token TEXT");
     await pool.query("ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS invited_by_endpoint TEXT");
     await pool.query("ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS app_saved_detected BOOLEAN DEFAULT FALSE");
@@ -8655,6 +8698,347 @@ async function insertOwnerMessageAndPushDeadline({ vehicle, plateNorm, alert }) 
 
   return { messageId: insertedMessageId, unreadCount, sent, failed };
 }
+
+
+
+function normalizeFollowMeCode(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function normalizeFollowMePublicId(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function normalizeUrlForFollowMe(value) {
+  let url = String(value || '').trim();
+  if (!url) return '';
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+  return url;
+}
+
+function makeFollowMeCode() {
+  return 'FM-' + Math.random().toString(16).slice(2, 10).toUpperCase();
+}
+
+function makeFollowMePublicId() {
+  return 'FM' + Math.random().toString(36).slice(2, 10).toUpperCase();
+}
+
+async function sendFollowMeScanPush(project) {
+  try {
+    const subs = await pool.query(
+      `SELECT endpoint, p256dh, auth
+       FROM push_subscriptions
+       WHERE code = $1
+         AND COALESCE(product_type,'vehicle') = 'follow_me'
+       ORDER BY updated_at DESC
+       LIMIT 20`,
+      [project.code]
+    );
+
+    const payload = JSON.stringify({
+      title: 'Follow Me QR scansionato 👀',
+      body: 'Qualcuno ha appena aperto il tuo QR.',
+      url: `/fm/app/${encodeURIComponent(project.code)}?focus=scans`,
+      targetUrl: `/fm/app/${encodeURIComponent(project.code)}?focus=scans`,
+      type: 'followme_scan',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      timestamp: Date.now(),
+      data: {
+        type: 'followme_scan',
+        code: project.code,
+        url: `/fm/app/${encodeURIComponent(project.code)}?focus=scans`
+      }
+    });
+
+    for (const sub of subs.rows) {
+      try {
+        await webpush.sendNotification(
+          {
+            endpoint: sub.endpoint,
+            keys: { p256dh: sub.p256dh, auth: sub.auth }
+          },
+          payload
+        );
+      } catch (err) {
+        if (err && (err.statusCode === 404 || err.statusCode === 410)) {
+          await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]);
+        } else {
+          console.error('followme push error:', err.statusCode || '', err.body || err.message || err);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('sendFollowMeScanPush error:', err.message || err);
+  }
+}
+
+app.get('/fm/app/:code', async (req, res) => {
+  return res.sendFile(path.join(__dirname, 'public', 'followme-app.html'));
+});
+
+app.get('/fm/u/:public_id', async (req, res) => {
+  try {
+    const publicId = normalizeFollowMePublicId(req.params.public_id);
+
+    const q = await pool.query(
+      `SELECT *
+       FROM followme_projects
+       WHERE public_id = $1
+         AND COALESCE(status,'active') = 'active'
+       LIMIT 1`,
+      [publicId]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).send('Follow Me QR non trovato.');
+    }
+
+    const project = q.rows[0];
+    const activeUrl = normalizeUrlForFollowMe(project.active_url);
+
+    await pool.query(
+      `INSERT INTO followme_scan_logs
+       (project_id, url, ip_address, user_agent, referrer)
+       VALUES ($1,$2,$3,$4,$5)`,
+      [
+        project.id,
+        activeUrl || null,
+        req.headers['x-forwarded-for'] || req.socket?.remoteAddress || null,
+        req.headers['user-agent'] || null,
+        req.headers['referer'] || req.headers['referrer'] || null
+      ]
+    );
+
+    if (activeUrl) {
+      await pool.query(
+        `INSERT INTO followme_url_history
+         (project_id, url, activated_at, last_used_at, scan_count)
+         VALUES ($1,$2,NOW(),NOW(),1)
+         ON CONFLICT (project_id, url)
+         DO UPDATE SET
+           last_used_at = NOW(),
+           scan_count = COALESCE(followme_url_history.scan_count,0) + 1`,
+        [project.id, activeUrl]
+      );
+    }
+
+    sendFollowMeScanPush(project).catch(() => {});
+
+    if (!activeUrl) {
+      return res.send(`
+        <!doctype html>
+        <html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>Follow Me QR</title>
+        <style>body{font-family:Arial,sans-serif;background:#0d0d14;color:#fff;display:grid;place-items:center;min-height:100vh;text-align:center;padding:24px}h1{font-size:42px;margin:0}p{color:#aaa;line-height:1.4}</style>
+        </head><body><div><h1>Follow Me</h1><p>Questo QR non ha ancora una destinazione attiva.</p></div></body></html>
+      `);
+    }
+
+    return res.redirect(302, activeUrl);
+  } catch (err) {
+    console.error('fm/u error:', err);
+    return res.status(500).send('Errore Follow Me QR.');
+  }
+});
+
+app.get('/api/followme/:code/status', async (req, res) => {
+  try {
+    const code = normalizeFollowMeCode(req.params.code);
+
+    const q = await pool.query(
+      `SELECT *
+       FROM followme_projects
+       WHERE code = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).json({ success:false, error:'Follow Me QR non trovato.' });
+    }
+
+    const project = q.rows[0];
+
+    const totalRes = await pool.query(
+      `SELECT COUNT(*)::int AS total
+       FROM followme_scan_logs
+       WHERE project_id = $1`,
+      [project.id]
+    );
+
+    const currentRes = await pool.query(
+      `SELECT COALESCE(scan_count,0)::int AS scans
+       FROM followme_url_history
+       WHERE project_id = $1 AND url = $2
+       LIMIT 1`,
+      [project.id, normalizeUrlForFollowMe(project.active_url)]
+    );
+
+    const hist = await pool.query(
+      `SELECT url, activated_at, last_used_at, COALESCE(scan_count,0)::int AS scan_count
+       FROM followme_url_history
+       WHERE project_id = $1
+       ORDER BY last_used_at DESC NULLS LAST, activated_at DESC
+       LIMIT 10`,
+      [project.id]
+    );
+
+    return res.json({
+      success:true,
+      project:{
+        code: project.code,
+        public_id: project.public_id,
+        label: project.label,
+        active_url: project.active_url,
+        status: project.status
+      },
+      stats:{
+        total_scans: totalRes.rows[0]?.total || 0,
+        current_url_scans: currentRes.rows[0]?.scans || 0
+      },
+      history: hist.rows
+    });
+  } catch (err) {
+    console.error('followme status error:', err);
+    return res.status(500).json({ success:false, error:err.message || String(err) });
+  }
+});
+
+app.post('/api/followme/:code/update-url', express.json(), async (req, res) => {
+  try {
+    const code = normalizeFollowMeCode(req.params.code);
+    const url = normalizeUrlForFollowMe(req.body?.url);
+
+    if (!url) {
+      return res.status(400).json({ success:false, error:'URL obbligatorio.' });
+    }
+
+    const q = await pool.query(
+      `UPDATE followme_projects
+       SET active_url = $2,
+           updated_at = NOW()
+       WHERE code = $1
+       RETURNING *`,
+      [code, url]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).json({ success:false, error:'Follow Me QR non trovato.' });
+    }
+
+    await pool.query(
+      `INSERT INTO followme_url_history
+       (project_id, url, activated_at, last_used_at, scan_count)
+       VALUES ($1,$2,NOW(),NULL,0)
+       ON CONFLICT (project_id, url)
+       DO UPDATE SET activated_at = NOW()`,
+      [q.rows[0].id, url]
+    );
+
+    return res.json({ success:true, project:q.rows[0] });
+  } catch (err) {
+    console.error('followme update-url error:', err);
+    return res.status(500).json({ success:false, error:err.message || String(err) });
+  }
+});
+
+app.post('/api/followme/:code/subscribe', express.json(), async (req, res) => {
+  try {
+    const code = normalizeFollowMeCode(req.params.code);
+    const subscription = req.body?.subscription;
+
+    if (!code || !subscription || !subscription.endpoint || !subscription.keys?.p256dh || !subscription.keys?.auth) {
+      return res.status(400).json({ success:false, error:'Dati subscription mancanti.' });
+    }
+
+    const exists = await pool.query(
+      `SELECT code FROM followme_projects WHERE code = $1 LIMIT 1`,
+      [code]
+    );
+
+    if (!exists.rows.length) {
+      return res.status(404).json({ success:false, error:'Follow Me QR non trovato.' });
+    }
+
+    await pool.query(
+      `INSERT INTO push_subscriptions
+       (code, plate, endpoint, p256dh, auth, user_agent, updated_at, product_type)
+       VALUES ($1,$2,$3,$4,$5,$6,NOW(),'follow_me')
+       ON CONFLICT (endpoint)
+       DO UPDATE SET
+         code = EXCLUDED.code,
+         plate = EXCLUDED.plate,
+         p256dh = EXCLUDED.p256dh,
+         auth = EXCLUDED.auth,
+         user_agent = EXCLUDED.user_agent,
+         product_type = 'follow_me',
+         updated_at = NOW()`,
+      [
+        code,
+        'FOLLOWME',
+        subscription.endpoint,
+        subscription.keys.p256dh,
+        subscription.keys.auth,
+        req.headers['user-agent'] || null
+      ]
+    );
+
+    return res.json({ success:true });
+  } catch (err) {
+    console.error('followme subscribe error:', err);
+    return res.status(500).json({ success:false, error:err.message || String(err) });
+  }
+});
+
+app.post('/api/admin/followme/create', requireAdmin, express.json(), async (req, res) => {
+  try {
+    let code = normalizeFollowMeCode(req.body?.code) || makeFollowMeCode();
+    let publicId = normalizeFollowMePublicId(req.body?.public_id) || makeFollowMePublicId();
+    const label = String(req.body?.label || 'Follow Me QR').trim();
+    const activeUrl = normalizeUrlForFollowMe(req.body?.active_url || 'https://app-me.it');
+
+    for (let i = 0; i < 8; i++) {
+      const exists = await pool.query(
+        `SELECT 1 FROM followme_projects WHERE code = $1 OR public_id = $2 LIMIT 1`,
+        [code, publicId]
+      );
+      if (!exists.rows.length) break;
+      code = makeFollowMeCode();
+      publicId = makeFollowMePublicId();
+    }
+
+    const inserted = await pool.query(
+      `INSERT INTO followme_projects
+       (code, public_id, label, active_url, status)
+       VALUES ($1,$2,$3,$4,'active')
+       RETURNING *`,
+      [code, publicId, label, activeUrl]
+    );
+
+    await pool.query(
+      `INSERT INTO followme_url_history
+       (project_id, url, activated_at, scan_count)
+       VALUES ($1,$2,NOW(),0)
+       ON CONFLICT (project_id, url) DO NOTHING`,
+      [inserted.rows[0].id, activeUrl]
+    );
+
+    const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+
+    return res.json({
+      success:true,
+      project: inserted.rows[0],
+      public_url: `${baseUrl.replace(/\/$/, '')}/fm/u/${encodeURIComponent(publicId)}`,
+      owner_url: `${baseUrl.replace(/\/$/, '')}/fm/app/${encodeURIComponent(code)}`
+    });
+  } catch (err) {
+    console.error('admin followme create error:', err);
+    return res.status(500).json({ success:false, error:err.message || String(err) });
+  }
+});
+
 
 app.post('/api/owner-deadlines/sync', async (req, res) => {
   try {

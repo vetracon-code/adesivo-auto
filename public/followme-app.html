@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Follow Me - Dynamic QR</title>
+  <meta name="theme-color" content="#101018">
+  <style>
+    :root{
+      --bg:#0d0d14;
+      --card:#171724;
+      --card2:#202033;
+      --text:#ffffff;
+      --muted:#a7a7bc;
+      --line:rgba(255,255,255,.10);
+      --lime:#c8ff2e;
+      --cyan:#5ee7ff;
+      --pink:#ff4fd8;
+      --danger:#ff5a6f;
+      --ok:#55f2a5;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      min-height:100vh;
+      background:
+        radial-gradient(circle at 15% 0%, rgba(255,79,216,.22), transparent 34%),
+        radial-gradient(circle at 90% 10%, rgba(94,231,255,.20), transparent 32%),
+        linear-gradient(180deg,#0d0d14,#11111d 55%,#090910);
+      color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    }
+    .app{
+      width:min(760px,100%);
+      margin:0 auto;
+      padding:22px 16px 34px;
+    }
+    .hero{
+      padding:24px 4px 18px;
+    }
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:7px 11px;
+      border-radius:999px;
+      background:rgba(200,255,46,.12);
+      border:1px solid rgba(200,255,46,.28);
+      color:var(--lime);
+      font-weight:900;
+      font-size:.78rem;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+    }
+    h1{
+      margin:16px 0 8px;
+      font-size:clamp(2.4rem,12vw,4.4rem);
+      line-height:.88;
+      letter-spacing:-.08em;
+      text-transform:uppercase;
+    }
+    h1 span{
+      display:block;
+      font-size:clamp(1.05rem,4.2vw,1.7rem);
+      letter-spacing:.02em;
+      color:var(--cyan);
+      margin-top:10px;
+      text-transform:none;
+    }
+    .hero p{
+      margin:14px 0 0;
+      color:var(--muted);
+      line-height:1.45;
+      font-size:1.02rem;
+    }
+    .card{
+      background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.035));
+      border:1px solid var(--line);
+      border-radius:26px;
+      padding:18px;
+      margin-top:14px;
+      box-shadow:0 18px 40px rgba(0,0,0,.24);
+      backdrop-filter:blur(12px);
+    }
+    .label{
+      color:var(--muted);
+      font-size:.78rem;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      font-weight:900;
+      margin-bottom:8px;
+    }
+    .current-url{
+      word-break:break-all;
+      font-size:1.02rem;
+      line-height:1.45;
+      color:#fff;
+      padding:14px;
+      border-radius:18px;
+      background:rgba(0,0,0,.22);
+      border:1px solid rgba(255,255,255,.08);
+    }
+    input{
+      width:100%;
+      border:1px solid rgba(255,255,255,.14);
+      background:rgba(0,0,0,.24);
+      color:#fff;
+      border-radius:18px;
+      min-height:54px;
+      padding:0 15px;
+      font-size:1rem;
+      outline:none;
+    }
+    input:focus{
+      border-color:rgba(94,231,255,.65);
+      box-shadow:0 0 0 4px rgba(94,231,255,.10);
+    }
+    .btn{
+      width:100%;
+      min-height:54px;
+      border:0;
+      border-radius:18px;
+      font-weight:950;
+      font-size:1rem;
+      cursor:pointer;
+      color:#090910;
+      background:linear-gradient(135deg,var(--lime),var(--cyan));
+      box-shadow:0 12px 28px rgba(94,231,255,.18);
+    }
+    .btn.secondary{
+      color:#fff;
+      background:rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.12);
+      box-shadow:none;
+    }
+    .btn.small{
+      width:auto;
+      min-height:38px;
+      border-radius:13px;
+      padding:0 12px;
+      font-size:.86rem;
+    }
+    .row{
+      display:grid;
+      gap:10px;
+    }
+    .stats{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+    }
+    .stat{
+      padding:16px;
+      border-radius:20px;
+      background:rgba(255,255,255,.055);
+      border:1px solid rgba(255,255,255,.08);
+    }
+    .stat strong{
+      display:block;
+      font-size:2rem;
+      line-height:1;
+      letter-spacing:-.04em;
+    }
+    .stat span{
+      display:block;
+      margin-top:7px;
+      color:var(--muted);
+      font-size:.88rem;
+      line-height:1.3;
+    }
+    .history{
+      display:grid;
+      gap:10px;
+    }
+    .history-item{
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:10px;
+      align-items:center;
+      padding:13px;
+      border-radius:18px;
+      background:rgba(255,255,255,.045);
+      border:1px solid rgba(255,255,255,.075);
+    }
+    .history-url{
+      word-break:break-all;
+      font-weight:800;
+      line-height:1.25;
+    }
+    .history-meta{
+      color:var(--muted);
+      font-size:.84rem;
+      margin-top:5px;
+    }
+    .toast{
+      position:fixed;
+      left:16px;
+      right:16px;
+      bottom:18px;
+      max-width:720px;
+      margin:0 auto;
+      padding:14px 16px;
+      border-radius:18px;
+      background:#ffffff;
+      color:#111;
+      font-weight:900;
+      display:none;
+      box-shadow:0 18px 50px rgba(0,0,0,.36);
+      z-index:50;
+    }
+    .empty{
+      color:var(--muted);
+      line-height:1.45;
+      padding:14px;
+      border-radius:18px;
+      background:rgba(255,255,255,.045);
+    }
+    .topline{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      margin-bottom:12px;
+    }
+    .status-dot{
+      display:inline-flex;
+      align-items:center;
+      gap:7px;
+      color:var(--ok);
+      font-weight:900;
+      font-size:.88rem;
+    }
+    .status-dot::before{
+      content:"";
+      width:9px;
+      height:9px;
+      border-radius:999px;
+      background:var(--ok);
+      box-shadow:0 0 0 5px rgba(85,242,165,.10);
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="hero">
+      <div class="badge">Dynamic QR</div>
+      <h1>Follow Me<span>Il QR che cambia con te.</span></h1>
+      <p>Decidi dove porta il tuo QR. Ogni scansione viene registrata e ti arriva una notifica.</p>
+    </section>
+
+    <section class="card">
+      <div class="topline">
+        <div class="label">Destinazione attuale</div>
+        <div class="status-dot" id="statusText">Attivo</div>
+      </div>
+      <div class="current-url" id="activeUrl">Caricamento...</div>
+    </section>
+
+    <section class="card row">
+      <div class="label">Dove vuoi mandare chi ti scansiona?</div>
+      <input id="newUrl" placeholder="Incolla qui un link: https://instagram.com/...">
+      <button class="btn" onclick="updateUrl()">Aggiorna QR</button>
+    </section>
+
+    <section class="card">
+      <div class="stats">
+        <div class="stat">
+          <strong id="totalScans">0</strong>
+          <span>Scansioni totali</span>
+        </div>
+        <div class="stat">
+          <strong id="currentScans">0</strong>
+          <span>Scansioni link attuale</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="label">Ultimi 10 link usati</div>
+      <div class="history" id="historyList">
+        <div class="empty">Nessun link ancora registrato.</div>
+      </div>
+    </section>
+
+    <section class="card row">
+      <div class="label">Notifiche scansione</div>
+      <button class="btn secondary" onclick="enableNotifications()">Attiva notifiche</button>
+      <button class="btn secondary" onclick="loadStatus()">Aggiorna dati</button>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+let CODE = "";
+
+function getCode(){
+  const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+  if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+  const p = new URLSearchParams(location.search || "");
+  return String(p.get("code") || "").trim().toUpperCase();
+}
+
+function toast(msg){
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.style.display = "block";
+  setTimeout(()=>{ el.style.display = "none"; }, 2600);
+}
+
+async function loadStatus(){
+  CODE = getCode();
+  if(!CODE){
+    toast("Codice Follow Me mancante.");
+    return;
+  }
+
+  const res = await fetch("/api/followme/" + encodeURIComponent(CODE) + "/status");
+  const data = await res.json().catch(()=>null);
+
+  if(!res.ok || !data || !data.success){
+    toast((data && data.error) || "Errore caricamento.");
+    return;
+  }
+
+  document.getElementById("activeUrl").textContent = data.project.active_url || "Nessun link impostato.";
+  document.getElementById("newUrl").value = data.project.active_url || "";
+  document.getElementById("totalScans").textContent = data.stats.total_scans || 0;
+  document.getElementById("currentScans").textContent = data.stats.current_url_scans || 0;
+
+  const list = document.getElementById("historyList");
+  const rows = data.history || [];
+
+  if(!rows.length){
+    list.innerHTML = '<div class="empty">Nessun link ancora registrato.</div>';
+    return;
+  }
+
+  list.innerHTML = rows.map(x => `
+    <div class="history-item">
+      <div>
+        <div class="history-url">${escapeHtml(x.url)}</div>
+        <div class="history-meta">${Number(x.scan_count || 0)} scansioni · ultimo uso ${formatDate(x.last_used_at || x.activated_at)}</div>
+      </div>
+      <button class="btn small secondary" onclick="reactivateUrl('${encodeURIComponent(x.url)}')">Riattiva</button>
+    </div>
+  `).join("");
+}
+
+async function updateUrl(){
+  const url = document.getElementById("newUrl").value.trim();
+  if(!url){
+    toast("Inserisci un link.");
+    return;
+  }
+
+  const res = await fetch("/api/followme/" + encodeURIComponent(CODE) + "/update-url", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({ url })
+  });
+
+  const data = await res.json().catch(()=>null);
+
+  if(!res.ok || !data || !data.success){
+    toast((data && data.error) || "Errore aggiornamento link.");
+    return;
+  }
+
+  toast("Fatto. Da ora il QR porta lì.");
+  loadStatus();
+}
+
+function reactivateUrl(encoded){
+  const url = decodeURIComponent(encoded);
+  document.getElementById("newUrl").value = url;
+  updateUrl();
+}
+
+async function enableNotifications(){
+  if(!("serviceWorker" in navigator) || !("PushManager" in window)){
+    toast("Notifiche non supportate su questo dispositivo.");
+    return;
+  }
+
+  const reg = await navigator.serviceWorker.register("/service-worker.js");
+  const permission = await Notification.requestPermission();
+
+  if(permission !== "granted"){
+    toast("Notifiche non autorizzate.");
+    return;
+  }
+
+  const vapidRes = await fetch("/api/vapid-public-key");
+  const vapidData = await vapidRes.json();
+
+  const sub = await reg.pushManager.subscribe({
+    userVisibleOnly:true,
+    applicationServerKey:urlBase64ToUint8Array(vapidData.publicKey)
+  });
+
+  const res = await fetch("/api/followme/" + encodeURIComponent(CODE) + "/subscribe", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({ subscription:sub })
+  });
+
+  const data = await res.json().catch(()=>null);
+  if(!res.ok || !data || !data.success){
+    toast((data && data.error) || "Errore attivazione notifiche.");
+    return;
+  }
+
+  toast("Notifiche attive.");
+}
+
+function urlBase64ToUint8Array(base64String){
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for(let i=0;i<rawData.length;++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+function escapeHtml(s){
+  return String(s || "")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#39;");
+}
+
+function formatDate(v){
+  if(!v) return "-";
+  try{ return new Date(v).toLocaleString("it-IT"); }catch(e){ return "-"; }
+}
+
+loadStatus();
+</script>
+</body>
+</html>
