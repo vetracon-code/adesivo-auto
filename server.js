@@ -8757,8 +8757,8 @@ async function sendFollowMeScanPush(project) {
     );
 
     const payload = JSON.stringify({
-      title: 'Follow Me QR scansionato 👀',
-      body: 'Qualcuno ha appena aperto il tuo QR.',
+      title: "Follow Me QR 👀",
+      body: "Hanno appena inquadrato il tuo QR 👀",
       url: `/fm/app/${encodeURIComponent(project.code)}?focus=scans`,
       targetUrl: `/fm/app/${encodeURIComponent(project.code)}?focus=scans`,
       type: 'followme_scan',
