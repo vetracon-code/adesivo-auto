@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>Follow Me - Dynamic QR</title>
   <meta name="theme-color" content="#101018">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Follow Me">
+  <link rel="apple-touch-icon" href="/followme/icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="/followme/icons/favicon.png">
+  <link id="dynamicManifest" rel="manifest" href="/fm/manifest/FM-DEMO.json">
   <style>
     :root{
       --bg:#0d0d14;
@@ -215,6 +221,38 @@
       border-radius:18px;
       background:rgba(255,255,255,.045);
     }
+    .setup-box{
+      display:grid;
+      gap:12px;
+    }
+    .setup-state{
+      padding:14px;
+      border-radius:18px;
+      background:rgba(255,255,255,.055);
+      border:1px solid rgba(255,255,255,.08);
+      color:var(--muted);
+      line-height:1.45;
+    }
+    .setup-state strong{
+      color:#fff;
+    }
+    .ios-steps{
+      display:none;
+      padding:14px;
+      border-radius:18px;
+      background:rgba(200,255,46,.09);
+      border:1px solid rgba(200,255,46,.18);
+      color:#f4ffd0;
+      line-height:1.45;
+      font-size:.95rem;
+    }
+    .ios-steps ol{
+      margin:8px 0 0 20px;
+      padding:0;
+    }
+    .ios-steps li{
+      margin:6px 0;
+    }
     .topline{
       display:flex;
       justify-content:space-between;
@@ -282,9 +320,26 @@
       </div>
     </section>
 
-    <section class="card row">
-      <div class="label">Notifiche scansione</div>
-      <button class="btn secondary" onclick="enableNotifications()">Attiva notifiche</button>
+    <section class="card setup-box">
+      <div class="label">App e notifiche</div>
+      <div class="setup-state" id="installState">
+        <strong>Configura Follow Me sul telefono.</strong><br>
+        Salva la Web App e attiva le notifiche per ricevere un avviso a ogni scansione.
+      </div>
+
+      <div class="ios-steps" id="iosSteps">
+        <strong>Su iPhone:</strong>
+        <ol>
+          <li>Apri questa pagina con Safari.</li>
+          <li>Tocca Condividi.</li>
+          <li>Scegli “Aggiungi alla schermata Home”.</li>
+          <li>Riapri Follow Me dall’icona appena creata.</li>
+          <li>Premi “Attiva notifiche”.</li>
+        </ol>
+      </div>
+
+      <button class="btn secondary" id="installHelpBtn" onclick="showInstallHelp()">Come salvo l’App?</button>
+      <button class="btn" id="notifyBtn" onclick="enableNotifications()">Attiva notifiche</button>
       <button class="btn secondary" onclick="loadStatus()">Aggiorna dati</button>
     </section>
   </main>
@@ -299,6 +354,53 @@ function getCode(){
   if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
   const p = new URLSearchParams(location.search || "");
   return String(p.get("code") || "").trim().toUpperCase();
+}
+
+function isIos(){
+  return /iphone|ipad|ipod/i.test(navigator.userAgent || "");
+}
+
+function isStandalone(){
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+
+function updateManifestAndInstallState(){
+  CODE = getCode();
+
+  const manifest = document.getElementById("dynamicManifest");
+  if(manifest && CODE){
+    manifest.href = "/fm/manifest/" + encodeURIComponent(CODE) + ".json";
+  }
+
+  const state = document.getElementById("installState");
+  const iosSteps = document.getElementById("iosSteps");
+  const notifyBtn = document.getElementById("notifyBtn");
+
+  if(iosSteps && isIos() && !isStandalone()){
+    iosSteps.style.display = "block";
+  }
+
+  if(state){
+    if(isStandalone()){
+      state.innerHTML = "<strong>App salvata.</strong><br>Ora puoi attivare le notifiche per ricevere un avviso a ogni scansione.";
+    }else if(isIos()){
+      state.innerHTML = "<strong>Prima salva l’App su iPhone.</strong><br>Le notifiche funzionano dopo aver aggiunto Follow Me alla schermata Home.";
+    }else{
+      state.innerHTML = "<strong>Salva l’App e attiva le notifiche.</strong><br>Su Android puoi attivare direttamente le notifiche se il browser lo consente.";
+    }
+  }
+
+  if(notifyBtn && isIos() && !isStandalone()){
+    notifyBtn.textContent = "Prima salva l’App";
+  }
+}
+
+function showInstallHelp(){
+  const iosSteps = document.getElementById("iosSteps");
+  if(iosSteps){
+    iosSteps.style.display = "block";
+    iosSteps.scrollIntoView({behavior:"smooth", block:"center"});
+  }
 }
 
 function toast(msg){
@@ -368,7 +470,8 @@ async function updateUrl(){
   }
 
   toast("Fatto. Da ora il QR porta lì.");
-  loadStatus();
+  updateManifestAndInstallState();
+loadStatus();
 }
 
 function reactivateUrl(encoded){
@@ -378,6 +481,12 @@ function reactivateUrl(encoded){
 }
 
 async function enableNotifications(){
+  if(isIos() && !isStandalone()){
+    showInstallHelp();
+    toast("Su iPhone salva prima l’App nella schermata Home.");
+    return;
+  }
+
   if(!("serviceWorker" in navigator) || !("PushManager" in window)){
     toast("Notifiche non supportate su questo dispositivo.");
     return;

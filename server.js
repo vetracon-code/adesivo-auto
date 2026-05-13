@@ -8774,6 +8774,54 @@ async function sendFollowMeScanPush(project) {
   }
 }
 
+
+app.get('/fm/manifest/:code.json', async (req, res) => {
+  try {
+    const code = normalizeFollowMeCode(req.params.code);
+    const q = await pool.query(
+      `SELECT code, label
+       FROM followme_projects
+       WHERE code = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    const label = q.rows[0]?.label || 'Follow Me';
+    const appName = String(label || 'Follow Me').slice(0, 32);
+
+    res.setHeader('Content-Type', 'application/manifest+json');
+    return res.json({
+      name: `${appName} - Dynamic QR`,
+      short_name: 'Follow Me',
+      description: 'Il QR dinamico che cambia con te.',
+      start_url: `/fm/app/${encodeURIComponent(code)}`,
+      scope: '/fm/',
+      display: 'standalone',
+      background_color: '#0d0d14',
+      theme_color: '#0d0d14',
+      orientation: 'portrait',
+      icons: [
+        {
+          src: '/followme/icons/icon-192.png',
+          sizes: '192x192',
+          type: 'image/png',
+          purpose: 'any maskable'
+        },
+        {
+          src: '/followme/icons/icon-512.png',
+          sizes: '512x512',
+          type: 'image/png',
+          purpose: 'any maskable'
+        }
+      ]
+    });
+  } catch (err) {
+    console.error('followme manifest error:', err);
+    return res.status(500).json({ error: 'manifest error' });
+  }
+});
+
+
 app.get('/fm/app/:code', async (req, res) => {
   return res.sendFile(path.join(__dirname, 'public', 'followme-app.html'));
 });
