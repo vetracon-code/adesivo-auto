@@ -276,43 +276,7 @@
       background:var(--ok);
       box-shadow:0 0 0 5px rgba(85,242,165,.10);
     }
-  
-    .qr-public-link-box{
-      position: relative;
-      overflow: hidden;
-      padding: 14px;
-      border-radius: 18px;
-      background:
-        linear-gradient(135deg, rgba(200,255,46,.20), rgba(94,231,255,.10)),
-        rgba(255,255,255,.045);
-      border: 1px solid rgba(200,255,46,.45);
-      box-shadow:
-        0 0 0 1px rgba(200,255,46,.12) inset,
-        0 14px 30px rgba(0,0,0,.22);
-      color: #f5ffd8;
-      line-height: 1.45;
-      font-size: .9rem;
-      word-break: break-word;
-    }
-    .qr-public-link-box strong{
-      display:block;
-      color:#c8ff2e;
-      font-size:.78rem;
-      text-transform:uppercase;
-      letter-spacing:.08em;
-      margin-bottom:5px;
-    }
-    .qr-public-link-box a{
-      color:#ffffff;
-      text-decoration:none;
-      font-weight:800;
-    }
-    .qr-public-link-box a:hover{
-      text-decoration:underline;
-    }
-
-
-    .history-item.active-current{
+.history-item.active-current{
       border: 1px solid rgba(200,255,46,.75) !important;
       box-shadow:
         0 0 0 1px rgba(200,255,46,.14) inset,
@@ -333,6 +297,66 @@
       white-space:nowrap;
     }
 
+
+    .simple-preview-card{
+      display:grid;
+      gap:10px;
+    }
+    .simple-preview-title{
+      color:#c8ff2e;
+      font-size:.78rem;
+      font-weight:900;
+      text-transform:uppercase;
+      letter-spacing:.10em;
+    }
+    .simple-preview-square{
+      position:relative;
+      width:100%;
+      aspect-ratio:1 / 1;
+      overflow:hidden;
+      border-radius:24px;
+      border:1px solid rgba(200,255,46,.42);
+      background:#080810;
+      box-shadow:
+        0 0 0 1px rgba(200,255,46,.10) inset,
+        0 18px 38px rgba(0,0,0,.30);
+    }
+    .simple-preview-square iframe{
+      width:100%;
+      height:100%;
+      border:0;
+      background:#ffffff;
+      display:block;
+    }
+    .simple-preview-empty{
+      position:absolute;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      color:rgba(255,255,255,.72);
+      text-align:center;
+      line-height:1.45;
+      font-size:.94rem;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(200,255,46,.14), transparent 34%),
+        radial-gradient(circle at 85% 18%, rgba(94,231,255,.12), transparent 32%),
+        #101018;
+    }
+    .simple-preview-open{
+      text-decoration:none;
+      text-align:center;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .refresh-running{
+      opacity:.72;
+      pointer-events:none;
+      filter:saturate(.85);
+    }
+
 </style>
 </head>
 <body>
@@ -342,6 +366,16 @@
       <h1>Follow Me<span>Il QR che cambia con te.</span></h1>
       <p>Decidi dove porta il tuo QR. Ogni scansione viene registrata e ti arriva una notifica.</p>
     </section>
+    <!-- followme-simple-preview-final-20260513_224845 -->
+    <section class="card simple-preview-card" id="simpleDestinationPreviewBlock" data-version="followme-simple-preview-final-20260513_224845">
+      <div class="simple-preview-title">Preview</div>
+      <div class="simple-preview-square">
+        <iframe id="simpleDestinationPreviewFrame" src="about:blank" loading="lazy"></iframe>
+        <div class="simple-preview-empty" id="simpleDestinationPreviewEmpty">Imposta una destinazione per vedere cosa stai trasmettendo.</div>
+      </div>
+      <a class="btn secondary simple-preview-open" id="simpleDestinationPreviewOpen" href="#" target="_blank" rel="noopener">Apri pagina trasmessa</a>
+    </section>
+
 <section class="card row">
       <div class="label">Dove vuoi mandare chi ti scansiona?</div>
       <input id="newUrl" placeholder="Incolla qui un link: https://instagram.com/...">
@@ -354,10 +388,8 @@
         Questo è il QR dinamico Follow Me. Il QR resta sempre uguale: cambi tu la destinazione dall’App.
       </div>
 
-      <div class="qr-public-link-box" id="qrPublicLink">
-        <strong>Link pubblicato nel QR</strong>
-        <a href="https://adesivo-auto.onrender.com/fm/u/FMDEMO" target="_blank">https://adesivo-auto.onrender.com/fm/u/FMDEMO</a>
-      </div>
+      
+
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <a class="btn secondary" id="downloadQrPng" href="/followme/qrs/followme-FMDEMO-qr.png" download="followme-FMDEMO-qr.png" style="display:flex;align-items:center;justify-content:center;text-decoration:none;">Scarica PNG</a>
@@ -416,7 +448,7 @@
 
       <button class="btn secondary" id="installHelpBtn" onclick="showInstallHelp()">Come salvo l’App?</button>
       <button class="btn" id="notifyBtn" onclick="enableNotifications()">Attiva notifiche</button>
-      <button class="btn secondary" onclick="loadStatus()">Aggiorna dati</button>
+      <button class="btn secondary" id="refreshDataBtn" onclick="tripleRefreshFollowMe()">Aggiorna dati</button>
       <pre id="pushDebugBox" style="white-space:pre-wrap;background:rgba(0,0,0,.32);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:12px;color:#c8ff2e;font-size:.78rem;line-height:1.35;display:none;"></pre>
     </section>
   </main>
@@ -505,6 +537,7 @@ async function loadStatus(){
   const activeUrlEl = document.getElementById("activeUrl");
   if(activeUrlEl) activeUrlEl.textContent = data.project.active_url || "Nessun link impostato.";
   document.getElementById("newUrl").value = data.project.active_url || "";
+  updateSimpleDestinationPreview(data.project.active_url || "");
   document.getElementById("totalScans").textContent = data.stats.total_scans || 0;
   document.getElementById("currentScans").textContent = data.stats.current_url_scans || 0;
 
@@ -571,6 +604,35 @@ async function saveExistingQr(){
   }
 
   loadStatus();
+}
+
+function updateSimpleDestinationPreview(url){
+  const frame = document.getElementById("simpleDestinationPreviewFrame");
+  const empty = document.getElementById("simpleDestinationPreviewEmpty");
+  const open = document.getElementById("simpleDestinationPreviewOpen");
+
+  const cleanUrl = String(url || "").trim();
+  const valid = /^https?:\/\//i.test(cleanUrl);
+
+  if(frame){
+    frame.src = valid ? cleanUrl : "about:blank";
+  }
+
+  if(empty){
+    empty.style.display = valid ? "none" : "flex";
+  }
+
+  if(open){
+    if(valid){
+      open.href = cleanUrl;
+      open.style.opacity = "1";
+      open.style.pointerEvents = "auto";
+    }else{
+      open.href = "#";
+      open.style.opacity = ".45";
+      open.style.pointerEvents = "none";
+    }
+  }
 }
 
 async function updateUrl(){
@@ -723,6 +785,36 @@ async function enableNotifications(){
     console.error("Follow Me enableNotifications error:", err);
     pushDebugLog("ERRORE: " + (err && err.stack ? err.stack : (err.message || err)));
     toast("Errore notifiche: " + (err.message || err));
+  }
+}
+
+async function tripleRefreshFollowMe(){
+  const btn = document.getElementById("refreshDataBtn");
+  const original = btn ? btn.textContent : "Aggiorna dati";
+
+  try{
+    if(btn){
+      btn.classList.add("refresh-running");
+      btn.textContent = "Aggiorno...";
+    }
+
+    await loadStatus();
+
+    await new Promise(function(resolve){ setTimeout(resolve, 350); });
+    await loadStatus();
+
+    await new Promise(function(resolve){ setTimeout(resolve, 700); });
+    await loadStatus();
+
+    toast("Dati aggiornati.");
+  }catch(err){
+    console.error("tripleRefreshFollowMe error:", err);
+    toast("Errore aggiornamento dati.");
+  }finally{
+    if(btn){
+      btn.classList.remove("refresh-running");
+      btn.textContent = original || "Aggiorna dati";
+    }
   }
 }
 
