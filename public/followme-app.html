@@ -357,6 +357,25 @@
       filter:saturate(.85);
     }
 
+
+    .btn-history-active-now{
+      border:0 !important;
+      border-radius:999px;
+      padding:8px 13px;
+      font-weight:950;
+      color:#101018 !important;
+      background:linear-gradient(135deg, #c8ff2e 0%, #9dff4f 48%, #5ee7ff 100%) !important;
+      box-shadow:
+        0 10px 24px rgba(200,255,46,.24),
+        0 0 0 1px rgba(255,255,255,.18) inset;
+      cursor:default;
+      white-space:nowrap;
+    }
+    .history-row-active{
+      border:1px solid rgba(200,255,46,.55) !important;
+      background:rgba(200,255,46,.07) !important;
+    }
+
 </style>
 </head>
 <body>
@@ -557,23 +576,54 @@ async function loadStatus(){
   }
 
   const list = document.getElementById("historyList");
-  const rows = data.history || [];
+  const rows = Array.isArray(data.history) ? data.history.slice() : [];
 
-  if(!rows.length){
+  if(!list){
+    console.warn("historyList non trovato nella pagina.");
+  }else if(!rows.length){
     list.innerHTML = '<div class="empty">Nessun link ancora registrato.</div>';
-    return;
+  }else{
+    const cleanUrl = function(v){
+      return String(v || "").trim().replace(/\/+$/,"");
+    };
+
+    const activeUrl = cleanUrl(data.project.active_url || "");
+
+    rows.sort(function(a,b){
+      const aa = cleanUrl(a.url) === activeUrl ? 0 : 1;
+      const bb = cleanUrl(b.url) === activeUrl ? 0 : 1;
+
+      if(aa !== bb) return aa - bb;
+
+      const ad = new Date(a.activated_at || a.last_used_at || 0).getTime();
+      const bd = new Date(b.activated_at || b.last_used_at || 0).getTime();
+
+      return bd - ad;
+    });
+
+    list.innerHTML = rows.slice(0,10).map(function(x){
+      const url = x.url || "";
+      const encoded = encodeURIComponent(url);
+      const isActive = cleanUrl(url) === activeUrl;
+      const scans = x.scan_count || 0;
+      const last = x.last_used_at ? formatDate(x.last_used_at) : "mai";
+      const rowClass = isActive ? "history-item history-row-active" : "history-item";
+      const button = isActive
+        ? '<button class="btn-history-active-now" type="button">Attivo ora</button>'
+        : '<button class="btn small secondary" type="button" onclick="reactivateUrl(\\'' + encoded + '\\')">Attivalo</button>';
+
+      return `
+        <div class="${rowClass}">
+          <div>
+            <strong>${escapeHtml(url)}</strong>
+            <span>${scans} scansioni · ultimo uso: ${escapeHtml(last)}</span>
+          </div>
+          ${button}
+        </div>
+      `;
+    }).join("");
   }
 
-  list.innerHTML = rows.map(x => `
-    <div class="history-item">
-      <div>
-        <div class="history-url">${escapeHtml(x.url)}</div>
-        <div class="history-meta">${Number(x.scan_count || 0)} scansioni · ultimo uso ${formatDate(x.last_used_at || x.activated_at)}</div>
-      </div>
-      <button class="btn small secondary" onclick="reactivateUrl('${encodeURIComponent(x.url)}')">Attivo ora</button>
-    </div>
-  `).join("");
-}
 
 async function saveExistingQr(){
   const existingQrUrl = document.getElementById("existingQrUrl").value.trim();
