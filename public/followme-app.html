@@ -785,7 +785,7 @@
 <section class="card row">
       <div class="label">MODIFICA LA DESTINAZIONE</div>
       <input id="newUrl" class="destination-input" placeholder="Incolla qui il nuovo Link.">
-      <button class="btn" id="updateDestinationBtn" type="button" onclick="window.updateUrl && window.updateUrl()">Aggiorna QR</button>
+      <button class="btn" id="updateDestinationBtn" type="button">Aggiorna QR</button>
     </section>
     <section class="card" id="scanStatsBlock">
       <div class="stats">
@@ -1945,6 +1945,143 @@ document.addEventListener("visibilitychange", function(){
 
 <!-- followme-preview-stable-card removed: it forced iframe hidden -->
 
+
+
+<script id="followme-isolated-update-handler">
+(function(){
+  function getFollowMeCode(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      var p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim().toUpperCase();
+    }catch(e){
+      return "";
+    }
+  }
+
+  function showMsg(text){
+    try{
+      var el = document.getElementById("toast");
+      if(el){
+        el.textContent = text;
+        el.style.display = "block";
+        setTimeout(function(){ el.style.display = "none"; }, 3200);
+      }else{
+        alert(text);
+      }
+    }catch(e){
+      alert(text);
+    }
+  }
+
+  async function isolatedUpdateDestination(){
+    var input = document.getElementById("newUrl");
+    var btn = document.getElementById("updateDestinationBtn");
+
+    var code = getFollowMeCode();
+    var url = input ? String(input.value || "").trim() : "";
+
+    if(!code){
+      showMsg("Codice Follow Me mancante.");
+      return;
+    }
+
+    if(!url){
+      showMsg("Inserisci un link.");
+      return;
+    }
+
+    if(!/^https?:\/\//i.test(url)){
+      url = "https://" + url;
+      if(input) input.value = url;
+    }
+
+    try{
+      new URL(url);
+    }catch(e){
+      showMsg("Link non valido.");
+      return;
+    }
+
+    try{
+      if(btn){
+        btn.disabled = true;
+        btn.textContent = "Aggiorno...";
+      }
+
+      showMsg("Sto salvando la nuova destinazione...");
+
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/update-url", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ url:url })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        showMsg((data && data.error) || "Errore aggiornamento link.");
+        return;
+      }
+
+      var previewBtn = document.getElementById("simpleDestinationPreviewOpen");
+      if(previewBtn){
+        previewBtn.href = url;
+        previewBtn.style.opacity = "1";
+        previewBtn.style.pointerEvents = "auto";
+      }
+
+      var frame = document.getElementById("simpleDestinationPreviewFrame");
+      var empty = document.getElementById("simpleDestinationPreviewEmpty");
+      var fallback = document.getElementById("previewFallbackBox");
+
+      if(empty) empty.style.display = "none";
+      if(fallback) fallback.classList.remove("show");
+
+      if(frame){
+        frame.src = "about:blank";
+        setTimeout(function(){ frame.src = url; }, 100);
+      }
+
+      showMsg("Fatto. Il QR ora porta al nuovo link.");
+
+      setTimeout(function(){
+        window.location.href = "/fm/app/" + encodeURIComponent(code) + "?v=updated-" + Date.now();
+      }, 700);
+
+    }catch(err){
+      console.error("isolatedUpdateDestination error:", err);
+      showMsg("Errore aggiornamento: " + (err.message || err));
+    }finally{
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = "Aggiorna QR";
+      }
+    }
+  }
+
+  function bind(){
+    var btn = document.getElementById("updateDestinationBtn");
+    if(!btn || btn.dataset.isolatedBound === "1") return;
+
+    btn.dataset.isolatedBound = "1";
+    btn.onclick = function(ev){
+      if(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+      isolatedUpdateDestination();
+      return false;
+    };
+  }
+
+  window.isolatedUpdateDestination = isolatedUpdateDestination;
+  document.addEventListener("DOMContentLoaded", bind);
+  setTimeout(bind, 200);
+  setTimeout(bind, 1000);
+})();
+</script>
 
 </body>
 </html>
