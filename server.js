@@ -8951,6 +8951,26 @@ app.get('/fm/app/:code', async (req, res) => {
     </section>`
     );
 
+    const previewUrl = String(project.active_url || '').trim();
+    const previewUrlEsc = esc(previewUrl);
+
+    if (previewUrl) {
+      html = html.replace(
+        /<iframe id="simpleDestinationPreviewFrame" src="[^"]*" loading="lazy"><\/iframe>/,
+        `<iframe id="simpleDestinationPreviewFrame" src="${previewUrlEsc}" loading="lazy"></iframe>`
+      );
+
+      html = html.replace(
+        /<div class="simple-preview-empty" id="simpleDestinationPreviewEmpty">[\s\S]*?<\/div>/,
+        `<div class="simple-preview-empty" id="simpleDestinationPreviewEmpty" style="display:none;">Imposta una destinazione per vedere cosa stai trasmettendo.</div>`
+      );
+
+      html = html.replace(
+        /<a class="btn secondary simple-preview-open" id="simpleDestinationPreviewOpen" href="[^"]*" target="_blank" rel="noopener">/,
+        `<a class="btn secondary simple-preview-open" id="simpleDestinationPreviewOpen" href="${previewUrlEsc}" target="_blank" rel="noopener">`
+      );
+    }
+
     return res.send(html);
   } catch (err) {
     console.error('fm/app server-side history error:', err);
