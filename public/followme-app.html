@@ -498,6 +498,34 @@
       justify-content:center;
     }
 
+    .qr-auto-preview-frame{
+      margin-top:10px;
+      width:100%;
+      height:260px;
+      border:0;
+      border-radius:16px;
+      background:#fff;
+      display:none;
+      overflow:hidden;
+    }
+
+    .qr-preview-card.show .qr-auto-preview-frame{
+      display:block;
+    }
+
+    .qr-preview-note{
+      margin-top:8px;
+      color:rgba(255,255,255,.64);
+      font-size:.82rem;
+      line-height:1.35;
+    }
+
+    @media (max-width:520px){
+      .qr-auto-preview-frame{
+        height:220px;
+      }
+    }
+
     @keyframes qrFrameSearching{
       0%,100%{
         transform:scale(1);
@@ -1143,7 +1171,8 @@
           <div class="qr-preview-kicker">Preview destinazione rilevata</div>
           <div class="qr-preview-domain" id="qrDetectedDomain">-</div>
           <div class="qr-preview-url" id="qrDetectedUrl">-</div>
-          <a class="btn secondary qr-preview-open" id="qrDetectedOpen" href="#" target="_blank" rel="noopener">Apri anteprima</a>
+          <iframe class="qr-auto-preview-frame" id="qrDetectedPreviewFrame" src="about:blank" loading="lazy"></iframe>
+          <div class="qr-preview-note">Se la pagina non appare, potrebbe bloccare l'anteprima interna. Il link può comunque essere attivato.</div>
         </div>
 
         <div class="qr-scan-actions">
@@ -3048,11 +3077,17 @@ document.addEventListener("visibilitychange", function(){
     var card = document.getElementById("qrDetectedPreview");
     var domain = document.getElementById("qrDetectedDomain");
     var urlEl = document.getElementById("qrDetectedUrl");
-    var open = document.getElementById("qrDetectedOpen");
+    var frame = document.getElementById("qrDetectedPreviewFrame");
 
     if(domain) domain.textContent = readableDomainFromUrl(url);
     if(urlEl) urlEl.textContent = url;
-    if(open) open.href = url || "#";
+
+    if(frame){
+      frame.src = "about:blank";
+      setTimeout(function(){
+        frame.src = url || "about:blank";
+      }, 80);
+    }
 
     if(card) card.classList.add("show");
   }
@@ -3061,12 +3096,12 @@ document.addEventListener("visibilitychange", function(){
     var card = document.getElementById("qrDetectedPreview");
     var domain = document.getElementById("qrDetectedDomain");
     var urlEl = document.getElementById("qrDetectedUrl");
-    var open = document.getElementById("qrDetectedOpen");
+    var frame = document.getElementById("qrDetectedPreviewFrame");
 
     if(card) card.classList.remove("show");
     if(domain) domain.textContent = "-";
     if(urlEl) urlEl.textContent = "-";
-    if(open) open.href = "#";
+    if(frame) frame.src = "about:blank";
   }
 
   function normalizeScannedUrl(raw){
@@ -3149,7 +3184,7 @@ document.addEventListener("visibilitychange", function(){
 
       if(qrCandidateUrl){
         apply.classList.add("qr-ready-pulse");
-        apply.textContent = "Usa e attiva URL rilevato";
+        apply.textContent = "Conferma e attiva subito";
       }else{
         apply.classList.remove("qr-ready-pulse");
         apply.textContent = "Usa URL rilevato";
@@ -3293,7 +3328,7 @@ document.addEventListener("visibilitychange", function(){
           setCandidateUrl(checked.url);
           setScannerVisualState("detected");
           showDetectedPreview(checked.url);
-          setQrStatus("QR rilevato. Controlla la preview e premi Usa e attiva URL rilevato.", "ok");
+          setQrStatus("QR rilevato. Controlla la preview automatica e premi Conferma e attiva subito.", "ok");
 
           stopQrScanner(false);
         }catch(err){
@@ -3380,7 +3415,7 @@ document.addEventListener("visibilitychange", function(){
       }
 
       stopQrScanner(true);
-      showMsg("URL rilevato e attivato.");
+      showMsg("URL rilevato e attivato. Aggiorno la Web App...");
 
     }catch(err){
       console.error("applyQrCandidate activation error:", err);
@@ -3391,7 +3426,7 @@ document.addEventListener("visibilitychange", function(){
         apply.disabled = !qrCandidateUrl;
         if(qrCandidateUrl){
           apply.classList.add("qr-ready-pulse");
-          apply.textContent = "Usa e attiva URL rilevato";
+          apply.textContent = "Conferma e attiva subito";
         }else{
           apply.classList.remove("qr-ready-pulse");
           apply.textContent = "Usa URL rilevato";
