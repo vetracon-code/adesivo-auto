@@ -376,6 +376,23 @@
       background:rgba(200,255,46,.07) !important;
     }
 
+
+    .followme-emergency-active{
+      border:1px solid rgba(200,255,46,.55) !important;
+      background:rgba(200,255,46,.07) !important;
+    }
+    .followme-emergency-active-btn{
+      border:0 !important;
+      border-radius:999px;
+      padding:8px 13px;
+      font-weight:950;
+      color:#101018 !important;
+      background:linear-gradient(135deg, #c8ff2e 0%, #9dff4f 48%, #5ee7ff 100%) !important;
+      box-shadow:0 10px 24px rgba(200,255,46,.24);
+      cursor:default;
+      white-space:nowrap;
+    }
+
 </style>
 </head>
 <body>
@@ -1099,5 +1116,172 @@ document.addEventListener("visibilitychange", function(){
 });
 
 </script>
+
+<script id="followme-emergency-history-render">
+(function(){
+  function getFollowMeCodeSafe(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      var p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim().toUpperCase();
+    }catch(e){
+      return "FM-DEMO";
+    }
+  }
+
+  function esc(s){
+    return String(s || "")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
+  }
+
+  function clean(v){
+    return String(v || "").trim().replace(/\/+$/,"");
+  }
+
+  function fmt(v){
+    if(!v) return "mai";
+    try{ return new Date(v).toLocaleString("it-IT"); }catch(e){ return "mai"; }
+  }
+
+  async function activateUrlEmergency(url){
+    try{
+      var code = getFollowMeCodeSafe();
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/update-url", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ url:url })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        alert((data && data.error) || "Errore attivazione link.");
+        return;
+      }
+
+      await renderFollowMeEmergencyHistory();
+    }catch(err){
+      alert("Errore: " + (err.message || err));
+    }
+  }
+
+  window.activateUrlEmergency = activateUrlEmergency;
+
+  async function renderFollowMeEmergencyHistory(){
+    try{
+      var code = getFollowMeCodeSafe();
+      if(!code) code = "FM-DEMO";
+
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        console.warn("Follow Me emergency: API non valida", data);
+        return;
+      }
+
+      var list = document.getElementById("historyList");
+      var totalScans = document.getElementById("totalScans");
+      var currentScans = document.getElementById("currentScans");
+      var newUrl = document.getElementById("newUrl");
+
+      if(totalScans) totalScans.textContent = (data.stats && data.stats.total_scans) || 0;
+      if(currentScans) currentScans.textContent = (data.stats && data.stats.current_url_scans) || 0;
+      if(newUrl) newUrl.value = (data.project && data.project.active_url) || "";
+
+      var frame = document.getElementById("simpleDestinationPreviewFrame");
+      var empty = document.getElementById("simpleDestinationPreviewEmpty");
+      var open = document.getElementById("simpleDestinationPreviewOpen");
+      var activeUrlRaw = (data.project && data.project.active_url) || "";
+      var activeUrl = clean(activeUrlRaw);
+
+      if(frame && activeUrlRaw){
+        frame.src = activeUrlRaw;
+      }
+      if(empty){
+        empty.style.display = activeUrlRaw ? "none" : "flex";
+      }
+      if(open && activeUrlRaw){
+        open.href = activeUrlRaw;
+        open.style.opacity = "1";
+        open.style.pointerEvents = "auto";
+      }
+
+      if(!list){
+        console.warn("Follow Me emergency: historyList non trovato");
+        return;
+      }
+
+      var rows = Array.isArray(data.history) ? data.history.slice() : [];
+
+      if(!rows.length){
+        list.innerHTML = '<div class="empty">Nessun link ancora registrato.</div>';
+        return;
+      }
+
+      rows.sort(function(a,b){
+        var aa = clean(a.url) === activeUrl ? 0 : 1;
+        var bb = clean(b.url) === activeUrl ? 0 : 1;
+        if(aa !== bb) return aa - bb;
+
+        var ad = new Date(a.activated_at || a.last_used_at || 0).getTime();
+        var bd = new Date(b.activated_at || b.last_used_at || 0).getTime();
+        return bd - ad;
+      });
+
+      list.innerHTML = rows.slice(0,10).map(function(x){
+        var url = x.url || "";
+        var isActive = clean(url) === activeUrl;
+        var scans = x.scan_count || 0;
+        var last = fmt(x.last_used_at);
+        var safeUrl = esc(url);
+        var encoded = encodeURIComponent(url);
+
+        return ''
+          + '<div class="history-item ' + (isActive ? 'followme-emergency-active' : '') + '">'
+          + '  <div>'
+          + '    <strong>' + safeUrl + '</strong>'
+          + '    <span>' + scans + ' scansioni · ultimo uso: ' + esc(last) + '</span>'
+          + '  </div>'
+          + (
+              isActive
+              ? '<button class="followme-emergency-active-btn" type="button">Attivo ora</button>'
+              : '<button class="btn small secondary" type="button" onclick="activateUrlEmergency(decodeURIComponent(\\'' + encoded + '\\'))">Attivalo</button>'
+            )
+          + '</div>';
+      }).join("");
+
+      console.log("Follow Me emergency history rendered:", rows.length);
+    }catch(err){
+      console.error("Follow Me emergency render error:", err);
+    }
+  }
+
+  window.renderFollowMeEmergencyHistory = renderFollowMeEmergencyHistory;
+
+  setTimeout(renderFollowMeEmergencyHistory, 250);
+  setTimeout(renderFollowMeEmergencyHistory, 1000);
+  setTimeout(renderFollowMeEmergencyHistory, 2200);
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(renderFollowMeEmergencyHistory, 300);
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible"){
+      setTimeout(renderFollowMeEmergencyHistory, 300);
+    }
+  });
+})();
+</script>
+
 </body>
 </html>
