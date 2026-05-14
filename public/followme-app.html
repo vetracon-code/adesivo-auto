@@ -981,7 +981,8 @@
         <div class="qr-scan-help">Inquadra il QR. Se contiene un URL valido e non sospetto, verrà inserito nel campo destinazione.</div>
 
         <div class="qr-video-wrap">
-          <video id="qrImportVideo" muted playsinline></video>
+          <video id="qrImportVideo" muted playsinline autoplay></video>
+          <canvas id="qrImportCanvas" style="display:none;"></canvas>
           <div class="qr-target-frame"></div>
         </div>
 
@@ -2818,12 +2819,14 @@ document.addEventListener("visibilitychange", function(){
 </script>
 
 
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js" defer></script>
 <script id="followme-qr-import-scanner">
 (function(){
   var qrStream = null;
   var qrScanTimer = null;
   var qrDetector = null;
   var qrCandidateUrl = "";
+  var qrMode = "";
 
   function showMsg(text){
     try{
@@ -2930,6 +2933,47 @@ document.addEventListener("visibilitychange", function(){
     }
   }
 
+  function detectWithJsQr(video){
+    var canvas = document.getElementById("qrImportCanvas");
+    if(!canvas || !video || !window.jsQR) return null;
+
+    var w = video.videoWidth || 0;
+    var h = video.videoHeight || 0;
+
+    if(!w || !h) return null;
+
+    canvas.width = w;
+    canvas.height = h;
+
+    var ctx = canvas.getContext("2d", { willReadFrequently:true });
+    if(!ctx) return null;
+
+    ctx.drawImage(video, 0, 0, w, h);
+
+    var imageData = ctx.getImageData(0, 0, w, h);
+    var result = window.jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts:"dontInvert"
+    });
+
+    return result && result.data ? result.data : null;
+  }
+
+  async function detectQrValue(video){
+    if(qrMode === "barcode" && qrDetector){
+      var codes = await qrDetector.detect(video);
+      if(codes && codes.length && codes[0].rawValue){
+        return codes[0].rawValue;
+      }
+      return null;
+    }
+
+    if(qrMode === "jsqr"){
+      return detectWithJsQr(video);
+    }
+
+    return null;
+  }
+
   async function startQrScanner(){
     var panel = document.getElementById("qrScanPanel");
     var video = document.getElementById("qrImportVideo");
@@ -2938,24 +2982,34 @@ document.addEventListener("visibilitychange", function(){
 
     setCandidateUrl("");
 
-    if(!("BarcodeDetector" in window)){
-      setQrStatus("Scanner QR non disponibile su questo browser. Usa Safari/Chrome aggiornato oppure incolla manualmente l'URL.", "danger");
-      return;
-    }
-
-    try{
-      qrDetector = new BarcodeDetector({ formats:["qr_code"] });
-    }catch(e){
-      setQrStatus("BarcodeDetector non supporta il formato QR su questo dispositivo.", "danger");
-      return;
-    }
-
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
       setQrStatus("Fotocamera non disponibile da questo browser.", "danger");
       return;
     }
 
+    qrMode = "";
+
+    if("BarcodeDetector" in window){
+      try{
+        qrDetector = new BarcodeDetector({ formats:["qr_code"] });
+        qrMode = "barcode";
+      }catch(e){
+        qrDetector = null;
+      }
+    }
+
+    if(!qrMode && window.jsQR){
+      qrMode = "jsqr";
+    }
+
+    if(!qrMode){
+      setQrStatus("Scanner QR non disponibile: la libreria jsQR non è ancora caricata. Chiudi e riapri lo scanner o aggiorna la pagina.", "danger");
+      return;
+    }
+
     try{
+      setQrStatus("Richiedo accesso alla fotocamera...", "");
+
       qrStream = await navigator.mediaDevices.getUserMedia({
         video:{
           facingMode:{ ideal:"environment" },
@@ -2965,20 +3019,32 @@ document.addEventListener("visibilitychange", function(){
         audio:false
       });
 
+      video.setAttribute("playsinline", "true");
+      video.setAttribute("autoplay", "true");
+      video.muted = true;
       video.srcObject = qrStream;
-      await video.play();
 
-      setQrStatus("Inquadra il QR all'interno del riquadro.", "");
+      try{
+        await video.play();
+      }catch(playErr){
+        console.warn("video.play bloccato, riprovo:", playErr);
+        setQrStatus("Fotocamera attiva. Se non vedi l'immagine, tocca il riquadro video.", "");
+      }
+
+      setQrStatus(
+        qrMode === "barcode"
+          ? "Scanner attivo. Inquadra il QR nel riquadro."
+          : "Scanner iPhone attivo. Inquadra il QR nel riquadro.",
+        ""
+      );
 
       qrScanTimer = setInterval(async function(){
         try{
-          if(!video || video.readyState < 2 || !qrDetector) return;
+          if(!video || video.readyState < 2) return;
 
-          var codes = await qrDetector.detect(video);
+          var raw = await detectQrValue(video);
+          if(!raw) return;
 
-          if(!codes || !codes.length) return;
-
-          var raw = codes[0].rawValue || "";
           var checked = normalizeScannedUrl(raw);
 
           if(!checked.ok){
@@ -2994,11 +3060,22 @@ document.addEventListener("visibilitychange", function(){
         }catch(err){
           console.warn("Errore scansione QR:", err);
         }
-      }, 450);
+      }, 420);
 
     }catch(err){
       console.error("startQrScanner error:", err);
-      setQrStatus("Non riesco ad accedere alla fotocamera. Controlla i permessi del browser.", "danger");
+
+      var msg = "Non riesco ad accedere alla fotocamera.";
+
+      if(err && (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")){
+        msg = "Permesso fotocamera negato. Su iPhone autorizza la fotocamera per questa Web App o aprila da Safari.";
+      }else if(err && err.name === "NotFoundError"){
+        msg = "Nessuna fotocamera trovata su questo dispositivo.";
+      }else if(err && err.name === "NotReadableError"){
+        msg = "La fotocamera è già in uso da un'altra App.";
+      }
+
+      setQrStatus(msg, "danger");
     }
   }
 
