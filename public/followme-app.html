@@ -498,6 +498,90 @@
       justify-content:center;
     }
 
+
+    .qr-frame-preview-overlay{
+      position:absolute;
+      inset:0;
+      z-index:6;
+      display:none;
+      flex-direction:column;
+      background:#ffffff;
+      color:#111;
+    }
+
+    .qr-frame-preview-overlay.show{
+      display:flex;
+    }
+
+    .qr-frame-preview-top{
+      flex:0 0 auto;
+      padding:10px 12px;
+      background:#101018;
+      color:#fff;
+      border-bottom:1px solid rgba(255,255,255,.10);
+    }
+
+    .qr-frame-preview-kicker{
+      color:#c8ff2e;
+      font-size:.70rem;
+      font-weight:950;
+      letter-spacing:.10em;
+      text-transform:uppercase;
+      margin-bottom:4px;
+    }
+
+    .qr-frame-preview-domain{
+      font-size:.95rem;
+      font-weight:950;
+      line-height:1.1;
+      word-break:break-word;
+    }
+
+    .qr-frame-preview-url{
+      margin-top:4px;
+      color:rgba(255,255,255,.66);
+      font-size:.72rem;
+      line-height:1.25;
+      word-break:break-all;
+      max-height:34px;
+      overflow:hidden;
+    }
+
+    .qr-frame-preview-iframe{
+      flex:1 1 auto;
+      width:100%;
+      min-height:0;
+      border:0;
+      background:#fff;
+    }
+
+    .qr-frame-preview-fallback{
+      display:none;
+      flex:1 1 auto;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      text-align:center;
+      color:#222;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(200,255,46,.20), transparent 34%),
+        radial-gradient(circle at 90% 0%, rgba(94,231,255,.18), transparent 30%),
+        #fff;
+      font-weight:800;
+      line-height:1.35;
+    }
+
+    .qr-frame-preview-fallback.show{
+      display:flex;
+    }
+
+    .qr-video-wrap.preview-mode video,
+    .qr-video-wrap.preview-mode .qr-target-frame,
+    .qr-video-wrap.preview-mode .qr-scan-line,
+    .qr-video-wrap.preview-mode .qr-live-badge{
+      display:none !important;
+    }
+
     .qr-auto-preview-frame{
       margin-top:10px;
       width:100%;
@@ -1163,17 +1247,21 @@
           <div class="qr-live-badge" id="qrLiveBadge">Cerco QR</div>
           <div class="qr-scan-line"></div>
           <div class="qr-target-frame"></div>
+
+          <div class="qr-frame-preview-overlay" id="qrFramePreviewOverlay">
+            <div class="qr-frame-preview-top">
+              <div class="qr-frame-preview-kicker">Preview destinazione rilevata</div>
+              <div class="qr-frame-preview-domain" id="qrDetectedDomain">-</div>
+              <div class="qr-frame-preview-url" id="qrDetectedUrl">-</div>
+            </div>
+            <iframe class="qr-frame-preview-iframe" id="qrDetectedPreviewFrame" src="about:blank" loading="lazy"></iframe>
+            <div class="qr-frame-preview-fallback" id="qrDetectedPreviewFallback">
+              Questa pagina potrebbe non consentire l'anteprima interna, ma il link è valido e può essere attivato.
+            </div>
+          </div>
         </div>
 
         <div class="qr-scan-status" id="qrScanStatus">Fotocamera non ancora attiva.</div>
-
-        <div class="qr-preview-card" id="qrDetectedPreview">
-          <div class="qr-preview-kicker">Preview destinazione rilevata</div>
-          <div class="qr-preview-domain" id="qrDetectedDomain">-</div>
-          <div class="qr-preview-url" id="qrDetectedUrl">-</div>
-          <iframe class="qr-auto-preview-frame" id="qrDetectedPreviewFrame" src="about:blank" loading="lazy"></iframe>
-          <div class="qr-preview-note">Se la pagina non appare, potrebbe bloccare l'anteprima interna. Il link può comunque essere attivato.</div>
-        </div>
 
         <div class="qr-scan-actions">
           <button class="btn secondary" id="qrStopBtn" type="button">Chiudi scanner</button>
@@ -3074,34 +3162,59 @@ document.addEventListener("visibilitychange", function(){
   }
 
   function showDetectedPreview(url){
-    var card = document.getElementById("qrDetectedPreview");
+    var wrap = document.getElementById("qrVideoWrap");
+    var overlay = document.getElementById("qrFramePreviewOverlay");
     var domain = document.getElementById("qrDetectedDomain");
     var urlEl = document.getElementById("qrDetectedUrl");
     var frame = document.getElementById("qrDetectedPreviewFrame");
+    var fallback = document.getElementById("qrDetectedPreviewFallback");
 
     if(domain) domain.textContent = readableDomainFromUrl(url);
     if(urlEl) urlEl.textContent = url;
 
+    if(fallback) fallback.classList.remove("show");
+
     if(frame){
+      frame.style.display = "block";
       frame.src = "about:blank";
+
       setTimeout(function(){
         frame.src = url || "about:blank";
       }, 80);
+
+      clearTimeout(window.__qrDetectedPreviewTimer);
+      window.__qrDetectedPreviewTimer = setTimeout(function(){
+        // Alcuni siti bloccano l'iframe: in quel caso mostro messaggio interno, sempre nello stesso riquadro.
+        if(fallback){
+          fallback.classList.add("show");
+        }
+      }, 1800);
+
+      frame.onload = function(){
+        clearTimeout(window.__qrDetectedPreviewTimer);
+      };
     }
 
-    if(card) card.classList.add("show");
+    if(wrap) wrap.classList.add("preview-mode");
+    if(overlay) overlay.classList.add("show");
   }
 
   function hideDetectedPreview(){
-    var card = document.getElementById("qrDetectedPreview");
+    var wrap = document.getElementById("qrVideoWrap");
+    var overlay = document.getElementById("qrFramePreviewOverlay");
     var domain = document.getElementById("qrDetectedDomain");
     var urlEl = document.getElementById("qrDetectedUrl");
     var frame = document.getElementById("qrDetectedPreviewFrame");
+    var fallback = document.getElementById("qrDetectedPreviewFallback");
 
-    if(card) card.classList.remove("show");
+    clearTimeout(window.__qrDetectedPreviewTimer);
+
+    if(wrap) wrap.classList.remove("preview-mode");
+    if(overlay) overlay.classList.remove("show");
     if(domain) domain.textContent = "-";
     if(urlEl) urlEl.textContent = "-";
     if(frame) frame.src = "about:blank";
+    if(fallback) fallback.classList.remove("show");
   }
 
   function normalizeScannedUrl(raw){
@@ -3391,9 +3504,10 @@ document.addEventListener("visibilitychange", function(){
 
     var input = document.getElementById("newUrl");
     var apply = document.getElementById("qrApplyBtn");
+    var url = qrCandidateUrl;
 
     if(input){
-      input.value = qrCandidateUrl;
+      input.value = url;
       input.focus();
     }
 
@@ -3404,18 +3518,50 @@ document.addEventListener("visibilitychange", function(){
         apply.textContent = "Attivo...";
       }
 
-      showMsg("Attivo la nuova destinazione...");
+      showMsg("Attivo direttamente la nuova destinazione...");
 
-      if(typeof window.updateUrl === "function"){
-        await window.updateUrl();
-      }else if(typeof updateUrl === "function"){
-        await updateUrl();
-      }else{
-        throw new Error("Funzione di aggiornamento non disponibile");
+      var code = "";
+      try{
+        var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+        if(m) code = decodeURIComponent(m[1] || "").trim().toUpperCase();
+        if(!code){
+          var p = new URLSearchParams(location.search || "");
+          code = String(p.get("code") || "").trim().toUpperCase();
+        }
+      }catch(e){}
+
+      if(!code){
+        throw new Error("Codice Follow Me mancante");
+      }
+
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/update-url", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ url:url })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Errore aggiornamento link");
+      }
+
+      if(typeof window.updateSimpleDestinationPreview === "function"){
+        try{ window.updateSimpleDestinationPreview(url); }catch(e){}
+      }
+
+      if(typeof window.refreshStatusOnce === "function"){
+        try{ await window.refreshStatusOnce(); }catch(e){}
       }
 
       stopQrScanner(true);
-      showMsg("URL rilevato e attivato. Aggiorno la Web App...");
+      showMsg("URL rilevato e attivato.");
+
+      setTimeout(function(){
+        window.location.replace(
+          window.location.origin + window.location.pathname + "?v=qr-activated-" + Date.now()
+        );
+      }, 650);
 
     }catch(err){
       console.error("applyQrCandidate activation error:", err);
@@ -3423,7 +3569,7 @@ document.addEventListener("visibilitychange", function(){
       showMsg("Errore attivazione URL.");
     }finally{
       if(apply){
-        apply.disabled = !qrCandidateUrl;
+        apply.disabled = false;
         if(qrCandidateUrl){
           apply.classList.add("qr-ready-pulse");
           apply.textContent = "Conferma e attiva subito";
