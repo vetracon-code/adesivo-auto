@@ -424,6 +424,28 @@
       margin-top:12px;
     }
 
+    #qrApplyBtn.qr-ready-pulse{
+      animation:qrReadyPulse 1.05s ease-in-out infinite;
+      box-shadow:
+        0 0 0 0 rgba(200,255,46,.42),
+        0 14px 30px rgba(200,255,46,.18);
+    }
+
+    @keyframes qrReadyPulse{
+      0%{
+        transform:scale(1);
+        box-shadow:0 0 0 0 rgba(200,255,46,.44), 0 14px 30px rgba(200,255,46,.18);
+      }
+      55%{
+        transform:scale(1.018);
+        box-shadow:0 0 0 7px rgba(200,255,46,.08), 0 18px 36px rgba(200,255,46,.25);
+      }
+      100%{
+        transform:scale(1);
+        box-shadow:0 0 0 0 rgba(200,255,46,0), 0 14px 30px rgba(200,255,46,.18);
+      }
+    }
+
     @media (max-width:520px){
       .qr-scan-actions{
         grid-template-columns:1fr;
@@ -978,7 +1000,7 @@
 
       <div class="qr-scan-panel" id="qrScanPanel">
         <div class="qr-scan-title">Scansione QR</div>
-        <div class="qr-scan-help">Inquadra il QR. Se contiene un URL valido e non sospetto, verrà inserito nel campo destinazione.</div>
+        <div class="qr-scan-help">Inquadra il QR. Se contiene un URL valido, potrai attivarlo subito come nuova destinazione.</div>
 
         <div class="qr-video-wrap">
           <video id="qrImportVideo" muted playsinline autoplay></video>
@@ -2930,6 +2952,14 @@ document.addEventListener("visibilitychange", function(){
     var apply = document.getElementById("qrApplyBtn");
     if(apply){
       apply.disabled = !qrCandidateUrl;
+
+      if(qrCandidateUrl){
+        apply.classList.add("qr-ready-pulse");
+        apply.textContent = "Usa e attiva URL rilevato";
+      }else{
+        apply.classList.remove("qr-ready-pulse");
+        apply.textContent = "Usa URL rilevato";
+      }
     }
   }
 
@@ -2978,7 +3008,16 @@ document.addEventListener("visibilitychange", function(){
     var panel = document.getElementById("qrScanPanel");
     var video = document.getElementById("qrImportVideo");
 
-    if(panel) panel.classList.add("show");
+    if(panel){
+      panel.classList.add("show");
+      setTimeout(function(){
+        try{
+          panel.scrollIntoView({ behavior:"smooth", block:"start" });
+        }catch(e){
+          panel.scrollIntoView();
+        }
+      }, 120);
+    }
 
     setCandidateUrl("");
 
@@ -3107,20 +3146,56 @@ document.addEventListener("visibilitychange", function(){
     }
   }
 
-  function applyQrCandidate(){
+  async function applyQrCandidate(){
     if(!qrCandidateUrl){
       setQrStatus("Nessun URL valido rilevato.", "danger");
       return;
     }
 
     var input = document.getElementById("newUrl");
+    var apply = document.getElementById("qrApplyBtn");
+
     if(input){
       input.value = qrCandidateUrl;
       input.focus();
     }
 
-    stopQrScanner(true);
-    showMsg("URL importato. Premi Aggiorna QR per attivarlo.");
+    try{
+      if(apply){
+        apply.disabled = true;
+        apply.classList.remove("qr-ready-pulse");
+        apply.textContent = "Attivo...";
+      }
+
+      showMsg("Attivo la nuova destinazione...");
+
+      if(typeof window.updateUrl === "function"){
+        await window.updateUrl();
+      }else if(typeof updateUrl === "function"){
+        await updateUrl();
+      }else{
+        throw new Error("Funzione di aggiornamento non disponibile");
+      }
+
+      stopQrScanner(true);
+      showMsg("URL rilevato e attivato.");
+
+    }catch(err){
+      console.error("applyQrCandidate activation error:", err);
+      setQrStatus("URL rilevato, ma non sono riuscito ad attivarlo: " + (err.message || err), "danger");
+      showMsg("Errore attivazione URL.");
+    }finally{
+      if(apply){
+        apply.disabled = !qrCandidateUrl;
+        if(qrCandidateUrl){
+          apply.classList.add("qr-ready-pulse");
+          apply.textContent = "Usa e attiva URL rilevato";
+        }else{
+          apply.classList.remove("qr-ready-pulse");
+          apply.textContent = "Usa URL rilevato";
+        }
+      }
+    }
   }
 
   function bindQrScanner(){
