@@ -413,6 +413,52 @@
       overflow:auto;
     }
 
+
+    .setup-box{
+      width:100% !important;
+      max-width:100% !important;
+      box-sizing:border-box !important;
+      overflow:hidden !important;
+      display:grid !important;
+      gap:10px !important;
+    }
+
+    .setup-box .btn,
+    .setup-box button,
+    .setup-box a.btn{
+      width:100% !important;
+      max-width:100% !important;
+      min-width:0 !important;
+      margin-left:0 !important;
+      margin-right:0 !important;
+      box-sizing:border-box !important;
+      display:flex !important;
+      align-items:center !important;
+      justify-content:center !important;
+      text-align:center !important;
+      white-space:normal !important;
+    }
+
+    .setup-box .ios-steps,
+    .setup-box .setup-state,
+    .setup-box pre{
+      max-width:100% !important;
+      box-sizing:border-box !important;
+      overflow:auto !important;
+    }
+
+    .setup-box .ios-steps ol{
+      margin-left:0 !important;
+      padding-left:20px !important;
+    }
+
+    #pushDebugBox{
+      width:100% !important;
+      max-width:100% !important;
+      box-sizing:border-box !important;
+      overflow:auto !important;
+    }
+
 </style>
 </head>
 <body>
@@ -1300,6 +1346,87 @@ document.addEventListener("visibilitychange", function(){
       setTimeout(renderFollowMeEmergencyHistory, 300);
     }
   });
+})();
+</script>
+
+
+<script id="followme-activate-history-fix">
+(function(){
+  function getFollowMeCodeSafe(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+
+      var p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim().toUpperCase();
+    }catch(e){
+      return "FM-DEMO";
+    }
+  }
+
+  function showFollowMeToastSafe(msg){
+    try{
+      if(typeof toast === "function"){
+        toast(msg);
+        return;
+      }
+
+      var el = document.getElementById("toast");
+      if(el){
+        el.textContent = msg;
+        el.style.display = "block";
+        setTimeout(function(){ el.style.display = "none"; }, 2600);
+      }
+    }catch(e){}
+  }
+
+  window.reactivateUrl = async function(encoded){
+    try{
+      var code = getFollowMeCodeSafe();
+      var url = decodeURIComponent(encoded || "").trim();
+
+      if(!code || !url){
+        showFollowMeToastSafe("Link non valido.");
+        return;
+      }
+
+      var input = document.getElementById("newUrl");
+      if(input) input.value = url;
+
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/update-url", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ url:url })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        showFollowMeToastSafe((data && data.error) || "Errore attivazione link.");
+        return;
+      }
+
+      window.__followMeActiveUrl = url;
+
+      if(typeof updateSimpleDestinationPreview === "function"){
+        try{ updateSimpleDestinationPreview(url); }catch(e){}
+      }
+
+      showFollowMeToastSafe("Link attivo ora.");
+
+      // Ricarica la pagina server-side così:
+      // - il link attivo sale primo
+      // - la preview viene precompilata
+      // - i conteggi vengono riallineati
+      setTimeout(function(){
+        window.location.replace("/fm/app/" + encodeURIComponent(code) + "?v=activate-" + Date.now());
+      }, 450);
+
+    }catch(err){
+      console.error("reactivateUrl safe error:", err);
+      showFollowMeToastSafe("Errore: " + (err.message || err));
+    }
+  };
 })();
 </script>
 
