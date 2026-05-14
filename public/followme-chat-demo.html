@@ -1,0 +1,724 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101820">
+  <title>Follow Me Chat Demo</title>
+  <style>
+    :root{
+      --bg:#07130f;
+      --panel:#0e1f18;
+      --panel2:#122820;
+      --line:rgba(255,255,255,.10);
+      --muted:rgba(255,255,255,.62);
+      --text:#ffffff;
+      --green:#25d366;
+      --green2:#128c7e;
+      --bubble-me:#dcf8c6;
+      --bubble-other:#ffffff;
+      --danger:#ff5a6f;
+      --lime:#c8ff2e;
+      --cyan:#5ee7ff;
+      --shadow:0 20px 55px rgba(0,0,0,.36);
+    }
+
+    *{box-sizing:border-box}
+
+    html,body{
+      margin:0;
+      min-height:100%;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(37,211,102,.16), transparent 28%),
+        radial-gradient(circle at 90% 10%, rgba(94,231,255,.12), transparent 28%),
+        linear-gradient(180deg,#07130f,#06100d);
+      color:var(--text);
+    }
+
+    body{
+      min-height:100vh;
+      display:grid;
+      place-items:center;
+      padding:18px;
+    }
+
+    .demo-shell{
+      width:min(430px,100%);
+      height:min(860px,calc(100vh - 36px));
+      min-height:720px;
+      border-radius:34px;
+      overflow:hidden;
+      background:#0b141a;
+      box-shadow:var(--shadow);
+      border:1px solid rgba(255,255,255,.12);
+      position:relative;
+      display:flex;
+      flex-direction:column;
+    }
+
+    .mode-strip{
+      display:flex;
+      gap:8px;
+      padding:10px;
+      background:#07130f;
+      border-bottom:1px solid rgba(255,255,255,.08);
+    }
+
+    .mode-btn{
+      flex:1;
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.06);
+      color:rgba(255,255,255,.76);
+      border-radius:999px;
+      min-height:34px;
+      font-weight:900;
+      font-size:.78rem;
+      cursor:pointer;
+    }
+
+    .mode-btn.active{
+      color:#07130f;
+      background:linear-gradient(135deg,var(--lime),var(--cyan));
+      border:0;
+    }
+
+    .admin-top{
+      display:none;
+      gap:8px;
+      padding:10px;
+      background:#101820;
+      border-bottom:1px solid rgba(255,255,255,.08);
+    }
+
+    body.admin-mode .admin-top{
+      display:flex;
+    }
+
+    .admin-action{
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.06);
+      color:#fff;
+      border-radius:14px;
+      min-height:38px;
+      padding:0 12px;
+      font-weight:950;
+      cursor:pointer;
+    }
+
+    .admin-action.danger{
+      color:#fff;
+      background:rgba(255,90,111,.17);
+      border-color:rgba(255,90,111,.35);
+    }
+
+    .admin-action.power{
+      flex:1;
+      color:#07130f;
+      background:linear-gradient(135deg,#ffdf7e,#ff9f1c);
+      border:0;
+    }
+
+    .chat-header{
+      height:64px;
+      background:#075e54;
+      display:flex;
+      align-items:center;
+      gap:11px;
+      padding:10px 14px;
+      border-bottom:1px solid rgba(0,0,0,.18);
+      flex:0 0 auto;
+    }
+
+    .back{
+      font-size:1.45rem;
+      opacity:.9;
+      line-height:1;
+    }
+
+    .avatar{
+      width:42px;
+      height:42px;
+      border-radius:999px;
+      background:
+        radial-gradient(circle at 35% 30%, rgba(255,255,255,.36), transparent 28%),
+        linear-gradient(135deg,#c8ff2e,#5ee7ff);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:#06211a;
+      font-weight:1000;
+      box-shadow:0 8px 22px rgba(0,0,0,.2);
+      flex:0 0 auto;
+    }
+
+    .chat-title{
+      min-width:0;
+      flex:1;
+    }
+
+    .chat-title strong{
+      display:block;
+      font-size:1rem;
+      line-height:1.1;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    .chat-title span{
+      display:block;
+      margin-top:3px;
+      color:rgba(255,255,255,.78);
+      font-size:.76rem;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    .header-dots{
+      font-size:1.4rem;
+      letter-spacing:2px;
+      color:rgba(255,255,255,.78);
+    }
+
+    .token-box{
+      display:none;
+      padding:8px 13px;
+      background:rgba(200,255,46,.08);
+      border-bottom:1px solid rgba(200,255,46,.12);
+      color:rgba(255,255,255,.78);
+      font-size:.73rem;
+      line-height:1.35;
+    }
+
+    body.admin-mode .token-box{
+      display:block;
+    }
+
+    .token-box strong{
+      color:#c8ff2e;
+    }
+
+    .messages{
+      flex:1 1 auto;
+      overflow:auto;
+      padding:18px 12px 14px;
+      background:
+        linear-gradient(rgba(11,20,26,.86),rgba(11,20,26,.86)),
+        radial-gradient(circle at 18px 18px, rgba(255,255,255,.06) 1px, transparent 2px);
+      background-size:auto, 22px 22px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+
+    .day{
+      align-self:center;
+      padding:6px 10px;
+      border-radius:999px;
+      background:rgba(255,255,255,.12);
+      color:rgba(255,255,255,.72);
+      font-size:.72rem;
+      font-weight:800;
+      margin-bottom:4px;
+    }
+
+    .bubble{
+      max-width:82%;
+      padding:8px 9px 6px;
+      border-radius:12px;
+      color:#111;
+      position:relative;
+      box-shadow:0 4px 12px rgba(0,0,0,.12);
+      line-height:1.28;
+      font-size:.94rem;
+      word-break:break-word;
+    }
+
+    .bubble small{
+      display:block;
+      text-align:right;
+      color:rgba(0,0,0,.46);
+      font-size:.65rem;
+      margin-top:4px;
+      white-space:nowrap;
+    }
+
+    .bubble.me{
+      align-self:flex-end;
+      background:var(--bubble-me);
+      border-top-right-radius:4px;
+    }
+
+    .bubble.other{
+      align-self:flex-start;
+      background:var(--bubble-other);
+      border-top-left-radius:4px;
+    }
+
+    .blocked-panel{
+      display:none;
+      margin:10px 12px;
+      padding:12px;
+      border-radius:18px;
+      background:rgba(255,90,111,.12);
+      border:1px solid rgba(255,90,111,.28);
+      color:#ffd7dd;
+      font-size:.86rem;
+      line-height:1.35;
+      text-align:center;
+      font-weight:850;
+    }
+
+    body.user-blocked .blocked-panel{
+      display:block;
+    }
+
+    .composer{
+      flex:0 0 auto;
+      display:flex;
+      gap:8px;
+      padding:10px;
+      background:#0b141a;
+      border-top:1px solid rgba(255,255,255,.08);
+      align-items:flex-end;
+    }
+
+    .input-wrap{
+      flex:1;
+      min-height:46px;
+      background:#fff;
+      border-radius:24px;
+      padding:7px 12px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+
+    .emoji{
+      color:#8696a0;
+      font-size:1.25rem;
+    }
+
+    textarea{
+      border:0;
+      outline:0;
+      resize:none;
+      width:100%;
+      max-height:90px;
+      min-height:28px;
+      font:inherit;
+      line-height:1.25;
+      color:#111;
+      padding:4px 0 0;
+    }
+
+    .send{
+      width:46px;
+      height:46px;
+      border-radius:999px;
+      border:0;
+      background:#25d366;
+      color:#fff;
+      font-size:1.15rem;
+      font-weight:1000;
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      box-shadow:0 10px 22px rgba(37,211,102,.24);
+      flex:0 0 auto;
+    }
+
+    body.user-blocked .composer{
+      opacity:.52;
+      pointer-events:none;
+    }
+
+    .modal{
+      position:absolute;
+      inset:0;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      background:rgba(0,0,0,.55);
+      z-index:20;
+      backdrop-filter:blur(8px);
+    }
+
+    .modal.show{
+      display:flex;
+    }
+
+    .modal-card{
+      width:100%;
+      border-radius:24px;
+      padding:18px;
+      background:#101820;
+      border:1px solid rgba(255,255,255,.13);
+      box-shadow:0 22px 60px rgba(0,0,0,.42);
+    }
+
+    .modal-card h3{
+      margin:0 0 8px;
+      font-size:1.12rem;
+    }
+
+    .modal-card p{
+      margin:0 0 14px;
+      color:var(--muted);
+      line-height:1.42;
+      font-size:.9rem;
+    }
+
+    .modal-actions{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:8px;
+    }
+
+    .modal-actions button{
+      min-height:44px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.12);
+      font-weight:950;
+      cursor:pointer;
+    }
+
+    .modal-actions .cancel{
+      color:#fff;
+      background:rgba(255,255,255,.07);
+    }
+
+    .modal-actions .confirm{
+      color:#101018;
+      background:linear-gradient(135deg,#c8ff2e,#5ee7ff);
+      border:0;
+    }
+
+    .toast{
+      position:absolute;
+      left:14px;
+      right:14px;
+      bottom:78px;
+      padding:11px 13px;
+      border-radius:18px;
+      color:#101018;
+      background:linear-gradient(135deg,#c8ff2e,#5ee7ff);
+      font-weight:950;
+      font-size:.85rem;
+      text-align:center;
+      box-shadow:0 16px 32px rgba(0,0,0,.25);
+      transform:translateY(18px);
+      opacity:0;
+      pointer-events:none;
+      transition:.22s ease;
+      z-index:30;
+    }
+
+    .toast.show{
+      opacity:1;
+      transform:translateY(0);
+    }
+
+    @media(max-width:440px){
+      body{padding:0}
+      .demo-shell{
+        width:100%;
+        height:100vh;
+        min-height:100vh;
+        border-radius:0;
+        border:0;
+      }
+    }
+  </style>
+</head>
+<body class="admin-mode">
+  <div class="demo-shell">
+    <div class="mode-strip">
+      <button class="mode-btn active" id="adminModeBtn" type="button">Vista admin</button>
+      <button class="mode-btn" id="userModeBtn" type="button">Vista utente</button>
+    </div>
+
+    <div class="admin-top">
+      <button class="admin-action power" id="powerBtn" type="button">Spegni chat</button>
+      <button class="admin-action" id="rotateBtn" type="button">Rigenera accesso</button>
+      <button class="admin-action danger" id="blockBtn" type="button">Blocca</button>
+    </div>
+
+    <header class="chat-header">
+      <div class="back">‹</div>
+      <div class="avatar" id="avatar">FM</div>
+      <div class="chat-title">
+        <strong id="chatName">Follow Me Chat</strong>
+        <span id="chatStatus">chat attiva · redirect sospesi</span>
+      </div>
+      <div class="header-dots">•••</div>
+    </header>
+
+    <div class="token-box">
+      Accesso chat attivo: <strong id="tokenText">CHAT-000000</strong><br>
+      Il QR rimane lo stesso, cambia il token interno della sessione.
+    </div>
+
+    <main class="messages" id="messages">
+      <div class="day">Oggi</div>
+    </main>
+
+    <div class="blocked-panel">
+      Questa conversazione non è più disponibile.
+    </div>
+
+    <footer class="composer">
+      <div class="input-wrap">
+        <div class="emoji">☺</div>
+        <textarea id="messageInput" rows="1" placeholder="Scrivi un messaggio"></textarea>
+      </div>
+      <button class="send" id="sendBtn" type="button">➤</button>
+    </footer>
+
+    <div class="modal" id="confirmModal">
+      <div class="modal-card">
+        <h3 id="modalTitle">Confermi?</h3>
+        <p id="modalText">Operazione richiesta.</p>
+        <div class="modal-actions">
+          <button class="cancel" id="modalCancel" type="button">Annulla</button>
+          <button class="confirm" id="modalConfirm" type="button">Confermi</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </div>
+
+<script>
+(function(){
+  var state = {
+    mode:"admin",
+    chatEnabled:true,
+    blocked:false,
+    token: localStorage.getItem("fmChatDemoToken") || makeToken(),
+    messages: JSON.parse(localStorage.getItem("fmChatDemoMessages") || "null") || [
+      { from:"user", text:"Ciao, ho inquadrato il tuo QR. Posso scriverti qui?", time:nowTime() },
+      { from:"admin", text:"Certo, questa è una chat privata collegata al mio Follow Me.", time:nowTime() },
+      { from:"user", text:"Quindi quando la chat è attiva il QR non apre più il redirect?", time:nowTime() },
+      { from:"admin", text:"Esatto. Il QR resta uguale, ma temporaneamente apre questa conversazione.", time:nowTime() }
+    ]
+  };
+
+  localStorage.setItem("fmChatDemoToken", state.token);
+
+  var body = document.body;
+  var messages = document.getElementById("messages");
+  var input = document.getElementById("messageInput");
+  var send = document.getElementById("sendBtn");
+  var toast = document.getElementById("toast");
+
+  var adminModeBtn = document.getElementById("adminModeBtn");
+  var userModeBtn = document.getElementById("userModeBtn");
+  var powerBtn = document.getElementById("powerBtn");
+  var rotateBtn = document.getElementById("rotateBtn");
+  var blockBtn = document.getElementById("blockBtn");
+  var tokenText = document.getElementById("tokenText");
+  var chatStatus = document.getElementById("chatStatus");
+  var chatName = document.getElementById("chatName");
+  var avatar = document.getElementById("avatar");
+
+  var modal = document.getElementById("confirmModal");
+  var modalTitle = document.getElementById("modalTitle");
+  var modalText = document.getElementById("modalText");
+  var modalCancel = document.getElementById("modalCancel");
+  var modalConfirm = document.getElementById("modalConfirm");
+  var modalAction = null;
+
+  function makeToken(){
+    return "CHAT-" + Math.random().toString(36).slice(2,10).toUpperCase();
+  }
+
+  function nowTime(){
+    var d = new Date();
+    return d.toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"});
+  }
+
+  function save(){
+    localStorage.setItem("fmChatDemoToken", state.token);
+    localStorage.setItem("fmChatDemoMessages", JSON.stringify(state.messages));
+  }
+
+  function showToast(text){
+    toast.textContent = text;
+    toast.classList.add("show");
+    clearTimeout(showToast.t);
+    showToast.t = setTimeout(function(){
+      toast.classList.remove("show");
+    }, 1800);
+  }
+
+  function setMode(mode){
+    state.mode = mode;
+    body.classList.toggle("admin-mode", mode === "admin");
+    adminModeBtn.classList.toggle("active", mode === "admin");
+    userModeBtn.classList.toggle("active", mode === "user");
+
+    if(mode === "admin"){
+      chatName.textContent = "Follow Me Chat";
+      chatStatus.textContent = state.chatEnabled ? "chat attiva · redirect sospesi" : "chat spenta · redirect ripristinati";
+      avatar.textContent = "FM";
+      input.placeholder = "Rispondi come amministratore";
+    }else{
+      chatName.textContent = "Contatto Follow Me";
+      chatStatus.textContent = state.chatEnabled ? "online" : "chat momentaneamente non disponibile";
+      avatar.textContent = "QR";
+      input.placeholder = "Scrivi un messaggio";
+    }
+
+    render();
+  }
+
+  function render(){
+    tokenText.textContent = state.token;
+    body.classList.toggle("user-blocked", state.blocked && state.mode === "user");
+
+    powerBtn.textContent = state.chatEnabled ? "Spegni chat" : "Riattiva chat";
+    blockBtn.textContent = state.blocked ? "Sblocca" : "Blocca";
+
+    chatStatus.textContent = state.mode === "admin"
+      ? (state.chatEnabled ? "chat attiva · redirect sospesi" : "chat spenta · redirect ripristinati")
+      : (state.chatEnabled ? "online" : "chat momentaneamente non disponibile");
+
+    messages.innerHTML = '<div class="day">Oggi</div>';
+
+    state.messages.forEach(function(m){
+      var div = document.createElement("div");
+      var mine = (state.mode === "admin" && m.from === "admin") || (state.mode === "user" && m.from === "user");
+      div.className = "bubble " + (mine ? "me" : "other");
+      div.innerHTML = escapeHtml(m.text) + '<small>' + escapeHtml(m.time) + '</small>';
+      messages.appendChild(div);
+    });
+
+    messages.scrollTop = messages.scrollHeight;
+    save();
+  }
+
+  function escapeHtml(s){
+    return String(s || "")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
+  }
+
+  function sendMessage(){
+    var text = input.value.trim();
+    if(!text) return;
+
+    if(!state.chatEnabled){
+      showToast("La chat è spenta. Il QR tornerebbe ai redirect.");
+      return;
+    }
+
+    if(state.blocked && state.mode === "user"){
+      showToast("Conversazione non disponibile.");
+      return;
+    }
+
+    state.messages.push({
+      from: state.mode === "admin" ? "admin" : "user",
+      text:text,
+      time:nowTime()
+    });
+
+    input.value = "";
+    render();
+
+    if(state.mode === "user"){
+      setTimeout(function(){
+        if(!state.blocked && state.chatEnabled){
+          state.messages.push({
+            from:"admin",
+            text:"Messaggio ricevuto. Ti rispondo appena possibile.",
+            time:nowTime()
+          });
+          render();
+        }
+      }, 900);
+    }
+  }
+
+  function openModal(title,text,action){
+    modalTitle.textContent = title;
+    modalText.textContent = text;
+    modalAction = action;
+    modal.classList.add("show");
+  }
+
+  function closeModal(){
+    modal.classList.remove("show");
+    modalAction = null;
+  }
+
+  adminModeBtn.addEventListener("click", function(){ setMode("admin"); });
+  userModeBtn.addEventListener("click", function(){ setMode("user"); });
+  send.addEventListener("click", sendMessage);
+
+  input.addEventListener("keydown", function(ev){
+    if(ev.key === "Enter" && !ev.shiftKey){
+      ev.preventDefault();
+      sendMessage();
+    }
+  });
+
+  powerBtn.addEventListener("click", function(){
+    openModal(
+      state.chatEnabled ? "Spegnere la chat?" : "Riattivare la chat?",
+      state.chatEnabled
+        ? "Il QR smetterà di aprire la chat e tornerà alla modalità redirect."
+        : "Il QR sospenderà i redirect e riaprirà questa chat.",
+      function(){
+        state.chatEnabled = !state.chatEnabled;
+        showToast(state.chatEnabled ? "Chat riattivata." : "Chat spenta. Redirect ripristinati.");
+        render();
+      }
+    );
+  });
+
+  rotateBtn.addEventListener("click", function(){
+    openModal(
+      "Rigenerare l’accesso?",
+      "I nuovi scan entreranno in una nuova sessione randomizzata. Le conversazioni già aperte restano consultabili.",
+      function(){
+        state.token = makeToken();
+        showToast("Nuovo token chat generato.");
+        render();
+      }
+    );
+  });
+
+  blockBtn.addEventListener("click", function(){
+    openModal(
+      state.blocked ? "Sbloccare utente?" : "Bloccare utente?",
+      state.blocked
+        ? "L’utente potrà tornare a inviare messaggi."
+        : "L’utente non potrà più inviare messaggi in questa conversazione.",
+      function(){
+        state.blocked = !state.blocked;
+        showToast(state.blocked ? "Utente bloccato." : "Utente sbloccato.");
+        render();
+      }
+    );
+  });
+
+  modalCancel.addEventListener("click", closeModal);
+  modalConfirm.addEventListener("click", function(){
+    if(typeof modalAction === "function") modalAction();
+    closeModal();
+  });
+
+  setMode("admin");
+})();
+</script>
+</body>
+</html>
