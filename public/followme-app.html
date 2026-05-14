@@ -330,6 +330,106 @@
       border-radius:16px;
     }
 
+
+    .qr-import-btn{
+      margin-top:10px;
+    }
+
+    .qr-scan-panel{
+      display:none;
+      margin-top:12px;
+      border-radius:22px;
+      padding:14px;
+      background:rgba(255,255,255,.055);
+      border:1px solid rgba(255,255,255,.11);
+      box-shadow:0 16px 36px rgba(0,0,0,.22);
+    }
+
+    .qr-scan-panel.show{
+      display:block;
+    }
+
+    .qr-scan-title{
+      color:#c8ff2e;
+      font-size:.78rem;
+      font-weight:950;
+      letter-spacing:.10em;
+      text-transform:uppercase;
+      margin-bottom:8px;
+    }
+
+    .qr-scan-help{
+      color:rgba(255,255,255,.72);
+      line-height:1.38;
+      font-size:.92rem;
+      margin-bottom:12px;
+    }
+
+    .qr-video-wrap{
+      position:relative;
+      width:100%;
+      aspect-ratio:1 / 1;
+      overflow:hidden;
+      border-radius:20px;
+      background:#05050a;
+      border:1px solid rgba(200,255,46,.32);
+    }
+
+    #qrImportVideo{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      display:block;
+      background:#000;
+    }
+
+    .qr-target-frame{
+      position:absolute;
+      inset:18%;
+      border:3px solid rgba(200,255,46,.88);
+      border-radius:20px;
+      box-shadow:
+        0 0 0 999px rgba(0,0,0,.26),
+        0 0 28px rgba(200,255,46,.22);
+      pointer-events:none;
+    }
+
+    .qr-scan-status{
+      margin-top:10px;
+      padding:11px 12px;
+      border-radius:15px;
+      background:rgba(0,0,0,.22);
+      border:1px solid rgba(255,255,255,.08);
+      color:rgba(255,255,255,.78);
+      font-size:.88rem;
+      line-height:1.35;
+    }
+
+    .qr-scan-status.danger{
+      color:#ffd7dd;
+      border-color:rgba(255,90,111,.42);
+      background:rgba(255,90,111,.12);
+    }
+
+    .qr-scan-status.ok{
+      color:#eaffb7;
+      border-color:rgba(200,255,46,.42);
+      background:rgba(200,255,46,.10);
+    }
+
+    .qr-scan-actions{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+      margin-top:12px;
+    }
+
+    @media (max-width:520px){
+      .qr-scan-actions{
+        grid-template-columns:1fr;
+      }
+    }
+
     .followme-delete-btn{
       margin-top:8px;
       width:100% !important;
@@ -874,6 +974,24 @@
       <div class="label">MODIFICA LA DESTINAZIONE</div>
       <input id="newUrl" class="destination-input" placeholder="Incolla qui il nuovo Link.">
       <button class="btn" id="updateDestinationBtn" type="button">Aggiorna QR</button>
+      <button class="btn secondary qr-import-btn" id="qrImportBtn" type="button">Importa con scansione QR</button>
+
+      <div class="qr-scan-panel" id="qrScanPanel">
+        <div class="qr-scan-title">Scansione QR</div>
+        <div class="qr-scan-help">Inquadra il QR. Se contiene un URL valido e non sospetto, verrà inserito nel campo destinazione.</div>
+
+        <div class="qr-video-wrap">
+          <video id="qrImportVideo" muted playsinline></video>
+          <div class="qr-target-frame"></div>
+        </div>
+
+        <div class="qr-scan-status" id="qrScanStatus">Fotocamera non ancora attiva.</div>
+
+        <div class="qr-scan-actions">
+          <button class="btn secondary" id="qrStopBtn" type="button">Chiudi scanner</button>
+          <button class="btn" id="qrApplyBtn" type="button" disabled>Usa URL rilevato</button>
+        </div>
+      </div>
     </section>
     <section class="card" id="scanStatsBlock">
       <div class="stats">
@@ -2696,6 +2814,277 @@ document.addEventListener("visibilitychange", function(){
   document.addEventListener("DOMContentLoaded", boot);
   setTimeout(boot, 200);
   setTimeout(boot, 1200);
+})();
+</script>
+
+
+<script id="followme-qr-import-scanner">
+(function(){
+  var qrStream = null;
+  var qrScanTimer = null;
+  var qrDetector = null;
+  var qrCandidateUrl = "";
+
+  function showMsg(text){
+    try{
+      var el = document.getElementById("toast");
+      if(el){
+        el.textContent = text;
+        el.style.display = "block";
+        setTimeout(function(){ el.style.display = "none"; }, 3000);
+      }else{
+        alert(text);
+      }
+    }catch(e){
+      alert(text);
+    }
+  }
+
+  function setQrStatus(text, mode){
+    var el = document.getElementById("qrScanStatus");
+    if(!el) return;
+
+    el.textContent = text;
+    el.classList.remove("danger", "ok");
+
+    if(mode) el.classList.add(mode);
+  }
+
+  function normalizeScannedUrl(raw){
+    var value = String(raw || "").trim();
+
+    if(!value) {
+      return { ok:false, reason:"Il QR è vuoto o non leggibile." };
+    }
+
+    if(value.length > 2048){
+      return { ok:false, reason:"URL troppo lungo: per sicurezza non viene importato." };
+    }
+
+    var lower = value.toLowerCase();
+
+    var blockedPrefixes = [
+      "javascript:",
+      "data:",
+      "file:",
+      "blob:",
+      "vbscript:",
+      "mailto:",
+      "tel:",
+      "sms:",
+      "intent:"
+    ];
+
+    for(var i=0;i<blockedPrefixes.length;i++){
+      if(lower.indexOf(blockedPrefixes[i]) === 0){
+        return { ok:false, reason:"QR potenzialmente pericoloso o non adatto: protocollo non consentito." };
+      }
+    }
+
+    if(!/^https?:\/\//i.test(value)){
+      if(/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(value)){
+        value = "https://" + value;
+      }else{
+        return { ok:false, reason:"Il QR non contiene un URL web valido." };
+      }
+    }
+
+    var urlObj;
+    try{
+      urlObj = new URL(value);
+    }catch(e){
+      return { ok:false, reason:"URL non valido: non viene importato." };
+    }
+
+    if(urlObj.protocol !== "http:" && urlObj.protocol !== "https:"){
+      return { ok:false, reason:"Protocollo non consentito. Sono accettati solo link http o https." };
+    }
+
+    if(!urlObj.hostname || !urlObj.hostname.includes(".")){
+      return { ok:false, reason:"Dominio non valido o incompleto." };
+    }
+
+    var suspicious = [
+      "%00",
+      "<script",
+      "javascript%3a",
+      "data%3a"
+    ];
+
+    var check = value.toLowerCase();
+    for(var j=0;j<suspicious.length;j++){
+      if(check.includes(suspicious[j])){
+        return { ok:false, reason:"URL sospetto: per sicurezza non viene importato." };
+      }
+    }
+
+    return { ok:true, url:urlObj.href };
+  }
+
+  function setCandidateUrl(url){
+    qrCandidateUrl = url || "";
+
+    var apply = document.getElementById("qrApplyBtn");
+    if(apply){
+      apply.disabled = !qrCandidateUrl;
+    }
+  }
+
+  async function startQrScanner(){
+    var panel = document.getElementById("qrScanPanel");
+    var video = document.getElementById("qrImportVideo");
+
+    if(panel) panel.classList.add("show");
+
+    setCandidateUrl("");
+
+    if(!("BarcodeDetector" in window)){
+      setQrStatus("Scanner QR non disponibile su questo browser. Usa Safari/Chrome aggiornato oppure incolla manualmente l'URL.", "danger");
+      return;
+    }
+
+    try{
+      qrDetector = new BarcodeDetector({ formats:["qr_code"] });
+    }catch(e){
+      setQrStatus("BarcodeDetector non supporta il formato QR su questo dispositivo.", "danger");
+      return;
+    }
+
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      setQrStatus("Fotocamera non disponibile da questo browser.", "danger");
+      return;
+    }
+
+    try{
+      qrStream = await navigator.mediaDevices.getUserMedia({
+        video:{
+          facingMode:{ ideal:"environment" },
+          width:{ ideal:1280 },
+          height:{ ideal:1280 }
+        },
+        audio:false
+      });
+
+      video.srcObject = qrStream;
+      await video.play();
+
+      setQrStatus("Inquadra il QR all'interno del riquadro.", "");
+
+      qrScanTimer = setInterval(async function(){
+        try{
+          if(!video || video.readyState < 2 || !qrDetector) return;
+
+          var codes = await qrDetector.detect(video);
+
+          if(!codes || !codes.length) return;
+
+          var raw = codes[0].rawValue || "";
+          var checked = normalizeScannedUrl(raw);
+
+          if(!checked.ok){
+            setCandidateUrl("");
+            setQrStatus(checked.reason, "danger");
+            return;
+          }
+
+          setCandidateUrl(checked.url);
+          setQrStatus("URL rilevato e verificato: " + checked.url, "ok");
+
+          stopQrScanner(false);
+        }catch(err){
+          console.warn("Errore scansione QR:", err);
+        }
+      }, 450);
+
+    }catch(err){
+      console.error("startQrScanner error:", err);
+      setQrStatus("Non riesco ad accedere alla fotocamera. Controlla i permessi del browser.", "danger");
+    }
+  }
+
+  function stopQrScanner(hidePanel){
+    if(qrScanTimer){
+      clearInterval(qrScanTimer);
+      qrScanTimer = null;
+    }
+
+    if(qrStream){
+      try{
+        qrStream.getTracks().forEach(function(track){ track.stop(); });
+      }catch(e){}
+      qrStream = null;
+    }
+
+    var video = document.getElementById("qrImportVideo");
+    if(video){
+      try{ video.pause(); }catch(e){}
+      video.srcObject = null;
+    }
+
+    if(hidePanel){
+      var panel = document.getElementById("qrScanPanel");
+      if(panel) panel.classList.remove("show");
+
+      setCandidateUrl("");
+      setQrStatus("Fotocamera non ancora attiva.", "");
+    }
+  }
+
+  function applyQrCandidate(){
+    if(!qrCandidateUrl){
+      setQrStatus("Nessun URL valido rilevato.", "danger");
+      return;
+    }
+
+    var input = document.getElementById("newUrl");
+    if(input){
+      input.value = qrCandidateUrl;
+      input.focus();
+    }
+
+    stopQrScanner(true);
+    showMsg("URL importato. Premi Aggiorna QR per attivarlo.");
+  }
+
+  function bindQrScanner(){
+    var open = document.getElementById("qrImportBtn");
+    var stop = document.getElementById("qrStopBtn");
+    var apply = document.getElementById("qrApplyBtn");
+
+    if(open && open.dataset.qrBound !== "1"){
+      open.dataset.qrBound = "1";
+      open.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        startQrScanner();
+      });
+    }
+
+    if(stop && stop.dataset.qrBound !== "1"){
+      stop.dataset.qrBound = "1";
+      stop.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        stopQrScanner(true);
+      });
+    }
+
+    if(apply && apply.dataset.qrBound !== "1"){
+      apply.dataset.qrBound = "1";
+      apply.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        applyQrCandidate();
+      });
+    }
+  }
+
+  window.startFollowMeQrScanner = startQrScanner;
+  window.stopFollowMeQrScanner = stopQrScanner;
+
+  document.addEventListener("DOMContentLoaded", bindQrScanner);
+  setTimeout(bindQrScanner, 300);
+  setTimeout(bindQrScanner, 1200);
 })();
 </script>
 
