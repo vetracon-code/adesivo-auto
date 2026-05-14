@@ -1707,7 +1707,17 @@
       object-fit:cover !important;
     }
 
-</style>
+
+    /* GIF fallback più leggibile quando favicon reale/Google è scadente */
+    .premium-card-preview-favicon[src*="favicon-search-fallback.gif"]{
+      width:72px !important;
+      height:72px !important;
+      border-radius:18px !important;
+      object-fit:cover !important;
+      opacity:1 !important;
+      filter:none !important;
+    }
+\n</style>
 </head>
 <body>
   <main class="app">
@@ -4522,6 +4532,61 @@ document.addEventListener("visibilitychange", function(){
     favicon.dataset.fallbackStep = "direct";
     favicon.src = faviconUrlForDomain(url);
 
+    function showInitialFallback(){
+      previewMark.innerHTML = "";
+      var fallback = document.createElement("span");
+      fallback.className = "premium-card-preview-initial-fallback";
+      fallback.textContent = initialOfDomain(url);
+      previewMark.appendChild(fallback);
+    }
+
+    function useAnimatedFallback(){
+      favicon.dataset.fallbackStep = "animated";
+      favicon.src = animatedSearchFallbackFaviconUrl();
+    }
+
+    function faviconLooksPoor(){
+      try{
+        var w = favicon.naturalWidth || 0;
+        var h = favicon.naturalHeight || 0;
+
+        // Se è molto piccola, quando viene ingrandita nella card appare sbiadita o impastata.
+        if(w > 0 && h > 0 && (w < 48 || h < 48)) return true;
+
+        return false;
+      }catch(e){
+        return false;
+      }
+    }
+
+    favicon.onload = function(){
+      var step = favicon.dataset.fallbackStep || "direct";
+
+      // Se la favicon diretta del sottodominio è reale e abbastanza grande, la teniamo.
+      if(step === "direct" && !faviconLooksPoor()){
+        return;
+      }
+
+      // Se la favicon diretta è scadente, proviamo Google.
+      if(step === "direct" && faviconLooksPoor()){
+        favicon.dataset.fallbackStep = "google";
+        favicon.src = googleFaviconUrlForDomain(url);
+        return;
+      }
+
+      // Se anche Google restituisce una favicon scadente per un dominio App Me, usiamo la GIF.
+      if(step === "google" && faviconLooksPoor() && isAppMeDomain(url)){
+        useAnimatedFallback();
+        return;
+      }
+
+      // Se Google è scadente ma non è App Me, meglio iniziale dominio.
+      if(step === "google" && faviconLooksPoor()){
+        showInitialFallback();
+        return;
+      }
+    };
+
     favicon.onerror = function(){
       var step = favicon.dataset.fallbackStep || "direct";
 
@@ -4531,17 +4596,22 @@ document.addEventListener("visibilitychange", function(){
         return;
       }
 
-      if(step === "google"){
-        favicon.dataset.fallbackStep = "animated";
-        favicon.src = animatedSearchFallbackFaviconUrl();
+      if(step === "google" && isAppMeDomain(url)){
+        useAnimatedFallback();
         return;
       }
 
-      previewMark.innerHTML = "";
-      var fallback = document.createElement("span");
-      fallback.className = "premium-card-preview-initial-fallback";
-      fallback.textContent = initialOfDomain(url);
-      previewMark.appendChild(fallback);
+      if(step === "google"){
+        showInitialFallback();
+        return;
+      }
+
+      if(step === "animated"){
+        showInitialFallback();
+        return;
+      }
+
+      showInitialFallback();
     };
 
     previewMark.appendChild(favicon);
