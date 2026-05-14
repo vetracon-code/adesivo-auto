@@ -1379,7 +1379,7 @@
         Se conosci l'URL incollalo qui.
       </div>
       <input id="existingQrUrl" placeholder="Incolla qui l'URL del QR esistente">
-      <button class="btn secondary" onclick="saveExistingQr()">Collega QR esistente</button>
+      <button class="btn secondary" id="saveExistingQrBtn" type="button" onclick="window.saveExistingQr && window.saveExistingQr()">Collega QR esistente</button>
       <button class="btn secondary existing-qr-delete-btn" id="deleteExistingQrBtn" type="button">Elimina abbinamento</button>
     </section>
 
@@ -1721,60 +1721,105 @@ setTimeout(bindDeleteExistingQrButton, 1200);
 window.updateExistingQrVisualState = updateExistingQrVisualState;
 
 async function saveExistingQr(){
-  const existingQrUrl = document.getElementById("existingQrUrl").value.trim();
+  const input = document.getElementById("existingQrUrl");
+  const btn = document.getElementById("saveExistingQrBtn");
 
-  if(!existingQrUrl){
-    toast("Incolla il link contenuto nel QR esistente.");
-    return;
-  }
-
-  const res = await fetch("/api/followme/" + encodeURIComponent(CODE) + "/update-existing-qr", {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({ existing_qr_url: existingQrUrl })
-  });
-
-  const data = await res.json().catch(()=>null);
-
-  if(!res.ok || !data || !data.success){
-    toast((data && data.error) || "Errore salvataggio QR esistente.");
-    return;
-  }
-
-  if(typeof updateExistingQrVisualState === "function"){
-    updateExistingQrVisualState(
-      (data.project && data.project.existing_qr_url) || existingQrUrl,
-      data.status || (data.project && data.project.existing_qr_status) || ""
-    );
-  }
-
-  if(data.compatible){
-    toast("QR esistente collegato ai redirect Follow Me.");
-  }else{
-    toast("QR salvato, ma potrebbe non essere controllabile.");
-  }
-
-  
-function applyFollowMeFocusFromUrl(){
   try{
-    const params = new URLSearchParams(window.location.search || "");
-    const focus = params.get("focus");
+    CODE = getCode();
 
-    if(focus === "stats"){
-      setTimeout(function(){
-        const el = document.getElementById("scanStatsBlock");
-        if(el){
-          el.scrollIntoView({ behavior:"smooth", block:"center" });
-        }
-      }, 900);
+    let existingQrUrl = input ? String(input.value || "").trim() : "";
+
+    if(!existingQrUrl){
+      toast("Incolla il link contenuto nel QR esistente.");
+      return;
     }
-  }catch(e){}
+
+    if(!/^https?:\/\//i.test(existingQrUrl)){
+      existingQrUrl = "https://" + existingQrUrl;
+      if(input) input.value = existingQrUrl;
+    }
+
+    try{
+      new URL(existingQrUrl);
+    }catch(e){
+      toast("URL non valido. Controlla il link inserito.");
+      return;
+    }
+
+    if(btn){
+      btn.disabled = true;
+      btn.textContent = "Collego...";
+      btn.classList.add("refresh-running");
+    }
+
+    toast("Collego il QR esistente...");
+
+    const res = await fetch("/api/followme/" + encodeURIComponent(CODE) + "/update-existing-qr", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ existing_qr_url: existingQrUrl })
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      toast((data && data.error) || "Errore salvataggio QR esistente.");
+      return;
+    }
+
+    const savedUrl = (data.project && data.project.existing_qr_url) || existingQrUrl;
+    const savedStatus = data.status || (data.project && data.project.existing_qr_status) || "";
+
+    if(input) input.value = savedUrl;
+
+    if(typeof updateExistingQrVisualState === "function"){
+      updateExistingQrVisualState(savedUrl, savedStatus);
+    }
+
+    if(data.compatible){
+      toast("QR esistente collegato ai redirect Follow Me.");
+    }else{
+      toast("QR esistente collegato.");
+    }
+
+    if(typeof loadStatus === "function"){
+      try{ await loadStatus(); }catch(e){}
+    }
+
+  }catch(err){
+    console.error("saveExistingQr error:", err);
+    toast("Errore collegamento QR: " + (err.message || err));
+  }finally{
+    if(btn){
+      btn.disabled = false;
+      btn.textContent = "Collega QR esistente";
+      btn.classList.remove("refresh-running");
+    }
+  }
 }
 
+window.saveExistingQr = saveExistingQr;
 
-loadStatus();
-applyFollowMeFocusFromUrl();
+function bindSaveExistingQrButton(){
+  const btn = document.getElementById("saveExistingQrBtn");
+  if(!btn || btn.dataset.bound === "1") return;
+
+  btn.dataset.bound = "1";
+  btn.addEventListener("click", function(ev){
+    ev.preventDefault();
+    ev.stopPropagation();
+
+    if(typeof window.saveExistingQr === "function"){
+      window.saveExistingQr();
+    }else{
+      toast("Funzione collega QR non disponibile. Aggiorna la pagina.");
+    }
+  });
 }
+
+document.addEventListener("DOMContentLoaded", bindSaveExistingQrButton);
+setTimeout(bindSaveExistingQrButton, 400);
+setTimeout(bindSaveExistingQrButton, 1200);
 
 function updateSimpleDestinationPreview(url){
   const frame = document.getElementById("simpleDestinationPreviewFrame");
