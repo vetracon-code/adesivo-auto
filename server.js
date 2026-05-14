@@ -8847,7 +8847,115 @@ app.get('/fm/app/:code', async (req, res) => {
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   res.setHeader('Surrogate-Control', 'no-store');
-  return res.sendFile(path.join(__dirname, 'public', 'followme-app.html'));
+
+  try {
+    const code = normalizeFollowMeCode(req.params.code);
+    const fs = require('fs');
+    const filePath = require('path').join(__dirname, 'public', 'followme-app.html');
+
+    let html = fs.readFileSync(filePath, 'utf8');
+
+    const projectRes = await pool.query(
+      `SELECT id, code, public_id, label, active_url, status
+       FROM followme_projects
+       WHERE code = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!projectRes.rows.length) {
+      return res.send(html);
+    }
+
+    const project = projectRes.rows[0];
+    const activeUrl = String(project.active_url || '').trim().replace(/\/+$/, '');
+
+    const statsRes = await pool.query(
+      `SELECT
+         COUNT(*)::int AS total_scans,
+         COUNT(*) FILTER (WHERE COALESCE(url,'') = COALESCE($2,''))::int AS current_url_scans
+       FROM followme_scan_logs
+       WHERE project_id = $1`,
+      [project.id, project.active_url || '']
+    );
+
+    const historyRes = await pool.query(
+      `SELECT url, activated_at, last_used_at, scan_count
+       FROM followme_url_history
+       WHERE project_id = $1
+       ORDER BY
+         CASE WHEN regexp_replace(COALESCE(url,''), '/+$', '') = $2 THEN 0 ELSE 1 END,
+         activated_at DESC NULLS LAST,
+         last_used_at DESC NULLS LAST
+       LIMIT 10`,
+      [project.id, activeUrl]
+    );
+
+    const esc = (v) => String(v || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    const clean = (v) => String(v || '').trim().replace(/\/+$/, '');
+
+    const formatDateIt = (v) => {
+      if (!v) return 'mai';
+      try {
+        return new Date(v).toLocaleString('it-IT');
+      } catch (e) {
+        return 'mai';
+      }
+    };
+
+    const historyHtml = historyRes.rows.length
+      ? historyRes.rows.map((x) => {
+          const url = String(x.url || '');
+          const isActive = clean(url) === activeUrl;
+          const scans = Number(x.scan_count || 0);
+          const last = formatDateIt(x.last_used_at);
+          const encoded = encodeURIComponent(url);
+
+          return `
+        <div class="history-item${isActive ? ' history-row-active' : ''}">
+          <div>
+            <strong>${esc(url)}</strong>
+            <span>${scans} scansioni · ultimo uso: ${esc(last)}</span>
+          </div>
+          ${
+            isActive
+              ? `<button class="btn-history-active-now" type="button" disabled>Attivo ora</button>`
+              : `<button class="btn small secondary" type="button" onclick="reactivateUrl('${encoded}')">Attivalo</button>`
+          }
+        </div>`;
+        }).join('')
+      : `<div class="empty">Nessun link ancora registrato.</div>`;
+
+    const stats = statsRes.rows[0] || { total_scans: 0, current_url_scans: 0 };
+
+    html = html.replace(
+      /<strong id="totalScans">[\s\S]*?<\/strong>/,
+      `<strong id="totalScans">${Number(stats.total_scans || 0)}</strong>`
+    );
+
+    html = html.replace(
+      /<strong id="currentScans">[\s\S]*?<\/strong>/,
+      `<strong id="currentScans">${Number(stats.current_url_scans || 0)}</strong>`
+    );
+
+    html = html.replace(
+      /<div class="history" id="historyList">[\s\S]*?<\/div>\s*<\/section>/,
+      `<div class="history" id="historyList">${historyHtml}
+      </div>
+    </section>`
+    );
+
+    return res.send(html);
+  } catch (err) {
+    console.error('fm/app server-side history error:', err);
+    return res.sendFile(path.join(__dirname, 'public', 'followme-app.html'));
+  }
 });
 
 app.get('/fm/u/:public_id', async (req, res) => {
