@@ -937,6 +937,167 @@ function formatDate(v){
 }
 
 loadStatus();
+
+async function emergencyRefreshFollowMeUI(){
+  try{
+    const code = (typeof getCode === "function") ? getCode() : "";
+    if(!code) return;
+
+    const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
+      cache: "no-store"
+    });
+
+    const data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || !data.success){
+      console.warn("emergencyRefreshFollowMeUI: dati non validi", data);
+      return;
+    }
+
+    const clean = function(v){
+      return String(v || "").trim().replace(/\/+$/,"");
+    };
+
+    const activeUrl = clean(data.project && data.project.active_url);
+
+    window.__followMeActiveUrl = (data.project && data.project.active_url) || "";
+
+    const totalScans = document.getElementById("totalScans");
+    const currentScans = document.getElementById("currentScans");
+    const newUrl = document.getElementById("newUrl");
+
+    if(totalScans) totalScans.textContent = (data.stats && data.stats.total_scans) || 0;
+    if(currentScans) currentScans.textContent = (data.stats && data.stats.current_url_scans) || 0;
+    if(newUrl) newUrl.value = (data.project && data.project.active_url) || "";
+
+    if(typeof updateSimpleDestinationPreview === "function"){
+      updateSimpleDestinationPreview((data.project && data.project.active_url) || "");
+    }
+
+    const list = document.getElementById("historyList");
+    if(!list) return;
+
+    const rows = Array.isArray(data.history) ? data.history.slice() : [];
+
+    if(!rows.length){
+      list.innerHTML = '<div class="empty">Nessun link ancora registrato.</div>';
+      return;
+    }
+
+    rows.sort(function(a,b){
+      const aa = clean(a.url) === activeUrl ? 0 : 1;
+      const bb = clean(b.url) === activeUrl ? 0 : 1;
+
+      if(aa !== bb) return aa - bb;
+
+      const ad = new Date(a.activated_at || a.last_used_at || 0).getTime();
+      const bd = new Date(b.activated_at || b.last_used_at || 0).getTime();
+
+      return bd - ad;
+    });
+
+    list.innerHTML = "";
+
+    rows.slice(0,10).forEach(function(x){
+      const url = x.url || "";
+      const isActive = clean(url) === activeUrl;
+
+      const row = document.createElement("div");
+      row.className = isActive ? "history-item history-row-active" : "history-item";
+
+      const left = document.createElement("div");
+
+      const strong = document.createElement("strong");
+      strong.textContent = url;
+
+      const span = document.createElement("span");
+      const last = x.last_used_at ? formatDate(x.last_used_at) : "mai";
+      span.textContent = ((x.scan_count || 0) + " scansioni · ultimo uso: " + last);
+
+      left.appendChild(strong);
+      left.appendChild(span);
+
+      const btn = document.createElement("button");
+
+      if(isActive){
+        btn.className = "btn-history-active-now";
+        btn.type = "button";
+        btn.textContent = "Attivo ora";
+        btn.disabled = true;
+      }else{
+        btn.className = "btn small secondary";
+        btn.type = "button";
+        btn.textContent = "Attivalo";
+        btn.addEventListener("click", function(){
+          emergencyActivateFollowMeUrl(url);
+        });
+      }
+
+      row.appendChild(left);
+      row.appendChild(btn);
+
+      list.appendChild(row);
+    });
+  }catch(err){
+    console.error("emergencyRefreshFollowMeUI error:", err);
+  }
+}
+
+async function emergencyActivateFollowMeUrl(url){
+  try{
+    const code = (typeof getCode === "function") ? getCode() : "";
+    if(!code || !url) return;
+
+    const input = document.getElementById("newUrl");
+    if(input) input.value = url;
+
+    const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/update-url", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ url })
+    });
+
+    const data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || !data.success){
+      if(typeof toast === "function") toast((data && data.error) || "Errore attivazione link.");
+      return;
+    }
+
+    window.__followMeActiveUrl = url;
+
+    if(typeof updateSimpleDestinationPreview === "function"){
+      updateSimpleDestinationPreview(url);
+    }
+
+    if(typeof toast === "function") toast("Link attivo ora.");
+
+    await emergencyRefreshFollowMeUI();
+
+    setTimeout(function(){
+      emergencyRefreshFollowMeUI();
+    }, 400);
+  }catch(err){
+    console.error("emergencyActivateFollowMeUrl error:", err);
+    if(typeof toast === "function") toast("Errore: " + (err.message || err));
+  }
+}
+
+window.addEventListener("load", function(){
+  setTimeout(emergencyRefreshFollowMeUI, 300);
+  setTimeout(emergencyRefreshFollowMeUI, 1200);
+});
+
+window.addEventListener("pageshow", function(){
+  setTimeout(emergencyRefreshFollowMeUI, 300);
+});
+
+document.addEventListener("visibilitychange", function(){
+  if(document.visibilityState === "visible"){
+    setTimeout(emergencyRefreshFollowMeUI, 300);
+  }
+});
+
 </script>
 </body>
 </html>
