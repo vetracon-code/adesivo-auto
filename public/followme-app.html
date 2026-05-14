@@ -3904,15 +3904,19 @@ document.addEventListener("visibilitychange", function(){
 
 
 
+
 <script id="safe-premium-history-script">
 (function(){
   function getCodeSafe(){
     try{
       var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
       if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+
       var p = new URLSearchParams(location.search || "");
       return String(p.get("code") || "").trim().toUpperCase();
-    }catch(e){ return ""; }
+    }catch(e){
+      return "";
+    }
   }
 
   function esc(s){
@@ -3924,11 +3928,16 @@ document.addEventListener("visibilitychange", function(){
       .replace(/'/g,"&#39;");
   }
 
-  function clean(v){ return String(v || "").trim().replace(/\/+$/,""); }
+  function clean(v){
+    return String(v || "").trim().replace(/\/+$/,"");
+  }
 
   function domainOf(url){
-    try{ return new URL(url).hostname.replace(/^www\./, ""); }
-    catch(e){ return "Destinazione"; }
+    try{
+      return new URL(String(url || "")).hostname.replace(/^www\./, "");
+    }catch(e){
+      return "Destinazione";
+    }
   }
 
   function fmtDate(v){
@@ -3940,26 +3949,64 @@ document.addEventListener("visibilitychange", function(){
         hour:"2-digit",
         minute:"2-digit"
       });
-    }catch(e){ return "mai"; }
+    }catch(e){
+      return "mai";
+    }
+  }
+
+  function renderEmptyPremiumHistory(message){
+    var track = document.getElementById("premiumHistoryTrack");
+    var counter = document.getElementById("premiumHistoryCounter");
+
+    if(track){
+      track.innerHTML = '<div class="empty">' + esc(message || "Nessun link ancora registrato.") + '</div>';
+    }
+
+    if(counter){
+      counter.innerHTML = '<strong>0</strong> di 10 link memorizzati';
+    }
   }
 
   async function renderPremiumHistory(){
+    var track = document.getElementById("premiumHistoryTrack");
+    var counter = document.getElementById("premiumHistoryCounter");
+
     try{
+      if(!track){
+        console.warn("premiumHistoryTrack non trovato");
+        return;
+      }
+
       var code = getCodeSafe();
-      if(!code) return;
 
-      var track = document.getElementById("premiumHistoryTrack");
-      var counter = document.getElementById("premiumHistoryCounter");
-      if(!track) return;
+      if(!code){
+        renderEmptyPremiumHistory("Codice Follow Me non trovato.");
+        return;
+      }
 
-      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
-        cache:"no-store"
+      track.innerHTML = '<div class="empty">Carico le destinazioni recenti...</div>';
+
+      var endpoint = "/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now();
+
+      var res = await fetch(endpoint, {
+        cache:"no-store",
+        headers:{
+          "Accept":"application/json"
+        }
       });
 
-      var data = await res.json().catch(function(){ return null; });
+      var data = await res.json().catch(function(err){
+        console.error("premium history JSON parse error:", err);
+        return null;
+      });
 
       if(!res.ok || !data || !data.success){
-        track.innerHTML = '<div class="empty">Destinazioni non disponibili.</div>';
+        console.error("premium history API error:", res.status, data);
+        renderEmptyPremiumHistory(
+          (data && data.error)
+            ? data.error
+            : "Destinazioni non disponibili. Aggiorna i dati."
+        );
         return;
       }
 
@@ -3971,7 +4018,7 @@ document.addEventListener("visibilitychange", function(){
       }
 
       if(!rows.length){
-        track.innerHTML = '<div class="empty">Nessun link ancora registrato.</div>';
+        renderEmptyPremiumHistory("Nessun link ancora registrato.");
         return;
       }
 
@@ -3986,7 +4033,7 @@ document.addEventListener("visibilitychange", function(){
       });
 
       track.innerHTML = rows.map(function(x){
-        var url = x.url || "";
+        var url = String(x.url || "");
         var encoded = encodeURIComponent(url);
         var isActive = clean(url) === activeUrl;
         var scans = x.scan_count || 0;
@@ -3994,9 +4041,9 @@ document.addEventListener("visibilitychange", function(){
 
         var mainBtn = isActive
           ? '<button class="premium-history-active" type="button">Attivo ora</button>'
-          : '<button class="premium-history-reactivate" type="button" onclick="reactivateUrl(\\'' + encoded + '\\')">Riattiva</button>';
+          : '<button class="premium-history-reactivate" type="button" onclick="window.reactivateUrl && window.reactivateUrl(\\'' + encoded + '\\')">Riattiva</button>';
 
-        var deleteBtn = '<button class="premium-history-delete" type="button" onclick="openDeleteHistoryConfirm(\\'' + encoded + '\\', ' + (isActive ? 'true' : 'false') + ')">Elimina</button>';
+        var deleteBtn = '<button class="premium-history-delete" type="button" onclick="window.openDeleteHistoryConfirm && window.openDeleteHistoryConfirm(\\'' + encoded + '\\', ' + (isActive ? 'true' : 'false') + ')">Elimina</button>';
 
         return ''
           + '<article class="premium-history-card ' + (isActive ? 'is-active' : '') + '">'
@@ -4017,8 +4064,11 @@ document.addEventListener("visibilitychange", function(){
           + '</article>';
       }).join("");
 
+      console.log("Destinazioni recenti renderizzate:", rows.length);
+
     }catch(err){
       console.error("renderPremiumHistory error:", err);
+      renderEmptyPremiumHistory("Errore caricamento destinazioni recenti.");
     }
   }
 
@@ -4039,6 +4089,7 @@ document.addEventListener("visibilitychange", function(){
   });
 })();
 </script>
+
 
 </body>
 </html>
