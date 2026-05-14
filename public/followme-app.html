@@ -394,6 +394,133 @@
       pointer-events:none;
     }
 
+    .qr-video-wrap.scanning .qr-target-frame{
+      animation:qrFrameSearching 1.25s ease-in-out infinite;
+    }
+
+    .qr-video-wrap.qr-detected .qr-target-frame{
+      border-color:rgba(85,242,165,.96);
+      box-shadow:
+        0 0 0 999px rgba(0,0,0,.22),
+        0 0 34px rgba(85,242,165,.35);
+    }
+
+    .qr-scan-line{
+      position:absolute;
+      left:20%;
+      right:20%;
+      top:22%;
+      height:3px;
+      border-radius:999px;
+      background:linear-gradient(90deg,transparent,rgba(200,255,46,.95),transparent);
+      box-shadow:0 0 18px rgba(200,255,46,.42);
+      opacity:0;
+      pointer-events:none;
+    }
+
+    .qr-video-wrap.scanning .qr-scan-line{
+      opacity:1;
+      animation:qrScanLine 1.45s ease-in-out infinite;
+    }
+
+    .qr-live-badge{
+      position:absolute;
+      left:12px;
+      top:12px;
+      z-index:4;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 10px;
+      border-radius:999px;
+      color:#101018;
+      background:rgba(200,255,46,.92);
+      font-size:.78rem;
+      font-weight:950;
+      box-shadow:0 10px 24px rgba(0,0,0,.28);
+      pointer-events:none;
+    }
+
+    .qr-live-badge::before{
+      content:"";
+      width:8px;
+      height:8px;
+      border-radius:999px;
+      background:#101018;
+      animation:qrDotPulse 1s ease-in-out infinite;
+    }
+
+    .qr-preview-card{
+      display:none;
+      margin-top:12px;
+      padding:13px;
+      border-radius:18px;
+      background:rgba(200,255,46,.10);
+      border:1px solid rgba(200,255,46,.28);
+      color:#fff;
+    }
+
+    .qr-preview-card.show{
+      display:block;
+    }
+
+    .qr-preview-kicker{
+      color:#c8ff2e;
+      font-size:.74rem;
+      font-weight:950;
+      letter-spacing:.10em;
+      text-transform:uppercase;
+      margin-bottom:7px;
+    }
+
+    .qr-preview-domain{
+      font-size:1.05rem;
+      font-weight:950;
+      margin-bottom:6px;
+      word-break:break-word;
+    }
+
+    .qr-preview-url{
+      color:rgba(255,255,255,.74);
+      font-size:.86rem;
+      line-height:1.35;
+      word-break:break-all;
+      margin-bottom:10px;
+    }
+
+    .qr-preview-open{
+      min-height:42px !important;
+      border-radius:14px !important;
+      font-size:.9rem !important;
+      text-decoration:none;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    @keyframes qrFrameSearching{
+      0%,100%{
+        transform:scale(1);
+        border-color:rgba(200,255,46,.62);
+      }
+      50%{
+        transform:scale(1.025);
+        border-color:rgba(94,231,255,.92);
+      }
+    }
+
+    @keyframes qrScanLine{
+      0%{ top:22%; opacity:.15; }
+      18%{ opacity:1; }
+      50%{ top:76%; opacity:1; }
+      100%{ top:22%; opacity:.15; }
+    }
+
+    @keyframes qrDotPulse{
+      0%,100%{ opacity:.35; transform:scale(.86); }
+      50%{ opacity:1; transform:scale(1.18); }
+    }
+
     .qr-scan-status{
       margin-top:10px;
       padding:11px 12px;
@@ -1002,13 +1129,22 @@
         <div class="qr-scan-title">Scansione QR</div>
         <div class="qr-scan-help">Inquadra il QR. Se contiene un URL valido, potrai attivarlo subito come nuova destinazione.</div>
 
-        <div class="qr-video-wrap">
+        <div class="qr-video-wrap" id="qrVideoWrap">
           <video id="qrImportVideo" muted playsinline autoplay></video>
           <canvas id="qrImportCanvas" style="display:none;"></canvas>
+          <div class="qr-live-badge" id="qrLiveBadge">Cerco QR</div>
+          <div class="qr-scan-line"></div>
           <div class="qr-target-frame"></div>
         </div>
 
         <div class="qr-scan-status" id="qrScanStatus">Fotocamera non ancora attiva.</div>
+
+        <div class="qr-preview-card" id="qrDetectedPreview">
+          <div class="qr-preview-kicker">Preview destinazione rilevata</div>
+          <div class="qr-preview-domain" id="qrDetectedDomain">-</div>
+          <div class="qr-preview-url" id="qrDetectedUrl">-</div>
+          <a class="btn secondary qr-preview-open" id="qrDetectedOpen" href="#" target="_blank" rel="noopener">Apri anteprima</a>
+        </div>
 
         <div class="qr-scan-actions">
           <button class="btn secondary" id="qrStopBtn" type="button">Chiudi scanner</button>
@@ -2875,6 +3011,64 @@ document.addEventListener("visibilitychange", function(){
     if(mode) el.classList.add(mode);
   }
 
+  function setScannerVisualState(state){
+    var wrap = document.getElementById("qrVideoWrap");
+    var badge = document.getElementById("qrLiveBadge");
+
+    if(wrap){
+      wrap.classList.remove("scanning", "qr-detected");
+      if(state === "scanning") wrap.classList.add("scanning");
+      if(state === "detected") wrap.classList.add("qr-detected");
+    }
+
+    if(badge){
+      if(state === "scanning"){
+        badge.textContent = "Cerco QR";
+        badge.style.display = "inline-flex";
+      }else if(state === "detected"){
+        badge.textContent = "QR rilevato";
+        badge.style.display = "inline-flex";
+      }else{
+        badge.textContent = "Cerco QR";
+        badge.style.display = "none";
+      }
+    }
+  }
+
+  function readableDomainFromUrl(url){
+    try{
+      var u = new URL(url);
+      return u.hostname.replace(/^www\./, "");
+    }catch(e){
+      return "Destinazione rilevata";
+    }
+  }
+
+  function showDetectedPreview(url){
+    var card = document.getElementById("qrDetectedPreview");
+    var domain = document.getElementById("qrDetectedDomain");
+    var urlEl = document.getElementById("qrDetectedUrl");
+    var open = document.getElementById("qrDetectedOpen");
+
+    if(domain) domain.textContent = readableDomainFromUrl(url);
+    if(urlEl) urlEl.textContent = url;
+    if(open) open.href = url || "#";
+
+    if(card) card.classList.add("show");
+  }
+
+  function hideDetectedPreview(){
+    var card = document.getElementById("qrDetectedPreview");
+    var domain = document.getElementById("qrDetectedDomain");
+    var urlEl = document.getElementById("qrDetectedUrl");
+    var open = document.getElementById("qrDetectedOpen");
+
+    if(card) card.classList.remove("show");
+    if(domain) domain.textContent = "-";
+    if(urlEl) urlEl.textContent = "-";
+    if(open) open.href = "#";
+  }
+
   function normalizeScannedUrl(raw){
     var value = String(raw || "").trim();
 
@@ -2959,6 +3153,7 @@ document.addEventListener("visibilitychange", function(){
       }else{
         apply.classList.remove("qr-ready-pulse");
         apply.textContent = "Usa URL rilevato";
+        hideDetectedPreview();
       }
     }
   }
@@ -3020,6 +3215,8 @@ document.addEventListener("visibilitychange", function(){
     }
 
     setCandidateUrl("");
+    hideDetectedPreview();
+    setScannerVisualState("scanning");
 
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
       setQrStatus("Fotocamera non disponibile da questo browser.", "danger");
@@ -3048,6 +3245,7 @@ document.addEventListener("visibilitychange", function(){
 
     try{
       setQrStatus("Richiedo accesso alla fotocamera...", "");
+      setScannerVisualState("scanning");
 
       qrStream = await navigator.mediaDevices.getUserMedia({
         video:{
@@ -3093,7 +3291,9 @@ document.addEventListener("visibilitychange", function(){
           }
 
           setCandidateUrl(checked.url);
-          setQrStatus("URL rilevato e verificato: " + checked.url, "ok");
+          setScannerVisualState("detected");
+          showDetectedPreview(checked.url);
+          setQrStatus("QR rilevato. Controlla la preview e premi Usa e attiva URL rilevato.", "ok");
 
           stopQrScanner(false);
         }catch(err){
@@ -3142,6 +3342,8 @@ document.addEventListener("visibilitychange", function(){
       if(panel) panel.classList.remove("show");
 
       setCandidateUrl("");
+      hideDetectedPreview();
+      setScannerVisualState("");
       setQrStatus("Fotocamera non ancora attiva.", "");
     }
   }
