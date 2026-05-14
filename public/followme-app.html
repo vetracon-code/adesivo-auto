@@ -2322,5 +2322,216 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+<script id="followme-final-history-delete-refresh-fix">
+(function(){
+  function getCodeSafe(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      var p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim().toUpperCase();
+    }catch(e){
+      return "";
+    }
+  }
+
+  function showMsg(text){
+    try{
+      var el = document.getElementById("toast");
+      if(el){
+        el.textContent = text;
+        el.style.display = "block";
+        setTimeout(function(){ el.style.display = "none"; }, 2800);
+      }else{
+        alert(text);
+      }
+    }catch(e){
+      alert(text);
+    }
+  }
+
+  function getActiveUrlFromInput(){
+    var input = document.getElementById("newUrl");
+    return input ? String(input.value || "").trim().replace(/\/+$/,"") : "";
+  }
+
+  function cleanUrl(v){
+    return String(v || "").trim().replace(/\/+$/,"");
+  }
+
+  function ensureDeleteButtons(){
+    try{
+      var list = document.getElementById("historyList");
+      if(!list) return;
+
+      var rows = list.querySelectorAll(".history-item");
+      var activeUrl = getActiveUrlFromInput();
+
+      rows.forEach(function(row){
+        if(row.querySelector(".followme-delete-btn")) return;
+
+        var strong = row.querySelector("strong");
+        if(!strong) return;
+
+        var url = String(strong.textContent || "").trim();
+        if(!url) return;
+
+        var isActive =
+          row.classList.contains("history-row-active") ||
+          row.classList.contains("followme-emergency-active") ||
+          cleanUrl(url) === cleanUrl(activeUrl);
+
+        var actions = row.querySelector(".followme-history-actions");
+
+        if(!actions){
+          actions = document.createElement("div");
+          actions.className = "followme-history-actions";
+
+          var existingButtons = Array.from(row.querySelectorAll("button"));
+          if(existingButtons.length){
+            existingButtons.forEach(function(btn){
+              actions.appendChild(btn);
+            });
+            row.appendChild(actions);
+          }else{
+            row.appendChild(actions);
+          }
+        }
+
+        var del = document.createElement("button");
+        del.type = "button";
+        del.className = "btn secondary followme-delete-btn";
+        del.textContent = "Elimina";
+        del.addEventListener("click", function(ev){
+          ev.preventDefault();
+          ev.stopPropagation();
+
+          if(typeof window.openDeleteHistoryConfirm === "function"){
+            window.openDeleteHistoryConfirm(encodeURIComponent(url), isActive);
+          }else{
+            showMsg("Funzione elimina non disponibile. Aggiorna i dati.");
+          }
+        });
+
+        actions.appendChild(del);
+      });
+    }catch(err){
+      console.error("ensureDeleteButtons error:", err);
+    }
+  }
+
+  async function refreshStatusOnce(){
+    var code = getCodeSafe();
+    if(!code) throw new Error("Codice Follow Me mancante");
+
+    var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    var data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || !data.success){
+      throw new Error((data && data.error) || "Errore caricamento dati");
+    }
+
+    if(typeof window.updateSimpleDestinationPreview === "function"){
+      try{ window.updateSimpleDestinationPreview((data.project && data.project.active_url) || ""); }catch(e){}
+    }
+
+    if(typeof window.loadStatus === "function"){
+      try{ await window.loadStatus(); }catch(e){}
+    }
+
+    if(typeof window.renderFollowMeEmergencyHistory === "function"){
+      try{ await window.renderFollowMeEmergencyHistory(); }catch(e){}
+    }
+
+    ensureDeleteButtons();
+    return data;
+  }
+
+  async function finalTripleRefreshFollowMe(){
+    var btn = document.getElementById("refreshDataBtn");
+    var original = btn ? btn.textContent : "Aggiorna dati";
+
+    try{
+      if(btn){
+        btn.disabled = true;
+        btn.textContent = "Aggiorno 1/3...";
+        btn.classList.add("refresh-running");
+      }
+
+      await refreshStatusOnce();
+
+      if(btn) btn.textContent = "Aggiorno 2/3...";
+      await new Promise(function(resolve){ setTimeout(resolve, 350); });
+      await refreshStatusOnce();
+
+      if(btn) btn.textContent = "Aggiorno 3/3...";
+      await new Promise(function(resolve){ setTimeout(resolve, 650); });
+      await refreshStatusOnce();
+
+      showMsg("Dati aggiornati. Ricarico l'ultima versione...");
+
+      setTimeout(function(){
+        var clean = window.location.origin + window.location.pathname + "?v=refresh-" + Date.now();
+        window.location.replace(clean);
+      }, 450);
+
+    }catch(err){
+      console.error("finalTripleRefreshFollowMe error:", err);
+      showMsg("Errore aggiornamento: " + (err.message || err));
+    }finally{
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = original || "Aggiorna dati";
+        btn.classList.remove("refresh-running");
+      }
+    }
+  }
+
+  function bindRefreshButton(){
+    var btn = document.getElementById("refreshDataBtn");
+    if(!btn || btn.dataset.finalRefreshBound === "1") return;
+
+    btn.dataset.finalRefreshBound = "1";
+    btn.onclick = function(ev){
+      if(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+      finalTripleRefreshFollowMe();
+      return false;
+    };
+  }
+
+  function boot(){
+    bindRefreshButton();
+    ensureDeleteButtons();
+
+    var list = document.getElementById("historyList");
+    if(list && !list.dataset.deleteObserverBound){
+      list.dataset.deleteObserverBound = "1";
+      var observer = new MutationObserver(function(){
+        setTimeout(ensureDeleteButtons, 30);
+      });
+      observer.observe(list, { childList:true, subtree:true });
+    }
+
+    setTimeout(ensureDeleteButtons, 300);
+    setTimeout(ensureDeleteButtons, 1000);
+    setTimeout(ensureDeleteButtons, 2200);
+  }
+
+  window.ensureFollowMeDeleteButtons = ensureDeleteButtons;
+  window.finalTripleRefreshFollowMe = finalTripleRefreshFollowMe;
+
+  document.addEventListener("DOMContentLoaded", boot);
+  setTimeout(boot, 200);
+  setTimeout(boot, 1200);
+})();
+</script>
+
 </body>
 </html>
