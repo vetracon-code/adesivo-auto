@@ -1397,6 +1397,58 @@
     .premium-history-counter strong{color:#c8ff2e;font-weight:950}
     @media (min-width:700px){.premium-history-card{flex-basis:330px}}
 
+
+    /* PREVIEW CAROUSEL PREMIUM — iframe con fallback */
+    .premium-history-preview{
+      padding:0 !important;
+      position:relative !important;
+      align-items:stretch !important;
+      justify-content:stretch !important;
+      overflow:hidden !important;
+    }
+
+    .premium-history-preview iframe{
+      width:100%;
+      height:100%;
+      border:0;
+      background:#fff;
+      display:block;
+      pointer-events:none;
+    }
+
+    .premium-history-preview-fallback{
+      position:absolute;
+      inset:0;
+      z-index:2;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      padding:14px;
+      color:rgba(255,255,255,.80);
+      font-weight:850;
+      line-height:1.35;
+      font-size:.88rem;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(200,255,46,.16), transparent 34%),
+        radial-gradient(circle at 88% 0%, rgba(94,231,255,.15), transparent 30%),
+        #101018;
+    }
+
+    .premium-history-preview-fallback.show{
+      display:flex;
+    }
+
+    .premium-history-preview-domain{
+      display:block;
+      color:#c8ff2e;
+      font-size:.74rem;
+      font-weight:950;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      margin-bottom:5px;
+    }
+
 </style>
 </head>
 <body>
@@ -1695,7 +1747,7 @@ async function loadStatus(){
       return bd - ad;
     });
 
-    list.innerHTML = rows.slice(0,10).map(function(x){
+    list.innerHTML = rows.slice(0,10).map(function(x, index){
       const url = x.url || "";
       const encoded = encodeURIComponent(url);
       const isActive = cleanUrl(url) === activeUrl;
@@ -3925,6 +3977,33 @@ document.addEventListener("visibilitychange", function(){
     }
   }
 
+
+  function premiumPreviewHtml(url, index){
+    var safeUrl = esc(url || "");
+    var safeDomain = esc(domainOf(url || ""));
+    var fallbackId = "premiumPreviewFallback_" + index;
+
+    return ''
+      + '<div class="premium-history-preview">'
+      + '  <iframe src="' + safeUrl + '" loading="lazy" referrerpolicy="no-referrer"></iframe>'
+      + '  <div class="premium-history-preview-fallback" id="' + fallbackId + '">'
+      + '    <div>'
+      + '      <span class="premium-history-preview-domain">' + safeDomain + '</span>'
+      + '      Preview non disponibile'
+      + '    </div>'
+      + '  </div>'
+      + '</div>';
+  }
+
+  function activatePremiumPreviewFallbacks(){
+    setTimeout(function(){
+      document.querySelectorAll(".premium-history-preview-fallback").forEach(function(el){
+        el.classList.add("show");
+      });
+    }, 2600);
+  }
+
+
   function getOldHistoryRows(){
     var list = document.getElementById("historyList");
     if(!list) return [];
@@ -4004,7 +4083,7 @@ document.addEventListener("visibilitychange", function(){
           + '    <div class="premium-history-domain">' + esc(domainOf(x.url)) + '</div>'
           + '    <div class="premium-history-url">' + esc(x.url) + '</div>'
           + '  </div>'
-          + '  <div class="premium-history-preview">Preview non disponibile</div>'
+          + premiumPreviewHtml(x.url, index)
           + '  <div class="premium-history-meta">'
           + '    <div class="premium-history-pill"><strong>' + esc(x.scans) + '</strong><span>scansioni</span></div>'
           + '    <div class="premium-history-pill"><strong>' + esc(x.last) + '</strong><span>ultimo uso</span></div>'
@@ -4015,6 +4094,8 @@ document.addEventListener("visibilitychange", function(){
           + '  </div>'
           + '</article>';
       }).join("");
+
+      activatePremiumPreviewFallbacks();
 
       console.log("Destinazioni recenti create dallo storico vecchio:", rows.length);
       return true;
