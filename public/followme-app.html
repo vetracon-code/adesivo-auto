@@ -2351,6 +2351,145 @@ document.addEventListener("visibilitychange", function(){
     }
   }
 
+  function ensureFinalDeleteModal(){
+    var overlay = document.getElementById("deleteHistoryConfirmOverlay");
+
+    if(overlay) return overlay;
+
+    overlay = document.createElement("div");
+    overlay.className = "followme-confirm-overlay";
+    overlay.id = "deleteHistoryConfirmOverlay";
+    overlay.setAttribute("aria-hidden", "true");
+
+    overlay.innerHTML = ''
+      + '<div class="followme-confirm-box" role="dialog" aria-modal="true">'
+      + '  <div class="followme-confirm-kicker">Elimina link</div>'
+      + '  <div class="followme-confirm-title">Vuoi eliminare questo link dallo storico?</div>'
+      + '  <div class="followme-confirm-url" id="deleteHistoryConfirmUrl"></div>'
+      + '  <div class="followme-confirm-actions">'
+      + '    <button class="btn secondary" type="button" id="cancelDeleteHistoryBtn">Annulla</button>'
+      + '    <button class="btn" type="button" id="confirmDeleteHistoryBtn">Confermi</button>'
+      + '  </div>'
+      + '</div>';
+
+    document.body.appendChild(overlay);
+    return overlay;
+  }
+
+  var __finalDeleteUrl = "";
+  var __finalDeleteIsActive = false;
+
+  function finalOpenDeleteConfirm(url, isActive){
+    url = String(url || "").trim();
+
+    if(!url){
+      showMsg("Link non valido.");
+      return;
+    }
+
+    if(isActive === true || isActive === "true"){
+      showMsg("Prima attiva un altro link, poi potrai eliminare questo.");
+      return;
+    }
+
+    __finalDeleteUrl = url;
+    __finalDeleteIsActive = false;
+
+    var overlay = ensureFinalDeleteModal();
+    var urlEl = document.getElementById("deleteHistoryConfirmUrl");
+    var cancel = document.getElementById("cancelDeleteHistoryBtn");
+    var confirm = document.getElementById("confirmDeleteHistoryBtn");
+
+    if(urlEl) urlEl.textContent = url;
+
+    if(cancel && cancel.dataset.finalBound !== "1"){
+      cancel.dataset.finalBound = "1";
+      cancel.addEventListener("click", finalCloseDeleteConfirm);
+    }
+
+    if(confirm && confirm.dataset.finalBound !== "1"){
+      confirm.dataset.finalBound = "1";
+      confirm.addEventListener("click", finalConfirmDeleteHistory);
+    }
+
+    if(overlay && overlay.dataset.finalBound !== "1"){
+      overlay.dataset.finalBound = "1";
+      overlay.addEventListener("click", function(ev){
+        if(ev.target === overlay) finalCloseDeleteConfirm();
+      });
+    }
+
+    overlay.classList.add("show");
+    overlay.setAttribute("aria-hidden", "false");
+  }
+
+  function finalCloseDeleteConfirm(){
+    var overlay = document.getElementById("deleteHistoryConfirmOverlay");
+    if(overlay){
+      overlay.classList.remove("show");
+      overlay.setAttribute("aria-hidden", "true");
+    }
+    __finalDeleteUrl = "";
+    __finalDeleteIsActive = false;
+  }
+
+  async function finalConfirmDeleteHistory(){
+    var url = String(__finalDeleteUrl || "").trim();
+
+    if(!url){
+      finalCloseDeleteConfirm();
+      showMsg("Link non valido.");
+      return;
+    }
+
+    var btn = document.getElementById("confirmDeleteHistoryBtn");
+
+    try{
+      var code = getCodeSafe();
+
+      if(!code){
+        showMsg("Codice Follow Me mancante.");
+        return;
+      }
+
+      if(btn){
+        btn.disabled = true;
+        btn.textContent = "Elimino...";
+      }
+
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/history/delete", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ url:url })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        showMsg((data && data.error) || "Errore eliminazione link.");
+        return;
+      }
+
+      finalCloseDeleteConfirm();
+      showMsg("Link eliminato dallo storico.");
+
+      await refreshStatusOnce();
+      setTimeout(ensureDeleteButtons, 100);
+
+    }catch(err){
+      console.error("finalConfirmDeleteHistory error:", err);
+      showMsg("Errore eliminazione: " + (err.message || err));
+    }finally{
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = "Confermi";
+      }
+    }
+  }
+
+  window.finalOpenDeleteConfirm = finalOpenDeleteConfirm;
+  window.finalConfirmDeleteHistory = finalConfirmDeleteHistory;
+
   function getActiveUrlFromInput(){
     var input = document.getElementById("newUrl");
     return input ? String(input.value || "").trim().replace(/\/+$/,"") : "";
@@ -2407,11 +2546,7 @@ document.addEventListener("visibilitychange", function(){
           ev.preventDefault();
           ev.stopPropagation();
 
-          if(typeof window.openDeleteHistoryConfirm === "function"){
-            window.openDeleteHistoryConfirm(encodeURIComponent(url), isActive);
-          }else{
-            showMsg("Funzione elimina non disponibile. Aggiorna i dati.");
-          }
+          finalOpenDeleteConfirm(url, isActive);
         });
 
         actions.appendChild(del);
