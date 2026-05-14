@@ -4222,17 +4222,30 @@ document.addEventListener("visibilitychange", function(){
     }
   }
 
-  function faviconUrlForDomain(url){
+  function directFaviconUrlForDomain(url){
     try{
-      if(isAppMeDomain(url)){
-        return "/images/followme/appme-preview-icon.svg";
-      }
+      var u = new URL(String(url || ""));
+      return u.origin + "/favicon.ico";
+    }catch(e){
+      return "";
+    }
+  }
 
+  function googleFaviconUrlForDomain(url){
+    try{
       var u = new URL(String(url || ""));
       return "https://www.google.com/s2/favicons?sz=128&domain_url=" + encodeURIComponent(u.origin);
     }catch(e){
       return "";
     }
+  }
+
+  function genericAppMeFaviconUrl(){
+    return "/images/followme/appme-preview-icon.svg";
+  }
+
+  function faviconUrlForDomain(url){
+    return directFaviconUrlForDomain(url);
   }
 
 
@@ -4469,9 +4482,24 @@ document.addEventListener("visibilitychange", function(){
     favicon.className = "premium-card-preview-favicon";
     favicon.alt = "";
     favicon.loading = "lazy";
+    favicon.dataset.fallbackStep = "direct";
     favicon.src = faviconUrlForDomain(url);
 
     favicon.onerror = function(){
+      var step = favicon.dataset.fallbackStep || "direct";
+
+      if(step === "direct"){
+        favicon.dataset.fallbackStep = "google";
+        favicon.src = googleFaviconUrlForDomain(url);
+        return;
+      }
+
+      if(step === "google" && isAppMeDomain(url)){
+        favicon.dataset.fallbackStep = "appme";
+        favicon.src = genericAppMeFaviconUrl();
+        return;
+      }
+
       previewMark.innerHTML = "";
       var fallback = document.createElement("span");
       fallback.className = "premium-card-preview-initial-fallback";
