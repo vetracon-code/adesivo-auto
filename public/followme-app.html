@@ -4168,16 +4168,121 @@ document.addEventListener("visibilitychange", function(){
 
   function deleteUrlFromPremium(url, isActive){
     try{
-      if(window.openDeleteHistoryConfirm && typeof window.openDeleteHistoryConfirm === "function"){
-        window.openDeleteHistoryConfirm(encodeURIComponent(url), !!isActive);
+      var cleanUrl = String(url || "").trim();
+
+      if(!cleanUrl){
+        if(typeof toast === "function") toast("Link non valido.");
         return;
       }
 
-      if(typeof toast === "function"){
-        toast("Funzione elimina non disponibile. Aggiorna i dati.");
+      window.__premiumDeleteCandidate = {
+        url: cleanUrl,
+        isActive: !!isActive
+      };
+
+      var overlay = document.getElementById("deleteHistoryConfirmOverlay");
+      var urlBox = document.getElementById("deleteHistoryConfirmUrl");
+      var title = document.getElementById("deleteHistoryConfirmTitle");
+      var confirm = document.getElementById("confirmDeleteHistoryBtn");
+      var cancel = document.getElementById("cancelDeleteHistoryBtn");
+
+      if(!overlay || !confirm || !cancel){
+        if(!window.confirm("Vuoi eliminare questo link dallo storico?")) return;
+        confirmPremiumDeleteNow();
+        return;
       }
+
+      if(title){
+        title.textContent = isActive
+          ? "Questo link è attivo ora. Vuoi eliminarlo?"
+          : "Vuoi eliminare questo link dallo storico?";
+      }
+
+      if(urlBox){
+        urlBox.textContent = cleanUrl;
+      }
+
+      overlay.classList.add("show");
+      overlay.setAttribute("aria-hidden", "false");
+
+      cancel.onclick = function(){
+        overlay.classList.remove("show");
+        overlay.setAttribute("aria-hidden", "true");
+        window.__premiumDeleteCandidate = null;
+      };
+
+      confirm.onclick = function(){
+        confirmPremiumDeleteNow();
+      };
+
     }catch(err){
       console.error("deleteUrlFromPremium error:", err);
+      if(typeof toast === "function") toast("Errore eliminazione: " + (err.message || err));
+    }
+  }
+
+  async function confirmPremiumDeleteNow(){
+    var overlay = document.getElementById("deleteHistoryConfirmOverlay");
+    var confirm = document.getElementById("confirmDeleteHistoryBtn");
+    var candidate = window.__premiumDeleteCandidate || {};
+    var url = String(candidate.url || "").trim();
+
+    if(!url){
+      if(typeof toast === "function") toast("Link non valido.");
+      return;
+    }
+
+    try{
+      if(confirm){
+        confirm.disabled = true;
+        confirm.textContent = "Elimino...";
+      }
+
+      var code = getCodeSafe();
+
+      if(!code){
+        throw new Error("Codice Follow Me mancante");
+      }
+
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/history/delete", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ url:url })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Errore eliminazione link");
+      }
+
+      if(overlay){
+        overlay.classList.remove("show");
+        overlay.setAttribute("aria-hidden", "true");
+      }
+
+      window.__premiumDeleteCandidate = null;
+
+      if(typeof toast === "function"){
+        toast("Link eliminato.");
+      }
+
+      await renderPremiumHistoryFromApi();
+
+      if(typeof loadStatus === "function"){
+        try{ await loadStatus(); }catch(e){}
+      }
+
+      setTimeout(renderPremiumHistoryFromApi, 500);
+
+    }catch(err){
+      console.error("confirmPremiumDeleteNow error:", err);
+      if(typeof toast === "function") toast("Errore eliminazione: " + (err.message || err));
+    }finally{
+      if(confirm){
+        confirm.disabled = false;
+        confirm.textContent = "Confermi";
+      }
     }
   }
 
