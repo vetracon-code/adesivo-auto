@@ -8801,7 +8801,7 @@ app.get('/fm/manifest/:code.json', async (req, res) => {
     const q = await pool.query(
       `SELECT code, label
        FROM followme_projects
-       WHERE code = $1
+       WHERE code = $1 OR public_id = $1
        LIMIT 1`,
       [code]
     );
@@ -8858,7 +8858,7 @@ app.get('/fm/app/:code', async (req, res) => {
     const projectRes = await pool.query(
       `SELECT id, code, public_id, label, active_url, status
        FROM followme_projects
-       WHERE code = $1
+       WHERE code = $1 OR public_id = $1
        LIMIT 1`,
       [code]
     );
@@ -9050,7 +9050,7 @@ app.get('/api/followme/:code/status', async (req, res) => {
     const q = await pool.query(
       `SELECT *
        FROM followme_projects
-       WHERE code = $1
+       WHERE code = $1 OR public_id = $1
        LIMIT 1`,
       [code]
     );
@@ -9191,7 +9191,7 @@ app.post('/api/followme/:code/update-url', express.json(), async (req, res) => {
       `UPDATE followme_projects
        SET active_url = $2,
            updated_at = NOW()
-       WHERE code = $1
+       WHERE code = $1 OR public_id = $1
        RETURNING *`,
       [code, url]
     );
@@ -9228,7 +9228,7 @@ app.post('/api/followme/:code/subscribe', express.json(), async (req, res) => {
     const projectRes = await pool.query(
       `SELECT id, code
        FROM followme_projects
-       WHERE code = $1
+       WHERE code = $1 OR public_id = $1
        LIMIT 1`,
       [code]
     );
@@ -9285,7 +9285,7 @@ app.post('/api/debug/followme/subscription-diagnosis', express.json(), async (re
     const projectRes = await pool.query(
       `SELECT id, code, public_id, label, active_url, status
        FROM followme_projects
-       WHERE code = $1
+       WHERE code = $1 OR public_id = $1
        LIMIT 1`,
       [code]
     );
@@ -9364,7 +9364,7 @@ app.post('/api/debug/followme/link-latest-device', express.json(), async (req, r
     const projectRes = await pool.query(
       `SELECT id, code, label
        FROM followme_projects
-       WHERE code = $1
+       WHERE code = $1 OR public_id = $1
        LIMIT 1`,
       [code]
     );
@@ -9463,7 +9463,7 @@ app.post('/api/debug/followme/test-push', express.json(), async (req, res) => {
     const projectRes = await pool.query(
       `SELECT *
        FROM followme_projects
-       WHERE code = $1
+       WHERE code = $1 OR public_id = $1
        LIMIT 1`,
       [code]
     );
