@@ -1091,28 +1091,74 @@ function updateSimpleDestinationPreview(url){
 }
 
 async function updateUrl(){
-  const url = document.getElementById("newUrl").value.trim();
-  if(!url){
-    toast("Inserisci un link.");
-    return;
+  const input = document.getElementById("newUrl");
+  const btn = document.querySelector('button[onclick="updateUrl()"]');
+
+  try{
+    CODE = getCode();
+
+    let url = input ? input.value.trim() : "";
+
+    if(!url){
+      toast("Inserisci un link.");
+      return;
+    }
+
+    if(!/^https?:\/\//i.test(url)){
+      url = "https://" + url;
+      if(input) input.value = url;
+    }
+
+    try{
+      new URL(url);
+    }catch(e){
+      toast("Link non valido. Controlla l'URL inserito.");
+      return;
+    }
+
+    if(btn){
+      btn.disabled = true;
+      btn.textContent = "Aggiorno...";
+      btn.classList.add("refresh-running");
+    }
+
+    const res = await fetch("/api/followme/" + encodeURIComponent(CODE) + "/update-url", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ url:url })
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      toast((data && data.error) || "Errore aggiornamento link.");
+      return;
+    }
+
+    window.__followMeActiveUrl = url;
+
+    if(typeof updateSimpleDestinationPreview === "function"){
+      updateSimpleDestinationPreview(url);
+    }
+
+    toast("Fatto. Il QR ora porta al nuovo link.");
+
+    await loadStatus();
+
+    if(typeof renderFollowMeEmergencyHistory === "function"){
+      try{ await renderFollowMeEmergencyHistory(); }catch(e){}
+    }
+
+  }catch(err){
+    console.error("updateUrl error:", err);
+    toast("Errore aggiornamento: " + (err.message || err));
+  }finally{
+    if(btn){
+      btn.disabled = false;
+      btn.textContent = "Aggiorna QR";
+      btn.classList.remove("refresh-running");
+    }
   }
-
-  const res = await fetch("/api/followme/" + encodeURIComponent(CODE) + "/update-url", {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({ url })
-  });
-
-  const data = await res.json().catch(()=>null);
-
-  if(!res.ok || !data || !data.success){
-    toast((data && data.error) || "Errore aggiornamento link.");
-    return;
-  }
-
-  toast("Fatto. Da ora il QR porta lì.");
-  updateManifestAndInstallState();
-loadStatus();
 }
 
 function reactivateUrl(encoded){
