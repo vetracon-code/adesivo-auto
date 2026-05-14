@@ -9216,6 +9216,56 @@ app.post('/api/followme/:code/update-url', express.json(), async (req, res) => {
   }
 });
 
+
+app.post('/api/followme/:code/history/delete', express.json(), async (req, res) => {
+  try {
+    const code = normalizeFollowMeCode(req.params.code);
+    const url = normalizeUrlForFollowMe(req.body?.url);
+
+    if (!url) {
+      return res.status(400).json({ success:false, error:'URL obbligatorio.' });
+    }
+
+    const projectRes = await pool.query(
+      `SELECT id, active_url
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!projectRes.rows.length) {
+      return res.status(404).json({ success:false, error:'Follow Me QR non trovato.' });
+    }
+
+    const project = projectRes.rows[0];
+    const activeUrl = normalizeUrlForFollowMe(project.active_url);
+
+    if (activeUrl && activeUrl === url) {
+      return res.status(400).json({
+        success:false,
+        error:'Non puoi eliminare il link attivo. Attiva prima un altro link.'
+      });
+    }
+
+    const del = await pool.query(
+      `DELETE FROM followme_url_history
+       WHERE project_id = $1 AND url = $2
+       RETURNING url`,
+      [project.id, url]
+    );
+
+    return res.json({
+      success:true,
+      deleted: del.rowCount || 0
+    });
+  } catch (err) {
+    console.error('followme history delete error:', err);
+    return res.status(500).json({ success:false, error:err.message || String(err) });
+  }
+});
+
+
 app.post('/api/followme/:code/subscribe', express.json(), async (req, res) => {
   try {
     const code = normalizeFollowMeCode(req.params.code);

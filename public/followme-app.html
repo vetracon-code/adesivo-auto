@@ -260,6 +260,94 @@
       font-size:.84rem;
       margin-top:5px;
     }
+
+    .followme-confirm-overlay{
+      position:fixed;
+      inset:0;
+      z-index:120;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      background:rgba(5,5,12,.72);
+      backdrop-filter:blur(14px);
+    }
+
+    .followme-confirm-overlay.show{
+      display:flex;
+    }
+
+    .followme-confirm-box{
+      width:min(420px,100%);
+      border-radius:26px;
+      padding:20px;
+      background:
+        radial-gradient(circle at 12% 0%, rgba(200,255,46,.16), transparent 34%),
+        radial-gradient(circle at 90% 8%, rgba(94,231,255,.13), transparent 32%),
+        linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.055));
+      border:1px solid rgba(255,255,255,.14);
+      box-shadow:0 24px 70px rgba(0,0,0,.52);
+      color:#fff;
+    }
+
+    .followme-confirm-kicker{
+      color:#c8ff2e;
+      font-size:.76rem;
+      font-weight:950;
+      letter-spacing:.11em;
+      text-transform:uppercase;
+      margin-bottom:8px;
+    }
+
+    .followme-confirm-title{
+      font-size:1.35rem;
+      line-height:1.08;
+      font-weight:950;
+      letter-spacing:-.04em;
+      margin-bottom:10px;
+    }
+
+    .followme-confirm-url{
+      padding:12px;
+      border-radius:16px;
+      background:rgba(0,0,0,.24);
+      border:1px solid rgba(255,255,255,.10);
+      color:rgba(255,255,255,.78);
+      font-size:.88rem;
+      line-height:1.35;
+      word-break:break-all;
+      margin:12px 0 16px;
+    }
+
+    .followme-confirm-actions{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+    }
+
+    .followme-confirm-actions .btn{
+      min-height:48px;
+      border-radius:16px;
+    }
+
+    .followme-delete-btn{
+      margin-top:8px;
+      width:100% !important;
+      min-height:38px !important;
+      border-radius:13px !important;
+      color:#fff !important;
+      background:rgba(255,90,111,.14) !important;
+      border:1px solid rgba(255,90,111,.36) !important;
+      box-shadow:none !important;
+      font-size:.86rem !important;
+    }
+
+    .followme-history-actions{
+      display:grid;
+      gap:8px;
+      align-items:start;
+    }
+
     .toast{
       position:fixed;
       left:16px;
@@ -858,6 +946,19 @@
     </section>
   </main>
 
+
+  <div class="followme-confirm-overlay" id="deleteHistoryConfirmOverlay" aria-hidden="true">
+    <div class="followme-confirm-box" role="dialog" aria-modal="true" aria-labelledby="deleteHistoryConfirmTitle">
+      <div class="followme-confirm-kicker">Elimina link</div>
+      <div class="followme-confirm-title" id="deleteHistoryConfirmTitle">Vuoi eliminare questo link dallo storico?</div>
+      <div class="followme-confirm-url" id="deleteHistoryConfirmUrl"></div>
+      <div class="followme-confirm-actions">
+        <button class="btn secondary" type="button" id="cancelDeleteHistoryBtn">Annulla</button>
+        <button class="btn" type="button" id="confirmDeleteHistoryBtn">Confermi</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
 <script>
@@ -999,13 +1100,18 @@ async function loadStatus(){
         ? '<button class="btn-history-active-now" type="button">Attivo ora</button>'
         : '<button class="btn small secondary" type="button" onclick="reactivateUrl(\\'' + encoded + '\\')">Attivalo</button>';
 
+      const deleteButton = '<button class="btn secondary followme-delete-btn" type="button" onclick="openDeleteHistoryConfirm(\\'' + encoded + '\\', ' + (isActive ? 'true' : 'false') + ')">Elimina</button>';
+
       return `
         <div class="${rowClass}">
           <div>
             <strong>${escapeHtml(url)}</strong>
             <span>${scans} scansioni · ultimo uso: ${escapeHtml(last)}</span>
           </div>
-          ${button}
+          <div class="followme-history-actions">
+            ${button}
+            ${deleteButton}
+          </div>
         </div>
       `;
     }).join("");
@@ -1170,6 +1276,134 @@ function reactivateUrl(encoded){
   document.getElementById("newUrl").value = url;
   updateUrl();
 }
+
+
+let __followMeDeleteHistoryUrl = "";
+let __followMeDeleteHistoryIsActive = false;
+
+function openDeleteHistoryConfirm(encoded, isActive){
+  try{
+    const url = decodeURIComponent(encoded || "").trim();
+
+    if(!url){
+      toast("Link non valido.");
+      return;
+    }
+
+    if(isActive === true || isActive === "true"){
+      toast("Prima attiva un altro link, poi potrai eliminare questo.");
+      return;
+    }
+
+    __followMeDeleteHistoryUrl = url;
+    __followMeDeleteHistoryIsActive = false;
+
+    const overlay = document.getElementById("deleteHistoryConfirmOverlay");
+    const urlEl = document.getElementById("deleteHistoryConfirmUrl");
+
+    if(urlEl) urlEl.textContent = url;
+
+    if(overlay){
+      overlay.classList.add("show");
+      overlay.setAttribute("aria-hidden", "false");
+    }
+  }catch(err){
+    console.error("openDeleteHistoryConfirm error:", err);
+    toast("Errore apertura conferma.");
+  }
+}
+
+function closeDeleteHistoryConfirm(){
+  const overlay = document.getElementById("deleteHistoryConfirmOverlay");
+  if(overlay){
+    overlay.classList.remove("show");
+    overlay.setAttribute("aria-hidden", "true");
+  }
+  __followMeDeleteHistoryUrl = "";
+  __followMeDeleteHistoryIsActive = false;
+}
+
+async function confirmDeleteHistoryLink(){
+  const url = String(__followMeDeleteHistoryUrl || "").trim();
+
+  if(!url){
+    closeDeleteHistoryConfirm();
+    toast("Link non valido.");
+    return;
+  }
+
+  try{
+    CODE = getCode();
+
+    const btn = document.getElementById("confirmDeleteHistoryBtn");
+    if(btn){
+      btn.disabled = true;
+      btn.textContent = "Elimino...";
+    }
+
+    const res = await fetch("/api/followme/" + encodeURIComponent(CODE) + "/history/delete", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ url:url })
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      toast((data && data.error) || "Errore eliminazione link.");
+      return;
+    }
+
+    closeDeleteHistoryConfirm();
+    toast("Link eliminato dallo storico.");
+
+    await loadStatus();
+
+    if(typeof renderFollowMeEmergencyHistory === "function"){
+      try{ await renderFollowMeEmergencyHistory(); }catch(e){}
+    }
+
+  }catch(err){
+    console.error("confirmDeleteHistoryLink error:", err);
+    toast("Errore eliminazione: " + (err.message || err));
+  }finally{
+    const btn = document.getElementById("confirmDeleteHistoryBtn");
+    if(btn){
+      btn.disabled = false;
+      btn.textContent = "Confermi";
+    }
+  }
+}
+
+function bindDeleteHistoryConfirm(){
+  const cancel = document.getElementById("cancelDeleteHistoryBtn");
+  const confirm = document.getElementById("confirmDeleteHistoryBtn");
+  const overlay = document.getElementById("deleteHistoryConfirmOverlay");
+
+  if(cancel && cancel.dataset.bound !== "1"){
+    cancel.dataset.bound = "1";
+    cancel.addEventListener("click", closeDeleteHistoryConfirm);
+  }
+
+  if(confirm && confirm.dataset.bound !== "1"){
+    confirm.dataset.bound = "1";
+    confirm.addEventListener("click", confirmDeleteHistoryLink);
+  }
+
+  if(overlay && overlay.dataset.bound !== "1"){
+    overlay.dataset.bound = "1";
+    overlay.addEventListener("click", function(ev){
+      if(ev.target === overlay) closeDeleteHistoryConfirm();
+    });
+  }
+}
+
+window.openDeleteHistoryConfirm = openDeleteHistoryConfirm;
+window.closeDeleteHistoryConfirm = closeDeleteHistoryConfirm;
+window.confirmDeleteHistoryLink = confirmDeleteHistoryLink;
+
+document.addEventListener("DOMContentLoaded", bindDeleteHistoryConfirm);
+setTimeout(bindDeleteHistoryConfirm, 300);
 
 function bindUpdateDestinationButton(){
   const btn = document.getElementById("updateDestinationBtn");
