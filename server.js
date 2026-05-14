@@ -9266,6 +9266,37 @@ app.post('/api/followme/:code/history/delete', express.json(), async (req, res) 
 });
 
 
+
+app.post('/api/followme/:code/existing-qr/delete', express.json(), async (req, res) => {
+  try {
+    const code = normalizeFollowMeCode(req.params.code);
+
+    const q = await pool.query(
+      `UPDATE followme_projects
+       SET existing_qr_url = NULL,
+           existing_qr_status = NULL,
+           existing_qr_updated_at = NOW(),
+           updated_at = NOW()
+       WHERE code = $1 OR public_id = $1
+       RETURNING code, public_id, existing_qr_url, existing_qr_status`,
+      [code]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).json({ success:false, error:'Follow Me QR non trovato.' });
+    }
+
+    return res.json({
+      success:true,
+      project:q.rows[0]
+    });
+  } catch (err) {
+    console.error('followme existing qr delete error:', err);
+    return res.status(500).json({ success:false, error:err.message || String(err) });
+  }
+});
+
+
 app.post('/api/followme/:code/subscribe', express.json(), async (req, res) => {
   try {
     const code = normalizeFollowMeCode(req.params.code);

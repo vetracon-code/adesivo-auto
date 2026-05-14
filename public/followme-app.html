@@ -736,6 +736,71 @@
       display:grid;
       gap:12px;
     }
+
+    .existing-qr-status-card{
+      padding:13px;
+      border-radius:18px;
+      background:rgba(255,255,255,.045);
+      border:1px solid rgba(255,255,255,.08);
+      display:grid;
+      gap:8px;
+    }
+
+    .existing-qr-badge{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      width:max-content;
+      max-width:100%;
+      padding:7px 10px;
+      border-radius:999px;
+      font-size:.78rem;
+      font-weight:950;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+    }
+
+    .existing-qr-badge::before{
+      content:"";
+      width:8px;
+      height:8px;
+      border-radius:999px;
+      background:currentColor;
+      box-shadow:0 0 0 5px rgba(255,255,255,.08);
+    }
+
+    .existing-qr-badge.is-linked{
+      color:#c8ff2e;
+      background:rgba(200,255,46,.11);
+      border:1px solid rgba(200,255,46,.28);
+    }
+
+    .existing-qr-badge.is-empty{
+      color:rgba(255,255,255,.68);
+      background:rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.10);
+    }
+
+    .existing-qr-url{
+      color:rgba(255,255,255,.76);
+      font-size:.88rem;
+      line-height:1.35;
+      word-break:break-all;
+    }
+
+    .existing-qr-delete-btn{
+      display:none;
+      margin-top:2px;
+      color:#ffd7dd !important;
+      background:rgba(255,90,111,.13) !important;
+      border:1px solid rgba(255,90,111,.34) !important;
+      box-shadow:none !important;
+    }
+
+    .existing-qr-delete-btn.show{
+      display:flex !important;
+    }
+
     .setup-state{
       padding:14px;
       border-radius:18px;
@@ -1304,11 +1369,18 @@
 
 <section class="card row">
       <div class="label">Hai già un QR?</div>
-      <div class="empty" id="existingQrInfo">
+
+      <div class="existing-qr-status-card" id="existingQrStatusCard">
+        <div class="existing-qr-badge is-empty" id="existingQrBadge">Nessun QR collegato</div>
+        <div class="existing-qr-url" id="existingQrStatusUrl">Se conosci l'URL incollalo qui.</div>
+      </div>
+
+      <div class="empty" id="existingQrInfo" style="display:none;">
         Se conosci l'URL incollalo qui.
       </div>
       <input id="existingQrUrl" placeholder="Incolla qui l'URL del QR esistente">
       <button class="btn secondary" onclick="saveExistingQr()">Collega QR esistente</button>
+      <button class="btn secondary existing-qr-delete-btn" id="deleteExistingQrBtn" type="button">Elimina abbinamento</button>
     </section>
 
     
@@ -1442,6 +1514,9 @@ async function loadStatus(){
   const existingInput = document.getElementById("existingQrUrl");
   const existingInfo = document.getElementById("existingQrInfo");
   if(existingInput) existingInput.value = data.project.existing_qr_url || "";
+  if(typeof updateExistingQrVisualState === "function"){
+    updateExistingQrVisualState(data.project.existing_qr_url || "", data.project.existing_qr_status || "");
+  }
   if(existingInfo){
     const s = data.project.existing_qr_status || "";
     if(!data.project.existing_qr_url){
@@ -1510,6 +1585,141 @@ async function loadStatus(){
   }
 
 
+
+function updateExistingQrVisualState(url, status){
+  const badge = document.getElementById("existingQrBadge");
+  const urlEl = document.getElementById("existingQrStatusUrl");
+  const delBtn = document.getElementById("deleteExistingQrBtn");
+
+  const hasUrl = !!String(url || "").trim();
+
+  if(badge){
+    badge.classList.remove("is-linked", "is-empty");
+    if(hasUrl){
+      badge.classList.add("is-linked");
+      badge.textContent = "QR collegato";
+    }else{
+      badge.classList.add("is-empty");
+      badge.textContent = "Nessun QR collegato";
+    }
+  }
+
+  if(urlEl){
+    if(hasUrl){
+      let note = String(url || "");
+      if(status === "followme_compatible") note += " · compatibile Follow Me";
+      else if(status === "same_domain_review_required") note += " · stesso dominio, verifica consigliata";
+      else if(status === "external_not_controllable") note += " · QR esterno non controllabile";
+      urlEl.textContent = note;
+    }else{
+      urlEl.textContent = "Se conosci l'URL incollalo qui.";
+    }
+  }
+
+  if(delBtn){
+    if(hasUrl) delBtn.classList.add("show");
+    else delBtn.classList.remove("show");
+  }
+}
+
+function openDeleteExistingQrConfirm(){
+  const input = document.getElementById("existingQrUrl");
+  const url = input ? String(input.value || "").trim() : "";
+
+  if(!url){
+    toast("Nessun QR collegato da eliminare.");
+    return;
+  }
+
+  const overlay = document.getElementById("deleteHistoryConfirmOverlay");
+  const title = document.getElementById("deleteHistoryConfirmTitle");
+  const urlEl = document.getElementById("deleteHistoryConfirmUrl");
+  const confirmBtn = document.getElementById("confirmDeleteHistoryBtn");
+  const cancelBtn = document.getElementById("cancelDeleteHistoryBtn");
+
+  if(!overlay || !confirmBtn || !cancelBtn){
+    if(window.confirm("Vuoi eliminare l'abbinamento con questo QR?")){
+      deleteExistingQrLink();
+    }
+    return;
+  }
+
+  if(title) title.textContent = "Vuoi eliminare l'abbinamento con questo QR?";
+  if(urlEl) urlEl.textContent = url;
+
+  const newConfirm = confirmBtn.cloneNode(true);
+  confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
+
+  const newCancel = cancelBtn.cloneNode(true);
+  cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+
+  newConfirm.textContent = "Confermi";
+  newCancel.textContent = "Annulla";
+
+  newCancel.addEventListener("click", function(){
+    overlay.classList.remove("show");
+    overlay.setAttribute("aria-hidden", "true");
+  });
+
+  newConfirm.addEventListener("click", async function(){
+    await deleteExistingQrLink();
+    overlay.classList.remove("show");
+    overlay.setAttribute("aria-hidden", "true");
+  });
+
+  overlay.classList.add("show");
+  overlay.setAttribute("aria-hidden", "false");
+}
+
+async function deleteExistingQrLink(){
+  try{
+    CODE = getCode();
+
+    const res = await fetch("/api/followme/" + encodeURIComponent(CODE) + "/existing-qr/delete", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"}
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      toast((data && data.error) || "Errore eliminazione abbinamento.");
+      return;
+    }
+
+    const input = document.getElementById("existingQrUrl");
+    if(input) input.value = "";
+
+    updateExistingQrVisualState("", "");
+    toast("Abbinamento QR eliminato.");
+
+    if(typeof loadStatus === "function"){
+      try{ await loadStatus(); }catch(e){}
+    }
+
+  }catch(err){
+    console.error("deleteExistingQrLink error:", err);
+    toast("Errore eliminazione: " + (err.message || err));
+  }
+}
+
+function bindDeleteExistingQrButton(){
+  const btn = document.getElementById("deleteExistingQrBtn");
+  if(!btn || btn.dataset.bound === "1") return;
+
+  btn.dataset.bound = "1";
+  btn.addEventListener("click", function(ev){
+    ev.preventDefault();
+    ev.stopPropagation();
+    openDeleteExistingQrConfirm();
+  });
+}
+
+document.addEventListener("DOMContentLoaded", bindDeleteExistingQrButton);
+setTimeout(bindDeleteExistingQrButton, 400);
+setTimeout(bindDeleteExistingQrButton, 1200);
+window.updateExistingQrVisualState = updateExistingQrVisualState;
+
 async function saveExistingQr(){
   const existingQrUrl = document.getElementById("existingQrUrl").value.trim();
 
@@ -1529,6 +1739,13 @@ async function saveExistingQr(){
   if(!res.ok || !data || !data.success){
     toast((data && data.error) || "Errore salvataggio QR esistente.");
     return;
+  }
+
+  if(typeof updateExistingQrVisualState === "function"){
+    updateExistingQrVisualState(
+      (data.project && data.project.existing_qr_url) || existingQrUrl,
+      data.status || (data.project && data.project.existing_qr_status) || ""
+    );
   }
 
   if(data.compatible){
