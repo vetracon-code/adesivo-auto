@@ -180,9 +180,11 @@
     }
     .history-item{
       display:grid;
-      grid-template-columns:1fr auto;
+      grid-template-columns:minmax(0,1fr) auto;
       gap:10px;
       align-items:center;
+      max-width:100%;
+      overflow:hidden;
       padding:13px;
       border-radius:18px;
       background:rgba(255,255,255,.045);
@@ -190,8 +192,46 @@
     }
     .history-url{
       word-break:break-all;
+      overflow-wrap:anywhere;
+      min-width:0;
       font-weight:800;
       line-height:1.25;
+    }
+
+    .history-item > div{
+      min-width:0;
+      overflow:hidden;
+    }
+
+    .history-item strong{
+      display:block;
+      word-break:break-all;
+      overflow-wrap:anywhere;
+    }
+
+    .history-item span{
+      display:block;
+      color:var(--muted);
+      font-size:.84rem;
+      margin-top:5px;
+    }
+
+    @media (max-width:520px){
+      .history-item{
+        grid-template-columns:1fr;
+      }
+      .history-item .btn,
+      .history-item button{
+        width:100% !important;
+        max-width:100% !important;
+      }
+      .btn-history-active-now,
+      .active-now-btn,
+      .followme-emergency-active-btn{
+        width:100% !important;
+        max-width:100% !important;
+        white-space:normal !important;
+      }
     }
     .history-meta{
       color:var(--muted);
@@ -574,18 +614,22 @@
     }
 
     #simpleDestinationPreviewFrame{
-      display:none !important;
+      display:block !important;
+      width:100% !important;
+      height:100% !important;
+      border:0 !important;
+      background:#ffffff !important;
     }
 
     #simpleDestinationPreviewEmpty{
-      display:none !important;
+      display:flex;
     }
 
     .preview-fallback-box{
       position:absolute;
       inset:0;
       z-index:8;
-      display:flex !important;
+      display:none !important;
       align-items:center;
       justify-content:center;
       padding:18px;
@@ -595,6 +639,10 @@
         radial-gradient(circle at 85% 18%, rgba(94,231,255,.13), transparent 32%),
         #101018;
       color:#fff;
+    }
+
+    .preview-fallback-box.show{
+      display:flex !important;
     }
 
     .preview-fallback-inner{
@@ -705,14 +753,11 @@
             <div class="preview-fallback-url" id="previewFallbackUrl">
               Alcune pagine non permettono l’anteprima interna.
             </div>
-            <a class="btn secondary" id="previewFallbackOpen" href="#" target="_blank" rel="noopener" style="text-decoration:none;display:flex;align-items:center;justify-content:center;">
-              Apri pagina trasmessa
-            </a>
           </div>
         </div>
 
       </div>
-      <a class="btn secondary simple-preview-open" id="simpleDestinationPreviewOpen" href="#" target="_blank" rel="noopener">Apri pagina trasmessa</a>
+      <a class="btn secondary simple-preview-open" id="simpleDestinationPreviewOpen" href="#" target="_blank" rel="noopener">Apri pagina in nuova scheda</a>
     </section>
 
 <section class="card row">
@@ -1738,8 +1783,9 @@ document.addEventListener("visibilitychange", function(){
         // Se il sito blocca iframe/X-Frame/CSP o resta bianco, mostriamo fallback utile.
         clearTimeout(window.__followMePreviewFallbackTimer);
         window.__followMePreviewFallbackTimer = setTimeout(function(){
-          setPreviewFallback(url, true);
-        }, 1800);
+          // Non copro automaticamente la preview: molti iframe cross-domain sono leggibili ma non ispezionabili.
+          setPreviewFallback(url, false);
+        }, 3500);
 
         frame.onload = function(){
           clearTimeout(window.__followMePreviewFallbackTimer);
@@ -1757,11 +1803,9 @@ document.addEventListener("visibilitychange", function(){
                 setPreviewFallback(url, false);
               }
             }catch(e){
-              // Cross-domain normale: non mostro subito fallback, ma se l'utente vede bianco ha comunque il pulsante sotto.
-              // Su alcuni siti bloccati il fallback serve: lo mostriamo dopo un breve tempo.
-              setTimeout(function(){
-                setPreviewFallback(url, true);
-              }, 900);
+              // Cross-domain normale: non posso ispezionare il contenuto.
+              // Lascio visibile l'iframe e tengo il pulsante sotto come apertura alternativa.
+              setPreviewFallback(url, false);
             }
           }, 300);
         };
@@ -1806,114 +1850,9 @@ document.addEventListener("visibilitychange", function(){
 </script>
 
 
-<script id="followme-preview-stable-card">
-(function(){
-  function getFollowMeCodeSafe(){
-    try{
-      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
-      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
 
-      var p = new URLSearchParams(location.search || "");
-      return String(p.get("code") || "").trim().toUpperCase();
-    }catch(e){
-      return "FM-DEMO";
-    }
-  }
+<!-- followme-preview-stable-card removed: it forced iframe hidden -->
 
-  function readableDomain(url){
-    try{
-      var u = new URL(url);
-      return u.hostname.replace(/^www\./, "");
-    }catch(e){
-      return "Destinazione attiva";
-    }
-  }
-
-  window.forceFollowMePreview = function(url){
-    url = String(url || "").trim();
-
-    var frame = document.getElementById("simpleDestinationPreviewFrame");
-    var empty = document.getElementById("simpleDestinationPreviewEmpty");
-    var box = document.getElementById("previewFallbackBox");
-    var domain = document.getElementById("previewFallbackDomain");
-    var urlEl = document.getElementById("previewFallbackUrl");
-    var openEl = document.getElementById("previewFallbackOpen");
-    var openTop = document.getElementById("simpleDestinationPreviewOpen");
-
-    if(frame){
-      frame.src = "about:blank";
-      frame.style.display = "none";
-    }
-
-    if(empty){
-      empty.style.display = "none";
-    }
-
-    if(domain){
-      domain.textContent = url ? readableDomain(url) : "Nessuna destinazione";
-    }
-
-    if(urlEl){
-      urlEl.textContent = url
-        ? url
-        : "Imposta una destinazione per vedere cosa stai trasmettendo.";
-    }
-
-    if(openEl){
-      openEl.href = url || "#";
-      openEl.style.pointerEvents = url ? "auto" : "none";
-      openEl.style.opacity = url ? "1" : ".5";
-    }
-
-    if(openTop){
-      openTop.href = url || "#";
-      openTop.style.pointerEvents = url ? "auto" : "none";
-      openTop.style.opacity = url ? "1" : ".5";
-    }
-
-    if(box){
-      box.classList.add("show");
-      box.style.display = "flex";
-    }
-  };
-
-  window.updateSimpleDestinationPreview = function(url){
-    window.forceFollowMePreview(url);
-  };
-
-  async function refreshPreviewCardFromApi(){
-    try{
-      var code = getFollowMeCodeSafe();
-
-      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
-        cache:"no-store"
-      });
-
-      var data = await res.json().catch(function(){ return null; });
-
-      if(data && data.success && data.project){
-        window.__followMeActiveUrl = data.project.active_url || "";
-        window.forceFollowMePreview(data.project.active_url || "");
-      }
-    }catch(err){
-      console.error("refreshPreviewCardFromApi error:", err);
-    }
-  }
-
-  setTimeout(refreshPreviewCardFromApi, 250);
-  setTimeout(refreshPreviewCardFromApi, 1000);
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(refreshPreviewCardFromApi, 250);
-  });
-
-  document.addEventListener("visibilitychange", function(){
-    if(document.visibilityState === "visible"){
-      setTimeout(refreshPreviewCardFromApi, 250);
-    }
-  });
-})();
-</script>
 
 </body>
 </html>
