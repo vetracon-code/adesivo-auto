@@ -564,6 +564,124 @@
       word-break:break-word;
     }
 
+
+    /* FOLLOW ME FIX FINALE: PREVIEW STABILE + PULSANTI NEI MARGINI */
+    .simple-preview-square{
+      background:
+        radial-gradient(circle at 20% 20%, rgba(200,255,46,.16), transparent 34%),
+        radial-gradient(circle at 85% 18%, rgba(94,231,255,.12), transparent 32%),
+        #101018 !important;
+    }
+
+    #simpleDestinationPreviewFrame{
+      display:none !important;
+    }
+
+    #simpleDestinationPreviewEmpty{
+      display:none !important;
+    }
+
+    .preview-fallback-box{
+      position:absolute;
+      inset:0;
+      z-index:8;
+      display:flex !important;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      text-align:center;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(200,255,46,.18), transparent 34%),
+        radial-gradient(circle at 85% 18%, rgba(94,231,255,.13), transparent 32%),
+        #101018;
+      color:#fff;
+    }
+
+    .preview-fallback-inner{
+      width:100%;
+      display:grid;
+      gap:10px;
+    }
+
+    .preview-fallback-kicker{
+      color:#c8ff2e;
+      font-size:.78rem;
+      font-weight:950;
+      text-transform:uppercase;
+      letter-spacing:.10em;
+    }
+
+    .preview-fallback-url{
+      color:rgba(255,255,255,.78);
+      font-size:.88rem;
+      line-height:1.38;
+      word-break:break-word;
+    }
+
+    .preview-fallback-domain{
+      font-size:1.05rem;
+      font-weight:950;
+      color:#fff;
+      word-break:break-word;
+    }
+
+    section.setup-box,
+    .setup-box{
+      width:100% !important;
+      max-width:100% !important;
+      min-width:0 !important;
+      box-sizing:border-box !important;
+      overflow:hidden !important;
+      display:flex !important;
+      flex-direction:column !important;
+      align-items:stretch !important;
+      gap:10px !important;
+      padding:16px !important;
+    }
+
+    section.setup-box > *,
+    .setup-box > *{
+      width:100% !important;
+      max-width:100% !important;
+      min-width:0 !important;
+      box-sizing:border-box !important;
+      margin-left:0 !important;
+      margin-right:0 !important;
+    }
+
+    #installHelpBtn,
+    #notifyBtn,
+    #refreshDataBtn{
+      width:100% !important;
+      max-width:100% !important;
+      min-width:0 !important;
+      margin:0 !important;
+      box-sizing:border-box !important;
+      display:flex !important;
+      align-items:center !important;
+      justify-content:center !important;
+      text-align:center !important;
+      white-space:normal !important;
+      overflow-wrap:anywhere !important;
+      transform:none !important;
+      position:relative !important;
+      left:auto !important;
+      right:auto !important;
+    }
+
+    #pushDebugBox{
+      width:100% !important;
+      max-width:100% !important;
+      min-width:0 !important;
+      box-sizing:border-box !important;
+      overflow:auto !important;
+    }
+
+    .setup-box .ios-steps ol{
+      margin:8px 0 0 0 !important;
+      padding-left:20px !important;
+    }
+
 </style>
 </head>
 <body>
@@ -582,7 +700,8 @@
 
         <div class="preview-fallback-box" id="previewFallbackBox">
           <div class="preview-fallback-inner">
-            <div class="preview-fallback-kicker">Preview non disponibile</div>
+            <div class="preview-fallback-kicker">Pagina trasmessa</div>
+            <div class="preview-fallback-domain" id="previewFallbackDomain">Destinazione attiva</div>
             <div class="preview-fallback-url" id="previewFallbackUrl">
               Alcune pagine non permettono l’anteprima interna.
             </div>
@@ -1682,6 +1801,116 @@ document.addEventListener("visibilitychange", function(){
 
   window.addEventListener("pageshow", function(){
     setTimeout(refreshPreviewFromApi, 300);
+  });
+})();
+</script>
+
+
+<script id="followme-preview-stable-card">
+(function(){
+  function getFollowMeCodeSafe(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+
+      var p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim().toUpperCase();
+    }catch(e){
+      return "FM-DEMO";
+    }
+  }
+
+  function readableDomain(url){
+    try{
+      var u = new URL(url);
+      return u.hostname.replace(/^www\./, "");
+    }catch(e){
+      return "Destinazione attiva";
+    }
+  }
+
+  window.forceFollowMePreview = function(url){
+    url = String(url || "").trim();
+
+    var frame = document.getElementById("simpleDestinationPreviewFrame");
+    var empty = document.getElementById("simpleDestinationPreviewEmpty");
+    var box = document.getElementById("previewFallbackBox");
+    var domain = document.getElementById("previewFallbackDomain");
+    var urlEl = document.getElementById("previewFallbackUrl");
+    var openEl = document.getElementById("previewFallbackOpen");
+    var openTop = document.getElementById("simpleDestinationPreviewOpen");
+
+    if(frame){
+      frame.src = "about:blank";
+      frame.style.display = "none";
+    }
+
+    if(empty){
+      empty.style.display = "none";
+    }
+
+    if(domain){
+      domain.textContent = url ? readableDomain(url) : "Nessuna destinazione";
+    }
+
+    if(urlEl){
+      urlEl.textContent = url
+        ? url
+        : "Imposta una destinazione per vedere cosa stai trasmettendo.";
+    }
+
+    if(openEl){
+      openEl.href = url || "#";
+      openEl.style.pointerEvents = url ? "auto" : "none";
+      openEl.style.opacity = url ? "1" : ".5";
+    }
+
+    if(openTop){
+      openTop.href = url || "#";
+      openTop.style.pointerEvents = url ? "auto" : "none";
+      openTop.style.opacity = url ? "1" : ".5";
+    }
+
+    if(box){
+      box.classList.add("show");
+      box.style.display = "flex";
+    }
+  };
+
+  window.updateSimpleDestinationPreview = function(url){
+    window.forceFollowMePreview(url);
+  };
+
+  async function refreshPreviewCardFromApi(){
+    try{
+      var code = getFollowMeCodeSafe();
+
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(data && data.success && data.project){
+        window.__followMeActiveUrl = data.project.active_url || "";
+        window.forceFollowMePreview(data.project.active_url || "");
+      }
+    }catch(err){
+      console.error("refreshPreviewCardFromApi error:", err);
+    }
+  }
+
+  setTimeout(refreshPreviewCardFromApi, 250);
+  setTimeout(refreshPreviewCardFromApi, 1000);
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(refreshPreviewCardFromApi, 250);
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible"){
+      setTimeout(refreshPreviewCardFromApi, 250);
+    }
   });
 })();
 </script>
