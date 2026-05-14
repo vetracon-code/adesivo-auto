@@ -1367,7 +1367,7 @@
       <a class="btn" id="openQrPreview" href="/followme/qrs/followme-FMDEMO-qr.png" target="_blank" style="display:flex;align-items:center;justify-content:center;text-decoration:none;">Apri anteprima QR</a>
     </section>
 
-<section class="card row">
+<section class="card row" id="existingQrBlock">
       <div class="label">Hai già un QR?</div>
 
       <div class="existing-qr-status-card" id="existingQrStatusCard">
@@ -1375,12 +1375,15 @@
         <div class="existing-qr-url" id="existingQrStatusUrl">Se conosci l'URL incollalo qui.</div>
       </div>
 
-      <div class="empty" id="existingQrInfo" style="display:none;">
-        Se conosci l'URL incollalo qui.
-      </div>
       <input id="existingQrUrl" placeholder="Incolla qui l'URL del QR esistente">
-      <button class="btn secondary" id="saveExistingQrBtn" type="button" onclick="return window.forceSaveExistingQrNow(event)">Collega QR esistente</button>
-      <button class="btn secondary existing-qr-delete-btn" id="deleteExistingQrBtn" type="button">Elimina abbinamento</button>
+
+      <button class="btn secondary" id="existingQrSaveBtn" type="button">
+        Collega QR esistente
+      </button>
+
+      <button class="btn secondary existing-qr-delete-btn" id="existingQrDeleteBtn" type="button">
+        Elimina abbinamento
+      </button>
     </section>
 
     
@@ -3884,9 +3887,12 @@ document.addEventListener("visibilitychange", function(){
 </script>
 
 
-<script id="force-existing-qr-save-handler">
+
+
+
+<script id="followme-existing-qr-rebuild-handler">
 (function(){
-  function fmCode(){
+  function getFmCode(){
     try{
       var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
       if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
@@ -3898,7 +3904,7 @@ document.addEventListener("visibilitychange", function(){
     }
   }
 
-  function msg(text){
+  function notify(text){
     try{
       if(typeof toast === "function"){
         toast(text);
@@ -3912,15 +3918,13 @@ document.addEventListener("visibilitychange", function(){
         setTimeout(function(){ el.style.display = "none"; }, 3000);
         return;
       }
+    }catch(e){}
 
-      alert(text);
-    }catch(e){
-      alert(text);
-    }
+    alert(text);
   }
 
-  function normalizeUrl(v){
-    var url = String(v || "").trim();
+  function normalizeUrl(value){
+    var url = String(value || "").trim();
 
     if(!url) return "";
 
@@ -3935,31 +3939,84 @@ document.addEventListener("visibilitychange", function(){
     }
   }
 
-  window.forceSaveExistingQrNow = async function(ev){
-    if(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
+  function setExistingQrState(url, status){
+    var badge = document.getElementById("existingQrBadge");
+    var text = document.getElementById("existingQrStatusUrl");
+    var del = document.getElementById("existingQrDeleteBtn");
+
+    var hasUrl = !!String(url || "").trim();
+
+    if(badge){
+      badge.classList.remove("is-linked", "is-empty");
+      if(hasUrl){
+        badge.classList.add("is-linked");
+        badge.textContent = "QR collegato";
+      }else{
+        badge.classList.add("is-empty");
+        badge.textContent = "Nessun QR collegato";
+      }
     }
 
-    msg("Click ricevuto. Collegamento QR in corso...");
+    if(text){
+      if(hasUrl){
+        var note = String(url || "");
+        if(status === "followme_compatible") note += " · compatibile Follow Me";
+        else if(status === "same_domain_review_required") note += " · stesso dominio, verifica consigliata";
+        else if(status === "external_not_controllable") note += " · QR esterno non controllabile";
+        text.textContent = note;
+      }else{
+        text.textContent = "Se conosci l'URL incollalo qui.";
+      }
+    }
 
+    if(del){
+      if(hasUrl) del.classList.add("show");
+      else del.classList.remove("show");
+    }
+  }
+
+  async function refreshExistingQrState(){
+    try{
+      var code = getFmCode();
+      if(!code) return;
+
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+      if(!res.ok || !data || !data.success || !data.project) return;
+
+      var input = document.getElementById("existingQrUrl");
+      var url = data.project.existing_qr_url || "";
+      var status = data.project.existing_qr_status || "";
+
+      if(input) input.value = url;
+      setExistingQrState(url, status);
+
+    }catch(err){
+      console.warn("refreshExistingQrState error:", err);
+    }
+  }
+
+  async function saveExistingQr(){
     var input = document.getElementById("existingQrUrl");
-    var btn = document.getElementById("saveExistingQrBtn");
+    var btn = document.getElementById("existingQrSaveBtn");
+
+    notify("Click ricevuto. Collegamento QR in corso...");
 
     var url = normalizeUrl(input ? input.value : "");
-
     if(!url){
-      msg("URL non valido. Incolla il link contenuto nel QR esistente.");
-      return false;
+      notify("URL non valido. Incolla il link contenuto nel QR esistente.");
+      return;
     }
 
     if(input) input.value = url;
 
-    var code = fmCode();
-
+    var code = getFmCode();
     if(!code){
-      msg("Codice Follow Me mancante.");
-      return false;
+      notify("Codice Follow Me mancante.");
+      return;
     }
 
     try{
@@ -3978,30 +4035,21 @@ document.addEventListener("visibilitychange", function(){
       var data = await res.json().catch(function(){ return null; });
 
       if(!res.ok || !data || !data.success){
-        msg((data && data.error) || "Errore salvataggio QR esistente.");
-        return false;
+        notify((data && data.error) || "Errore salvataggio QR esistente.");
+        return;
       }
 
       var savedUrl = (data.project && data.project.existing_qr_url) || url;
       var savedStatus = data.status || (data.project && data.project.existing_qr_status) || "";
 
       if(input) input.value = savedUrl;
+      setExistingQrState(savedUrl, savedStatus);
 
-      if(typeof updateExistingQrVisualState === "function"){
-        updateExistingQrVisualState(savedUrl, savedStatus);
-      }
-
-      msg("QR esistente collegato.");
-
-      setTimeout(function(){
-        window.location.replace(
-          window.location.origin + window.location.pathname + "?v=existing-qr-saved-" + Date.now()
-        );
-      }, 650);
+      notify("QR esistente collegato.");
 
     }catch(err){
-      console.error("forceSaveExistingQrNow error:", err);
-      msg("Errore collegamento QR: " + (err.message || err));
+      console.error("saveExistingQr rebuilt error:", err);
+      notify("Errore collegamento QR: " + (err.message || err));
     }finally{
       if(btn){
         btn.disabled = false;
@@ -4009,20 +4057,82 @@ document.addEventListener("visibilitychange", function(){
         btn.classList.remove("refresh-running");
       }
     }
-
-    return false;
-  };
-
-  function hardBind(){
-    var btn = document.getElementById("saveExistingQrBtn");
-    if(!btn) return;
-
-    btn.onclick = window.forceSaveExistingQrNow;
   }
 
-  document.addEventListener("DOMContentLoaded", hardBind);
-  setTimeout(hardBind, 300);
-  setTimeout(hardBind, 1200);
+  async function deleteExistingQr(){
+    var code = getFmCode();
+    if(!code){
+      notify("Codice Follow Me mancante.");
+      return;
+    }
+
+    var input = document.getElementById("existingQrUrl");
+    var current = input ? String(input.value || "").trim() : "";
+
+    if(!current){
+      notify("Nessun QR collegato da eliminare.");
+      return;
+    }
+
+    if(!window.confirm("Vuoi eliminare l'abbinamento con questo QR?")){
+      return;
+    }
+
+    try{
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/existing-qr/delete", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"}
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        notify((data && data.error) || "Errore eliminazione abbinamento.");
+        return;
+      }
+
+      if(input) input.value = "";
+      setExistingQrState("", "");
+      notify("Abbinamento QR eliminato.");
+
+    }catch(err){
+      console.error("deleteExistingQr rebuilt error:", err);
+      notify("Errore eliminazione: " + (err.message || err));
+    }
+  }
+
+  function bind(){
+    var saveBtn = document.getElementById("existingQrSaveBtn");
+    var delBtn = document.getElementById("existingQrDeleteBtn");
+
+    if(saveBtn && saveBtn.dataset.bound !== "1"){
+      saveBtn.dataset.bound = "1";
+      saveBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        saveExistingQr();
+      });
+    }
+
+    if(delBtn && delBtn.dataset.bound !== "1"){
+      delBtn.dataset.bound = "1";
+      delBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        deleteExistingQr();
+      });
+    }
+
+    refreshExistingQrState();
+  }
+
+  window.followMeSaveExistingQrRebuilt = saveExistingQr;
+  window.followMeDeleteExistingQrRebuilt = deleteExistingQr;
+
+  document.addEventListener("DOMContentLoaded", bind);
+  setTimeout(bind, 250);
+  setTimeout(bind, 1000);
+  setTimeout(bind, 2200);
 })();
 </script>
 
