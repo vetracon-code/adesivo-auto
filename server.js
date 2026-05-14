@@ -8059,6 +8059,12 @@ async function initDb() {
     await pool.query("ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS existing_qr_url TEXT");
     await pool.query("ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS existing_qr_status TEXT");
     await pool.query("ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS existing_qr_updated_at TIMESTAMPTZ");
+    await pool.query("ALTER TABLE followme_url_history ADD COLUMN IF NOT EXISTS preview_image_url TEXT");
+    await pool.query("ALTER TABLE followme_url_history ADD COLUMN IF NOT EXISTS preview_image_path TEXT");
+    await pool.query("ALTER TABLE followme_url_history ADD COLUMN IF NOT EXISTS preview_status TEXT");
+    await pool.query("ALTER TABLE followme_url_history ADD COLUMN IF NOT EXISTS preview_created_at TIMESTAMPTZ");
+    await pool.query("ALTER TABLE followme_url_history ADD COLUMN IF NOT EXISTS preview_error TEXT");
+
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS followme_push_subscriptions (
@@ -9077,7 +9083,14 @@ app.get('/api/followme/:code/status', async (req, res) => {
     );
 
     const hist = await pool.query(
-      `SELECT url, activated_at, last_used_at, COALESCE(scan_count,0)::int AS scan_count
+      `SELECT url,
+              activated_at,
+              last_used_at,
+              COALESCE(scan_count,0)::int AS scan_count,
+              preview_image_url,
+              preview_status,
+              preview_created_at,
+              preview_error
        FROM followme_url_history
        WHERE project_id = $1
        ORDER BY last_used_at DESC NULLS LAST, activated_at DESC
@@ -9293,6 +9306,284 @@ app.post('/api/followme/:code/existing-qr/delete', express.json(), async (req, r
   } catch (err) {
     console.error('followme existing qr delete error:', err);
     return res.status(500).json({ success:false, error:err.message || String(err) });
+  }
+});
+
+
+
+function getFollowMePreviewFsTools() {
+  const fs = require('fs');
+  const path = require('path');
+  const crypto = require('crypto');
+
+  const publicDir = path.join(__dirname, 'public');
+  const previewDir = path.join(publicDir, 'followme', 'previews');
+
+  if (!fs.existsSync(previewDir)) {
+    fs.mkdirSync(previewDir, { recursive: true });
+  }
+
+  return { fs, path, crypto, publicDir, previewDir };
+}
+
+function safeFollowMePreviewName(code, url) {
+  const { crypto } = getFollowMePreviewFsTools();
+  const hash = crypto.createHash('sha256').update(String(code || '') + '|' + String(url || '')).digest('hex').slice(0, 18);
+  const safeCode = String(code || 'FM').replace(/[^a-z0-9_-]/gi, '').slice(0, 32) || 'FM';
+  return `${safeCode}-${hash}.jpg`;
+}
+
+function getDirectorySizeBytes(dir) {
+  const { fs, path } = getFollowMePreviewFsTools();
+
+  let total = 0;
+  let count = 0;
+
+  if (!fs.existsSync(dir)) {
+    return { bytes: 0, count: 0 };
+  }
+
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+
+    if (entry.isDirectory()) {
+      const sub = getDirectorySizeBytes(full);
+      total += sub.bytes;
+      count += sub.count;
+    } else if (entry.isFile()) {
+      const stat = fs.statSync(full);
+      total += stat.size;
+      if (!entry.name.startsWith('.')) count += 1;
+    }
+  }
+
+  return { bytes: total, count };
+}
+
+async function findFollowMeProjectByCodeOrPublicId(code) {
+  const q = await pool.query(
+    `SELECT id, code, public_id, label, active_url
+     FROM followme_projects
+     WHERE code = $1 OR public_id = $1
+     LIMIT 1`,
+    [code]
+  );
+
+  return q.rows[0] || null;
+}
+
+app.get('/api/followme/:code/previews/storage', async (req, res) => {
+  try {
+    const code = normalizeFollowMeCode(req.params.code);
+    const project = await findFollowMeProjectByCodeOrPublicId(code);
+
+    if (!project) {
+      return res.status(404).json({ success:false, error:'Follow Me QR non trovato.' });
+    }
+
+    const { fs, path, previewDir } = getFollowMePreviewFsTools();
+    const size = getDirectorySizeBytes(previewDir);
+
+    const files = fs.existsSync(previewDir)
+      ? fs.readdirSync(previewDir)
+          .filter(name => !name.startsWith('.'))
+          .map(name => {
+            const full = path.join(previewDir, name);
+            const stat = fs.statSync(full);
+            return {
+              name,
+              bytes: stat.size,
+              kb: Math.round((stat.size / 1024) * 10) / 10,
+              updated_at: stat.mtime
+            };
+          })
+          .sort((a,b) => b.bytes - a.bytes)
+      : [];
+
+    const db = await pool.query(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE preview_image_url IS NOT NULL)::int AS with_preview,
+              COUNT(*) FILTER (WHERE preview_status = 'ready')::int AS ready,
+              COUNT(*) FILTER (WHERE preview_status = 'failed')::int AS failed
+       FROM followme_url_history
+       WHERE project_id = $1`,
+      [project.id]
+    );
+
+    return res.json({
+      success:true,
+      project:{
+        code: project.code,
+        public_id: project.public_id,
+        label: project.label
+      },
+      storage:{
+        directory:'/public/followme/previews',
+        files_count:size.count,
+        bytes:size.bytes,
+        kb:Math.round((size.bytes / 1024) * 10) / 10,
+        mb:Math.round((size.bytes / 1024 / 1024) * 100) / 100
+      },
+      database: db.rows[0],
+      files
+    });
+  } catch (err) {
+    console.error('followme preview storage error:', err);
+    return res.status(500).json({ success:false, error:err.message || String(err) });
+  }
+});
+
+app.post('/api/followme/:code/history/preview', express.json(), async (req, res) => {
+  let browser = null;
+
+  try {
+    const code = normalizeFollowMeCode(req.params.code);
+    const rawUrl = req.body?.url;
+    const url = normalizeUrlForFollowMe(rawUrl);
+
+    if (!url) {
+      return res.status(400).json({ success:false, error:'URL obbligatorio.' });
+    }
+
+    const project = await findFollowMeProjectByCodeOrPublicId(code);
+
+    if (!project) {
+      return res.status(404).json({ success:false, error:'Follow Me QR non trovato.' });
+    }
+
+    const history = await pool.query(
+      `SELECT id, url, preview_image_path
+       FROM followme_url_history
+       WHERE project_id = $1 AND url = $2
+       LIMIT 1`,
+      [project.id, url]
+    );
+
+    if (!history.rows.length) {
+      return res.status(404).json({
+        success:false,
+        error:'Link non trovato nello storico Follow Me.'
+      });
+    }
+
+    const { fs, path, previewDir } = getFollowMePreviewFsTools();
+    const fileName = safeFollowMePreviewName(project.code, url);
+    const absolutePath = path.join(previewDir, fileName);
+    const publicUrl = `/followme/previews/${fileName}`;
+
+    await pool.query(
+      `UPDATE followme_url_history
+       SET preview_status = 'generating',
+           preview_error = NULL
+       WHERE id = $1`,
+      [history.rows[0].id]
+    );
+
+    let chromium;
+    try {
+      ({ chromium } = require('playwright'));
+    } catch (err) {
+      await pool.query(
+        `UPDATE followme_url_history
+         SET preview_status = 'failed',
+             preview_error = $2
+         WHERE id = $1`,
+        [history.rows[0].id, 'Playwright non installato o non disponibile: ' + (err.message || String(err))]
+      );
+
+      return res.status(500).json({
+        success:false,
+        error:'Playwright non disponibile sul server.',
+        detail: err.message || String(err)
+      });
+    }
+
+    browser = await chromium.launch({
+      headless:true,
+      args:[
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage'
+      ]
+    });
+
+    const page = await browser.newPage({
+      viewport:{ width: 900, height: 520 },
+      deviceScaleFactor: 1
+    });
+
+    page.setDefaultNavigationTimeout(12000);
+    page.setDefaultTimeout(12000);
+
+    await page.goto(url, {
+      waitUntil:'domcontentloaded',
+      timeout:12000
+    });
+
+    await page.waitForTimeout(1800);
+
+    await page.screenshot({
+      path:absolutePath,
+      type:'jpeg',
+      quality:58,
+      fullPage:false
+    });
+
+    await browser.close();
+    browser = null;
+
+    const stat = fs.statSync(absolutePath);
+
+    await pool.query(
+      `UPDATE followme_url_history
+       SET preview_image_url = $2,
+           preview_image_path = $3,
+           preview_status = 'ready',
+           preview_created_at = NOW(),
+           preview_error = NULL
+       WHERE id = $1`,
+      [history.rows[0].id, publicUrl, absolutePath]
+    );
+
+    return res.json({
+      success:true,
+      url,
+      preview:{
+        image_url:publicUrl,
+        bytes:stat.size,
+        kb:Math.round((stat.size / 1024) * 10) / 10
+      }
+    });
+  } catch (err) {
+    console.error('followme generate preview error:', err);
+
+    try {
+      if (browser) await browser.close();
+    } catch(e) {}
+
+    try {
+      const code = normalizeFollowMeCode(req.params.code);
+      const url = normalizeUrlForFollowMe(req.body?.url);
+      const project = await findFollowMeProjectByCodeOrPublicId(code);
+
+      if (project && url) {
+        await pool.query(
+          `UPDATE followme_url_history
+           SET preview_status = 'failed',
+               preview_error = $3
+           WHERE project_id = $1 AND url = $2`,
+          [project.id, url, err.message || String(err)]
+        );
+      }
+    } catch(e) {}
+
+    return res.status(500).json({
+      success:false,
+      error:'Errore generazione preview.',
+      detail: err.message || String(err)
+    });
   }
 });
 
