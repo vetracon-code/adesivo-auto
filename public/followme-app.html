@@ -1560,6 +1560,16 @@
     .premium-history-counter strong{color:#c8ff2e;font-weight:950}
     @media (min-width:700px){.premium-history-card{flex-basis:330px}}
 
+
+    /* Nasconde il vecchio storico solo quando il carousel API è renderizzato correttamente */
+    body.premium-api-ready #oldHistorySection{
+      display:none !important;
+    }
+
+    body:not(.premium-api-ready) #oldHistorySection{
+      display:block;
+    }
+
 </style>
 </head>
 <body>
@@ -1669,7 +1679,7 @@
     </section>
 
 
-    <section class="card">
+    <section class="card old-history-section" id="oldHistorySection">
       <div class="label">ULTIMI LINK INSERITI</div>
       <div class="history" id="historyList">
         <div class="empty">Nessun link ancora registrato.</div>
@@ -4074,15 +4084,23 @@ document.addEventListener("visibilitychange", function(){
 
 
 
+
 <script id="safe-premium-history-script">
 (function(){
-  function esc(s){
-    return String(s || "")
-      .replace(/&/g,"&amp;")
-      .replace(/</g,"&lt;")
-      .replace(/>/g,"&gt;")
-      .replace(/"/g,"&quot;")
-      .replace(/'/g,"&#39;");
+  function getCodeSafe(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+
+      var p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim().toUpperCase();
+    }catch(e){
+      return "";
+    }
+  }
+
+  function clean(v){
+    return String(v || "").trim().replace(/\/+$/,"");
   }
 
   function domainOf(url){
@@ -4093,137 +4111,258 @@ document.addEventListener("visibilitychange", function(){
     }
   }
 
-  function getOldHistoryRows(){
-    var list = document.getElementById("historyList");
-    if(!list) return [];
-
-    var items = Array.prototype.slice.call(list.querySelectorAll(".history-item"));
-
-    return items.map(function(item){
-      var strong = item.querySelector("strong");
-      var span = item.querySelector("span");
-      var buttons = Array.prototype.slice.call(item.querySelectorAll("button"));
-
-      var url = strong ? String(strong.textContent || "").trim() : "";
-      var meta = span ? String(span.textContent || "").trim() : "";
-
-      var isActive =
-        item.classList.contains("history-row-active") ||
-        item.classList.contains("followme-emergency-active") ||
-        /attivo ora/i.test(item.textContent || "");
-
-      var reactivateBtn = buttons.find(function(b){
-        return /attivalo|riattiva/i.test(b.textContent || "");
+  function fmtDate(v){
+    if(!v) return "mai";
+    try{
+      return new Date(v).toLocaleString("it-IT", {
+        day:"2-digit",
+        month:"2-digit",
+        hour:"2-digit",
+        minute:"2-digit"
       });
-
-      var deleteBtn = buttons.find(function(b){
-        return /elimina/i.test(b.textContent || "");
-      });
-
-      var scans = "0";
-      var m = meta.match(/(\d+)\s+scansioni/i);
-      if(m) scans = m[1];
-
-      var last = "mai";
-      var lm = meta.match(/ultimo uso:\s*(.*)$/i);
-      if(lm && lm[1]) last = lm[1].trim();
-
-      return {
-        url:url,
-        scans:scans,
-        last:last,
-        isActive:isActive,
-        reactivateOnclick: reactivateBtn ? reactivateBtn.getAttribute("onclick") : "",
-        deleteOnclick: deleteBtn ? deleteBtn.getAttribute("onclick") : ""
-      };
-    }).filter(function(x){
-      return !!x.url;
-    });
+    }catch(e){
+      return "mai";
+    }
   }
 
-  function renderPremiumFromOldHistory(){
+  function setCounter(n){
+    var counter = document.getElementById("premiumHistoryCounter");
+    if(counter){
+      counter.innerHTML = "<strong>" + Math.min(Number(n || 0), 10) + "</strong> di 10 link memorizzati";
+    }
+  }
+
+  function makeButton(label, className, disabled){
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = label;
+    btn.className = className;
+    if(disabled) btn.disabled = true;
+    return btn;
+  }
+
+  async function activateUrlFromPremium(url){
     try{
-      var track = document.getElementById("premiumHistoryTrack");
-      var counter = document.getElementById("premiumHistoryCounter");
-      if(!track) return false;
-
-      var rows = getOldHistoryRows();
-
-      if(counter){
-        counter.innerHTML = '<strong>' + rows.length + '</strong> di 10 link memorizzati';
+      if(window.reactivateUrl && typeof window.reactivateUrl === "function"){
+        await window.reactivateUrl(encodeURIComponent(url));
+        setTimeout(renderPremiumHistoryFromApi, 700);
+        return;
       }
 
-      if(!rows.length){
-        track.innerHTML = '<div class="empty">Carico le destinazioni recenti...</div>';
+      var code = getCodeSafe();
+      if(!code || !url) return;
+
+      var input = document.getElementById("newUrl");
+      if(input) input.value = url;
+
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/update-url", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ url:url })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        if(typeof toast === "function") toast((data && data.error) || "Errore attivazione link.");
+        return;
+      }
+
+      if(typeof toast === "function") toast("Link attivo ora.");
+
+      if(typeof loadStatus === "function"){
+        try{ await loadStatus(); }catch(e){}
+      }
+
+      setTimeout(renderPremiumHistoryFromApi, 700);
+    }catch(err){
+      console.error("activateUrlFromPremium error:", err);
+      if(typeof toast === "function") toast("Errore: " + (err.message || err));
+    }
+  }
+
+  function deleteUrlFromPremium(url, isActive){
+    try{
+      if(window.openDeleteHistoryConfirm && typeof window.openDeleteHistoryConfirm === "function"){
+        window.openDeleteHistoryConfirm(encodeURIComponent(url), !!isActive);
+        return;
+      }
+
+      if(typeof toast === "function"){
+        toast("Funzione elimina non disponibile. Aggiorna i dati.");
+      }
+    }catch(err){
+      console.error("deleteUrlFromPremium error:", err);
+    }
+  }
+
+  function createPremiumCard(item, activeUrl){
+    var url = String(item.url || "");
+    var isActive = clean(url) === activeUrl;
+    var scans = item.scan_count || 0;
+    var last = fmtDate(item.last_used_at);
+
+    var card = document.createElement("article");
+    card.className = "premium-history-card" + (isActive ? " is-active" : "");
+    card.dataset.url = url;
+
+    var top = document.createElement("div");
+
+    var badge = document.createElement("div");
+    badge.className = "premium-history-badge";
+    badge.textContent = isActive ? "Attivo ora" : "Precedente";
+
+    var domain = document.createElement("div");
+    domain.className = "premium-history-domain";
+    domain.textContent = domainOf(url);
+
+    var urlEl = document.createElement("div");
+    urlEl.className = "premium-history-url";
+    urlEl.textContent = url;
+
+    top.appendChild(badge);
+    top.appendChild(domain);
+    top.appendChild(urlEl);
+
+    var preview = document.createElement("div");
+    preview.className = "premium-history-preview";
+    preview.textContent = "Destinazione salvata";
+
+    var meta = document.createElement("div");
+    meta.className = "premium-history-meta";
+
+    var scansPill = document.createElement("div");
+    scansPill.className = "premium-history-pill";
+    scansPill.innerHTML = "<strong>" + scans + "</strong><span>scansioni</span>";
+
+    var lastPill = document.createElement("div");
+    lastPill.className = "premium-history-pill";
+    lastPill.innerHTML = "<strong></strong><span>ultimo uso</span>";
+    lastPill.querySelector("strong").textContent = last;
+
+    meta.appendChild(scansPill);
+    meta.appendChild(lastPill);
+
+    var actions = document.createElement("div");
+    actions.className = "premium-history-actions";
+
+    var mainBtn;
+    if(isActive){
+      mainBtn = makeButton("Attivo ora", "premium-history-active", true);
+    }else{
+      mainBtn = makeButton("Riattiva", "premium-history-reactivate", false);
+      mainBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        activateUrlFromPremium(url);
+      });
+    }
+
+    var deleteBtn = makeButton("Elimina", "premium-history-delete", false);
+    deleteBtn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      deleteUrlFromPremium(url, isActive);
+    });
+
+    actions.appendChild(mainBtn);
+    actions.appendChild(deleteBtn);
+
+    card.appendChild(top);
+    card.appendChild(preview);
+    card.appendChild(meta);
+    card.appendChild(actions);
+
+    return card;
+  }
+
+  async function renderPremiumHistoryFromApi(){
+    var track = document.getElementById("premiumHistoryTrack");
+
+    try{
+      if(!track) return false;
+
+      var code = getCodeSafe();
+
+      if(!code){
+        document.body.classList.remove("premium-api-ready");
+        track.innerHTML = '<div class="empty">Codice Follow Me non trovato.</div>';
+        setCounter(0);
         return false;
       }
 
-      track.innerHTML = rows.slice(0,10).map(function(x){
-        var mainBtn = x.isActive
-          ? '<button class="premium-history-active" type="button">Attivo ora</button>'
-          : '<button class="premium-history-reactivate" type="button" onclick="' + esc(x.reactivateOnclick || "") + '">Riattiva</button>';
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
+        cache:"no-store",
+        headers:{ "Accept":"application/json" }
+      });
 
-        var deleteBtn = '<button class="premium-history-delete" type="button" onclick="' + esc(x.deleteOnclick || "") + '">Elimina</button>';
+      var data = await res.json().catch(function(){ return null; });
 
-        return ''
-          + '<article class="premium-history-card ' + (x.isActive ? 'is-active' : '') + '">'
-          + '  <div>'
-          + '    <div class="premium-history-badge">' + (x.isActive ? 'Attivo ora' : 'Precedente') + '</div>'
-          + '    <div class="premium-history-domain">' + esc(domainOf(x.url)) + '</div>'
-          + '    <div class="premium-history-url">' + esc(x.url) + '</div>'
-          + '  </div>'
-          + '  <div class="premium-history-preview">Destinazione salvata</div>'
-          + '  <div class="premium-history-meta">'
-          + '    <div class="premium-history-pill"><strong>' + esc(x.scans) + '</strong><span>scansioni</span></div>'
-          + '    <div class="premium-history-pill"><strong>' + esc(x.last) + '</strong><span>ultimo uso</span></div>'
-          + '  </div>'
-          + '  <div class="premium-history-actions">'
-          +      mainBtn
-          +      deleteBtn
-          + '  </div>'
-          + '</article>';
-      }).join("");
+      if(!res.ok || !data || !data.success){
+        console.warn("premium API status non valido", data);
+        document.body.classList.remove("premium-api-ready");
+        track.innerHTML = '<div class="empty">Destinazioni recenti non disponibili.</div>';
+        setCounter(0);
+        return false;
+      }
 
-      console.log("Destinazioni recenti create dallo storico vecchio:", rows.length);
+      var rows = Array.isArray(data.history) ? data.history.slice(0, 10) : [];
+      var activeUrl = clean(data.project && data.project.active_url);
+
+      setCounter(rows.length);
+
+      if(!rows.length){
+        document.body.classList.remove("premium-api-ready");
+        track.innerHTML = '<div class="empty">Nessun link ancora registrato.</div>';
+        return false;
+      }
+
+      rows.sort(function(a,b){
+        var aa = clean(a.url) === activeUrl ? 0 : 1;
+        var bb = clean(b.url) === activeUrl ? 0 : 1;
+        if(aa !== bb) return aa - bb;
+
+        var ad = new Date(a.activated_at || a.last_used_at || 0).getTime();
+        var bd = new Date(b.activated_at || b.last_used_at || 0).getTime();
+        return bd - ad;
+      });
+
+      track.innerHTML = "";
+      rows.forEach(function(item){
+        track.appendChild(createPremiumCard(item, activeUrl));
+      });
+
+      document.body.classList.add("premium-api-ready");
+
+      console.log("Carousel premium renderizzato da API:", rows.length);
       return true;
+
     }catch(err){
-      console.error("renderPremiumFromOldHistory error:", err);
+      console.error("renderPremiumHistoryFromApi error:", err);
+      document.body.classList.remove("premium-api-ready");
       return false;
     }
   }
 
-  function retryRenderPremium(){
-    var attempts = 0;
+  window.renderPremiumHistory = renderPremiumHistoryFromApi;
+  window.renderPremiumHistoryFromApi = renderPremiumHistoryFromApi;
 
-    function tick(){
-      attempts += 1;
-      var ok = renderPremiumFromOldHistory();
-
-      if(!ok && attempts < 30){
-        setTimeout(tick, 350);
-      }
-    }
-
-    tick();
-  }
-
-  window.renderPremiumHistory = renderPremiumFromOldHistory;
-
-  setTimeout(retryRenderPremium, 300);
-  setTimeout(retryRenderPremium, 1200);
-  setTimeout(retryRenderPremium, 2500);
+  setTimeout(renderPremiumHistoryFromApi, 300);
+  setTimeout(renderPremiumHistoryFromApi, 1200);
+  setTimeout(renderPremiumHistoryFromApi, 2500);
 
   window.addEventListener("pageshow", function(){
-    setTimeout(retryRenderPremium, 300);
+    setTimeout(renderPremiumHistoryFromApi, 300);
   });
 
   document.addEventListener("visibilitychange", function(){
     if(document.visibilityState === "visible"){
-      setTimeout(retryRenderPremium, 300);
+      setTimeout(renderPremiumHistoryFromApi, 300);
     }
   });
 })();
 </script>
+
 
 </body>
 </html>
