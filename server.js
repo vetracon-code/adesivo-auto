@@ -9150,7 +9150,7 @@ app.post('/api/followme/:code/update-existing-qr', express.json(), async (req, r
            existing_qr_status = $3,
            existing_qr_updated_at = NOW(),
            updated_at = NOW()
-       WHERE code = $1
+       WHERE code = $1 OR public_id = $1
        RETURNING code, public_id, label, active_url, existing_qr_url, existing_qr_status`,
       [code, url, status]
     );
