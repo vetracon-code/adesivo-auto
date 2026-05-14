@@ -1379,7 +1379,7 @@
         Se conosci l'URL incollalo qui.
       </div>
       <input id="existingQrUrl" placeholder="Incolla qui l'URL del QR esistente">
-      <button class="btn secondary" id="saveExistingQrBtn" type="button" onclick="window.saveExistingQr && window.saveExistingQr()">Collega QR esistente</button>
+      <button class="btn secondary" id="saveExistingQrBtn" type="button" onclick="return window.forceSaveExistingQrNow(event)">Collega QR esistente</button>
       <button class="btn secondary existing-qr-delete-btn" id="deleteExistingQrBtn" type="button">Elimina abbinamento</button>
     </section>
 
@@ -3880,6 +3880,149 @@ document.addEventListener("visibilitychange", function(){
   document.addEventListener("DOMContentLoaded", bindQrScanner);
   setTimeout(bindQrScanner, 300);
   setTimeout(bindQrScanner, 1200);
+})();
+</script>
+
+
+<script id="force-existing-qr-save-handler">
+(function(){
+  function fmCode(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+
+      var p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim().toUpperCase();
+    }catch(e){
+      return "";
+    }
+  }
+
+  function msg(text){
+    try{
+      if(typeof toast === "function"){
+        toast(text);
+        return;
+      }
+
+      var el = document.getElementById("toast");
+      if(el){
+        el.textContent = text;
+        el.style.display = "block";
+        setTimeout(function(){ el.style.display = "none"; }, 3000);
+        return;
+      }
+
+      alert(text);
+    }catch(e){
+      alert(text);
+    }
+  }
+
+  function normalizeUrl(v){
+    var url = String(v || "").trim();
+
+    if(!url) return "";
+
+    if(!/^https?:\/\//i.test(url)){
+      url = "https://" + url;
+    }
+
+    try{
+      return new URL(url).href;
+    }catch(e){
+      return "";
+    }
+  }
+
+  window.forceSaveExistingQrNow = async function(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+
+    msg("Click ricevuto. Collegamento QR in corso...");
+
+    var input = document.getElementById("existingQrUrl");
+    var btn = document.getElementById("saveExistingQrBtn");
+
+    var url = normalizeUrl(input ? input.value : "");
+
+    if(!url){
+      msg("URL non valido. Incolla il link contenuto nel QR esistente.");
+      return false;
+    }
+
+    if(input) input.value = url;
+
+    var code = fmCode();
+
+    if(!code){
+      msg("Codice Follow Me mancante.");
+      return false;
+    }
+
+    try{
+      if(btn){
+        btn.disabled = true;
+        btn.textContent = "Collego...";
+        btn.classList.add("refresh-running");
+      }
+
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/update-existing-qr", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ existing_qr_url:url })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        msg((data && data.error) || "Errore salvataggio QR esistente.");
+        return false;
+      }
+
+      var savedUrl = (data.project && data.project.existing_qr_url) || url;
+      var savedStatus = data.status || (data.project && data.project.existing_qr_status) || "";
+
+      if(input) input.value = savedUrl;
+
+      if(typeof updateExistingQrVisualState === "function"){
+        updateExistingQrVisualState(savedUrl, savedStatus);
+      }
+
+      msg("QR esistente collegato.");
+
+      setTimeout(function(){
+        window.location.replace(
+          window.location.origin + window.location.pathname + "?v=existing-qr-saved-" + Date.now()
+        );
+      }, 650);
+
+    }catch(err){
+      console.error("forceSaveExistingQrNow error:", err);
+      msg("Errore collegamento QR: " + (err.message || err));
+    }finally{
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = "Collega QR esistente";
+        btn.classList.remove("refresh-running");
+      }
+    }
+
+    return false;
+  };
+
+  function hardBind(){
+    var btn = document.getElementById("saveExistingQrBtn");
+    if(!btn) return;
+
+    btn.onclick = window.forceSaveExistingQrNow;
+  }
+
+  document.addEventListener("DOMContentLoaded", hardBind);
+  setTimeout(hardBind, 300);
+  setTimeout(hardBind, 1200);
 })();
 </script>
 
