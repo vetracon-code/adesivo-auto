@@ -2471,10 +2471,41 @@ document.addEventListener("visibilitychange", function(){
       }
 
       finalCloseDeleteConfirm();
+
+      // Rimozione visiva immediata della riga eliminata
+      try{
+        var list = document.getElementById("historyList");
+        if(list){
+          var rows = list.querySelectorAll(".history-item");
+          rows.forEach(function(row){
+            var strong = row.querySelector("strong");
+            var rowUrl = strong ? String(strong.textContent || "").trim().replace(/\/+$/,"") : "";
+            var deletedUrl = String(url || "").trim().replace(/\/+$/,"");
+
+            if(rowUrl && deletedUrl && rowUrl === deletedUrl){
+              row.remove();
+            }
+          });
+
+          if(!list.querySelector(".history-item")){
+            list.innerHTML = '<div class="empty">Nessun link ancora registrato.</div>';
+          }
+        }
+      }catch(e){
+        console.warn("Rimozione visiva link eliminato non riuscita:", e);
+      }
+
       showMsg("Link eliminato dallo storico.");
 
       await refreshStatusOnce();
       setTimeout(ensureDeleteButtons, 100);
+
+      // Refresh reale con cache-buster: utile soprattutto nella Web App iPhone/PWA
+      setTimeout(function(){
+        window.location.replace(
+          window.location.origin + window.location.pathname + "?v=delete-" + Date.now()
+        );
+      }, 650);
 
     }catch(err){
       console.error("finalConfirmDeleteHistory error:", err);
