@@ -1365,6 +1365,65 @@
       }
     }
 
+
+    /* STEP 2 — Storico link scorrevole lateralmente, senza cambiare logica dati */
+    #historyList.history-horizontal{
+      display:flex !important;
+      gap:14px !important;
+      overflow-x:auto !important;
+      overflow-y:hidden !important;
+      padding:2px 2px 14px !important;
+      scroll-snap-type:x mandatory;
+      -webkit-overflow-scrolling:touch;
+    }
+
+    #historyList.history-horizontal::-webkit-scrollbar{
+      height:7px;
+    }
+
+    #historyList.history-horizontal::-webkit-scrollbar-thumb{
+      background:rgba(255,255,255,.18);
+      border-radius:999px;
+    }
+
+    #historyList.history-horizontal .history-item{
+      flex:0 0 min(84%, 360px);
+      scroll-snap-align:start;
+      grid-template-columns:1fr !important;
+      min-height:178px;
+      align-content:space-between;
+    }
+
+    #historyList.history-horizontal .followme-history-actions{
+      grid-template-columns:1fr 1fr;
+      min-width:0;
+      margin-top:4px;
+    }
+
+    #historyList.history-horizontal .followme-history-actions .btn,
+    #historyList.history-horizontal .followme-history-actions button{
+      width:100% !important;
+    }
+
+    .history-counter{
+      margin-top:3px;
+      color:rgba(255,255,255,.58);
+      font-size:.82rem;
+      line-height:1.35;
+      text-align:center;
+    }
+
+    .history-counter strong{
+      color:#c8ff2e;
+      font-weight:950;
+    }
+
+    @media (min-width:700px){
+      #historyList.history-horizontal .history-item{
+        flex-basis:330px;
+      }
+    }
+
 </style>
 </head>
 <body>
@@ -1463,8 +1522,9 @@
 
     <section class="card">
       <div class="label">Ultimi 10 link usati</div>
-      <div class="history" id="historyList">
+      <div class="history history-horizontal" id="historyList">
         <div class="empty">Nessun link ancora registrato.</div>
+      <div class="history-counter" id="historyCounter">0 di 10 link memorizzati</div>
       </div>
     </section>
 
@@ -1626,6 +1686,7 @@ async function loadStatus(){
 
   const list = document.getElementById("historyList");
   const rows = Array.isArray(data.history) ? data.history.slice() : [];
+  updateHistoryCounter(rows.length);
 
   if(!list){
     console.warn("historyList non trovato nella pagina.");
@@ -2236,6 +2297,26 @@ function isFollowMeActiveHistoryUrl(itemUrl){
   }
 }
 
+
+function updateHistoryCounter(count){
+  try{
+    const el = document.getElementById("historyCounter");
+    if(!el) return;
+
+    const n = Math.max(0, Number(count || 0));
+    const visible = Math.min(n, 10);
+
+    if(n === 0){
+      el.innerHTML = "<strong>0</strong> di 10 link memorizzati";
+    }else if(n === 1){
+      el.innerHTML = "<strong>1</strong> di 10 link memorizzati";
+    }else{
+      el.innerHTML = "<strong>" + visible + "</strong> di 10 link memorizzati";
+    }
+  }catch(e){}
+}
+
+
 function escapeHtml(s){
   return String(s || "")
     .replace(/&/g,"&amp;")
@@ -2518,6 +2599,7 @@ document.addEventListener("visibilitychange", function(){
       }
 
       var rows = Array.isArray(data.history) ? data.history.slice() : [];
+      if(typeof updateHistoryCounter === "function") updateHistoryCounter(rows.length);
 
       if(!rows.length){
         list.innerHTML = '<div class="empty">Nessun link ancora registrato.</div>';
