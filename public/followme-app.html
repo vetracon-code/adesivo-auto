@@ -3905,20 +3905,9 @@ document.addEventListener("visibilitychange", function(){
 
 
 
+
 <script id="safe-premium-history-script">
 (function(){
-  function getCodeSafe(){
-    try{
-      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
-      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
-
-      var p = new URLSearchParams(location.search || "");
-      return String(p.get("code") || "").trim().toUpperCase();
-    }catch(e){
-      return "";
-    }
-  }
-
   function esc(s){
     return String(s || "")
       .replace(/&/g,"&amp;")
@@ -3926,10 +3915,6 @@ document.addEventListener("visibilitychange", function(){
       .replace(/>/g,"&gt;")
       .replace(/"/g,"&quot;")
       .replace(/'/g,"&#39;");
-  }
-
-  function clean(v){
-    return String(v || "").trim().replace(/\/+$/,"");
   }
 
   function domainOf(url){
@@ -3940,122 +3925,89 @@ document.addEventListener("visibilitychange", function(){
     }
   }
 
-  function fmtDate(v){
-    if(!v) return "mai";
-    try{
-      return new Date(v).toLocaleString("it-IT", {
-        day:"2-digit",
-        month:"2-digit",
-        hour:"2-digit",
-        minute:"2-digit"
+  function getOldHistoryRows(){
+    var list = document.getElementById("historyList");
+    if(!list) return [];
+
+    var items = Array.prototype.slice.call(list.querySelectorAll(".history-item"));
+    return items.map(function(item){
+      var strong = item.querySelector("strong");
+      var span = item.querySelector("span");
+      var buttons = Array.prototype.slice.call(item.querySelectorAll("button"));
+
+      var url = strong ? String(strong.textContent || "").trim() : "";
+      var meta = span ? String(span.textContent || "").trim() : "";
+      var isActive =
+        item.classList.contains("history-row-active") ||
+        item.classList.contains("followme-emergency-active") ||
+        /attivo ora/i.test(item.textContent || "");
+
+      var reactivateBtn = buttons.find(function(b){
+        return /attivalo|riattiva/i.test(b.textContent || "");
       });
-    }catch(e){
-      return "mai";
-    }
+
+      var deleteBtn = buttons.find(function(b){
+        return /elimina/i.test(b.textContent || "");
+      });
+
+      var scans = "0";
+      var m = meta.match(/(\d+)\s+scansioni/i);
+      if(m) scans = m[1];
+
+      var last = "mai";
+      var lm = meta.match(/ultimo uso:\s*(.*)$/i);
+      if(lm && lm[1]) last = lm[1].trim();
+
+      return {
+        url:url,
+        meta:meta,
+        scans:scans,
+        last:last,
+        isActive:isActive,
+        reactivateOnclick: reactivateBtn ? reactivateBtn.getAttribute("onclick") : "",
+        deleteOnclick: deleteBtn ? deleteBtn.getAttribute("onclick") : ""
+      };
+    }).filter(function(x){
+      return !!x.url;
+    });
   }
 
-  function renderEmptyPremiumHistory(message){
-    var track = document.getElementById("premiumHistoryTrack");
-    var counter = document.getElementById("premiumHistoryCounter");
-
-    if(track){
-      track.innerHTML = '<div class="empty">' + esc(message || "Nessun link ancora registrato.") + '</div>';
-    }
-
-    if(counter){
-      counter.innerHTML = '<strong>0</strong> di 10 link memorizzati';
-    }
-  }
-
-  async function renderPremiumHistory(){
-    var track = document.getElementById("premiumHistoryTrack");
-    var counter = document.getElementById("premiumHistoryCounter");
-
+  function renderPremiumFromOldHistory(){
     try{
-      if(!track){
-        console.warn("premiumHistoryTrack non trovato");
-        return;
-      }
+      var track = document.getElementById("premiumHistoryTrack");
+      var counter = document.getElementById("premiumHistoryCounter");
 
-      var code = getCodeSafe();
+      if(!track) return false;
 
-      if(!code){
-        renderEmptyPremiumHistory("Codice Follow Me non trovato.");
-        return;
-      }
-
-      track.innerHTML = '<div class="empty">Carico le destinazioni recenti...</div>';
-
-      var endpoint = "/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now();
-
-      var res = await fetch(endpoint, {
-        cache:"no-store",
-        headers:{
-          "Accept":"application/json"
-        }
-      });
-
-      var data = await res.json().catch(function(err){
-        console.error("premium history JSON parse error:", err);
-        return null;
-      });
-
-      if(!res.ok || !data || !data.success){
-        console.error("premium history API error:", res.status, data);
-        renderEmptyPremiumHistory(
-          (data && data.error)
-            ? data.error
-            : "Destinazioni non disponibili. Aggiorna i dati."
-        );
-        return;
-      }
-
-      var rows = Array.isArray(data.history) ? data.history.slice(0, 10) : [];
-      var activeUrl = clean(data.project && data.project.active_url);
+      var rows = getOldHistoryRows();
 
       if(counter){
         counter.innerHTML = '<strong>' + rows.length + '</strong> di 10 link memorizzati';
       }
 
       if(!rows.length){
-        renderEmptyPremiumHistory("Nessun link ancora registrato.");
-        return;
+        track.innerHTML = '<div class="empty">Carico le destinazioni recenti...</div>';
+        return false;
       }
 
-      rows.sort(function(a,b){
-        var aa = clean(a.url) === activeUrl ? 0 : 1;
-        var bb = clean(b.url) === activeUrl ? 0 : 1;
-        if(aa !== bb) return aa - bb;
-
-        var ad = new Date(a.activated_at || a.last_used_at || 0).getTime();
-        var bd = new Date(b.activated_at || b.last_used_at || 0).getTime();
-        return bd - ad;
-      });
-
-      track.innerHTML = rows.map(function(x){
-        var url = String(x.url || "");
-        var encoded = encodeURIComponent(url);
-        var isActive = clean(url) === activeUrl;
-        var scans = x.scan_count || 0;
-        var last = fmtDate(x.last_used_at);
-
-        var mainBtn = isActive
+      track.innerHTML = rows.slice(0,10).map(function(x){
+        var mainBtn = x.isActive
           ? '<button class="premium-history-active" type="button">Attivo ora</button>'
-          : '<button class="premium-history-reactivate" type="button" onclick="window.reactivateUrl && window.reactivateUrl(\\'' + encoded + '\\')">Riattiva</button>';
+          : '<button class="premium-history-reactivate" type="button" onclick="' + esc(x.reactivateOnclick || "") + '">Riattiva</button>';
 
-        var deleteBtn = '<button class="premium-history-delete" type="button" onclick="window.openDeleteHistoryConfirm && window.openDeleteHistoryConfirm(\\'' + encoded + '\\', ' + (isActive ? 'true' : 'false') + ')">Elimina</button>';
+        var deleteBtn = '<button class="premium-history-delete" type="button" onclick="' + esc(x.deleteOnclick || "") + '">Elimina</button>';
 
         return ''
-          + '<article class="premium-history-card ' + (isActive ? 'is-active' : '') + '">'
+          + '<article class="premium-history-card ' + (x.isActive ? 'is-active' : '') + '">'
           + '  <div>'
-          + '    <div class="premium-history-badge">' + (isActive ? 'Attivo ora' : 'Precedente') + '</div>'
-          + '    <div class="premium-history-domain">' + esc(domainOf(url)) + '</div>'
-          + '    <div class="premium-history-url">' + esc(url) + '</div>'
+          + '    <div class="premium-history-badge">' + (x.isActive ? 'Attivo ora' : 'Precedente') + '</div>'
+          + '    <div class="premium-history-domain">' + esc(domainOf(x.url)) + '</div>'
+          + '    <div class="premium-history-url">' + esc(x.url) + '</div>'
           + '  </div>'
           + '  <div class="premium-history-preview">Preview non disponibile</div>'
           + '  <div class="premium-history-meta">'
-          + '    <div class="premium-history-pill"><strong>' + scans + '</strong><span>scansioni</span></div>'
-          + '    <div class="premium-history-pill"><strong>' + esc(last) + '</strong><span>ultimo uso</span></div>'
+          + '    <div class="premium-history-pill"><strong>' + esc(x.scans) + '</strong><span>scansioni</span></div>'
+          + '    <div class="premium-history-pill"><strong>' + esc(x.last) + '</strong><span>ultimo uso</span></div>'
           + '  </div>'
           + '  <div class="premium-history-actions">'
           +      mainBtn
@@ -4064,31 +4016,48 @@ document.addEventListener("visibilitychange", function(){
           + '</article>';
       }).join("");
 
-      console.log("Destinazioni recenti renderizzate:", rows.length);
+      console.log("Destinazioni recenti create dallo storico vecchio:", rows.length);
+      return true;
 
     }catch(err){
-      console.error("renderPremiumHistory error:", err);
-      renderEmptyPremiumHistory("Errore caricamento destinazioni recenti.");
+      console.error("renderPremiumFromOldHistory error:", err);
+      return false;
     }
   }
 
-  window.renderPremiumHistory = renderPremiumHistory;
+  function retryRenderPremium(){
+    var attempts = 0;
 
-  setTimeout(renderPremiumHistory, 300);
-  setTimeout(renderPremiumHistory, 1200);
-  setTimeout(renderPremiumHistory, 2500);
+    function tick(){
+      attempts += 1;
+      var ok = renderPremiumFromOldHistory();
+
+      if(!ok && attempts < 20){
+        setTimeout(tick, 350);
+      }
+    }
+
+    tick();
+  }
+
+  window.renderPremiumHistory = renderPremiumFromOldHistory;
+
+  setTimeout(retryRenderPremium, 300);
+  setTimeout(retryRenderPremium, 1200);
+  setTimeout(retryRenderPremium, 2500);
 
   window.addEventListener("pageshow", function(){
-    setTimeout(renderPremiumHistory, 300);
+    setTimeout(retryRenderPremium, 300);
   });
 
   document.addEventListener("visibilitychange", function(){
     if(document.visibilityState === "visible"){
-      setTimeout(renderPremiumHistory, 300);
+      setTimeout(retryRenderPremium, 300);
     }
   });
 })();
 </script>
+
 
 
 </body>
