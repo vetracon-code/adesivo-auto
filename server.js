@@ -9038,6 +9038,48 @@ app.get('/fm/u/:public_id', async (req, res) => {
   }
 });
 
+
+async function cleanupFollowMeUrlHistory(projectId, activeUrl) {
+  try {
+    const normalizedActiveUrl = normalizeUrlForFollowMe(activeUrl || '');
+
+    /*
+      Regola storico FollowMe:
+      - massimo 20 destinazioni memorizzate per progetto
+      - non eliminare mai l'URL attualmente attivo
+      - se ci sono più di 20 record, elimina prima quelli meno utili:
+        1) meno scansioni
+        2) mai usati / usati meno recentemente
+        3) attivati da più tempo
+    */
+    await pool.query(
+      `WITH overflow AS (
+         SELECT GREATEST(COUNT(*) - 20, 0)::int AS excess
+         FROM followme_url_history
+         WHERE project_id = $1
+       ),
+       candidates AS (
+         SELECT id
+         FROM followme_url_history
+         WHERE project_id = $1
+           AND LOWER(TRIM(url)) <> LOWER(TRIM($2))
+         ORDER BY
+           COALESCE(scan_count, 0) ASC,
+           last_used_at ASC NULLS FIRST,
+           activated_at ASC NULLS FIRST,
+           id ASC
+         LIMIT (SELECT excess FROM overflow)
+       )
+       DELETE FROM followme_url_history
+       WHERE id IN (SELECT id FROM candidates)`,
+      [projectId, normalizedActiveUrl]
+    );
+  } catch (err) {
+    console.error('cleanupFollowMeUrlHistory error:', err);
+  }
+}
+
+
 app.get('/api/followme/:code/status', async (req, res) => {
   try {
     const code = normalizeFollowMeCode(req.params.code);
@@ -9076,7 +9118,7 @@ app.get('/api/followme/:code/status', async (req, res) => {
        FROM followme_url_history
        WHERE project_id = $1
        ORDER BY last_used_at DESC NULLS LAST, activated_at DESC
-       LIMIT 10`,
+       LIMIT 20`,
       [project.id]
     );
 
