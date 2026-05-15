@@ -6971,5 +6971,113 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+<script id="followme-preview-speed-guard">
+(function(){
+  var lastPreviewUrl = "";
+  var previewTimer = null;
+
+  function normalizePreviewUrl(url){
+    try{
+      return String(url || "").trim();
+    }catch(e){
+      return "";
+    }
+  }
+
+  function getPreviewFrame(){
+    return document.getElementById("simpleDestinationPreviewFrame");
+  }
+
+  function setPreviewFrameOnce(url){
+    var clean = normalizePreviewUrl(url);
+    if(!clean) return false;
+
+    var frame = getPreviewFrame();
+    if(!frame) return false;
+
+    if(lastPreviewUrl === clean && frame.getAttribute("src") === clean){
+      return true;
+    }
+
+    lastPreviewUrl = clean;
+
+    if(previewTimer){
+      clearTimeout(previewTimer);
+      previewTimer = null;
+    }
+
+    previewTimer = setTimeout(function(){
+      try{
+        var current = frame.getAttribute("src") || "";
+        if(current !== clean){
+          frame.setAttribute("loading", "eager");
+          frame.setAttribute("src", clean);
+        }
+      }catch(e){}
+    }, 180);
+
+    return true;
+  }
+
+  function wrapPreviewFunction(){
+    if(typeof window.updateSimpleDestinationPreview !== "function") return;
+    if(window.updateSimpleDestinationPreview.__speedGuardWrapped === true) return;
+
+    var original = window.updateSimpleDestinationPreview;
+
+    window.updateSimpleDestinationPreview = function(url){
+      var clean = normalizePreviewUrl(url);
+
+      try{
+        if(clean){
+          var frame = getPreviewFrame();
+          if(frame && lastPreviewUrl === clean && frame.getAttribute("src") === clean){
+            return;
+          }
+        }
+      }catch(e){}
+
+      var result = original.apply(this, arguments);
+
+      if(clean){
+        setPreviewFrameOnce(clean);
+      }
+
+      return result;
+    };
+
+    window.updateSimpleDestinationPreview.__speedGuardWrapped = true;
+  }
+
+  function boot(){
+    wrapPreviewFunction();
+
+    try{
+      var frame = getPreviewFrame();
+      if(frame){
+        var src = frame.getAttribute("src") || "";
+        if(src) lastPreviewUrl = src;
+      }
+    }catch(e){}
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 100);
+    setTimeout(boot, 700);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 100);
+  });
+})();
+</script>
+
 </body>
 </html>
