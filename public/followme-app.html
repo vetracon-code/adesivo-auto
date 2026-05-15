@@ -6352,5 +6352,97 @@ bindInstallHelpSheet();
 })();
 </script>
 
+
+<script id="followme-notify-click-robust-bind">
+(function(){
+  function showDebugImmediately(source){
+    try{
+      var box = document.getElementById("pushDebugBox");
+      if(box){
+        box.style.display = "block";
+        box.textContent = "CLICK RICEVUTO: " + source + "\n";
+      }
+    }catch(e){}
+  }
+
+  async function runFollowMeNotificationActivation(source){
+    showDebugImmediately(source);
+
+    try{
+      if(typeof window.enableNotifications !== "function"){
+        var box = document.getElementById("pushDebugBox");
+        if(box){
+          box.textContent += "ERRORE: enableNotifications non è disponibile.\n";
+        }
+        if(typeof toast === "function") toast("Funzione notifiche non disponibile.");
+        return;
+      }
+
+      var box = document.getElementById("pushDebugBox");
+      if(box){
+        box.textContent += "Avvio enableNotifications...\n";
+      }
+
+      await window.enableNotifications();
+
+      if(typeof window.refreshPushNagV4 === "function"){
+        setTimeout(function(){
+          try{ window.refreshPushNagV4({ forceScroll:false }); }catch(e){}
+        }, 700);
+      }
+
+    }catch(err){
+      console.error("runFollowMeNotificationActivation error:", err);
+      var box = document.getElementById("pushDebugBox");
+      if(box){
+        box.style.display = "block";
+        box.textContent += "ERRORE CLICK: " + (err.message || String(err)) + "\n";
+      }
+      if(typeof toast === "function") toast("Errore notifiche: " + (err.message || String(err)));
+    }
+  }
+
+  function bindNotifyButtons(){
+    var ids = [
+      "notifyBtn",
+      "followmePushFixedBtnV4"
+    ];
+
+    ids.forEach(function(id){
+      var btn = document.getElementById(id);
+      if(!btn) return;
+
+      if(btn.dataset.notifyRobustBound === "1") return;
+      btn.dataset.notifyRobustBound = "1";
+
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        runFollowMeNotificationActivation(id);
+      }, true);
+    });
+  }
+
+  window.runFollowMeNotificationActivation = runFollowMeNotificationActivation;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bindNotifyButtons);
+  }else{
+    bindNotifyButtons();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(bindNotifyButtons, 100);
+    setTimeout(bindNotifyButtons, 800);
+    setTimeout(bindNotifyButtons, 2000);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(bindNotifyButtons, 150);
+    setTimeout(bindNotifyButtons, 900);
+  });
+})();
+</script>
+
 </body>
 </html>
