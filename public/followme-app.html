@@ -2911,6 +2911,86 @@
       text-align:center;
     }
 
+
+    /* FollowMe chat active session chips */
+    .followme-chat-session-strip{
+      display:flex;
+      gap:7px;
+      overflow-x:auto;
+      padding:7px 0 10px;
+      margin:0 0 8px;
+      -webkit-overflow-scrolling:touch;
+    }
+
+    .followme-chat-session-chip{
+      flex:0 0 auto;
+      min-height:32px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.14);
+      background:rgba(255,255,255,.075);
+      color:rgba(255,255,255,.82);
+      padding:0 11px;
+      font-weight:900;
+      font-size:.78rem;
+      cursor:pointer;
+    }
+
+    .followme-chat-session-chip.active{
+      color:#101820;
+      background:linear-gradient(135deg,#c8ff2e,#5ee7ff);
+      border:0;
+    }
+
+    .followme-chat-session-chip.new{
+      border-color:rgba(200,255,46,.45);
+      color:#dfff79;
+    }
+
+    .followme-chat-waiting-list{
+      margin-top:18px;
+      display:grid;
+      gap:9px;
+      text-align:left;
+    }
+
+    .followme-chat-waiting-row{
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:10px;
+      align-items:center;
+      padding:10px;
+      border-radius:18px;
+      background:rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.10);
+    }
+
+    .followme-chat-waiting-row strong{
+      display:block;
+      font-size:.9rem;
+      letter-spacing:-.025em;
+    }
+
+    .followme-chat-waiting-row span{
+      display:block;
+      color:rgba(255,255,255,.58);
+      font-size:.74rem;
+      margin-top:3px;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      max-width:210px;
+    }
+
+    .followme-chat-waiting-row button{
+      min-height:34px;
+      border-radius:14px;
+      border:0;
+      color:#101820;
+      background:linear-gradient(135deg,#c8ff2e,#5ee7ff);
+      font-weight:950;
+      padding:0 11px;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -7989,6 +8069,7 @@ document.addEventListener("visibilitychange", function(){
     </div>
   </header>
 
+  <div class="followme-chat-session-strip" id="followmeOwnerChatSessionStrip"></div>
   <section class="followme-owner-chat-messages" id="followmeOwnerChatMessages"></section>
 
   <footer class="followme-owner-chat-composer">
@@ -8470,6 +8551,7 @@ document.addEventListener("visibilitychange", function(){
       <h2>In attesa di collegamenti</h2>
       <p>Quando qualcuno inquadra il tuo QR, questa schermata passerà automaticamente alla conversazione.</p>
       <div class="followme-chat-waiting-pulse"><i></i> Controllo nuovi utenti...</div>
+      <div class="followme-chat-waiting-list" id="followmeChatWaitingList"></div>
     </div>
   </section>
 
@@ -8612,6 +8694,134 @@ document.addEventListener("visibilitychange", function(){
   }else{
     bootWaiting();
   }
+})();
+</script>
+
+
+<script id="followme-real-chat-dialogue-fix">
+(function(){
+  let chatSessionsCache = [];
+  let sessionsPollTimer = null;
+
+  function chatCode(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function escChat(v){
+    return String(v || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function labelForSession(index, session){
+    return "Utente " + (index + 1);
+  }
+
+  function currentSessionId(){
+    try{
+      return new URLSearchParams(location.search || "").get("chatSession") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function openOwnerSession(sessionId){
+    if(!sessionId) return;
+    location.href = "/fm/app/" + encodeURIComponent(chatCode()) + "?chatSession=" + encodeURIComponent(sessionId) + "&focus=chat";
+  }
+
+  async function fetchChatSessions(){
+    const code = chatCode();
+    const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/chat/sessions?v=" + Date.now(), { cache:"no-store" });
+    const data = await res.json().catch(()=>null);
+    if(!res.ok || !data || !data.success) return [];
+    chatSessionsCache = Array.isArray(data.sessions) ? data.sessions : [];
+    return chatSessionsCache;
+  }
+
+  function renderSessionChips(sessions){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+    if(!strip) return;
+
+    const current = currentSessionId();
+    strip.innerHTML = "";
+
+    sessions.forEach((s, idx)=>{
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "followme-chat-session-chip" + (String(s.id) === String(current) ? " active" : "") + (!s.owner_opened_at ? " new" : "");
+      btn.textContent = labelForSession(idx, s);
+      btn.onclick = ()=>openOwnerSession(s.id);
+      strip.appendChild(btn);
+    });
+  }
+
+  function renderWaitingList(sessions){
+    const list = document.getElementById("followmeChatWaitingList");
+    if(!list) return;
+
+    list.innerHTML = "";
+
+    if(!sessions.length){
+      return;
+    }
+
+    sessions.forEach((s, idx)=>{
+      const row = document.createElement("div");
+      row.className = "followme-chat-waiting-row";
+      const label = labelForSession(idx, s);
+      const last = s.last_message ? escChat(s.last_message) : "Appena collegato";
+      row.innerHTML =
+        '<div><strong>' + escChat(label) + '</strong><span>' + last + '</span></div>' +
+        '<button type="button">Apri</button>';
+      row.querySelector("button").onclick = ()=>openOwnerSession(s.id);
+      list.appendChild(row);
+    });
+  }
+
+  async function refreshOwnerChatSessions(){
+    try{
+      const sessions = await fetchChatSessions();
+      renderSessionChips(sessions);
+      renderWaitingList(sessions);
+
+      const waiting = new URLSearchParams(location.search || "").get("chatWaiting") === "1";
+      if(waiting && sessions.length === 1){
+        // Se c'è una sola chat, può aprirla automaticamente.
+        openOwnerSession(sessions[0].id);
+      }
+    }catch(err){
+      console.warn("refreshOwnerChatSessions error:", err);
+    }
+  }
+
+  function bootDialogueFix(){
+    setTimeout(refreshOwnerChatSessions, 700);
+    setTimeout(refreshOwnerChatSessions, 2000);
+
+    if(!sessionsPollTimer){
+      sessionsPollTimer = setInterval(refreshOwnerChatSessions, 3500);
+    }
+  }
+
+  window.refreshFollowMeOwnerChatSessions = refreshOwnerChatSessions;
+  window.openFollowMeOwnerSession = openOwnerSession;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bootDialogueFix);
+  }else{
+    bootDialogueFix();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(refreshOwnerChatSessions, 600);
+  });
 })();
 </script>
 

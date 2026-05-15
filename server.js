@@ -9378,6 +9378,74 @@ app.post('/api/followme/chat/session/:session_id/message', express.json(), async
 });
 
 
+
+app.get('/api/followme/:code/chat/sessions', async (req, res) => {
+  try {
+    await ensureFollowMeChatSchema();
+
+    const code = normalizeFollowMeCode(req.params.code);
+
+    const projectRes = await pool.query(
+      `SELECT id, code, chat_mode_enabled
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!projectRes.rows.length) {
+      return res.status(404).json({ success:false, error:'FollowMe QR non trovato.' });
+    }
+
+    const project = projectRes.rows[0];
+
+    const sessionsRes = await pool.query(
+      `SELECT
+         s.id,
+         s.visitor_label,
+         s.status,
+         s.created_at,
+         s.last_seen_at,
+         s.owner_opened_at,
+         (
+           SELECT m.message
+           FROM followme_chat_messages m
+           WHERE m.session_id = s.id
+           ORDER BY m.id DESC
+           LIMIT 1
+         ) AS last_message,
+         (
+           SELECT m.sender
+           FROM followme_chat_messages m
+           WHERE m.session_id = s.id
+           ORDER BY m.id DESC
+           LIMIT 1
+         ) AS last_sender,
+         (
+           SELECT MAX(m.id)
+           FROM followme_chat_messages m
+           WHERE m.session_id = s.id
+         ) AS last_message_id
+       FROM followme_chat_sessions s
+       WHERE s.project_id = $1
+         AND s.status = 'open'
+       ORDER BY s.created_at ASC
+       LIMIT 20`,
+      [project.id]
+    );
+
+    return res.json({
+      success:true,
+      chat_mode_enabled: project.chat_mode_enabled === true,
+      project_code: project.code,
+      sessions: sessionsRes.rows
+    });
+  } catch (err) {
+    console.error('followme chat sessions list error:', err);
+    return res.status(500).json({ success:false, error:'Errore lettura chat attive.' });
+  }
+});
+
 app.get('/api/followme/:code/chat/latest-open-session', async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
