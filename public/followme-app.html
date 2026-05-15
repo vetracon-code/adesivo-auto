@@ -1911,7 +1911,7 @@
       </div>
 
       <button class="btn secondary" id="installHelpBtn" onclick="showInstallHelp()">Come salvo l’App?</button>
-      <button class="btn" id="notifyBtn" onclick="enableNotifications()">Attiva notifiche</button>
+      <button class="btn" id="notifyBtn" type="button" onclick="window.followMeActivateNotifications(event)">Attiva notifiche</button>
       <button class="btn secondary" id="refreshDataBtn" onclick="tripleRefreshFollowMe()">Aggiorna dati</button>
       <pre id="pushDebugBox" style="white-space:pre-wrap;background:rgba(0,0,0,.32);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:12px;color:#c8ff2e;font-size:.78rem;line-height:1.35;display:none;"></pre>
     </section>
@@ -4812,6 +4812,253 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-apple-direct-real-push">
+(function(){
+  function getCodeSafe(){
+    try{
+      if(typeof getCode === "function") return getCode();
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      var p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim().toUpperCase();
+    }catch(e){
+      return "";
+    }
+  }
+
+  function isIosSafe(){
+    return /iphone|ipad|ipod/i.test(navigator.userAgent || "");
+  }
+
+  function isStandaloneSafe(){
+    try{
+      return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    }catch(e){
+      return false;
+    }
+  }
+
+  function logPush(line, reset){
+    try{
+      var box = document.getElementById("pushDebugBox");
+      if(box){
+        box.style.display = "block";
+        if(reset) box.textContent = "";
+        box.textContent += line + "\n";
+      }
+    }catch(e){}
+  }
+
+  function toastSafe(msg){
+    try{
+      if(typeof toast === "function") toast(msg);
+      else alert(msg);
+    }catch(e){
+      alert(msg);
+    }
+  }
+
+  function urlBase64ToUint8ArraySafe(base64String){
+    var padding = "=".repeat((4 - base64String.length % 4) % 4);
+    var base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    var rawData = window.atob(base64);
+    var outputArray = new Uint8Array(rawData.length);
+    for(var i = 0; i < rawData.length; ++i){
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  }
+
+  async function completeFollowMeSubscriptionAfterApplePermission(){
+    var code = getCodeSafe();
+
+    logPush("CODE: " + code);
+    logPush("Registro service worker...");
+
+    var reg = await navigator.serviceWorker.register("/service-worker.js?v=followme-apple-direct-real");
+    await navigator.serviceWorker.ready;
+
+    logPush("Service worker pronto.");
+    logPush("Recupero VAPID public key...");
+
+    var vapidRes = await fetch("/api/push/public-key", { cache:"no-store" });
+    var vapidData = await vapidRes.json().catch(function(){ return null; });
+
+    if(!vapidRes.ok || !vapidData || !vapidData.publicKey){
+      throw new Error("VAPID public key non disponibile");
+    }
+
+    logPush("VAPID public key ricevuta.");
+    logPush("Controllo subscription esistente...");
+
+    var sub = await reg.pushManager.getSubscription();
+
+    if(sub){
+      logPush("Subscription esistente trovata.");
+    }else{
+      logPush("Creo nuova subscription...");
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly:true,
+        applicationServerKey:urlBase64ToUint8ArraySafe(vapidData.publicKey)
+      });
+      logPush("Nuova subscription creata.");
+    }
+
+    var subJson = sub.toJSON();
+
+    if(!subJson || !subJson.endpoint || !subJson.keys || !subJson.keys.p256dh || !subJson.keys.auth){
+      throw new Error("Subscription incompleta");
+    }
+
+    logPush("Invio subscription al server Follow Me...");
+
+    var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/subscribe", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ subscription:subJson })
+    });
+
+    logPush("Server subscribe status: " + res.status);
+
+    var data = await res.json().catch(function(){ return null; });
+    logPush("Server response: " + JSON.stringify(data));
+
+    if(!res.ok || !data || !data.success){
+      throw new Error((data && data.error) || "Errore salvataggio subscription Follow Me");
+    }
+
+    logPush("OK: subscription Follow Me salvata.");
+
+    var btn = document.getElementById("notifyBtn");
+    if(btn){
+      btn.textContent = "Notifiche attive";
+      btn.disabled = false;
+    }
+
+    var state = document.getElementById("installState");
+    if(state){
+      state.classList.remove("install-danger","install-warning","install-info");
+      state.classList.add("install-ok");
+      state.innerHTML = "<strong>App e notifiche attive.</strong><br>Riceverai gli avvisi su questo dispositivo.";
+    }
+
+    var pushState = document.getElementById("detectedPushState");
+    if(pushState) pushState.textContent = "attive";
+
+    toastSafe("Notifiche attivate.");
+  }
+
+  window.followMeActivateNotifications = async function(ev){
+    if(ev){
+      try{
+        ev.preventDefault();
+        ev.stopPropagation();
+      }catch(e){}
+    }
+
+    logPush("CLICK ATTIVA NOTIFICHE RICEVUTO", true);
+    logPush("UserAgent: " + navigator.userAgent);
+    logPush("isIos: " + isIosSafe());
+    logPush("isStandalone: " + isStandaloneSafe());
+    logPush("Notification disponibile: " + ("Notification" in window));
+    logPush("ServiceWorker disponibile: " + ("serviceWorker" in navigator));
+    logPush("PushManager disponibile: " + ("PushManager" in window));
+
+    try{
+      if(isIosSafe() && !isStandaloneSafe()){
+        logPush("STOP: su iPhone devi aprire dalla Web App salvata.");
+        toastSafe("Su iPhone salva prima l’App nella schermata Home.");
+        if(typeof showInstallHelp === "function") showInstallHelp();
+        return;
+      }
+
+      if(!("Notification" in window)){
+        logPush("STOP: Notification API non disponibile.");
+        toastSafe("Notifiche non supportate.");
+        return;
+      }
+
+      if(!("serviceWorker" in navigator) || !("PushManager" in window)){
+        logPush("STOP: ServiceWorker o PushManager non disponibili.");
+        toastSafe("Notifiche non supportate su questo dispositivo.");
+        return;
+      }
+
+      /*
+        Percorso identico al test Apple:
+        requestPermission parte immediatamente nel click.
+      */
+      logPush("Permission prima: " + Notification.permission);
+
+      var permission = Notification.permission;
+
+      if(permission !== "granted"){
+        logPush("Chiedo autorizzazione Apple ora...");
+        permission = await Notification.requestPermission();
+        logPush("Permission dopo richiesta Apple: " + permission);
+      }else{
+        logPush("Permission già granted.");
+      }
+
+      if(permission !== "granted"){
+        logPush("STOP: autorizzazione Apple non concessa.");
+        toastSafe("Notifiche non autorizzate.");
+        return;
+      }
+
+      await completeFollowMeSubscriptionAfterApplePermission();
+
+    }catch(err){
+      console.error("followMeActivateNotifications error:", err);
+      logPush("ERRORE: " + (err.message || String(err)));
+      toastSafe("Errore notifiche: " + (err.message || String(err)));
+    }
+  };
+
+  function syncBasicPushDiagnosis(){
+    try{
+      var device = document.getElementById("detectedDevice");
+      var install = document.getElementById("detectedInstallState");
+      var push = document.getElementById("detectedPushState");
+
+      if(device){
+        if(isIosSafe() && isStandaloneSafe()) device.textContent = "iPhone Web App";
+        else if(isIosSafe()) device.textContent = "iPhone Safari";
+        else device.textContent = /android/i.test(navigator.userAgent || "") ? "Android" : "Computer";
+      }
+
+      if(install){
+        install.textContent = isStandaloneSafe() ? "App salvata" : "Browser";
+      }
+
+      if(push && "Notification" in window){
+        if(Notification.permission === "granted") push.textContent = "autorizzate";
+        else if(Notification.permission === "denied") push.textContent = "bloccate";
+        else push.textContent = "da attivare";
+      }else if(push){
+        push.textContent = "non supportate";
+      }
+    }catch(e){}
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", syncBasicPushDiagnosis);
+  }else{
+    syncBasicPushDiagnosis();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(syncBasicPushDiagnosis, 200);
+    setTimeout(syncBasicPushDiagnosis, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(syncBasicPushDiagnosis, 300);
+  });
+})();
+</script>
 
 </body>
 </html>
