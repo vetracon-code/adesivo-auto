@@ -2456,6 +2456,17 @@
       margin-top:4px;
     }
 
+
+    /* Fix premium install frame: niente lampeggio, pulsante Come salvo funzionante */
+    .followme-safe-install-card{
+      animation:none !important;
+      transform:none !important;
+    }
+
+    .followme-safe-install-mainbtn{
+      animation:none !important;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -6798,6 +6809,93 @@ document.addEventListener("visibilitychange", function(){
     if(document.visibilityState === "visible"){
       setTimeout(updateInstalledNotificationBox, 150);
     }
+  });
+})();
+</script>
+
+
+<script id="followme-install-help-button-fix">
+(function(){
+  function isStandaloneInstallHelpFix(){
+    try{
+      return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    }catch(e){
+      return false;
+    }
+  }
+
+  function openInstallHelpFrame(){
+    try{
+      var overlay = document.getElementById("followmeSafeInstallOverlay");
+
+      if(overlay){
+        overlay.classList.add("show");
+        overlay.setAttribute("aria-hidden", "false");
+
+        var step = document.getElementById("followmeSafeInstallStepOne");
+        if(step){
+          var ua = navigator.userAgent || "";
+          if(/iphone|ipad|ipod/i.test(ua)){
+            step.innerHTML = 'Su iPhone: apri con <strong>Safari</strong>, tocca <strong>Condividi</strong> e scegli <strong>Aggiungi alla schermata Home</strong>.';
+          }else if(/android/i.test(ua)){
+            step.innerHTML = 'Su Android: scegli <strong>Installa App</strong> o <strong>Aggiungi alla schermata Home</strong>, se disponibile.';
+          }else{
+            step.innerHTML = 'Apri questa pagina da smartphone e salva FollowMe QR sulla schermata Home.';
+          }
+        }
+
+        return true;
+      }
+
+      if(typeof toast === "function"){
+        toast("Apri da smartphone e salva FollowMe QR sulla schermata Home.");
+      }
+      return false;
+    }catch(err){
+      console.warn("openInstallHelpFrame error:", err);
+      return false;
+    }
+  }
+
+  function bindInstallHelpButton(){
+    var btn = document.getElementById("installHelpBtn");
+    if(!btn) return;
+
+    if(btn.dataset.installHelpFixed === "1") return;
+    btn.dataset.installHelpFixed = "1";
+
+    btn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+
+      // Se siamo già in Web App installata il pulsante dovrebbe essere nascosto.
+      // Se per qualunque motivo fosse visibile, non mostriamo il frame installazione.
+      if(isStandaloneInstallHelpFix()){
+        if(typeof toast === "function"){
+          toast("App già salvata.");
+        }
+        return;
+      }
+
+      openInstallHelpFrame();
+    }, true);
+  }
+
+  window.openFollowMeInstallHelpFrame = openInstallHelpFrame;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bindInstallHelpButton);
+  }else{
+    bindInstallHelpButton();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(bindInstallHelpButton, 150);
+    setTimeout(bindInstallHelpButton, 900);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(bindInstallHelpButton, 150);
   });
 })();
 </script>
