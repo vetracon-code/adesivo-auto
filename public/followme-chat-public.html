@@ -234,6 +234,9 @@
   let lastMessageId = 0;
   let realConversationStarted = false;
   let robotTimers = [];
+  let followMeInfoChoiceSent = false;
+  let followMeInfoExplained = false;
+  let followMeRobotFallbackSent = false;
   const messages = document.getElementById("messages");
   const statusText = document.getElementById("statusText");
   const input = document.getElementById("messageInput");
@@ -343,6 +346,9 @@
     yes.onclick = ()=>{
       wrap.remove();
       addUser("Sì, raccontami");
+      followMeInfoExplained = true;
+      followMeInfoChoiceSent = true;
+      sendSystemNoteToOwner("Ok, info trasmesse.");
       addBotHtml(
         "<strong>Piacere, sono FollowMe QR.</strong><br><br>" +
         "In questo momento sono in <strong>modalità Dialogo 💬</strong>: permetto al proprietario di risponderti direttamente qui.<br><br>" +
@@ -360,6 +366,9 @@
     no.onclick = ()=>{
       wrap.remove();
       addUser("No, aspetto");
+      followMeInfoExplained = false;
+      followMeInfoChoiceSent = true;
+      sendSystemNoteToOwner("No, nessuna presentazione.");
       addBot("Va bene, resto qui con te in attesa.");
     };
 
@@ -381,14 +390,35 @@
     statusText.textContent = "Connesso · in attesa del proprietario";
   }
 
+  async function sendSystemNoteToOwner(message){
+    if(!sessionId || !message) return;
+
+    try{
+      await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/message", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ sender:"visitor", message:message })
+      });
+    }catch(e){}
+  }
+
   async function sendMessage(){
     const text = input.value.trim();
     if(!text || !sessionId) return;
+
+    const shouldRobotFallback = followMeInfoExplained && !followMeRobotFallbackSent;
 
     stopRobotSequence();
 
     input.value = "";
     addUser(text);
+
+    if(shouldRobotFallback){
+      followMeRobotFallbackSent = true;
+      setTimeout(function(){
+        addBot("Mi spiace, io sono solo un robottino 🤖<br>Per altre risposte devi attendere il proprietario.<br><strong>Puoi attendere?</strong>");
+      }, 650);
+    }
 
     const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/message", {
       method:"POST",
