@@ -8990,12 +8990,15 @@ async function ensureFollowMeChatSchema() {
       project_id BIGINT NOT NULL,
       chat_public_token TEXT NOT NULL,
       visitor_label TEXT,
+      display_name TEXT,
       status TEXT DEFAULT 'open',
       created_at TIMESTAMPTZ DEFAULT NOW(),
       last_seen_at TIMESTAMPTZ,
       owner_opened_at TIMESTAMPTZ
     )
   `);
+
+  await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS display_name TEXT`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS followme_chat_messages (
@@ -9460,6 +9463,7 @@ app.get('/api/followme/:code/chat/sessions', async (req, res) => {
          s.id,
          s.display_index,
          s.visitor_label,
+         s.display_name,
          s.status,
          s.created_at,
          s.last_seen_at,
@@ -9547,6 +9551,64 @@ app.get('/api/followme/:code/chat/latest-open-session', async (req, res) => {
   }
 });
 
+
+app.post('/api/followme/:code/chat/session/:session_id/rename', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeChatSchema();
+
+    const code = normalizeFollowMeCode(req.params.code);
+    const sessionId = Number(req.params.session_id || 0);
+    let displayName = String(req.body?.display_name || '').trim();
+
+    displayName = displayName
+      .replace(/[<>]/g, '')
+      .replace(/\s+/g, ' ')
+      .slice(0, 32);
+
+    if (!sessionId || !displayName) {
+      return res.status(400).json({ success:false, error:'Nome mancante.' });
+    }
+
+    if (!/^[A-Za-zÀ-ÖØ-öø-ÿ0-9 .'-]{2,32}$/.test(displayName)) {
+      return res.status(400).json({ success:false, error:'Nome non valido.' });
+    }
+
+    const projectRes = await pool.query(
+      `SELECT id, code
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!projectRes.rows.length) {
+      return res.status(404).json({ success:false, error:'FollowMe QR non trovato.' });
+    }
+
+    const project = projectRes.rows[0];
+
+    const updated = await pool.query(
+      `UPDATE followme_chat_sessions
+       SET display_name = $3
+       WHERE id = $1 AND project_id = $2
+       RETURNING id, visitor_label, display_name`,
+      [sessionId, project.id, displayName]
+    );
+
+    if (!updated.rows.length) {
+      return res.status(404).json({ success:false, error:'Sessione non trovata.' });
+    }
+
+    return res.json({
+      success:true,
+      session:updated.rows[0]
+    });
+  } catch (err) {
+    console.error('followme chat rename session error:', err);
+    return res.status(500).json({ success:false, error:'Errore rinomina utente.' });
+  }
+});
+
 app.get('/api/followme/:code/chat/session/:session_id', async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
@@ -9567,7 +9629,7 @@ app.get('/api/followme/:code/chat/session/:session_id', async (req, res) => {
     }
 
     const sessionRes = await pool.query(
-      `SELECT id, project_id, visitor_label, status, created_at, last_seen_at
+      `SELECT id, project_id, visitor_label, display_name, status, created_at, last_seen_at
        FROM followme_chat_sessions
        WHERE id = $1 AND project_id = $2
        LIMIT 1`,

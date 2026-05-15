@@ -3173,6 +3173,61 @@
       vertical-align:-2px;
     }
 
+
+    /* FollowMe chat name suggestion */
+    .followme-name-suggestion{
+      display:none;
+      margin:0 0 8px;
+      padding:9px 10px;
+      border-radius:16px;
+      background:rgba(94,231,255,.08);
+      border:1px solid rgba(94,231,255,.20);
+      color:#fff;
+    }
+
+    .followme-name-suggestion strong{
+      display:block;
+      font-size:.84rem;
+      color:#9ef3ff;
+      letter-spacing:-.02em;
+    }
+
+    .followme-name-suggestion span{
+      display:block;
+      margin-top:3px;
+      color:rgba(255,255,255,.64);
+      font-size:.72rem;
+      line-height:1.25;
+    }
+
+    .followme-name-suggestion-actions{
+      display:flex;
+      gap:7px;
+      margin-top:8px;
+    }
+
+    .followme-name-suggestion-actions button{
+      min-height:30px !important;
+      height:30px !important;
+      border-radius:999px !important;
+      padding:0 10px !important;
+      font-size:.72rem !important;
+      font-weight:900 !important;
+      box-shadow:none !important;
+    }
+
+    .followme-name-confirm{
+      border:0 !important;
+      color:#101820 !important;
+      background:linear-gradient(135deg,#c8ff2e,#5ee7ff) !important;
+    }
+
+    .followme-name-cancel{
+      border:1px solid rgba(255,255,255,.14) !important;
+      color:rgba(255,255,255,.76) !important;
+      background:rgba(255,255,255,.07) !important;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -8259,6 +8314,14 @@ document.addEventListener("visibilitychange", function(){
     </div>
     <button type="button" class="followme-reset-chat-btn" id="followmeResetChatBtn">Reset chat</button>
   </div>
+  <div class="followme-name-suggestion" id="followmeNameSuggestionBox">
+    <strong id="followmeNameSuggestionTitle">Nome rilevato</strong>
+    <span id="followmeNameSuggestionText">Vuoi rinominare questo utente?</span>
+    <div class="followme-name-suggestion-actions">
+      <button type="button" class="followme-name-confirm" id="followmeNameConfirmBtn">Conferma</button>
+      <button type="button" class="followme-name-cancel" id="followmeNameCancelBtn">Annulla</button>
+    </div>
+  </div>
   <section class="followme-owner-chat-messages" id="followmeOwnerChatMessages"></section>
 
   <footer class="followme-owner-chat-composer">
@@ -9596,6 +9659,256 @@ document.addEventListener("visibilitychange", function(){
       setTimeout(()=>ctx.close().catch(()=>{}), 280);
     }catch(e){}
   };
+})();
+</script>
+
+
+<script id="followme-chat-name-detection-script">
+(function(){
+  let pendingNameSuggestion = null;
+  let detectedNamesBySession = {};
+
+  function code(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function getParam(name){
+    try{ return new URLSearchParams(location.search || "").get(name) || ""; }
+    catch(e){ return ""; }
+  }
+
+  function esc(v){
+    return String(v || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function cleanName(raw){
+    let name = String(raw || "")
+      .trim()
+      .replace(/[.,;:!?()[\]{}"“”]/g, "")
+      .replace(/\s+/g, " ");
+
+    // Tieni massimo due parole, utile per "Marco Rossi".
+    const parts = name.split(" ").filter(Boolean).slice(0, 2);
+    name = parts.join(" ");
+
+    if(name.length < 2 || name.length > 32) return "";
+    if(!/^[A-Za-zÀ-ÖØ-öø-ÿ0-9 .'-]+$/.test(name)) return "";
+
+    // Evita parole comuni scambiate per nomi.
+    const bad = [
+      "qui","ciao","salve","buongiorno","buonasera","info","informazioni",
+      "interessato","interessata","utente","prova","test","aspetto","grazie",
+      "ok","bene","male","adesso","subito","tardi","macchina","auto"
+    ];
+    if(bad.includes(name.toLowerCase())) return "";
+
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  }
+
+  function detectNameFromText(text){
+    const t = String(text || "").trim();
+
+    const patterns = [
+      /\bmi chiamo\s+([A-Za-zÀ-ÖØ-öø-ÿ0-9 .'-]{2,32})/i,
+      /\bsono\s+([A-Za-zÀ-ÖØ-öø-ÿ0-9 .'-]{2,32})/i,
+      /\bio sono\s+([A-Za-zÀ-ÖØ-öø-ÿ0-9 .'-]{2,32})/i,
+      /\bciao[, ]+sono\s+([A-Za-zÀ-ÖØ-öø-ÿ0-9 .'-]{2,32})/i,
+      /\bsalve[, ]+sono\s+([A-Za-zÀ-ÖØ-öø-ÿ0-9 .'-]{2,32})/i
+    ];
+
+    for(const re of patterns){
+      const m = t.match(re);
+      if(m && m[1]){
+        let candidate = m[1].split(/\b(?:e|volevo|vorrei|ti|le|scrivo|sono qui|perché|perche)\b/i)[0];
+        candidate = cleanName(candidate);
+        if(candidate) return candidate;
+      }
+    }
+
+    return "";
+  }
+
+  function currentSessionId(){
+    return getParam("chatSession");
+  }
+
+  function showNameSuggestion(name, source){
+    const sessionId = currentSessionId();
+    if(!sessionId || !name) return;
+
+    pendingNameSuggestion = { sessionId, name, source: source || "detected" };
+
+    const box = document.getElementById("followmeNameSuggestionBox");
+    const title = document.getElementById("followmeNameSuggestionTitle");
+    const text = document.getElementById("followmeNameSuggestionText");
+
+    if(!box || !title || !text) return;
+
+    title.textContent = source === "manual" ? "Nome selezionato: " + name : "Nome rilevato: " + name;
+    text.textContent = "Vuoi rinominare questo utente in “" + name + "”?";
+    box.style.display = "block";
+  }
+
+  function hideNameSuggestion(){
+    pendingNameSuggestion = null;
+    const box = document.getElementById("followmeNameSuggestionBox");
+    if(box) box.style.display = "none";
+  }
+
+  async function confirmNameSuggestion(){
+    if(!pendingNameSuggestion) return;
+
+    const { sessionId, name } = pendingNameSuggestion;
+
+    try{
+      const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/session/" + encodeURIComponent(sessionId) + "/rename", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ display_name:name })
+      });
+
+      const data = await res.json().catch(()=>null);
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Errore rinomina");
+      }
+
+      hideNameSuggestion();
+
+      if(typeof window.refreshFollowMeChatNumberingAndLatest === "function"){
+        window.refreshFollowMeChatNumberingAndLatest();
+      }
+      if(typeof window.refreshFollowMeOwnerChatSessions === "function"){
+        window.refreshFollowMeOwnerChatSessions();
+      }
+      if(typeof window.followMeUpdateSelectedUserLabel === "function"){
+        window.followMeUpdateSelectedUserLabel();
+      }
+
+    }catch(err){
+      alert("Non riesco a rinominare l’utente: " + (err.message || String(err)));
+    }
+  }
+
+  function bindNameSuggestionButtons(){
+    const confirm = document.getElementById("followmeNameConfirmBtn");
+    const cancel = document.getElementById("followmeNameCancelBtn");
+
+    if(confirm && confirm.dataset.boundName !== "1"){
+      confirm.dataset.boundName = "1";
+      confirm.addEventListener("click", confirmNameSuggestion);
+    }
+
+    if(cancel && cancel.dataset.boundName !== "1"){
+      cancel.dataset.boundName = "1";
+      cancel.addEventListener("click", hideNameSuggestion);
+    }
+  }
+
+  function inspectLastVisitorMessages(){
+    const sessionId = currentSessionId();
+    if(!sessionId) return;
+
+    const bubbles = document.querySelectorAll(".followme-owner-chat-bubble:not(.owner)");
+    bubbles.forEach(function(b){
+      if(b.dataset.nameInspected === "1") return;
+      b.dataset.nameInspected = "1";
+
+      const text = b.textContent || "";
+      const name = detectNameFromText(text);
+
+      if(name && detectedNamesBySession[sessionId] !== name){
+        detectedNamesBySession[sessionId] = name;
+        showNameSuggestion(name, "detected");
+      }
+
+      // Doppio click / doppio tap manuale su parola selezionata o parola toccata.
+      b.addEventListener("dblclick", function(){
+        let selected = "";
+        try{
+          selected = String(window.getSelection && window.getSelection().toString() || "").trim();
+        }catch(e){}
+
+        if(!selected){
+          selected = text.split(/\s+/).find(w => cleanName(w)) || "";
+        }
+
+        const manualName = cleanName(selected);
+        if(manualName){
+          showNameSuggestion(manualName, "manual");
+        }
+      });
+    });
+  }
+
+  function patchLabelsWithDisplayNames(){
+    // Aggancia i dati sessione se disponibili dalle funzioni già presenti.
+    // In caso contrario, aggiorna tramite API e ridisegna in modo leggero.
+    fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), { cache:"no-store" })
+      .then(r => r.json())
+      .then(data => {
+        if(!data || !data.success || !Array.isArray(data.sessions)) return;
+
+        const current = currentSessionId();
+
+        // Aggiorna label “Stai scrivendo a”.
+        const label = document.getElementById("followmeCurrentChatUserLabel");
+        if(label && current){
+          const ordered = data.sessions.slice().sort((a,b)=>Number(a.display_index||0)-Number(b.display_index||0));
+          const idx = ordered.findIndex(s => String(s.id) === String(current));
+          if(idx >= 0){
+            const s = ordered[idx];
+            const num = Number(s.display_index || idx + 1);
+            label.textContent = "Stai scrivendo a: Utente " + num + (s.display_name ? " · " + s.display_name : "");
+          }
+        }
+
+        // Aggiorna tab in alto.
+        const strip = document.getElementById("followmeOwnerChatSessionStrip");
+        if(strip){
+          const buttons = strip.querySelectorAll(".followme-chat-session-chip");
+          const ordered = data.sessions.slice().sort((a,b)=>Number(a.display_index||0)-Number(b.display_index||0));
+          buttons.forEach((btn, idx)=>{
+            const sess = ordered[idx];
+            if(!sess) return;
+            const n = Number(sess.display_index || idx + 1);
+            btn.textContent = "U" + n + (sess.display_name ? " · " + sess.display_name : "");
+            btn.style.maxWidth = sess.display_name ? "118px" : "62px";
+            btn.title = "Utente " + n + (sess.display_name ? " · " + sess.display_name : "");
+          });
+        }
+      })
+      .catch(()=>{});
+  }
+
+  function boot(){
+    bindNameSuggestionButtons();
+    setInterval(inspectLastVisitorMessages, 1200);
+    setInterval(patchLabelsWithDisplayNames, 2500);
+    setTimeout(inspectLastVisitorMessages, 600);
+    setTimeout(patchLabelsWithDisplayNames, 900);
+  }
+
+  window.followMeShowNameSuggestion = showNameSuggestion;
+  window.followMeConfirmNameSuggestion = confirmNameSuggestion;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 400);
+  });
 })();
 </script>
 
