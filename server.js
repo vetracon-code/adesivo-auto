@@ -9400,8 +9400,17 @@ app.get('/api/followme/:code/chat/sessions', async (req, res) => {
     const project = projectRes.rows[0];
 
     const sessionsRes = await pool.query(
-      `SELECT
+      `WITH ordered_sessions AS (
+         SELECT
+           s.*,
+           ROW_NUMBER() OVER (ORDER BY s.created_at ASC, s.id ASC) AS display_index
+         FROM followme_chat_sessions s
+         WHERE s.project_id = $1
+           AND s.status = 'open'
+       )
+       SELECT
          s.id,
+         s.display_index,
          s.visitor_label,
          s.status,
          s.created_at,
@@ -9426,10 +9435,8 @@ app.get('/api/followme/:code/chat/sessions', async (req, res) => {
            FROM followme_chat_messages m
            WHERE m.session_id = s.id
          ) AS last_message_id
-       FROM followme_chat_sessions s
-       WHERE s.project_id = $1
-         AND s.status = 'open'
-       ORDER BY s.created_at DESC
+       FROM ordered_sessions s
+       ORDER BY s.created_at ASC, s.id ASC
        LIMIT 20`,
       [project.id]
     );

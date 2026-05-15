@@ -3040,6 +3040,75 @@
       padding-top:6px !important;
     }
 
+
+    /* Override finale: tab utenti piccoli, discreti, non bottoni giganti */
+    #followmeOwnerChatSessionStrip.followme-chat-session-strip{
+      display:flex !important;
+      flex-direction:row !important;
+      align-items:center !important;
+      gap:5px !important;
+      overflow-x:auto !important;
+      overflow-y:hidden !important;
+      width:100% !important;
+      min-height:34px !important;
+      max-height:36px !important;
+      padding:3px 2px 5px !important;
+      margin:0 0 4px !important;
+      background:transparent !important;
+      border:0 !important;
+      box-shadow:none !important;
+    }
+
+    #followmeOwnerChatSessionStrip .followme-chat-session-chip{
+      appearance:none !important;
+      -webkit-appearance:none !important;
+      flex:0 0 auto !important;
+      display:inline-flex !important;
+      align-items:center !important;
+      justify-content:center !important;
+      width:auto !important;
+      min-width:42px !important;
+      max-width:62px !important;
+      height:26px !important;
+      min-height:26px !important;
+      padding:0 8px !important;
+      margin:0 !important;
+      border-radius:999px !important;
+      border:1px solid rgba(255,255,255,.16) !important;
+      background:rgba(255,255,255,.06) !important;
+      color:rgba(255,255,255,.70) !important;
+      font-size:11px !important;
+      line-height:1 !important;
+      font-weight:800 !important;
+      letter-spacing:-.02em !important;
+      text-transform:none !important;
+      white-space:nowrap !important;
+      box-shadow:none !important;
+      transform:none !important;
+    }
+
+    #followmeOwnerChatSessionStrip .followme-chat-session-chip.active{
+      color:#101820 !important;
+      background:linear-gradient(135deg,#c8ff2e,#5ee7ff) !important;
+      border:0 !important;
+      box-shadow:none !important;
+    }
+
+    #followmeOwnerChatSessionStrip .followme-chat-session-chip.waiting{
+      opacity:.62 !important;
+    }
+
+    #followmeOwnerChatSessionStrip .followme-chat-session-chip.new{
+      color:#dfff79 !important;
+      border-color:rgba(200,255,46,.34) !important;
+      background:rgba(200,255,46,.07) !important;
+    }
+
+    #followmeOwnerChatSessionStrip .followme-chat-session-chip.active.new{
+      color:#101820 !important;
+      background:linear-gradient(135deg,#c8ff2e,#5ee7ff) !important;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -9161,6 +9230,130 @@ document.addEventListener("visibilitychange", function(){
   window.addEventListener("pageshow", function(){
     setTimeout(boot, 500);
   });
+})();
+</script>
+
+
+<script id="followme-chat-numbering-and-small-tabs-final">
+(function(){
+  function getCode(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function currentSession(){
+    try{
+      return new URLSearchParams(location.search || "").get("chatSession") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function labelFor(s, fallbackIndex){
+    const n = Number(s && s.display_index);
+    return "U" + (Number.isFinite(n) && n > 0 ? n : (fallbackIndex + 1));
+  }
+
+  function openSession(id){
+    if(!id) return;
+    location.href = "/fm/app/" + encodeURIComponent(getCode()) +
+      "?chatSession=" + encodeURIComponent(id) +
+      "&focus=chat";
+  }
+
+  async function getSessions(){
+    const res = await fetch("/api/followme/" + encodeURIComponent(getCode()) + "/chat/sessions?v=" + Date.now(), {
+      cache:"no-store"
+    });
+    const data = await res.json().catch(()=>null);
+    if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)) return [];
+    return data.sessions;
+  }
+
+  function latestByArrival(sessions){
+    if(!sessions.length) return null;
+    return sessions.slice().sort(function(a,b){
+      return new Date(b.created_at || 0) - new Date(a.created_at || 0) || Number(b.id) - Number(a.id);
+    })[0];
+  }
+
+  function renderSmallTabs(sessions){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+    if(!strip) return;
+
+    const active = currentSession();
+    strip.innerHTML = "";
+
+    sessions.forEach(function(s, idx){
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className =
+        "followme-chat-session-chip" +
+        (String(s.id) === String(active) ? " active" : " waiting") +
+        (!s.owner_opened_at ? " new" : "");
+
+      btn.textContent = labelFor(s, idx);
+      btn.title = "Utente " + btn.textContent.replace("U","") + (s.last_message ? " · " + s.last_message : "");
+      btn.onclick = function(){ openSession(s.id); };
+
+      strip.appendChild(btn);
+    });
+  }
+
+  function renderWaitingRowsCompact(sessions){
+    const list = document.getElementById("followmeChatWaitingList");
+    if(!list) return;
+
+    list.innerHTML = "";
+
+    sessions.forEach(function(s, idx){
+      const row = document.createElement("div");
+      row.className = "followme-chat-waiting-row";
+      const label = "Utente " + labelFor(s, idx).replace("U","");
+      const last = s.last_message || "Appena collegato";
+      row.innerHTML =
+        '<div><strong>' + label + '</strong><span>' + String(last).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])) + '</span></div>' +
+        '<button type="button">Apri</button>';
+      row.querySelector("button").onclick = function(){ openSession(s.id); };
+      list.appendChild(row);
+    });
+  }
+
+  async function refreshNumberingAndLatest(){
+    try{
+      const sessions = await getSessions();
+
+      renderSmallTabs(sessions);
+      renderWaitingRowsCompact(sessions);
+
+      const waiting = new URLSearchParams(location.search || "").get("chatWaiting") === "1";
+      if(waiting && sessions.length){
+        const latest = latestByArrival(sessions);
+        if(latest && latest.id){
+          openSession(latest.id);
+        }
+      }
+    }catch(err){
+      console.warn("refreshNumberingAndLatest error:", err);
+    }
+  }
+
+  window.refreshFollowMeChatNumberingAndLatest = refreshNumberingAndLatest;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", function(){
+      setTimeout(refreshNumberingAndLatest, 500);
+      setTimeout(refreshNumberingAndLatest, 1500);
+    });
+  }else{
+    setTimeout(refreshNumberingAndLatest, 500);
+    setTimeout(refreshNumberingAndLatest, 1500);
+  }
+
+  setInterval(refreshNumberingAndLatest, 3000);
 })();
 </script>
 
