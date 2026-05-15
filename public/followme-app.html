@@ -2556,6 +2556,89 @@
       transition:opacity .18s ease;
     }
 
+
+    /* Frame Altre opzioni FollowMe */
+    .followme-other-options-card{
+      display:block;
+    }
+
+    .followme-other-options-toggle{
+      width:100%;
+      min-height:54px;
+      border:0;
+      border-radius:18px;
+      padding:0 14px;
+      color:#fff;
+      background:
+        linear-gradient(180deg,rgba(255,255,255,.085),rgba(255,255,255,.055));
+      border:1px solid rgba(255,255,255,.12);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      font-weight:950;
+      font-size:.98rem;
+      cursor:pointer;
+      text-align:left;
+    }
+
+    .followme-other-options-toggle span{
+      display:block;
+      color:rgba(255,255,255,.64);
+      font-size:.76rem;
+      font-weight:750;
+      margin-top:3px;
+      line-height:1.25;
+    }
+
+    .followme-other-options-chevron{
+      flex:0 0 auto;
+      width:34px;
+      height:34px;
+      border-radius:999px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.10);
+      color:rgba(255,255,255,.78);
+      font-size:1.2rem;
+      line-height:1;
+      transition:transform .18s ease;
+    }
+
+    .followme-other-options-card.open .followme-other-options-chevron{
+      transform:rotate(45deg);
+    }
+
+    .followme-other-options-list{
+      display:none;
+      gap:9px;
+      margin-top:11px;
+    }
+
+    .followme-other-options-card.open .followme-other-options-list{
+      display:grid;
+    }
+
+    .followme-other-options-list a,
+    .followme-other-options-list button{
+      width:100% !important;
+      min-height:46px !important;
+      border-radius:16px !important;
+      display:flex !important;
+      align-items:center !important;
+      justify-content:center !important;
+      text-align:center !important;
+      text-decoration:none !important;
+      margin:0 !important;
+      font-weight:900 !important;
+    }
+
+    .followme-hidden-original-tools{
+      display:none !important;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -2687,6 +2770,25 @@
 
 
     
+
+
+    <section class="card followme-other-options-card" id="followmeOtherOptionsCard">
+      <button class="followme-other-options-toggle" id="followmeOtherOptionsToggle" type="button" aria-expanded="false">
+        <div>
+          Altre opzioni
+          <span>QR, download e funzioni aggiuntive.</span>
+        </div>
+        <div class="followme-other-options-chevron">+</div>
+      </button>
+
+      <div class="followme-other-options-list" id="followmeOtherOptionsList">
+        <a class="btn secondary" id="followmeOtherOpenQrPreview" href="#" target="_blank" rel="noopener">Apri anteprima QR</a>
+        <a class="btn secondary" id="followmeOtherDownloadQrPng" href="#" download>Scarica QR PNG</a>
+        <a class="btn secondary" id="followmeOtherDownloadQrSvg" href="#" download>Scarica QR SVG</a>
+        <a class="btn secondary" id="followmeOtherOpenChat" href="/followme-chat-demo.html" target="_blank" rel="noopener">Attiva chat</a>
+      </div>
+    </section>
+
 
 <section class="card setup-box">
       <div class="label">App e notifiche</div>
@@ -7500,6 +7602,105 @@ document.addEventListener("visibilitychange", function(){
       frameSrc: (getFrame() && (getFrame().getAttribute("src") || getFrame().src)) || ""
     };
   };
+})();
+</script>
+
+
+<script id="followme-other-options-script">
+(function(){
+  function byId(id){
+    return document.getElementById(id);
+  }
+
+  function copyAttr(fromId, toId, attrs){
+    var from = byId(fromId);
+    var to = byId(toId);
+    if(!from || !to) return;
+
+    attrs.forEach(function(attr){
+      var v = from.getAttribute(attr);
+      if(v) to.setAttribute(attr, v);
+    });
+  }
+
+  function hideOriginalTools(){
+    [
+      "openQrPreview",
+      "downloadQrPng",
+      "downloadQrSvg",
+      "openChatDemoBtn"
+    ].forEach(function(id){
+      var el = byId(id);
+      if(el){
+        el.classList.add("followme-hidden-original-tools");
+      }
+    });
+
+    // Se il blocco Scarica il tuo QR contiene solo i pulsanti ora spostati, nascondiamolo.
+    var qrBlock = byId("qrDownloadBlock");
+    if(qrBlock){
+      qrBlock.classList.add("followme-hidden-original-tools");
+    }
+
+    // Nasconde eventuale pulsante demo chat in alto solo se è duplicato visivamente.
+    var chatTopCard = byId("followmeChatDemoTopCard");
+    if(chatTopCard){
+      chatTopCard.classList.add("followme-hidden-original-tools");
+    }
+  }
+
+  function syncOtherOptionLinks(){
+    copyAttr("openQrPreview", "followmeOtherOpenQrPreview", ["href"]);
+    copyAttr("downloadQrPng", "followmeOtherDownloadQrPng", ["href", "download"]);
+    copyAttr("downloadQrSvg", "followmeOtherDownloadQrSvg", ["href", "download"]);
+
+    var chat = byId("openChatDemoBtn") || byId("openChatDemoTopBtn");
+    var otherChat = byId("followmeOtherOpenChat");
+    if(chat && otherChat){
+      var href = chat.getAttribute("href");
+      if(href) otherChat.setAttribute("href", href);
+    }
+  }
+
+  function bindOtherOptions(){
+    var card = byId("followmeOtherOptionsCard");
+    var toggle = byId("followmeOtherOptionsToggle");
+
+    if(!card || !toggle) return;
+
+    if(toggle.dataset.boundOtherOptions === "1") return;
+    toggle.dataset.boundOtherOptions = "1";
+
+    toggle.addEventListener("click", function(ev){
+      ev.preventDefault();
+      var open = !card.classList.contains("open");
+      card.classList.toggle("open", open);
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  }
+
+  function bootOtherOptions(){
+    syncOtherOptionLinks();
+    hideOriginalTools();
+    bindOtherOptions();
+  }
+
+  window.bootFollowMeOtherOptions = bootOtherOptions;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bootOtherOptions);
+  }else{
+    bootOtherOptions();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(bootOtherOptions, 150);
+    setTimeout(bootOtherOptions, 900);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(bootOtherOptions, 150);
+  });
 })();
 </script>
 
