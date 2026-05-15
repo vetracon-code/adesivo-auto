@@ -8797,38 +8797,33 @@ async function sendFollowMeScanPush(project) {
 
 app.get('/fm/manifest/:code.json', async (req, res) => {
   try {
-    const code = normalizeFollowMeCode(req.params.code);
-    const q = await pool.query(
-      `SELECT code, label
-       FROM followme_projects
-       WHERE code = $1 OR public_id = $1
-       LIMIT 1`,
-      [code]
-    );
-
-    const label = q.rows[0]?.label || 'Follow Me';
-    const appName = String(label || 'Follow Me').slice(0, 32);
+    const rawCode = String(req.params.code || 'FOLLOWME').trim();
+    const cleanCode = rawCode.replace(/[^a-z0-9_-]/gi, '').toUpperCase() || 'FOLLOWME';
 
     res.setHeader('Content-Type', 'application/manifest+json');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
     return res.json({
-      name: `${appName} - Dynamic QR`,
-      short_name: 'Follow Me',
-      description: 'Il QR dinamico che cambia con te.',
-      start_url: `/fm/app/${encodeURIComponent(code)}`,
+      name: cleanCode,
+      short_name: cleanCode,
+      description: 'Follow Me - QR dinamico',
+      start_url: `/fm/app/${encodeURIComponent(cleanCode)}?source=pwa&v=followme-dynamic-qr-v2`,
       scope: '/fm/',
       display: 'standalone',
-      background_color: '#0d0d14',
-      theme_color: '#0d0d14',
+      background_color: '#101820',
+      theme_color: '#101820',
       orientation: 'portrait',
       icons: [
         {
-          src: '/followme/icons/icon-192.png',
+          src: '/images/followme/icons/followme-icon-192.png?v=followme-dynamic-qr-v2',
           sizes: '192x192',
           type: 'image/png',
           purpose: 'any maskable'
         },
         {
-          src: '/followme/icons/icon-512.png',
+          src: '/images/followme/icons/followme-icon-512.png?v=followme-dynamic-qr-v2',
           sizes: '512x512',
           type: 'image/png',
           purpose: 'any maskable'
@@ -8837,7 +8832,7 @@ app.get('/fm/manifest/:code.json', async (req, res) => {
     });
   } catch (err) {
     console.error('followme manifest error:', err);
-    return res.status(500).json({ error: 'manifest error' });
+    return res.status(500).json({ error: 'manifest_error' });
   }
 });
 
