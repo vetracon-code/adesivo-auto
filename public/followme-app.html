@@ -2280,7 +2280,7 @@
         Le notifiche servono per ricevere subito gli avvisi quando qualcuno inquadra il QR o, in futuro, entra nella chat.
       </div>
 
-      <button class="btn secondary" id="installHelpBtn" onclick="showInstallHelp()">Come salvo l’App?</button>
+      <button class="btn secondary" id="installHelpBtn" type="button">Come salvo l’App?</button>
       <button class="btn" id="notifyBtn" onclick="enableNotifications()">Attiva notifiche</button>
       <button class="btn secondary" id="refreshDataBtn" onclick="tripleRefreshFollowMe()">Aggiorna dati</button>
       <a class="followme-chat-demo-btn" id="openChatDemoBtn" href="/followme-chat-demo.html" target="_blank" rel="noopener">Prova Chat</a>
@@ -5352,6 +5352,119 @@ bindInstallHelpSheet();
 })();
 </script>
 
+
+
+<script id="followme-install-help-robust-bind">
+(function(){
+  function qs(id){ return document.getElementById(id); }
+
+  function forceOpenInstallHelp(){
+    try{
+      var iosSteps = qs("iosSteps");
+      var sheet = qs("installHelpSheet");
+      var btn = qs("installHelpBtn");
+
+      if(iosSteps){
+        iosSteps.style.display = "block";
+      }
+
+      if(sheet){
+        sheet.classList.add("show");
+        sheet.setAttribute("aria-hidden", "false");
+        return;
+      }
+
+      if(iosSteps){
+        iosSteps.scrollIntoView({ behavior:"smooth", block:"center" });
+      }
+
+      if(window.toast){
+        toast("Su iPhone: prima salva l’App nella schermata Home.");
+      }
+    }catch(err){
+      console.error("forceOpenInstallHelp error:", err);
+    }
+  }
+
+  function forceCloseInstallHelp(){
+    try{
+      var sheet = qs("installHelpSheet");
+      if(sheet){
+        sheet.classList.remove("show");
+        sheet.setAttribute("aria-hidden", "true");
+      }
+    }catch(err){}
+  }
+
+  function bind(){
+    var btn = qs("installHelpBtn");
+    var ok = qs("installSheetOkBtn");
+    var close = qs("installSheetCloseBtn");
+    var sheet = qs("installHelpSheet");
+
+    if(btn && btn.dataset.robustInstallBound !== "1"){
+      btn.dataset.robustInstallBound = "1";
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        forceOpenInstallHelp();
+      });
+    }
+
+    if(ok && ok.dataset.robustInstallBound !== "1"){
+      ok.dataset.robustInstallBound = "1";
+      ok.addEventListener("click", function(ev){
+        ev.preventDefault();
+        forceCloseInstallHelp();
+      });
+    }
+
+    if(close && close.dataset.robustInstallBound !== "1"){
+      close.dataset.robustInstallBound = "1";
+      close.addEventListener("click", function(ev){
+        ev.preventDefault();
+        forceCloseInstallHelp();
+      });
+    }
+
+    if(sheet && sheet.dataset.robustInstallBound !== "1"){
+      sheet.dataset.robustInstallBound = "1";
+      sheet.addEventListener("click", function(ev){
+        if(ev.target === sheet) forceCloseInstallHelp();
+      });
+    }
+
+    // Su iPhone non ancora PWA, rendiamo il pulsante evidente.
+    try{
+      var ua = navigator.userAgent || "";
+      var isIos = /iphone|ipad|ipod/i.test(ua);
+      var standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+      if(btn && isIos && !standalone){
+        btn.classList.add("install-help-pulse");
+        btn.style.display = "flex";
+      }
+    }catch(e){}
+  }
+
+  window.forceOpenInstallHelp = forceOpenInstallHelp;
+  window.forceCloseInstallHelp = forceCloseInstallHelp;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bind);
+  }else{
+    bind();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(bind, 150);
+    setTimeout(bind, 800);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(bind, 150);
+  });
+})();
+</script>
 
 </body>
 </html>
