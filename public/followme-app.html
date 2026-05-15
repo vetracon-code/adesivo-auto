@@ -2991,6 +2991,55 @@
       padding:0 11px;
     }
 
+
+    /* Fix definitivo chat admin: chip piccoli e discreti */
+    .followme-chat-session-strip{
+      display:flex !important;
+      gap:6px !important;
+      overflow-x:auto !important;
+      padding:6px 2px 8px !important;
+      margin:0 0 6px !important;
+      min-height:40px !important;
+      max-height:44px !important;
+      align-items:center !important;
+      -webkit-overflow-scrolling:touch;
+    }
+
+    .followme-chat-session-chip{
+      flex:0 0 auto !important;
+      width:auto !important;
+      min-width:auto !important;
+      max-width:92px !important;
+      height:30px !important;
+      min-height:30px !important;
+      padding:0 9px !important;
+      border-radius:999px !important;
+      border:1px solid rgba(255,255,255,.14) !important;
+      background:rgba(255,255,255,.075) !important;
+      color:rgba(255,255,255,.78) !important;
+      font-size:.72rem !important;
+      line-height:1 !important;
+      font-weight:850 !important;
+      white-space:nowrap !important;
+      overflow:hidden !important;
+      text-overflow:ellipsis !important;
+      box-shadow:none !important;
+    }
+
+    .followme-chat-session-chip.active{
+      color:#101820 !important;
+      background:linear-gradient(135deg,#c8ff2e,#5ee7ff) !important;
+      border:0 !important;
+    }
+
+    .followme-chat-session-chip.waiting{
+      opacity:.72 !important;
+    }
+
+    .followme-owner-chat-messages{
+      padding-top:6px !important;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -8821,6 +8870,296 @@ document.addEventListener("visibilitychange", function(){
 
   window.addEventListener("pageshow", function(){
     setTimeout(refreshOwnerChatSessions, 600);
+  });
+})();
+</script>
+
+
+<script id="followme-owner-chat-dialogue-final-fix">
+(function(){
+  let currentOwnerSessionId = "";
+  let ownerLastMessageId = 0;
+  let ownerMessagePollTimer = null;
+  let ownerSessionsPollTimer = null;
+  let sessionCache = [];
+
+  function code(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function esc(v){
+    return String(v || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function getParam(name){
+    try{ return new URLSearchParams(location.search || "").get(name) || ""; }
+    catch(e){ return ""; }
+  }
+
+  function messagesBox(){
+    return document.getElementById("followmeOwnerChatMessages");
+  }
+
+  function clearOwnerMessages(){
+    const box = messagesBox();
+    if(box) box.innerHTML = "";
+    ownerLastMessageId = 0;
+  }
+
+  function addOwnerChatMessage(sender, text){
+    const box = messagesBox();
+    if(!box) return;
+
+    const div = document.createElement("div");
+    div.className = "followme-owner-chat-bubble" + (sender === "owner" ? " owner" : "");
+    div.innerHTML = esc(text).replace(/\n/g,"<br>");
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  async function fetchSessions(){
+    const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), { cache:"no-store" });
+    const data = await res.json().catch(()=>null);
+    if(!res.ok || !data || !data.success) return [];
+    sessionCache = Array.isArray(data.sessions) ? data.sessions : [];
+    return sessionCache;
+  }
+
+  function sessionLabel(index){
+    return "Utente " + (index + 1);
+  }
+
+  function renderTinyChips(sessions){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+    if(!strip) return;
+
+    strip.innerHTML = "";
+
+    sessions.forEach((s, idx)=>{
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className =
+        "followme-chat-session-chip" +
+        (String(s.id) === String(currentOwnerSessionId) ? " active" : " waiting");
+
+      btn.textContent = sessionLabel(idx);
+      btn.title = sessionLabel(idx) + " - " + (s.last_message || "in attesa");
+      btn.onclick = function(){
+        openSession(s.id, true);
+      };
+
+      strip.appendChild(btn);
+    });
+  }
+
+  function renderWaitingRows(sessions){
+    const list = document.getElementById("followmeChatWaitingList");
+    if(!list) return;
+
+    list.innerHTML = "";
+
+    if(!sessions.length) return;
+
+    sessions.forEach((s, idx)=>{
+      const row = document.createElement("div");
+      row.className = "followme-chat-waiting-row";
+      row.innerHTML =
+        '<div><strong>' + esc(sessionLabel(idx)) + '</strong><span>' +
+        esc(s.last_message || "Appena collegato") +
+        '</span></div><button type="button">Apri</button>';
+
+      row.querySelector("button").onclick = function(){
+        openSession(s.id, true);
+      };
+
+      list.appendChild(row);
+    });
+  }
+
+  async function refreshSessionsAndMaybeOpenLatest(){
+    try{
+      const sessions = await fetchSessions();
+
+      renderTinyChips(sessions);
+      renderWaitingRows(sessions);
+
+      const isWaiting = getParam("chatWaiting") === "1";
+      const hasSession = !!getParam("chatSession");
+
+      if(isWaiting && sessions.length){
+        // Regola richiesta: collegami sempre all'ultimo connesso.
+        openSession(sessions[0].id, true);
+        return;
+      }
+
+      if(hasSession){
+        renderTinyChips(sessions);
+      }
+    }catch(err){
+      console.warn("refreshSessionsAndMaybeOpenLatest error:", err);
+    }
+  }
+
+  function openSession(sessionId, navigate){
+    if(!sessionId) return;
+    if(navigate){
+      location.href = "/fm/app/" + encodeURIComponent(code()) +
+        "?chatSession=" + encodeURIComponent(sessionId) +
+        "&focus=chat";
+      return;
+    }
+  }
+
+  async function loadOwnerConversation(sessionId){
+    if(!sessionId) return;
+
+    currentOwnerSessionId = String(sessionId);
+    clearOwnerMessages();
+
+    document.body.classList.add("followme-chat-only-mode");
+
+    const screen = document.getElementById("followmeOwnerChatScreen");
+    if(screen) screen.style.display = "grid";
+
+    try{
+      const metaRes = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/session/" + encodeURIComponent(sessionId), { cache:"no-store" });
+      const meta = await metaRes.json().catch(()=>null);
+
+      const sub = document.getElementById("followmeOwnerChatSubtitle");
+      if(sub && meta && meta.success && meta.session){
+        sub.textContent = meta.session.visitor_label || ("Utente " + sessionId);
+      }
+    }catch(e){}
+
+    await pollOwnerMessages(true);
+
+    if(ownerMessagePollTimer) clearInterval(ownerMessagePollTimer);
+    ownerMessagePollTimer = setInterval(function(){
+      pollOwnerMessages(false);
+    }, 1800);
+
+    refreshSessionsAndMaybeOpenLatest();
+  }
+
+  async function pollOwnerMessages(initial){
+    const sessionId = currentOwnerSessionId || getParam("chatSession");
+    if(!sessionId) return;
+
+    try{
+      const after = initial ? 0 : ownerLastMessageId;
+
+      const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/messages?after=" + encodeURIComponent(after) + "&v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data = await res.json().catch(()=>null);
+
+      if(!res.ok || !data || !data.success || !Array.isArray(data.messages)) return;
+
+      data.messages.forEach(m=>{
+        ownerLastMessageId = Math.max(ownerLastMessageId, Number(m.id) || 0);
+        addOwnerChatMessage(m.sender, m.message);
+      });
+
+    }catch(err){
+      console.warn("pollOwnerMessages error:", err);
+    }
+  }
+
+  async function sendOwnerReply(){
+    const sessionId = currentOwnerSessionId || getParam("chatSession");
+    const input = document.getElementById("followmeOwnerChatInput");
+    const text = input ? input.value.trim() : "";
+
+    if(!sessionId || !text) return;
+
+    if(input) input.value = "";
+
+    try{
+      const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/message", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ sender:"owner", message:text })
+      });
+
+      const data = await res.json().catch(()=>null);
+
+      if(data && data.success && data.message){
+        ownerLastMessageId = Math.max(ownerLastMessageId, Number(data.message.id) || 0);
+        addOwnerChatMessage("owner", text);
+      }else{
+        addOwnerChatMessage("visitor", "Errore invio messaggio.");
+      }
+
+      setTimeout(function(){ pollOwnerMessages(false); }, 500);
+    }catch(err){
+      addOwnerChatMessage("visitor", "Errore invio messaggio: " + (err.message || String(err)));
+    }
+  }
+
+  function bindOwnerComposerFinal(){
+    const send = document.getElementById("followmeOwnerChatSend");
+    const input = document.getElementById("followmeOwnerChatInput");
+
+    if(send && send.dataset.finalDialogueBound !== "1"){
+      send.dataset.finalDialogueBound = "1";
+      send.onclick = function(ev){
+        ev.preventDefault();
+        sendOwnerReply();
+      };
+    }
+
+    if(input && input.dataset.finalDialogueBound !== "1"){
+      input.dataset.finalDialogueBound = "1";
+      input.addEventListener("keydown", function(e){
+        if(e.key === "Enter" && !e.shiftKey){
+          e.preventDefault();
+          sendOwnerReply();
+        }
+      });
+    }
+  }
+
+  function boot(){
+    bindOwnerComposerFinal();
+
+    const sessionId = getParam("chatSession");
+
+    if(sessionId){
+      loadOwnerConversation(sessionId);
+    }else{
+      setTimeout(refreshSessionsAndMaybeOpenLatest, 700);
+      setTimeout(refreshSessionsAndMaybeOpenLatest, 1800);
+    }
+
+    if(!ownerSessionsPollTimer){
+      ownerSessionsPollTimer = setInterval(refreshSessionsAndMaybeOpenLatest, 3500);
+    }
+  }
+
+  window.followMeOwnerChatFinalFix = {
+    refreshSessionsAndMaybeOpenLatest,
+    loadOwnerConversation,
+    pollOwnerMessages,
+    sendOwnerReply
+  };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 500);
   });
 })();
 </script>

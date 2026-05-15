@@ -9429,7 +9429,7 @@ app.get('/api/followme/:code/chat/sessions', async (req, res) => {
        FROM followme_chat_sessions s
        WHERE s.project_id = $1
          AND s.status = 'open'
-       ORDER BY s.created_at ASC
+       ORDER BY s.created_at DESC
        LIMIT 20`,
       [project.id]
     );
@@ -9475,9 +9475,7 @@ app.get('/api/followme/:code/chat/latest-open-session', async (req, res) => {
        FROM followme_chat_sessions
        WHERE project_id = $1
          AND status = 'open'
-       ORDER BY
-         CASE WHEN owner_opened_at IS NULL THEN 0 ELSE 1 END,
-         created_at DESC
+       ORDER BY created_at DESC
        LIMIT 1`,
       [project.id]
     );
