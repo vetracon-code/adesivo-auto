@@ -2287,10 +2287,56 @@
       padding-bottom:110px;
     }
 
+
+    /* Prompt insistente notifiche Follow Me: attivo finché manca la subscription reale */
+    @keyframes followmeNotifyPulse{
+      0%{
+        transform:translateY(0) scale(1);
+        box-shadow:0 0 0 0 rgba(200,255,46,.32), 0 14px 30px rgba(200,255,46,.16);
+      }
+      50%{
+        transform:translateY(-1px) scale(1.02);
+        box-shadow:0 0 0 10px rgba(200,255,46,0), 0 20px 38px rgba(200,255,46,.24);
+      }
+      100%{
+        transform:translateY(0) scale(1);
+        box-shadow:0 0 0 0 rgba(200,255,46,0), 0 14px 30px rgba(200,255,46,.16);
+      }
+    }
+
+    #notifyBtn.followme-notify-pulse{
+      animation:followmeNotifyPulse 1.35s ease-in-out infinite;
+      color:#101018 !important;
+      background:linear-gradient(135deg,#c8ff2e,#5ee7ff) !important;
+      border:0 !important;
+      font-weight:950 !important;
+    }
+
+    .followme-push-required-note{
+      display:none;
+      padding:12px 13px;
+      border-radius:18px;
+      color:#fff2c7;
+      background:rgba(255,210,90,.12);
+      border:1px solid rgba(255,210,90,.25);
+      font-size:.88rem;
+      line-height:1.35;
+      font-weight:850;
+    }
+
+    .followme-push-required-note.show{
+      display:block;
+    }
+
+    body.followme-push-missing #installNotificationsBox{
+      border-color:rgba(255,210,90,.34) !important;
+      box-shadow:0 0 0 1px rgba(255,210,90,.10), 0 18px 42px rgba(255,210,90,.08);
+    }
+
 </style>
 
-  <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v2">
-  <link rel="apple-touch-icon" href="/images/followme/icons/apple-touch-icon.png?v=followme-dynamic-qr-v2">
+  <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v3">
+  <link rel="apple-touch-icon" href="/images/followme/icons/apple-touch-icon.png?v=followme-dynamic-qr-v3">
 
 </head>
 <body>
@@ -2474,6 +2520,10 @@
 
       <div class="setup-primary-note" id="setupPrimaryNote">
         Le notifiche servono per ricevere subito gli avvisi quando qualcuno inquadra il QR o, in futuro, entra nella chat.
+      </div>
+
+      <div class="followme-push-required-note" id="followmePushRequiredNote">
+        ATTENZIONE: attiva subito le notifiche. Servono per ricevere gli avvisi del tuo QR e, in futuro, le nuove chat.
       </div>
 
       <button class="btn secondary" id="installHelpBtn" type="button">Come salvo l’App?</button>
@@ -5807,6 +5857,157 @@ bindInstallHelpSheet();
 
   window.addEventListener("pageshow", function(){
     setTimeout(bind, 150);
+  });
+})();
+</script>
+
+
+<script id="followme-real-push-state-assistant">
+(function(){
+  var hasAutoScrolledForPush = false;
+
+  function isIosDevice(){
+    return /iphone|ipad|ipod/i.test(navigator.userAgent || "");
+  }
+
+  function isStandaloneMode(){
+    return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  }
+
+  async function getRealPushSubscription(){
+    try{
+      if(!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+
+      var reg = await navigator.serviceWorker.ready.catch(function(){ return null; });
+      if(!reg || !reg.pushManager) return null;
+
+      return await reg.pushManager.getSubscription();
+    }catch(err){
+      console.warn("getRealPushSubscription error:", err);
+      return null;
+    }
+  }
+
+  function setPushPromptVisible(visible){
+    var box = document.getElementById("installNotificationsBox");
+    var btn = document.getElementById("notifyBtn");
+    var note = document.getElementById("followmePushRequiredNote");
+    var pushState = document.getElementById("detectedPushState");
+    var installState = document.getElementById("installState");
+
+    document.body.classList.toggle("followme-push-missing", !!visible);
+
+    if(note) note.classList.toggle("show", !!visible);
+
+    if(btn){
+      btn.classList.toggle("followme-notify-pulse", !!visible);
+      if(visible){
+        btn.textContent = "Attiva notifiche ora";
+      }
+    }
+
+    if(pushState){
+      pushState.textContent = visible ? "da attivare" : "attive";
+    }
+
+    if(installState && visible && isStandaloneMode()){
+      installState.classList.remove("install-danger","install-info","install-ok");
+      installState.classList.add("install-warning");
+      installState.innerHTML = "<strong>Attiva subito le notifiche.</strong><br>Servono per ricevere gli avvisi del tuo QR e le future richieste chat.";
+    }
+
+    if(installState && !visible && isStandaloneMode()){
+      installState.classList.remove("install-danger","install-info","install-warning");
+      installState.classList.add("install-ok");
+      installState.innerHTML = "<strong>App e notifiche attive.</strong><br>Riceverai gli avvisi su questo dispositivo.";
+    }
+  }
+
+  async function refreshRealPushState(options){
+    options = options || {};
+
+    var btn = document.getElementById("notifyBtn");
+    var box = document.getElementById("installNotificationsBox");
+
+    var shouldRequirePush = isStandaloneMode();
+
+    // Su iPhone Safari non installato non chiediamo push: prima va salvata l'App.
+    if(isIosDevice() && !isStandaloneMode()){
+      setPushPromptVisible(false);
+      return false;
+    }
+
+    if(!shouldRequirePush){
+      return false;
+    }
+
+    var sub = await getRealPushSubscription();
+    var active = !!sub;
+
+    setPushPromptVisible(!active);
+
+    if(!active && box && (!hasAutoScrolledForPush || options.forceScroll)){
+      hasAutoScrolledForPush = true;
+
+      setTimeout(function(){
+        try{
+          box.scrollIntoView({ behavior:"smooth", block:"center" });
+        }catch(e){
+          location.hash = "#installNotificationsBox";
+        }
+      }, 500);
+    }
+
+    return active;
+  }
+
+  function wrapEnableNotifications(){
+    if(typeof window.enableNotifications !== "function") return;
+    if(window.enableNotifications.__followmeWrapped === true) return;
+
+    var original = window.enableNotifications;
+
+    window.enableNotifications = async function(){
+      var result;
+      try{
+        result = await original.apply(this, arguments);
+      }finally{
+        setTimeout(function(){ refreshRealPushState({ forceScroll:true }); }, 500);
+        setTimeout(function(){ refreshRealPushState({ forceScroll:true }); }, 1600);
+      }
+      return result;
+    };
+
+    window.enableNotifications.__followmeWrapped = true;
+  }
+
+  function boot(){
+    wrapEnableNotifications();
+
+    setTimeout(function(){ refreshRealPushState({ forceScroll:true }); }, 650);
+    setTimeout(function(){ refreshRealPushState({ forceScroll:false }); }, 2200);
+  }
+
+  window.refreshRealFollowMePushState = refreshRealPushState;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 300);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(function(){ refreshRealPushState({ forceScroll:true }); }, 350);
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible"){
+      setTimeout(function(){ refreshRealPushState({ forceScroll:false }); }, 350);
+    }
   });
 })();
 </script>
