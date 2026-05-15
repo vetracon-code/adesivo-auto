@@ -8116,5 +8116,91 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+<script id="followme-chat-push-auto-open-client">
+(function(){
+  function normalizeCodeForChatAuto(v){
+    return String(v || "").trim().toUpperCase();
+  }
+
+  function currentFollowMeCodeForChatAuto(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return normalizeCodeForChatAuto(decodeURIComponent(m[1] || ""));
+    }catch(e){}
+    return "";
+  }
+
+  function openOwnerChatFromPushMessage(payload){
+    try{
+      var sessionId = payload && (payload.session_id || payload.sessionId);
+      var code = normalizeCodeForChatAuto((payload && payload.code) || currentFollowMeCodeForChatAuto() || "FM-DEMO");
+
+      if(!sessionId) return;
+
+      var currentCode = currentFollowMeCodeForChatAuto();
+      if(currentCode && code && currentCode !== code && currentCode.replace("-", "") !== code.replace("-", "")){
+        return;
+      }
+
+      var target = "/fm/app/" + encodeURIComponent(code) + "?chatSession=" + encodeURIComponent(sessionId) + "&focus=chat&autopush=1";
+
+      // Se siamo già sulla stessa sessione, non ricarichiamo.
+      var params = new URLSearchParams(location.search || "");
+      if(params.get("chatSession") === String(sessionId)){
+        document.body.classList.add("followme-chat-only-mode");
+        var screen = document.getElementById("followmeOwnerChatScreen");
+        if(screen) screen.style.display = "grid";
+        return;
+      }
+
+      // L'App è aperta: la trasformiamo navigando alla chat-only.
+      location.href = target;
+    }catch(err){
+      console.warn("openOwnerChatFromPushMessage error:", err);
+    }
+  }
+
+  if("serviceWorker" in navigator){
+    navigator.serviceWorker.addEventListener("message", function(event){
+      var data = event.data || {};
+      if(data.type === "FOLLOWME_CHAT_NEW_USER"){
+        openOwnerChatFromPushMessage(data);
+      }
+    });
+  }
+
+  window.openOwnerChatFromPushMessage = openOwnerChatFromPushMessage;
+})();
+</script>
+
+
+<script id="followme-force-chat-service-worker-v2">
+(function(){
+  async function updateChatServiceWorkerNow(){
+    try{
+      if(!("serviceWorker" in navigator)) return;
+      const reg = await navigator.serviceWorker.register("/service-worker.js?v=followme-chat-auto-open-20260515");
+      await navigator.serviceWorker.ready;
+      if(reg && typeof reg.update === "function") await reg.update();
+    }catch(err){
+      console.warn("updateChatServiceWorkerNow error:", err);
+    }
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", function(){
+      setTimeout(updateChatServiceWorkerNow, 300);
+    });
+  }else{
+    setTimeout(updateChatServiceWorkerNow, 300);
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(updateChatServiceWorkerNow, 500);
+  });
+})();
+</script>
+
 </body>
 </html>

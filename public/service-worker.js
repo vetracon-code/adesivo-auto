@@ -1,4 +1,5 @@
 const ANDROID_FIX_VERSION = '20260428140657';
+const FOLLOWME_CHAT_PUSH_AUTO_OPEN_VERSION = '20260515-CHAT-AUTO-OPEN';
 const FOLLOWME_CHAT_CLICK_FIX_VERSION = '20260515-1558';
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -29,6 +30,33 @@ self.addEventListener('push', (event) => {
   }
 
   const unreadCount = Number(data.unreadCount || 0);
+
+  const pushType = data.type || (data.data && data.data.type) || null;
+  const pushCode = data.code || (data.data && data.data.code) || null;
+  const pushSessionId = data.session_id || data.sessionId || (data.data && (data.data.session_id || data.data.sessionId)) || null;
+  const pushTargetUrl = data.targetUrl || data.url || data.relativeTargetUrl || (
+    pushType === 'followme_chat_new_user' && pushCode && pushSessionId
+      ? ('/fm/app/' + encodeURIComponent(pushCode) + '?chatSession=' + encodeURIComponent(pushSessionId) + '&focus=chat')
+      : null
+  );
+
+  if (pushType === 'followme_chat_new_user' && pushCode && pushSessionId) {
+    event.waitUntil((async () => {
+      try {
+        const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+        for (const client of clientList) {
+          if (client && client.url && client.url.startsWith(self.location.origin)) {
+            client.postMessage({
+              type: 'FOLLOWME_CHAT_NEW_USER',
+              code: pushCode,
+              session_id: pushSessionId,
+              targetUrl: pushTargetUrl
+            });
+          }
+        }
+      } catch (e) {}
+    })());
+  }
 
   const title = data.title || 'Nuova segnalazione ricevuta';
   const options = {

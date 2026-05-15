@@ -9058,22 +9058,30 @@ async function sendFollowMeNewChatPush(project, sessionId) {
       [project.id]
     );
 
-    const targetUrl = `/fm/app/${encodeURIComponent(project.code)}?chatSession=${encodeURIComponent(sessionId)}`;
+    const baseUrl = process.env.PUBLIC_BASE_URL || process.env.BASE_URL || 'https://adesivo-auto.onrender.com';
+    const canonicalCode = String(project.code || '').trim().toUpperCase();
+    const relativeTargetUrl = `/fm/app/${encodeURIComponent(canonicalCode)}?chatSession=${encodeURIComponent(sessionId)}&focus=chat`;
+    const targetUrl = baseUrl.replace(/\/$/, '') + relativeTargetUrl;
 
     const payload = JSON.stringify({
       title: 'Nuovo utente in chat 💬',
       body: 'Una nuova persona si è collegata al tuo FollowMe QR.',
       url: targetUrl,
       targetUrl,
+      relativeTargetUrl,
       type: 'followme_chat_new_user',
+      code: canonicalCode,
+      session_id: sessionId,
       icon: '/images/followme/icons/followme-icon-192.png',
       badge: '/images/followme/icons/followme-icon-192.png',
       timestamp: Date.now(),
       data: {
         type: 'followme_chat_new_user',
-        code: project.code,
+        code: canonicalCode,
         session_id: sessionId,
-        url: targetUrl
+        url: targetUrl,
+        targetUrl,
+        relativeTargetUrl
       }
     });
 
