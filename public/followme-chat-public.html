@@ -138,7 +138,73 @@
     .smallnote{
       text-align:center;color:rgba(255,255,255,.48);font-size:.72rem;padding:4px 10px 0;
     }
-  </style>
+  
+    /* Avatar chat FollowMe */
+    .boticon{
+      width:38px !important;
+      height:38px !important;
+      border-radius:0 !important;
+      background:transparent !important;
+      box-shadow:none !important;
+      font-size:1.65rem !important;
+      flex:0 0 auto !important;
+    }
+
+    .adminicon{
+      width:38px;
+      height:38px;
+      border-radius:999px;
+      flex:0 0 auto;
+      display:grid;
+      place-items:center;
+      background:
+        radial-gradient(circle at 50% 33%, #f1c7a5 0 28%, transparent 29%),
+        radial-gradient(circle at 44% 24%, #1d2028 0 18%, transparent 19%),
+        radial-gradient(circle at 57% 24%, #1d2028 0 18%, transparent 19%),
+        radial-gradient(circle at 50% 61%, #2c1c16 0 10%, transparent 11%),
+        linear-gradient(180deg,#263244,#101820);
+      border:1px solid rgba(255,255,255,.16);
+      box-shadow:0 10px 24px rgba(0,0,0,.22);
+      position:relative;
+      overflow:hidden;
+    }
+
+    .adminicon::before{
+      content:"";
+      position:absolute;
+      width:18px;
+      height:7px;
+      border-radius:999px;
+      background:#241713;
+      left:10px;
+      top:24px;
+      opacity:.95;
+    }
+
+    .adminicon::after{
+      content:"";
+      position:absolute;
+      width:10px;
+      height:8px;
+      border-radius:0 0 999px 999px;
+      background:#241713;
+      left:14px;
+      top:28px;
+      opacity:.9;
+    }
+
+    .msgrow.admin{
+      justify-content:flex-start;
+    }
+
+    .admin .bubble{
+      background:#162536;
+      border:1px solid rgba(94,231,255,.18);
+      color:#fff;
+      border-bottom-left-radius:7px;
+    }
+
+</style>
 </head>
 <body>
   <main class="chat">
@@ -177,13 +243,22 @@
 
   function row(kind, html, typing){
     const r = document.createElement("div");
-    r.className = "msgrow " + (kind === "user" ? "user" : "bot");
-    if(kind !== "user"){
+    r.className = "msgrow " + (kind === "user" ? "user" : (kind === "admin" ? "admin" : "bot"));
+
+    if(kind === "bot"){
       const ico = document.createElement("div");
       ico.className = "boticon";
       ico.textContent = "🤖";
       r.appendChild(ico);
     }
+
+    if(kind === "admin"){
+      const ico = document.createElement("div");
+      ico.className = "adminicon";
+      ico.setAttribute("aria-label", "Admin");
+      r.appendChild(ico);
+    }
+
     const b = document.createElement("div");
     b.className = "bubble";
     if(typing){
@@ -203,6 +278,10 @@
 
   function addUser(text){
     row("user", String(text || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+  }
+
+  function addAdmin(text){
+    row("admin", String(text || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
   }
 
   function botTypingThen(text, delay){
@@ -269,7 +348,7 @@
       if(data.success && Array.isArray(data.messages)){
         data.messages.forEach(m=>{
           lastMessageId = Math.max(lastMessageId, Number(m.id)||0);
-          if(m.sender === "owner") addBot(String(m.message || ""));
+          if(m.sender === "owner") addAdmin(String(m.message || ""));
         });
       }
     }catch(e){}
