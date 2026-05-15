@@ -2538,6 +2538,24 @@
       margin-top:0 !important;
     }
 
+
+    /* Preview FollowMe più rapida: evita sensazione di frame vuoto */
+    #simpleDestinationPreviewFrame{
+      background:
+        radial-gradient(circle at 20% 10%, rgba(200,255,46,.10), transparent 34%),
+        radial-gradient(circle at 88% 0%, rgba(94,231,255,.10), transparent 30%),
+        #101018;
+    }
+
+    .simple-preview-card.preview-loading #simpleDestinationPreviewFrame{
+      opacity:.72;
+    }
+
+    .simple-preview-card.preview-loaded #simpleDestinationPreviewFrame{
+      opacity:1;
+      transition:opacity .18s ease;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -2555,7 +2573,7 @@
     <section class="card simple-preview-card" id="simpleDestinationPreviewBlock" data-version="followme-simple-preview-final-20260513_224845">
       <div class="simple-preview-title">ORA STAI TRASMETTENDO QUESTO:</div>
       <div class="simple-preview-square">
-        <iframe id="simpleDestinationPreviewFrame" src="about:blank" loading="lazy"></iframe>
+        <iframe id="simpleDestinationPreviewFrame" src="about:blank" loading="eager"></iframe>
         <div class="simple-preview-empty" id="simpleDestinationPreviewEmpty">Imposta una destinazione per vedere cosa stai trasmettendo.</div>
 
         <div class="preview-fallback-box" id="previewFallbackBox">
@@ -7075,6 +7093,181 @@ document.addEventListener("visibilitychange", function(){
 
   window.addEventListener("pageshow", function(){
     setTimeout(boot, 100);
+  });
+})();
+</script>
+
+
+<script id="followme-final-preview-stabilizer">
+(function(){
+  var wantedUrl = "";
+  var lastLoadedUrl = "";
+  var loadTimer = null;
+  var observerStarted = false;
+
+  function cleanUrl(url){
+    try{
+      return String(url || "").trim();
+    }catch(e){
+      return "";
+    }
+  }
+
+  function isRealUrl(url){
+    return /^https?:\/\//i.test(cleanUrl(url));
+  }
+
+  function getFrame(){
+    return document.getElementById("simpleDestinationPreviewFrame");
+  }
+
+  function getCard(){
+    return document.getElementById("simpleDestinationPreviewBlock");
+  }
+
+  function markLoading(){
+    var card = getCard();
+    if(card){
+      card.classList.add("preview-loading");
+      card.classList.remove("preview-loaded");
+    }
+  }
+
+  function markLoaded(){
+    var card = getCard();
+    if(card){
+      card.classList.remove("preview-loading");
+      card.classList.add("preview-loaded");
+    }
+  }
+
+  function loadPreviewOnce(url){
+    var frame = getFrame();
+    var clean = cleanUrl(url);
+
+    if(!frame) return;
+    if(!isRealUrl(clean)) return;
+
+    wantedUrl = clean;
+
+    var current = cleanUrl(frame.getAttribute("src") || frame.src || "");
+
+    // Se è già lo stesso URL, non ricaricare.
+    if(current === clean || lastLoadedUrl === clean){
+      markLoaded();
+      return;
+    }
+
+    if(loadTimer){
+      clearTimeout(loadTimer);
+      loadTimer = null;
+    }
+
+    markLoading();
+
+    loadTimer = setTimeout(function(){
+      try{
+        var now = cleanUrl(frame.getAttribute("src") || frame.src || "");
+        if(now !== clean){
+          frame.setAttribute("loading", "eager");
+          frame.setAttribute("src", clean);
+          lastLoadedUrl = clean;
+        }
+      }catch(e){}
+
+      setTimeout(markLoaded, 550);
+    }, 60);
+  }
+
+  function protectAgainstBlankReset(){
+    if(observerStarted) return;
+
+    var frame = getFrame();
+    if(!frame) return;
+
+    observerStarted = true;
+
+    try{
+      var obs = new MutationObserver(function(){
+        var src = cleanUrl(frame.getAttribute("src") || "");
+
+        // Alcuni vecchi blocchi impostano about:blank prima di ricaricare.
+        // Se abbiamo già un URL valido desiderato, lo ripristiniamo subito.
+        if((src === "about:blank" || src === "") && isRealUrl(wantedUrl)){
+          setTimeout(function(){
+            var current = cleanUrl(frame.getAttribute("src") || "");
+            if(current === "about:blank" || current === ""){
+              frame.setAttribute("src", wantedUrl);
+              lastLoadedUrl = wantedUrl;
+            }
+          }, 40);
+          return;
+        }
+
+        if(isRealUrl(src)){
+          wantedUrl = src;
+          lastLoadedUrl = src;
+        }
+      });
+
+      obs.observe(frame, { attributes:true, attributeFilter:["src"] });
+    }catch(e){}
+  }
+
+  function replacePreviewFunction(){
+    if(window.updateSimpleDestinationPreview && window.updateSimpleDestinationPreview.__finalStabilizer === true){
+      return;
+    }
+
+    window.updateSimpleDestinationPreview = function(url){
+      var clean = cleanUrl(url);
+
+      if(!isRealUrl(clean)){
+        return;
+      }
+
+      // Mantiene memoria dell'URL attivo, utile anche per altri script.
+      window.__followMeActiveUrl = clean;
+      window.__followMePreviewWantedUrl = clean;
+
+      loadPreviewOnce(clean);
+    };
+
+    window.updateSimpleDestinationPreview.__finalStabilizer = true;
+  }
+
+  function boot(){
+    replacePreviewFunction();
+    protectAgainstBlankReset();
+
+    try{
+      var active = cleanUrl(window.__followMeActiveUrl || "");
+      var frame = getFrame();
+      var src = frame ? cleanUrl(frame.getAttribute("src") || "") : "";
+
+      if(isRealUrl(active)){
+        loadPreviewOnce(active);
+      }else if(isRealUrl(src)){
+        wantedUrl = src;
+        lastLoadedUrl = src;
+      }
+    }catch(e){}
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 100);
+    setTimeout(boot, 700);
+    setTimeout(boot, 1600);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 150);
   });
 })();
 </script>
