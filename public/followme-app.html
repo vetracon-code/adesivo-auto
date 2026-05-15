@@ -2427,6 +2427,35 @@
       cursor:pointer;
     }
 
+
+    /* Pulizia blocco App e notifiche quando la Web App è già installata */
+    body.followme-app-installed #installState,
+    body.followme-app-installed #iosSteps,
+    body.followme-app-installed #androidSteps,
+    body.followme-app-installed #desktopSteps,
+    body.followme-app-installed #installHelpBtn,
+    body.followme-app-installed #setupPrimaryNote{
+      display:none !important;
+    }
+
+    body.followme-app-installed #installNotificationsBox{
+      display:grid;
+      gap:12px;
+    }
+
+    body.followme-app-installed #notifyBtn,
+    body.followme-app-installed #refreshDataBtn{
+      display:flex !important;
+      align-items:center;
+      justify-content:center;
+      width:100% !important;
+      margin:0 !important;
+    }
+
+    body.followme-app-installed #pushDebugBox{
+      margin-top:4px;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -6705,6 +6734,69 @@ document.addEventListener("visibilitychange", function(){
   document.addEventListener("visibilitychange", function(){
     if(document.visibilityState === "visible"){
       setTimeout(showDeniedFrameIfNeeded, 500);
+    }
+  });
+})();
+</script>
+
+
+<script id="followme-clean-installed-notification-box-script">
+(function(){
+  function isStandaloneCleanBox(){
+    try{
+      return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    }catch(e){
+      return false;
+    }
+  }
+
+  function updateInstalledNotificationBox(){
+    try{
+      var installed = isStandaloneCleanBox();
+
+      document.body.classList.toggle("followme-app-installed", installed);
+
+      var detectedInstallState = document.getElementById("detectedInstallState");
+      if(detectedInstallState){
+        detectedInstallState.textContent = installed ? "App salvata" : "Browser";
+      }
+
+      var detectedDevice = document.getElementById("detectedDevice");
+      if(detectedDevice && detectedDevice.textContent === "Verifico..."){
+        var ua = navigator.userAgent || "";
+        if(/iphone|ipad|ipod/i.test(ua)){
+          detectedDevice.textContent = installed ? "iPhone Web App" : "iPhone Safari";
+        }else if(/android/i.test(ua)){
+          detectedDevice.textContent = installed ? "Android Web App" : "Android";
+        }else{
+          detectedDevice.textContent = "Computer";
+        }
+      }
+    }catch(err){
+      console.warn("updateInstalledNotificationBox error:", err);
+    }
+  }
+
+  window.updateInstalledNotificationBox = updateInstalledNotificationBox;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", updateInstalledNotificationBox);
+  }else{
+    updateInstalledNotificationBox();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(updateInstalledNotificationBox, 150);
+    setTimeout(updateInstalledNotificationBox, 900);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(updateInstalledNotificationBox, 150);
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible"){
+      setTimeout(updateInstalledNotificationBox, 150);
     }
   });
 })();
