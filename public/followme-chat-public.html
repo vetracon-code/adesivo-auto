@@ -255,6 +255,7 @@
   let followMeInfoChoiceSent = false;
   let followMeInfoExplained = false;
   let followMeRobotFallbackSent = false;
+  const renderedMessageKeys = new Set();
   const messages = document.getElementById("messages");
   const statusText = document.getElementById("statusText");
   const input = document.getElementById("messageInput");
@@ -283,6 +284,18 @@
       document.querySelectorAll(".choices").forEach(el => el.remove());
       document.querySelectorAll("[data-robot-typing='1']").forEach(el => el.remove());
     }catch(e){}
+  }
+
+  function messageKey(sender, text, id){
+    if(id) return "id:" + id;
+    return String(sender || "") + ":" + String(text || "").replace(/\s+/g, " ").trim().slice(0, 180);
+  }
+
+  function alreadyRendered(sender, text, id){
+    const key = messageKey(sender, text, id);
+    if(renderedMessageKeys.has(key)) return true;
+    renderedMessageKeys.add(key);
+    return false;
   }
 
   function row(kind, html, typing){
@@ -519,6 +532,7 @@
     input.value = "";
     addUser(text);
     playFollowMeSendSound();
+    alreadyRendered("visitor", text, null);
 
     if(shouldRobotFallback){
       followMeRobotFallbackSent = true;
@@ -536,6 +550,7 @@
     const data = await res.json().catch(()=>null);
     if(data && data.success && data.message && data.message.id){
       lastMessageId = Math.max(lastMessageId, Number(data.message.id) || 0);
+      alreadyRendered("visitor", text, data.message.id);
       setTimeout(poll, 700);
     }
   }

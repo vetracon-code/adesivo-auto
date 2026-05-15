@@ -3228,6 +3228,26 @@
       background:rgba(255,255,255,.07) !important;
     }
 
+
+    /* Fix chat UI: niente box "stai scrivendo", reset in alto, deduplica */
+    #followmeCurrentChatUserBox{
+      display:none !important;
+    }
+
+    .followme-owner-chat-actions #followmeTopResetChatBtn{
+      min-height:38px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.08);
+      color:#fff;
+      padding:0 10px;
+      font-weight:900;
+    }
+
+    .followme-owner-chat-bubble[data-message-id]{
+      position:relative;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -8302,6 +8322,7 @@ document.addEventListener("visibilitychange", function(){
     </div>
     <div class="followme-owner-chat-actions">
       <button type="button" id="followmeOwnerChatClose">Chiudi</button>
+      <button type="button" id="followmeTopResetChatBtn">Reset chat</button>
       <button type="button" id="followmeOwnerChatDisable">Spegni chat</button>
     </div>
   </header>
@@ -8312,7 +8333,7 @@ document.addEventListener("visibilitychange", function(){
       <strong id="followmeCurrentChatUserLabel">Stai scrivendo a: Utente</strong>
       <span>Gli altri utenti restano in attesa.</span>
     </div>
-    <button type="button" class="followme-reset-chat-btn" id="followmeResetChatBtn">Reset chat</button>
+    <button type="button" class="followme-reset-chat-btn" id="followmeResetChatBtn" style="display:none">Reset chat</button>
   </div>
   <div class="followme-name-suggestion" id="followmeNameSuggestionBox">
     <strong id="followmeNameSuggestionTitle">Nome rilevato</strong>
@@ -9588,7 +9609,7 @@ document.addEventListener("visibilitychange", function(){
   }
 
   function bindResetButtons(){
-    ["followmeResetChatBtn", "followmeChatWaitingReset"].forEach(function(id){
+    ["followmeResetChatBtn", "followmeTopResetChatBtn", "followmeChatWaitingReset"].forEach(function(id){
       const btn = document.getElementById(id);
       if(!btn || btn.dataset.resetBound === "1") return;
       btn.dataset.resetBound = "1";
@@ -9909,6 +9930,65 @@ document.addEventListener("visibilitychange", function(){
   window.addEventListener("pageshow", function(){
     setTimeout(boot, 400);
   });
+})();
+</script>
+
+
+<script id="followme-admin-message-dedupe-final">
+(function(){
+  const seenOwnerMessages = new Set();
+
+  function normalizeText(v){
+    return String(v || "").replace(/\s+/g, " ").trim();
+  }
+
+  function keyFor(sender, text, id){
+    if(id) return "id:" + id;
+    return String(sender || "") + ":" + normalizeText(text).slice(0, 180);
+  }
+
+  function removeDuplicateBubbles(){
+    const localSeen = new Set();
+    document.querySelectorAll("#followmeOwnerChatMessages .followme-owner-chat-bubble").forEach(function(b){
+      const id = b.getAttribute("data-message-id") || "";
+      const sender = b.classList.contains("owner") ? "owner" : (b.classList.contains("system") ? "system" : "visitor");
+      const key = keyFor(sender, b.textContent || "", id);
+
+      if(localSeen.has(key)){
+        b.remove();
+        return;
+      }
+
+      localSeen.add(key);
+    });
+  }
+
+  const originalAppendChild = Element.prototype.appendChild;
+  if(!window.__followMeAdminAppendDedupeInstalled){
+    window.__followMeAdminAppendDedupeInstalled = true;
+
+    Element.prototype.appendChild = function(child){
+      try{
+        if(this && this.id === "followmeOwnerChatMessages" && child && child.classList && child.classList.contains("followme-owner-chat-bubble")){
+          const sender = child.classList.contains("owner") ? "owner" : (child.classList.contains("system") ? "system" : "visitor");
+          const key = keyFor(sender, child.textContent || "", child.getAttribute && child.getAttribute("data-message-id"));
+
+          if(seenOwnerMessages.has(key)){
+            return child;
+          }
+
+          seenOwnerMessages.add(key);
+          setTimeout(removeDuplicateBubbles, 50);
+        }
+      }catch(e){}
+
+      return originalAppendChild.call(this, child);
+    };
+  }
+
+  window.followMeRemoveDuplicateChatBubbles = removeDuplicateBubbles;
+
+  setInterval(removeDuplicateBubbles, 1200);
 })();
 </script>
 
