@@ -2128,8 +2128,7 @@
         Le notifiche servono per ricevere subito gli avvisi quando qualcuno inquadra il QR o, in futuro, entra nella chat.
       </div>
 <button class="btn secondary" id="installHelpBtn" onclick="showInstallHelp()">Come salvo l’App?</button>
-      <button class="btn" id="notifyBtn" onclick="enableNotifications()">Attiva notifiche</button>
-      <button class="btn secondary" id="applePushTestBtn" type="button" onclick="testAppleNotificationPrompt()" style="border:1px solid rgba(200,255,46,.45);color:#c8ff2e;">TEST Apple notifiche</button>
+      <button class="btn" id="notifyBtn" type="button" onclick="enableNotifications()">Attiva notifiche</button>
       <button class="btn secondary" id="refreshDataBtn" onclick="tripleRefreshFollowMe()">Aggiorna dati</button>
       <a class="followme-chat-demo-btn" id="openChatDemoBtn" href="/followme-chat-demo.html" target="_blank" rel="noopener">Prova Chat</a>
       <pre id="pushDebugBox" style="white-space:pre-wrap;background:rgba(0,0,0,.32);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:12px;color:#c8ff2e;font-size:.78rem;line-height:1.35;display:none;"></pre>
@@ -2891,103 +2890,117 @@ function resetPushDebug(){
 }
 
 async function enableNotifications(){
-  resetPushDebug();
+  const box = document.getElementById("pushDebugBox");
+
+  function log(line){
+    try{
+      if(box){
+        box.style.display = "block";
+        box.textContent += line + "\n";
+      }
+    }catch(e){}
+  }
 
   try{
+    if(box){
+      box.style.display = "block";
+      box.textContent = "";
+    }
+
     CODE = getCode();
 
-    pushDebugLog("CODE: " + CODE);
-    pushDebugLog("UserAgent: " + navigator.userAgent);
-    pushDebugLog("isIos: " + isIos());
-    pushDebugLog("isStandalone: " + isStandalone());
-    pushDebugLog("Notification in window: " + ("Notification" in window));
-    pushDebugLog("Notification.permission iniziale: " + (("Notification" in window) ? Notification.permission : "non disponibile"));
-    pushDebugLog("serviceWorker supportato: " + ("serviceWorker" in navigator));
-    pushDebugLog("PushManager supportato: " + ("PushManager" in window));
+    log("CLICK ATTIVA NOTIFICHE RICEVUTO");
+    log("CODE: " + CODE);
+    log("UserAgent: " + navigator.userAgent);
+    log("isIos: " + isIos());
+    log("isStandalone: " + isStandalone());
+    log("Notification disponibile: " + ("Notification" in window));
+    log("ServiceWorker disponibile: " + ("serviceWorker" in navigator));
+    log("PushManager disponibile: " + ("PushManager" in window));
 
     if(isIos() && !isStandalone()){
-      showInstallHelp();
-      pushDebugLog("STOP: iPhone non in modalità Home Screen/PWA.");
+      log("STOP: iPhone non in modalità Web App.");
       toast("Su iPhone salva prima l’App nella schermata Home.");
+      showInstallHelp();
       return;
     }
 
     if(!("Notification" in window)){
-      pushDebugLog("STOP: Notification API non disponibile.");
-      toast("Notifiche non supportate su questo dispositivo.");
+      log("STOP: Notification API non disponibile.");
+      toast("Notifiche non supportate.");
       return;
     }
 
     if(!("serviceWorker" in navigator) || !("PushManager" in window)){
-      pushDebugLog("STOP: ServiceWorker o PushManager non disponibili.");
+      log("STOP: ServiceWorker o PushManager non disponibili.");
       toast("Notifiche non supportate su questo dispositivo.");
       return;
     }
 
     /*
-      IMPORTANTE iPhone:
-      Notification.requestPermission() deve essere chiamata subito dopo il tap.
-      Non facciamo prima await su service worker/VAPID, altrimenti iOS può ignorare il gesto utente.
+      Punto decisivo:
+      stessa logica del pulsante TEST Apple che ha funzionato.
+      La richiesta Apple parte subito dentro il click.
     */
+    log("Permission prima: " + Notification.permission);
+
     let permission = Notification.permission;
-    pushDebugLog("Permission prima della richiesta: " + permission);
 
     if(permission !== "granted"){
-      pushDebugLog("Chiedo autorizzazione notifiche subito dopo il tap...");
+      log("Chiedo autorizzazione Apple ora...");
       permission = await Notification.requestPermission();
-      pushDebugLog("Permission dopo richiesta: " + permission);
+      log("Permission dopo richiesta Apple: " + permission);
     }else{
-      pushDebugLog("Permission già granted.");
+      log("Permission già granted.");
     }
 
     if(permission !== "granted"){
-      pushDebugLog("STOP: notifiche non autorizzate.");
+      log("STOP: autorizzazione notifiche non concessa.");
       toast("Notifiche non autorizzate.");
       return;
     }
 
-    pushDebugLog("Registro service worker...");
-    const reg = await navigator.serviceWorker.register("/service-worker.js?v=followme-push-v2");
+    log("Registro service worker...");
+    const reg = await navigator.serviceWorker.register("/service-worker.js?v=followme-push-final");
     await navigator.serviceWorker.ready;
-    pushDebugLog("Service worker pronto.");
+    log("Service worker pronto.");
 
-    pushDebugLog("Recupero VAPID public key...");
+    log("Recupero VAPID public key...");
     const vapidRes = await fetch("/api/push/public-key", { cache:"no-store" });
     const vapidData = await vapidRes.json().catch(()=>null);
 
     if(!vapidRes.ok || !vapidData || !vapidData.publicKey){
-      pushDebugLog("STOP: VAPID public key non disponibile.");
+      log("STOP: VAPID public key non disponibile.");
       toast("Chiave notifiche non disponibile.");
       return;
     }
 
-    pushDebugLog("VAPID public key ricevuta.");
+    log("VAPID public key ricevuta.");
 
-    pushDebugLog("Controllo subscription esistente...");
+    log("Controllo subscription esistente...");
     let sub = await reg.pushManager.getSubscription();
 
     if(sub){
-      pushDebugLog("Subscription esistente trovata.");
+      log("Subscription esistente trovata.");
     }else{
-      pushDebugLog("Nessuna subscription esistente. Creo nuova subscription...");
-
+      log("Creo nuova subscription...");
       sub = await reg.pushManager.subscribe({
         userVisibleOnly:true,
         applicationServerKey:urlBase64ToUint8Array(vapidData.publicKey)
       });
-
-      pushDebugLog("Nuova subscription creata.");
+      log("Nuova subscription creata.");
     }
 
     const subJson = sub.toJSON();
 
     if(!subJson || !subJson.endpoint || !subJson.keys || !subJson.keys.p256dh || !subJson.keys.auth){
-      pushDebugLog("STOP: subscription creata ma incompleta.");
-      toast("Subscription notifiche incompleta.");
+      log("STOP: subscription incompleta.");
+      toast("Subscription incompleta.");
       return;
     }
 
-    pushDebugLog("Invio subscription al server Follow Me...");
+    log("Endpoint: " + subJson.endpoint.slice(0, 80) + "...");
+    log("Invio subscription al server Follow Me...");
 
     const res = await fetch("/api/followme/" + encodeURIComponent(CODE) + "/subscribe", {
       method:"POST",
@@ -2995,29 +3008,45 @@ async function enableNotifications(){
       body:JSON.stringify({ subscription:subJson })
     });
 
-    pushDebugLog("Server subscribe status: " + res.status);
+    log("Server subscribe status: " + res.status);
 
     const data = await res.json().catch(()=>null);
-    pushDebugLog("Server response: " + JSON.stringify(data));
+    log("Server response: " + JSON.stringify(data));
 
     if(!res.ok || !data || !data.success){
       throw new Error((data && data.error) || "Errore salvataggio subscription Follow Me");
     }
 
-    pushDebugLog("OK: subscription Follow Me salvata.");
+    log("OK: subscription Follow Me salvata.");
     toast("Notifiche attivate.");
 
-    if(typeof updateManifestAndInstallState === "function"){
-      try{ updateManifestAndInstallState(); }catch(e){}
+    const notifyBtn = document.getElementById("notifyBtn");
+    if(notifyBtn){
+      notifyBtn.textContent = "Notifiche attive";
+      notifyBtn.classList.remove("followme-push-pulse-v4");
+      notifyBtn.disabled = true;
     }
 
-    if(typeof window.refreshPushNagV4 === "function"){
-      try{ await window.refreshPushNagV4({ forceScroll:false }); }catch(e){}
+    const state = document.getElementById("installState");
+    if(state){
+      state.classList.remove("install-danger","install-warning","install-info");
+      state.classList.add("install-ok");
+      state.innerHTML = "<strong>App e notifiche attive.</strong><br>Riceverai gli avvisi su questo dispositivo.";
+    }
+
+    const pushState = document.getElementById("detectedPushState");
+    if(pushState){
+      pushState.textContent = "attive";
+    }
+
+    const fixed = document.getElementById("followmePushFixedV4");
+    if(fixed){
+      fixed.classList.remove("show");
     }
 
   }catch(err){
     console.error("Follow Me enableNotifications error:", err);
-    pushDebugLog("ERRORE: " + (err.message || String(err)));
+    log("ERRORE: " + (err.message || String(err)));
     toast("Errore notifiche: " + (err.message || String(err)));
   }
 }
@@ -5260,63 +5289,6 @@ bindInstallHelpSheet();
 
 
 
-
-<script id="direct-apple-notification-test">
-async function testAppleNotificationPrompt(){
-  const box = document.getElementById("pushDebugBox");
-
-  try{
-    if(box){
-      box.style.display = "block";
-      box.textContent = "";
-      box.textContent += "CLICK TEST APPLE RICEVUTO\n";
-      box.textContent += "UserAgent: " + navigator.userAgent + "\n";
-      box.textContent += "standalone matchMedia: " + window.matchMedia("(display-mode: standalone)").matches + "\n";
-      box.textContent += "navigator.standalone: " + window.navigator.standalone + "\n";
-      box.textContent += "Notification disponibile: " + ("Notification" in window) + "\n";
-      box.textContent += "ServiceWorker disponibile: " + ("serviceWorker" in navigator) + "\n";
-      box.textContent += "PushManager disponibile: " + ("PushManager" in window) + "\n";
-    }
-
-    if(!("Notification" in window)){
-      if(box) box.textContent += "STOP: Notification API non disponibile.\n";
-      alert("Notification API non disponibile su questo dispositivo.");
-      return;
-    }
-
-    if(box) box.textContent += "Permission prima: " + Notification.permission + "\n";
-
-    /*
-      Questo è il test più importante:
-      requestPermission viene chiamato direttamente dentro il click.
-    */
-    const permission = await Notification.requestPermission();
-
-    if(box){
-      box.textContent += "Permission dopo richiesta Apple: " + permission + "\n";
-    }
-
-    if(permission === "granted"){
-      if(box) box.textContent += "OK: Apple ha autorizzato le notifiche.\n";
-      alert("Notifiche autorizzate da Apple.");
-    }else if(permission === "denied"){
-      if(box) box.textContent += "BLOCCO: notifiche negate. Serve riabilitarle dalle impostazioni iPhone/Safari.\n";
-      alert("Notifiche negate. Controlla le impostazioni iPhone/Safari.");
-    }else{
-      if(box) box.textContent += "ATTENZIONE: permesso rimasto su default. Apple non ha mostrato o completato la richiesta.\n";
-      alert("Permesso non concesso. La richiesta Apple non è stata completata.");
-    }
-
-  }catch(err){
-    console.error("testAppleNotificationPrompt error:", err);
-    if(box){
-      box.style.display = "block";
-      box.textContent += "ERRORE TEST APPLE: " + (err.message || String(err)) + "\n";
-    }
-    alert("Errore test notifiche: " + (err.message || String(err)));
-  }
-}
-</script>
 
 </body>
 </html>
