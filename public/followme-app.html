@@ -2333,10 +2333,112 @@
       box-shadow:0 0 0 1px rgba(255,210,90,.10), 0 18px 42px rgba(255,210,90,.08);
     }
 
+
+    /* FollowMe push nag v4: insiste finché manca la subscription reale */
+    @keyframes followmePushPulseV4{
+      0%{
+        transform:scale(1);
+        box-shadow:0 0 0 0 rgba(200,255,46,.36), 0 14px 30px rgba(200,255,46,.16);
+      }
+      50%{
+        transform:scale(1.025);
+        box-shadow:0 0 0 12px rgba(200,255,46,0), 0 20px 40px rgba(200,255,46,.24);
+      }
+      100%{
+        transform:scale(1);
+        box-shadow:0 0 0 0 rgba(200,255,46,0), 0 14px 30px rgba(200,255,46,.16);
+      }
+    }
+
+    #notifyBtn.followme-push-pulse-v4{
+      animation:followmePushPulseV4 1.25s ease-in-out infinite !important;
+      color:#101018 !important;
+      background:linear-gradient(135deg,#c8ff2e,#5ee7ff) !important;
+      border:0 !important;
+      font-weight:950 !important;
+    }
+
+    .followme-push-fixed-v4{
+      position:fixed;
+      left:12px;
+      right:12px;
+      bottom:calc(12px + env(safe-area-inset-bottom));
+      z-index:99997;
+      display:none;
+      grid-template-columns:1fr auto;
+      gap:10px;
+      align-items:center;
+      padding:12px;
+      border-radius:22px;
+      color:#fff;
+      background:
+        radial-gradient(circle at 14% 0%, rgba(200,255,46,.22), transparent 34%),
+        radial-gradient(circle at 90% 0%, rgba(94,231,255,.16), transparent 30%),
+        rgba(16,24,32,.97);
+      border:1px solid rgba(255,255,255,.18);
+      box-shadow:0 20px 60px rgba(0,0,0,.42);
+      backdrop-filter:blur(14px);
+    }
+
+    .followme-push-fixed-v4.show{
+      display:grid;
+    }
+
+    .followme-push-fixed-v4 strong{
+      display:block;
+      font-size:.92rem;
+      line-height:1.16;
+      font-weight:950;
+    }
+
+    .followme-push-fixed-v4 span{
+      display:block;
+      margin-top:3px;
+      color:rgba(255,255,255,.68);
+      font-size:.76rem;
+      line-height:1.25;
+    }
+
+    .followme-push-fixed-v4 button{
+      min-height:42px;
+      border:0;
+      border-radius:16px;
+      padding:0 13px;
+      color:#101018;
+      background:linear-gradient(135deg,#c8ff2e,#5ee7ff);
+      font-weight:950;
+      animation:followmePushPulseV4 1.25s ease-in-out infinite;
+    }
+
+    .followme-push-note-v4{
+      display:none;
+      padding:12px 13px;
+      border-radius:18px;
+      color:#fff2c7;
+      background:rgba(255,210,90,.12);
+      border:1px solid rgba(255,210,90,.25);
+      font-size:.88rem;
+      line-height:1.35;
+      font-weight:850;
+    }
+
+    .followme-push-note-v4.show{
+      display:block;
+    }
+
+    body.followme-push-missing-v4 #installNotificationsBox{
+      border-color:rgba(255,210,90,.38) !important;
+      box-shadow:0 0 0 1px rgba(255,210,90,.12), 0 18px 42px rgba(255,210,90,.10);
+    }
+
+    body.followme-push-missing-v4{
+      padding-bottom:118px;
+    }
+
 </style>
 
-  <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v3">
-  <link rel="apple-touch-icon" href="/images/followme/icons/apple-touch-icon.png?v=followme-dynamic-qr-v3">
+  <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v4">
+  <link rel="apple-touch-icon" href="/images/followme/icons/apple-touch-icon.png?v=followme-dynamic-qr-v4">
 
 </head>
 <body>
@@ -2526,6 +2628,10 @@
         ATTENZIONE: attiva subito le notifiche. Servono per ricevere gli avvisi del tuo QR e, in futuro, le nuove chat.
       </div>
 
+      <div class="followme-push-note-v4" id="followmePushNoteV4">
+        ATTENZIONE: attiva subito le notifiche. Servono per ricevere gli avvisi del tuo QR e le future richieste chat.
+      </div>
+
       <button class="btn secondary" id="installHelpBtn" type="button">Come salvo l’App?</button>
       <button class="btn" id="notifyBtn" onclick="enableNotifications()">Attiva notifiche</button>
       <button class="btn secondary" id="refreshDataBtn" onclick="tripleRefreshFollowMe()">Aggiorna dati</button>
@@ -2628,6 +2734,16 @@
         <button class="iphone-install-close" type="button" id="iphoneInstallCloseBtn">Chiudi</button>
       </div>
     </div>
+  </div>
+
+
+  
+  <div class="followme-push-fixed-v4" id="followmePushFixedV4">
+    <div>
+      <strong>Attiva subito le notifiche</strong>
+      <span>Servono per ricevere gli avvisi del tuo QR.</span>
+    </div>
+    <button type="button" id="followmePushFixedBtnV4">Attiva ora</button>
   </div>
 
 
@@ -6007,6 +6123,206 @@ bindInstallHelpSheet();
   document.addEventListener("visibilitychange", function(){
     if(document.visibilityState === "visible"){
       setTimeout(function(){ refreshRealPushState({ forceScroll:false }); }, 350);
+    }
+  });
+})();
+</script>
+
+
+<script id="followme-push-nag-v4-script">
+(function(){
+  var autoScrollCount = 0;
+
+  function isIosDeviceV4(){
+    return /iphone|ipad|ipod/i.test(navigator.userAgent || "");
+  }
+
+  function isStandaloneV4(){
+    try{
+      return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    }catch(e){
+      return false;
+    }
+  }
+
+  function cameFromPwaStartUrlV4(){
+    try{
+      var p = new URLSearchParams(location.search || "");
+      if(p.get("source") === "pwa"){
+        localStorage.setItem("followmePwaOpened", "1");
+        return true;
+      }
+      return localStorage.getItem("followmePwaOpened") === "1";
+    }catch(e){
+      return false;
+    }
+  }
+
+  function shouldNagForPushV4(){
+    // Su iPhone Safari normale prima serve salvataggio App, quindi niente nag push.
+    if(isIosDeviceV4() && !isStandaloneV4() && !cameFromPwaStartUrlV4()){
+      return false;
+    }
+
+    // Se è PWA/standalone, o è stata aperta da start_url PWA, il nag deve partire.
+    return isStandaloneV4() || cameFromPwaStartUrlV4();
+  }
+
+  async function ensureServiceWorkerReadyV4(){
+    try{
+      if(!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+      var reg = await navigator.serviceWorker.register("/service-worker.js");
+      await navigator.serviceWorker.ready;
+      return reg;
+    }catch(err){
+      console.warn("ensureServiceWorkerReadyV4 error:", err);
+      return null;
+    }
+  }
+
+  async function getRealSubscriptionV4(){
+    try{
+      var reg = await ensureServiceWorkerReadyV4();
+      if(!reg || !reg.pushManager) return null;
+      return await reg.pushManager.getSubscription();
+    }catch(err){
+      console.warn("getRealSubscriptionV4 error:", err);
+      return null;
+    }
+  }
+
+  function scrollToPushBlockV4(force){
+    var box = document.getElementById("installNotificationsBox");
+    if(!box) return;
+
+    if(!force && autoScrollCount > 2) return;
+    autoScrollCount += 1;
+
+    setTimeout(function(){
+      try{
+        box.scrollIntoView({ behavior:"smooth", block:"center" });
+      }catch(e){
+        location.hash = "#installNotificationsBox";
+      }
+    }, 450);
+  }
+
+  function setNagVisibleV4(visible){
+    var fixed = document.getElementById("followmePushFixedV4");
+    var note = document.getElementById("followmePushNoteV4");
+    var btn = document.getElementById("notifyBtn");
+    var pushState = document.getElementById("detectedPushState");
+    var installState = document.getElementById("installState");
+
+    document.body.classList.toggle("followme-push-missing-v4", !!visible);
+
+    if(fixed) fixed.classList.toggle("show", !!visible);
+    if(note) note.classList.toggle("show", !!visible);
+
+    if(btn){
+      btn.classList.toggle("followme-push-pulse-v4", !!visible);
+      if(visible) btn.textContent = "Attiva notifiche ora";
+      else btn.textContent = "Notifiche attive";
+    }
+
+    if(pushState){
+      pushState.textContent = visible ? "da attivare" : "attive";
+    }
+
+    if(installState && visible){
+      installState.classList.remove("install-danger","install-info","install-ok");
+      installState.classList.add("install-warning");
+      installState.innerHTML = "<strong>Attiva subito le notifiche.</strong><br>Servono per ricevere gli avvisi del tuo QR e le future chat.";
+    }
+
+    if(installState && !visible && shouldNagForPushV4()){
+      installState.classList.remove("install-danger","install-info","install-warning");
+      installState.classList.add("install-ok");
+      installState.innerHTML = "<strong>App e notifiche attive.</strong><br>Riceverai gli avvisi su questo dispositivo.";
+    }
+  }
+
+  async function refreshPushNagV4(options){
+    options = options || {};
+
+    if(!shouldNagForPushV4()){
+      setNagVisibleV4(false);
+      return false;
+    }
+
+    var sub = await getRealSubscriptionV4();
+    var active = !!sub;
+
+    setNagVisibleV4(!active);
+
+    if(!active){
+      scrollToPushBlockV4(!!options.forceScroll);
+    }
+
+    return active;
+  }
+
+  function bindPushNagV4(){
+    var fixedBtn = document.getElementById("followmePushFixedBtnV4");
+
+    if(fixedBtn && fixedBtn.dataset.boundV4 !== "1"){
+      fixedBtn.dataset.boundV4 = "1";
+      fixedBtn.addEventListener("click", async function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        scrollToPushBlockV4(true);
+
+        if(typeof window.enableNotifications === "function"){
+          try{
+            await window.enableNotifications();
+          }catch(err){
+            console.error("fixed enableNotifications error:", err);
+          }
+        }
+
+        setTimeout(function(){ refreshPushNagV4({ forceScroll:true }); }, 700);
+        setTimeout(function(){ refreshPushNagV4({ forceScroll:true }); }, 2000);
+      });
+    }
+
+    var notifyBtn = document.getElementById("notifyBtn");
+    if(notifyBtn && notifyBtn.dataset.pushNagBoundV4 !== "1"){
+      notifyBtn.dataset.pushNagBoundV4 = "1";
+      notifyBtn.addEventListener("click", function(){
+        setTimeout(function(){ refreshPushNagV4({ forceScroll:true }); }, 800);
+        setTimeout(function(){ refreshPushNagV4({ forceScroll:true }); }, 2200);
+      });
+    }
+  }
+
+  function bootPushNagV4(){
+    bindPushNagV4();
+
+    setTimeout(function(){ refreshPushNagV4({ forceScroll:true }); }, 700);
+    setTimeout(function(){ refreshPushNagV4({ forceScroll:true }); }, 1800);
+    setTimeout(function(){ refreshPushNagV4({ forceScroll:false }); }, 4200);
+  }
+
+  window.refreshPushNagV4 = refreshPushNagV4;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bootPushNagV4);
+  }else{
+    bootPushNagV4();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(bootPushNagV4, 250);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(function(){ refreshPushNagV4({ forceScroll:true }); }, 350);
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible"){
+      setTimeout(function(){ refreshPushNagV4({ forceScroll:false }); }, 350);
     }
   });
 })();
