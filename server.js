@@ -9344,6 +9344,51 @@ app.post('/api/followme/:code/subscribe', express.json(), async (req, res) => {
 
 
 
+
+app.post('/api/followme/:code/unsubscribe', express.json(), async (req, res) => {
+  try {
+    const code = normalizeFollowMeCode(req.params.code);
+    const endpoint = String(req.body?.endpoint || '').trim();
+
+    if (!code || !endpoint) {
+      return res.status(400).json({ success:false, error:'Dati unsubscribe mancanti.' });
+    }
+
+    const projectRes = await pool.query(
+      `SELECT id, code, public_id
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!projectRes.rows.length) {
+      return res.status(404).json({ success:false, error:'Follow Me QR non trovato.' });
+    }
+
+    const project = projectRes.rows[0];
+
+    await pool.query(
+      `DELETE FROM followme_push_subscriptions
+       WHERE project_id = $1 AND endpoint = $2`,
+      [project.id, endpoint]
+    );
+
+    // Pulizia prudenziale anche della vecchia tabella condivisa, se l'endpoint era stato salvato lì.
+    await pool.query(
+      `DELETE FROM push_subscriptions
+       WHERE endpoint = $1`,
+      [endpoint]
+    );
+
+    return res.json({ success:true, unsubscribed:true });
+  } catch (err) {
+    console.error('followme unsubscribe error:', err);
+    return res.status(500).json({ success:false, error:'Errore disattivazione notifiche.' });
+  }
+});
+
+
 app.post('/api/debug/followme/subscription-diagnosis', express.json(), async (req, res) => {
   try {
     const key = String(req.body?.key || '').trim();
