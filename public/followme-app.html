@@ -7272,5 +7272,236 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+<script id="followme-hard-iframe-preview-guard">
+(function(){
+  var guardInstalled = false;
+  var wantedUrl = "";
+  var committedUrl = "";
+  var pendingTimer = null;
+
+  function clean(url){
+    try{
+      return String(url || "").trim();
+    }catch(e){
+      return "";
+    }
+  }
+
+  function isRealUrl(url){
+    return /^https?:\/\//i.test(clean(url));
+  }
+
+  function debug(msg){
+    try{
+      var p = new URLSearchParams(location.search || "");
+      if(p.get("previewdebug") === "1"){
+        console.log("[FollowMe Preview Guard]", msg);
+      }
+    }catch(e){}
+  }
+
+  function getFrame(){
+    return document.getElementById("simpleDestinationPreviewFrame");
+  }
+
+  function getNativeSrcDescriptor(){
+    var proto = HTMLIFrameElement && HTMLIFrameElement.prototype;
+    if(!proto) return null;
+    return Object.getOwnPropertyDescriptor(proto, "src");
+  }
+
+  function commitFrameUrl(frame, url, nativeDescriptor){
+    var target = clean(url);
+    if(!isRealUrl(target)) return;
+
+    if(pendingTimer){
+      clearTimeout(pendingTimer);
+      pendingTimer = null;
+    }
+
+    pendingTimer = setTimeout(function(){
+      try{
+        var current = clean(nativeDescriptor && nativeDescriptor.get ? nativeDescriptor.get.call(frame) : frame.getAttribute("src"));
+
+        if(current === target || committedUrl === target){
+          debug("skip duplicate commit: " + target);
+          return;
+        }
+
+        committedUrl = target;
+        wantedUrl = target;
+
+        debug("commit iframe src: " + target);
+
+        if(nativeDescriptor && nativeDescriptor.set){
+          nativeDescriptor.set.call(frame, target);
+        }else{
+          HTMLIFrameElement.prototype.setAttribute.call(frame, "src", target);
+        }
+      }catch(err){
+        console.warn("commitFrameUrl error:", err);
+      }
+    }, 70);
+  }
+
+  function installGuard(){
+    var frame = getFrame();
+    if(!frame) return false;
+    if(frame.dataset.hardPreviewGuard === "1") return true;
+
+    var nativeDescriptor = getNativeSrcDescriptor();
+    var nativeSetAttribute = frame.setAttribute.bind(frame);
+    var nativeGetAttribute = frame.getAttribute.bind(frame);
+
+    var initial = clean(nativeGetAttribute("src") || (nativeDescriptor && nativeDescriptor.get ? nativeDescriptor.get.call(frame) : ""));
+    if(isRealUrl(initial)){
+      wantedUrl = initial;
+      committedUrl = initial;
+    }
+
+    frame.dataset.hardPreviewGuard = "1";
+
+    try{
+      Object.defineProperty(frame, "src", {
+        configurable:true,
+        enumerable:true,
+        get:function(){
+          try{
+            return nativeDescriptor && nativeDescriptor.get ? nativeDescriptor.get.call(frame) : nativeGetAttribute("src");
+          }catch(e){
+            return nativeGetAttribute("src");
+          }
+        },
+        set:function(value){
+          var next = clean(value);
+
+          if(!next || next === "about:blank"){
+            if(isRealUrl(wantedUrl) || isRealUrl(committedUrl)){
+              debug("blocked blank src reset");
+              return;
+            }
+
+            debug("allow blank before real url");
+            if(nativeDescriptor && nativeDescriptor.set){
+              nativeDescriptor.set.call(frame, "about:blank");
+            }else{
+              nativeSetAttribute("src", "about:blank");
+            }
+            return;
+          }
+
+          if(!isRealUrl(next)){
+            debug("blocked non-real src: " + next);
+            return;
+          }
+
+          if(next === wantedUrl || next === committedUrl){
+            debug("blocked duplicate src setter: " + next);
+            return;
+          }
+
+          wantedUrl = next;
+          commitFrameUrl(frame, next, nativeDescriptor);
+        }
+      });
+    }catch(err){
+      console.warn("iframe src property guard failed:", err);
+    }
+
+    frame.setAttribute = function(name, value){
+      if(String(name || "").toLowerCase() !== "src"){
+        return nativeSetAttribute(name, value);
+      }
+
+      var next = clean(value);
+
+      if(!next || next === "about:blank"){
+        if(isRealUrl(wantedUrl) || isRealUrl(committedUrl)){
+          debug("blocked blank setAttribute reset");
+          return;
+        }
+
+        debug("allow blank setAttribute before real url");
+        return nativeSetAttribute("src", "about:blank");
+      }
+
+      if(!isRealUrl(next)){
+        debug("blocked non-real setAttribute src: " + next);
+        return;
+      }
+
+      if(next === wantedUrl || next === committedUrl){
+        debug("blocked duplicate setAttribute src: " + next);
+        return;
+      }
+
+      wantedUrl = next;
+      commitFrameUrl(frame, next, nativeDescriptor);
+    };
+
+    guardInstalled = true;
+    debug("hard iframe guard installed");
+    return true;
+  }
+
+  function forceCurrentActivePreview(){
+    try{
+      var frame = getFrame();
+      if(!frame) return;
+
+      var active = clean(window.__followMeActiveUrl || window.__followMePreviewWantedUrl || "");
+      var current = clean(frame.getAttribute("src") || frame.src || "");
+
+      if(isRealUrl(active)){
+        wantedUrl = active;
+        if(current !== active){
+          frame.src = active;
+        }
+      }else if(isRealUrl(current)){
+        wantedUrl = current;
+        committedUrl = current;
+      }
+    }catch(e){}
+  }
+
+  function boot(){
+    installGuard();
+    forceCurrentActivePreview();
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 80);
+    setTimeout(boot, 500);
+    setTimeout(boot, 1400);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 120);
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible"){
+      setTimeout(boot, 120);
+    }
+  });
+
+  window.followMePreviewHardGuardStatus = function(){
+    return {
+      installed: guardInstalled,
+      wantedUrl: wantedUrl,
+      committedUrl: committedUrl,
+      frameSrc: (getFrame() && (getFrame().getAttribute("src") || getFrame().src)) || ""
+    };
+  };
+})();
+</script>
+
 </body>
 </html>
