@@ -2129,6 +2129,7 @@
       </div>
 <button class="btn secondary" id="installHelpBtn" onclick="showInstallHelp()">Come salvo l’App?</button>
       <button class="btn" id="notifyBtn" onclick="enableNotifications()">Attiva notifiche</button>
+      <button class="btn secondary" id="applePushTestBtn" type="button" onclick="testAppleNotificationPrompt()" style="border:1px solid rgba(200,255,46,.45);color:#c8ff2e;">TEST Apple notifiche</button>
       <button class="btn secondary" id="refreshDataBtn" onclick="tripleRefreshFollowMe()">Aggiorna dati</button>
       <a class="followme-chat-demo-btn" id="openChatDemoBtn" href="/followme-chat-demo.html" target="_blank" rel="noopener">Prova Chat</a>
       <pre id="pushDebugBox" style="white-space:pre-wrap;background:rgba(0,0,0,.32);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:12px;color:#c8ff2e;font-size:.78rem;line-height:1.35;display:none;"></pre>
@@ -5258,6 +5259,64 @@ bindInstallHelpSheet();
 </script>
 
 
+
+
+<script id="direct-apple-notification-test">
+async function testAppleNotificationPrompt(){
+  const box = document.getElementById("pushDebugBox");
+
+  try{
+    if(box){
+      box.style.display = "block";
+      box.textContent = "";
+      box.textContent += "CLICK TEST APPLE RICEVUTO\n";
+      box.textContent += "UserAgent: " + navigator.userAgent + "\n";
+      box.textContent += "standalone matchMedia: " + window.matchMedia("(display-mode: standalone)").matches + "\n";
+      box.textContent += "navigator.standalone: " + window.navigator.standalone + "\n";
+      box.textContent += "Notification disponibile: " + ("Notification" in window) + "\n";
+      box.textContent += "ServiceWorker disponibile: " + ("serviceWorker" in navigator) + "\n";
+      box.textContent += "PushManager disponibile: " + ("PushManager" in window) + "\n";
+    }
+
+    if(!("Notification" in window)){
+      if(box) box.textContent += "STOP: Notification API non disponibile.\n";
+      alert("Notification API non disponibile su questo dispositivo.");
+      return;
+    }
+
+    if(box) box.textContent += "Permission prima: " + Notification.permission + "\n";
+
+    /*
+      Questo è il test più importante:
+      requestPermission viene chiamato direttamente dentro il click.
+    */
+    const permission = await Notification.requestPermission();
+
+    if(box){
+      box.textContent += "Permission dopo richiesta Apple: " + permission + "\n";
+    }
+
+    if(permission === "granted"){
+      if(box) box.textContent += "OK: Apple ha autorizzato le notifiche.\n";
+      alert("Notifiche autorizzate da Apple.");
+    }else if(permission === "denied"){
+      if(box) box.textContent += "BLOCCO: notifiche negate. Serve riabilitarle dalle impostazioni iPhone/Safari.\n";
+      alert("Notifiche negate. Controlla le impostazioni iPhone/Safari.");
+    }else{
+      if(box) box.textContent += "ATTENZIONE: permesso rimasto su default. Apple non ha mostrato o completato la richiesta.\n";
+      alert("Permesso non concesso. La richiesta Apple non è stata completata.");
+    }
+
+  }catch(err){
+    console.error("testAppleNotificationPrompt error:", err);
+    if(box){
+      box.style.display = "block";
+      box.textContent += "ERRORE TEST APPLE: " + (err.message || String(err)) + "\n";
+    }
+    alert("Errore test notifiche: " + (err.message || String(err)));
+  }
+}
+</script>
 
 </body>
 </html>
