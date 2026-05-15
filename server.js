@@ -9357,6 +9357,8 @@ app.post('/api/followme/:code/subscribe', express.json(), async (req, res) => {
 
     const project = projectRes.rows[0];
 
+    const userAgent = req.headers['user-agent'] || null;
+
     await pool.query(
       `INSERT INTO followme_push_subscriptions
        (project_id, code, endpoint, p256dh, auth, user_agent, updated_at)
@@ -9373,11 +9375,37 @@ app.post('/api/followme/:code/subscribe', express.json(), async (req, res) => {
         subscription.endpoint,
         subscription.keys.p256dh,
         subscription.keys.auth,
-        req.headers['user-agent'] || null
+        userAgent
       ]
     );
 
-    return res.json({ success:true, saved:true, table:'followme_push_subscriptions' });
+    /*
+      Evita notifiche duplicate dopo reinstallazioni PWA/iPhone:
+      per lo stesso progetto e lo stesso user_agent conserva solo la subscription più recente.
+      Non tocca altri progetti e non tocca le subscription Auto.
+    */
+    await pool.query(
+      `WITH ranked AS (
+         SELECT id,
+                ROW_NUMBER() OVER (
+                  PARTITION BY project_id, COALESCE(user_agent, '')
+                  ORDER BY
+                    CASE WHEN endpoint = $2 THEN 0 ELSE 1 END,
+                    updated_at DESC NULLS LAST,
+                    id DESC
+                ) AS rn
+         FROM followme_push_subscriptions
+         WHERE project_id = $1
+           AND COALESCE(user_agent, '') = COALESCE($3, '')
+       )
+       DELETE FROM followme_push_subscriptions
+       WHERE id IN (
+         SELECT id FROM ranked WHERE rn > 1
+       )`,
+      [project.id, subscription.endpoint, userAgent]
+    );
+
+    return res.json({ success:true, saved:true, table:'followme_push_subscriptions', deduped:true });
   } catch (err) {
     console.error('followme subscribe error:', err);
     return res.status(500).json({ success:false, error:err.message || String(err) });
