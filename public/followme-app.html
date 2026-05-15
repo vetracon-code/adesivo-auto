@@ -8077,5 +8077,44 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+<script id="followme-force-service-worker-update-chat">
+(function(){
+  async function forceServiceWorkerUpdateForChat(){
+    try{
+      if(!("serviceWorker" in navigator)) return;
+
+      const reg = await navigator.serviceWorker.register("/service-worker.js?v=followme-chat-click-20260515-1558");
+      await navigator.serviceWorker.ready;
+
+      if(reg && typeof reg.update === "function"){
+        await reg.update();
+      }
+
+      if(navigator.serviceWorker.controller){
+        navigator.serviceWorker.controller.postMessage({
+          type:"FOLLOWME_CHAT_SW_REFRESH",
+          ts:Date.now()
+        });
+      }
+    }catch(err){
+      console.warn("forceServiceWorkerUpdateForChat error:", err);
+    }
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", function(){
+      setTimeout(forceServiceWorkerUpdateForChat, 500);
+    });
+  }else{
+    setTimeout(forceServiceWorkerUpdateForChat, 500);
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(forceServiceWorkerUpdateForChat, 800);
+  });
+})();
+</script>
+
 </body>
 </html>

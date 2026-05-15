@@ -1,4 +1,5 @@
 const ANDROID_FIX_VERSION = '20260428140657';
+const FOLLOWME_CHAT_CLICK_FIX_VERSION = '20260515-1558';
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
@@ -38,8 +39,12 @@ self.addEventListener('push', (event) => {
     renotify: !!data.renotify,
     requireInteraction: !!data.requireInteraction,
     data: {
-      url: data.url || '/owner-login.html',
-      targetUrl: data.targetUrl || data.url || '/owner-login.html',
+      url: data.url || data.relativeTargetUrl || '/owner-login.html',
+      targetUrl: data.targetUrl || data.url || data.relativeTargetUrl || '/owner-login.html',
+      relativeTargetUrl: data.relativeTargetUrl || null,
+      type: data.type || (data.data && data.data.type) || null,
+      code: data.code || (data.data && data.data.code) || null,
+      session_id: data.session_id || data.sessionId || (data.data && (data.data.session_id || data.data.sessionId)) || null,
       messageId: data.messageId || null,
       channel: data.channel || null,
       broadcastNotificationId: data.broadcastNotificationId || null,
@@ -61,7 +66,12 @@ self.addEventListener('notificationclick', (event) => {
   const data = event.notification && event.notification.data ? event.notification.data : {};
   const notificationId = data.broadcastNotificationId;
   const recipientId = data.broadcastRecipientId;
-  const rawTargetUrl = data.targetUrl || data.url || '/owner-login.html';
+  let rawTargetUrl = data.targetUrl || data.url || data.relativeTargetUrl || '/owner-login.html';
+
+  if (data.type === 'followme_chat_new_user' && data.code && data.session_id) {
+    rawTargetUrl = data.targetUrl || data.url || data.relativeTargetUrl || ('/fm/app/' + encodeURIComponent(data.code) + '?chatSession=' + encodeURIComponent(data.session_id) + '&focus=chat');
+  }
+
   const targetUrl = new URL(rawTargetUrl, self.location.origin).href;
 
   event.waitUntil((async () => {
