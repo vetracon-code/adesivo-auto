@@ -9171,6 +9171,54 @@ app.post('/api/followme/:code/chat/enable', express.json(), async (req, res) => 
   }
 });
 
+
+app.post('/api/followme/:code/chat/reset', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeChatSchema();
+
+    const code = normalizeFollowMeCode(req.params.code);
+
+    const projectRes = await pool.query(
+      `SELECT id, code
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!projectRes.rows.length) {
+      return res.status(404).json({ success:false, error:'FollowMe QR non trovato.' });
+    }
+
+    const project = projectRes.rows[0];
+
+    const deletedMessages = await pool.query(
+      `DELETE FROM followme_chat_messages
+       WHERE project_id = $1
+       RETURNING id`,
+      [project.id]
+    );
+
+    const deletedSessions = await pool.query(
+      `DELETE FROM followme_chat_sessions
+       WHERE project_id = $1
+       RETURNING id`,
+      [project.id]
+    );
+
+    return res.json({
+      success:true,
+      reset:true,
+      project_code:project.code,
+      deleted_sessions:deletedSessions.rows.length,
+      deleted_messages:deletedMessages.rows.length
+    });
+  } catch (err) {
+    console.error('followme chat reset error:', err);
+    return res.status(500).json({ success:false, error:'Errore pulizia chat.' });
+  }
+});
+
 app.post('/api/followme/:code/chat/disable', express.json(), async (req, res) => {
   try {
     await ensureFollowMeChatSchema();

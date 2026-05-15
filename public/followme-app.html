@@ -3109,6 +3109,54 @@
       background:linear-gradient(135deg,#c8ff2e,#5ee7ff) !important;
     }
 
+
+    /* UX chat: utente selezionato e reset */
+    .followme-current-chat-user{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin:0 0 8px;
+      padding:9px 10px;
+      border-radius:16px;
+      background:rgba(200,255,46,.08);
+      border:1px solid rgba(200,255,46,.20);
+      color:#fff;
+    }
+
+    .followme-current-chat-user strong{
+      display:block;
+      color:#dfff79;
+      font-size:.86rem;
+      letter-spacing:-.02em;
+    }
+
+    .followme-current-chat-user span{
+      display:block;
+      color:rgba(255,255,255,.62);
+      font-size:.72rem;
+      margin-top:2px;
+      line-height:1.25;
+    }
+
+    .followme-reset-chat-btn{
+      flex:0 0 auto;
+      min-height:30px !important;
+      height:30px !important;
+      padding:0 9px !important;
+      border-radius:999px !important;
+      border:1px solid rgba(255,255,255,.14) !important;
+      background:rgba(255,255,255,.07) !important;
+      color:rgba(255,255,255,.72) !important;
+      font-size:.7rem !important;
+      font-weight:850 !important;
+      box-shadow:none !important;
+    }
+
+    .followme-reset-chat-btn:active{
+      transform:scale(.98);
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -8188,6 +8236,13 @@ document.addEventListener("visibilitychange", function(){
   </header>
 
   <div class="followme-chat-session-strip" id="followmeOwnerChatSessionStrip"></div>
+  <div class="followme-current-chat-user" id="followmeCurrentChatUserBox">
+    <div>
+      <strong id="followmeCurrentChatUserLabel">Stai scrivendo a: Utente</strong>
+      <span>Gli altri utenti restano in attesa.</span>
+    </div>
+    <button type="button" class="followme-reset-chat-btn" id="followmeResetChatBtn">Reset chat</button>
+  </div>
   <section class="followme-owner-chat-messages" id="followmeOwnerChatMessages"></section>
 
   <footer class="followme-owner-chat-composer">
@@ -8659,6 +8714,7 @@ document.addEventListener("visibilitychange", function(){
     </div>
     <div class="followme-chat-waiting-actions">
       <button type="button" id="followmeChatWaitingClose">Chiudi</button>
+      <button type="button" id="followmeChatWaitingReset">Reset chat</button>
       <button type="button" id="followmeChatWaitingDisable">Spegni chat</button>
     </div>
   </header>
@@ -9354,6 +9410,135 @@ document.addEventListener("visibilitychange", function(){
   }
 
   setInterval(refreshNumberingAndLatest, 3000);
+})();
+</script>
+
+
+<script id="followme-chat-selected-user-and-reset">
+(function(){
+  function code(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function getParam(name){
+    try{ return new URLSearchParams(location.search || "").get(name) || ""; }
+    catch(e){ return ""; }
+  }
+
+  async function fetchSessions(){
+    try{
+      const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), { cache:"no-store" });
+      const data = await res.json().catch(()=>null);
+      if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)) return [];
+      return data.sessions;
+    }catch(e){
+      return [];
+    }
+  }
+
+  function userLabelForSession(sessions, sessionId){
+    const ordered = sessions.slice().sort(function(a,b){
+      return Number(a.display_index || 0) - Number(b.display_index || 0);
+    });
+
+    const foundIndex = ordered.findIndex(function(s){
+      return String(s.id) === String(sessionId);
+    });
+
+    if(foundIndex >= 0){
+      const display = Number(ordered[foundIndex].display_index);
+      return "Utente " + (Number.isFinite(display) && display > 0 ? display : (foundIndex + 1));
+    }
+
+    return "Utente";
+  }
+
+  async function updateSelectedUserLabel(){
+    const sessionId = getParam("chatSession");
+    const label = document.getElementById("followmeCurrentChatUserLabel");
+    const box = document.getElementById("followmeCurrentChatUserBox");
+
+    if(!label || !box) return;
+
+    if(!sessionId){
+      box.style.display = "none";
+      return;
+    }
+
+    box.style.display = "flex";
+
+    const sessions = await fetchSessions();
+    const userLabel = userLabelForSession(sessions, sessionId);
+
+    label.textContent = "Stai scrivendo a: " + userLabel;
+  }
+
+  async function resetChat(){
+    const ok = confirm("Vuoi pulire tutte le chat aperte e ripartire da zero? Questa azione elimina le conversazioni di test.");
+    if(!ok) return;
+
+    try{
+      const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/reset", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({})
+      });
+
+      const data = await res.json().catch(()=>null);
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Errore reset chat");
+      }
+
+      alert("Chat pulita. Sessioni eliminate: " + data.deleted_sessions + ". Messaggi eliminati: " + data.deleted_messages + ".");
+
+      location.href = "/fm/app/" + encodeURIComponent(code()) + "?chatWaiting=1&focus=chat-waiting";
+
+    }catch(err){
+      alert("Errore pulizia chat: " + (err.message || String(err)));
+    }
+  }
+
+  function bindResetButtons(){
+    ["followmeResetChatBtn", "followmeChatWaitingReset"].forEach(function(id){
+      const btn = document.getElementById(id);
+      if(!btn || btn.dataset.resetBound === "1") return;
+      btn.dataset.resetBound = "1";
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        resetChat();
+      });
+    });
+  }
+
+  function boot(){
+    bindResetButtons();
+    setTimeout(updateSelectedUserLabel, 300);
+    setTimeout(updateSelectedUserLabel, 1200);
+  }
+
+  window.followMeUpdateSelectedUserLabel = updateSelectedUserLabel;
+  window.followMeResetChat = resetChat;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 500);
+  });
+
+  setInterval(updateSelectedUserLabel, 3500);
 })();
 </script>
 
