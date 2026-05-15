@@ -2639,6 +2639,126 @@
       display:none !important;
     }
 
+
+    /* FollowMe owner chat-only mode */
+    #followmeOwnerChatScreen{
+      display:none;
+      min-height:100dvh;
+      padding:14px;
+      background:
+        radial-gradient(circle at 20% -10%,rgba(200,255,46,.14),transparent 34%),
+        radial-gradient(circle at 92% 0%,rgba(94,231,255,.13),transparent 30%),
+        #071018;
+      color:#fff;
+    }
+
+    body.followme-chat-only-mode main,
+    body.followme-chat-only-mode .app,
+    body.followme-chat-only-mode .wrap{
+      display:none !important;
+    }
+
+    body.followme-chat-only-mode #followmeOwnerChatScreen{
+      display:grid !important;
+      grid-template-rows:auto 1fr auto;
+    }
+
+    .followme-owner-chat-top{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:calc(10px + env(safe-area-inset-top)) 0 12px;
+    }
+
+    .followme-owner-chat-title strong{
+      display:block;
+      font-size:1.05rem;
+      letter-spacing:-.03em;
+    }
+
+    .followme-owner-chat-title span{
+      display:block;
+      margin-top:3px;
+      color:rgba(255,255,255,.62);
+      font-size:.78rem;
+    }
+
+    .followme-owner-chat-actions{
+      display:flex;
+      gap:8px;
+    }
+
+    .followme-owner-chat-actions button{
+      min-height:38px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.08);
+      color:#fff;
+      padding:0 10px;
+      font-weight:900;
+    }
+
+    #followmeOwnerChatDisable{
+      color:#101820;
+      background:linear-gradient(135deg,#c8ff2e,#5ee7ff);
+      border:0;
+    }
+
+    .followme-owner-chat-messages{
+      overflow:auto;
+      display:flex;
+      flex-direction:column;
+      gap:9px;
+      padding:12px 0 16px;
+    }
+
+    .followme-owner-chat-bubble{
+      max-width:82%;
+      border-radius:20px;
+      padding:10px 12px;
+      line-height:1.35;
+      font-size:.92rem;
+      background:#182838;
+      border:1px solid rgba(255,255,255,.08);
+    }
+
+    .followme-owner-chat-bubble.owner{
+      align-self:flex-end;
+      background:linear-gradient(135deg,#c8ff2e,#e9ff9c);
+      color:#101820;
+      font-weight:750;
+    }
+
+    .followme-owner-chat-composer{
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:8px;
+      padding:10px 0 calc(10px + env(safe-area-inset-bottom));
+    }
+
+    .followme-owner-chat-composer textarea{
+      resize:none;
+      min-height:46px;
+      max-height:110px;
+      border-radius:18px;
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(0,0,0,.22);
+      color:#fff;
+      padding:12px;
+      font:inherit;
+      outline:none;
+    }
+
+    .followme-owner-chat-composer button{
+      border:0;
+      border-radius:18px;
+      padding:0 15px;
+      color:#101820;
+      background:linear-gradient(135deg,#c8ff2e,#5ee7ff);
+      font-weight:950;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -7701,6 +7821,146 @@ document.addEventListener("visibilitychange", function(){
   window.addEventListener("pageshow", function(){
     setTimeout(bootOtherOptions, 150);
   });
+})();
+</script>
+
+
+<div id="followmeOwnerChatScreen">
+  <header class="followme-owner-chat-top">
+    <div class="followme-owner-chat-title">
+      <strong>Chat FollowMe</strong>
+      <span id="followmeOwnerChatSubtitle">Conversazione aperta da notifica</span>
+    </div>
+    <div class="followme-owner-chat-actions">
+      <button type="button" id="followmeOwnerChatClose">Chiudi</button>
+      <button type="button" id="followmeOwnerChatDisable">Spegni chat</button>
+    </div>
+  </header>
+
+  <section class="followme-owner-chat-messages" id="followmeOwnerChatMessages"></section>
+
+  <footer class="followme-owner-chat-composer">
+    <textarea id="followmeOwnerChatInput" rows="1" placeholder="Scrivi una risposta..."></textarea>
+    <button type="button" id="followmeOwnerChatSend">Invia</button>
+  </footer>
+</div>
+
+
+<script id="followme-owner-chat-only-script">
+(function(){
+  const params = new URLSearchParams(location.search || "");
+  const sessionId = params.get("chatSession");
+  let lastMessageId = 0;
+  let pollTimer = null;
+
+  function getCode(){
+    const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+    if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+    return "FM-DEMO";
+  }
+
+  function esc(s){
+    return String(s || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function addMsg(sender, text){
+    const box = document.getElementById("followmeOwnerChatMessages");
+    if(!box) return;
+    const div = document.createElement("div");
+    div.className = "followme-owner-chat-bubble" + (sender === "owner" ? " owner" : "");
+    div.innerHTML = esc(text).replace(/\n/g,"<br>");
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  async function loadSession(){
+    const code = getCode();
+    const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/chat/session/" + encodeURIComponent(sessionId), { cache:"no-store" });
+    const data = await res.json();
+    if(!res.ok || !data.success) throw new Error(data.error || "Chat non trovata");
+    const sub = document.getElementById("followmeOwnerChatSubtitle");
+    if(sub) sub.textContent = (data.session && data.session.visitor_label) ? data.session.visitor_label : "Nuovo utente collegato";
+  }
+
+  async function pollMessages(){
+    if(!sessionId) return;
+    try{
+      const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/messages?after=" + encodeURIComponent(lastMessageId), { cache:"no-store" });
+      const data = await res.json();
+      if(data.success && Array.isArray(data.messages)){
+        data.messages.forEach(m=>{
+          lastMessageId = Math.max(lastMessageId, Number(m.id)||0);
+          addMsg(m.sender, m.message);
+        });
+      }
+    }catch(e){}
+  }
+
+  async function sendOwnerMessage(){
+    const input = document.getElementById("followmeOwnerChatInput");
+    const text = input ? input.value.trim() : "";
+    if(!text) return;
+    input.value = "";
+
+    await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/message", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ sender:"owner", message:text })
+    });
+
+    await pollMessages();
+  }
+
+  async function disableChat(){
+    if(!confirm("Vuoi spegnere la modalità chat e tornare al redirect normale del QR?")) return;
+    const code = getCode();
+    const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/chat/disable", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"}
+    });
+    const data = await res.json().catch(()=>null);
+    if(!res.ok || !data || !data.success){
+      alert("Errore spegnimento chat.");
+      return;
+    }
+    location.href = "/fm/app/" + encodeURIComponent(code);
+  }
+
+  function boot(){
+    if(!sessionId) return;
+
+    document.body.classList.add("followme-chat-only-mode");
+
+    const close = document.getElementById("followmeOwnerChatClose");
+    const disable = document.getElementById("followmeOwnerChatDisable");
+    const send = document.getElementById("followmeOwnerChatSend");
+    const input = document.getElementById("followmeOwnerChatInput");
+
+    if(close) close.onclick = ()=>{ location.href = "/fm/app/" + encodeURIComponent(getCode()); };
+    if(disable) disable.onclick = disableChat;
+    if(send) send.onclick = sendOwnerMessage;
+    if(input){
+      input.addEventListener("keydown", function(e){
+        if(e.key === "Enter" && !e.shiftKey){
+          e.preventDefault();
+          sendOwnerMessage();
+        }
+      });
+    }
+
+    loadSession().then(()=>{
+      pollMessages();
+      pollTimer = setInterval(pollMessages, 2500);
+    }).catch(err=>{
+      addMsg("visitor", "Errore apertura chat: " + (err.message || String(err)));
+    });
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
 })();
 </script>
 

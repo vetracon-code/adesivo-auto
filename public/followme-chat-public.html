@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>FollowMe Chat</title>
+  <style>
+    :root{
+      --bg:#071018;
+      --panel:#101820;
+      --panel2:#142231;
+      --text:#f7fafc;
+      --muted:rgba(255,255,255,.62);
+      --line:rgba(255,255,255,.10);
+      --lime:#c8ff2e;
+      --cyan:#5ee7ff;
+      --bot:#182838;
+      --user:#c8ff2e;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,Arial,sans-serif}
+    body{
+      background:
+        radial-gradient(circle at 20% -10%,rgba(200,255,46,.14),transparent 34%),
+        radial-gradient(circle at 92% 0%,rgba(94,231,255,.13),transparent 30%),
+        #071018;
+    }
+    .chat{
+      width:min(520px,100%);
+      height:100dvh;
+      margin:0 auto;
+      display:grid;
+      grid-template-rows:auto 1fr auto;
+      background:rgba(7,16,24,.76);
+      border-left:1px solid rgba(255,255,255,.06);
+      border-right:1px solid rgba(255,255,255,.06);
+    }
+    .top{
+      padding:calc(12px + env(safe-area-inset-top)) 14px 12px;
+      display:flex;
+      align-items:center;
+      gap:11px;
+      background:rgba(16,24,32,.92);
+      backdrop-filter:blur(14px);
+      border-bottom:1px solid var(--line);
+    }
+    .avatar{
+      width:44px;height:44px;border-radius:16px;
+      display:grid;place-items:center;
+      background:linear-gradient(135deg,var(--lime),var(--cyan));
+      color:#101820;font-weight:1000;font-size:1.2rem;
+      box-shadow:0 12px 28px rgba(94,231,255,.16);
+    }
+    .top h1{margin:0;font-size:1.02rem;letter-spacing:-.03em;line-height:1.08}
+    .top p{margin:3px 0 0;color:var(--muted);font-size:.76rem}
+    .messages{
+      overflow:auto;
+      padding:16px 12px 18px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .msgrow{display:flex;gap:8px;align-items:flex-end}
+    .msgrow.user{justify-content:flex-end}
+    .boticon{
+      width:30px;height:30px;border-radius:11px;flex:0 0 auto;
+      display:grid;place-items:center;
+      background:linear-gradient(135deg,var(--lime),var(--cyan));
+      color:#101820;font-weight:1000;font-size:.85rem;
+    }
+    .bubble{
+      max-width:78%;
+      border-radius:20px;
+      padding:10px 12px;
+      font-size:.92rem;
+      line-height:1.34;
+      box-shadow:0 10px 26px rgba(0,0,0,.18);
+    }
+    .bot .bubble{
+      background:var(--bot);
+      border:1px solid rgba(255,255,255,.08);
+      color:#fff;
+      border-bottom-left-radius:7px;
+    }
+    .user .bubble{
+      background:linear-gradient(135deg,var(--lime),#e9ff9c);
+      color:#101820;
+      font-weight:750;
+      border-bottom-right-radius:7px;
+    }
+    .typing{
+      display:inline-flex;gap:4px;align-items:center;
+      padding:2px 0;
+    }
+    .typing span{
+      width:6px;height:6px;border-radius:99px;background:rgba(255,255,255,.65);
+      animation:bounce 1s infinite ease-in-out;
+    }
+    .typing span:nth-child(2){animation-delay:.16s}
+    .typing span:nth-child(3){animation-delay:.32s}
+    @keyframes bounce{0%,80%,100%{transform:translateY(0);opacity:.45}40%{transform:translateY(-4px);opacity:1}}
+    .choices{
+      display:flex;gap:8px;flex-wrap:wrap;margin-left:38px;margin-top:-2px;
+    }
+    .choice{
+      border:1px solid rgba(200,255,46,.28);
+      background:rgba(200,255,46,.10);
+      color:#e9ff9c;
+      border-radius:999px;
+      padding:8px 10px;
+      font-weight:850;
+      font-size:.78rem;
+    }
+    .composer{
+      padding:10px 12px calc(12px + env(safe-area-inset-bottom));
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:8px;
+      background:rgba(16,24,32,.94);
+      border-top:1px solid var(--line);
+      backdrop-filter:blur(14px);
+    }
+    textarea{
+      resize:none;height:46px;max-height:110px;
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(0,0,0,.22);
+      color:#fff;
+      border-radius:18px;
+      padding:12px 13px;
+      font:inherit;
+      outline:none;
+    }
+    button{
+      border:0;border-radius:18px;padding:0 15px;
+      font-weight:950;color:#101820;
+      background:linear-gradient(135deg,var(--lime),var(--cyan));
+    }
+    .smallnote{
+      text-align:center;color:rgba(255,255,255,.48);font-size:.72rem;padding:4px 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <main class="chat">
+    <header class="top">
+      <div class="avatar">🤖</div>
+      <div>
+        <h1>FollowMe Chat</h1>
+        <p id="statusText">Connessione in corso...</p>
+      </div>
+    </header>
+
+    <section class="messages" id="messages"></section>
+
+    <footer>
+      <div class="smallnote">Scrivi qui. Il proprietario riceverà il tuo messaggio in questa chat.</div>
+      <div class="composer">
+        <textarea id="messageInput" placeholder="Scrivi un messaggio..." rows="1"></textarea>
+        <button id="sendBtn">Invia</button>
+      </div>
+    </footer>
+  </main>
+
+<script>
+(function(){
+  const TOKEN = (location.pathname.match(/\/fm\/chat\/c\/([^\/?#]+)/i)||[])[1] || "";
+  let sessionId = "";
+  let lastMessageId = 0;
+  const messages = document.getElementById("messages");
+  const statusText = document.getElementById("statusText");
+  const input = document.getElementById("messageInput");
+  const sendBtn = document.getElementById("sendBtn");
+
+  function scrollBottom(){
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  function row(kind, html, typing){
+    const r = document.createElement("div");
+    r.className = "msgrow " + (kind === "user" ? "user" : "bot");
+    if(kind !== "user"){
+      const ico = document.createElement("div");
+      ico.className = "boticon";
+      ico.textContent = "🤖";
+      r.appendChild(ico);
+    }
+    const b = document.createElement("div");
+    b.className = "bubble";
+    if(typing){
+      b.innerHTML = '<span class="typing"><span></span><span></span><span></span></span>';
+    }else{
+      b.innerHTML = html;
+    }
+    r.appendChild(b);
+    messages.appendChild(r);
+    scrollBottom();
+    return r;
+  }
+
+  function addBot(text){
+    row("bot", text.replace(/\n/g,"<br>"));
+  }
+
+  function addUser(text){
+    row("user", String(text || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+  }
+
+  function botTypingThen(text, delay){
+    const t = row("bot", "", true);
+    setTimeout(()=>{
+      t.remove();
+      addBot(text);
+    }, delay || 900);
+  }
+
+  function addChoices(){
+    const wrap = document.createElement("div");
+    wrap.className = "choices";
+    const wait = document.createElement("button");
+    wait.className = "choice";
+    wait.textContent = "Attendo ancora";
+    const close = document.createElement("button");
+    close.className = "choice";
+    close.textContent = "Chiudo, riprovo più tardi";
+    wait.onclick = ()=>{ wrap.remove(); addUser("Attendo ancora"); botTypingThen("Grazie, appena possibile riceverai risposta qui.", 700); };
+    close.onclick = ()=>{ wrap.remove(); addUser("Riprovo più tardi"); botTypingThen("Va bene, grazie per esserti collegato. A presto.", 700); };
+    wrap.appendChild(wait);
+    wrap.appendChild(close);
+    messages.appendChild(wrap);
+    scrollBottom();
+  }
+
+  async function createSession(){
+    const res = await fetch("/api/followme/chat/" + encodeURIComponent(TOKEN) + "/session", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ source:"public_chat" })
+    });
+    const data = await res.json();
+    if(!res.ok || !data.success) throw new Error(data.error || "Errore apertura chat");
+    sessionId = data.session_id;
+    statusText.textContent = "Connesso · in attesa del proprietario";
+  }
+
+  async function sendMessage(){
+    const text = input.value.trim();
+    if(!text || !sessionId) return;
+    input.value = "";
+    addUser(text);
+
+    await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/message", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ sender:"visitor", message:text })
+    });
+  }
+
+  async function poll(){
+    if(!sessionId) return;
+    try{
+      const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/messages?after=" + encodeURIComponent(lastMessageId), { cache:"no-store" });
+      const data = await res.json();
+      if(data.success && Array.isArray(data.messages)){
+        data.messages.forEach(m=>{
+          lastMessageId = Math.max(lastMessageId, Number(m.id)||0);
+          if(m.sender === "owner") addBot(String(m.message || ""));
+        });
+      }
+    }catch(e){}
+  }
+
+  async function boot(){
+    try{
+      await createSession();
+
+      botTypingThen("Sto informando che ti sei collegato...", 900);
+      setTimeout(()=>botTypingThen("Un attimo di pazienza.", 800), 2300);
+      setTimeout(()=>botTypingThen("⏳", 600), 3900);
+
+      setTimeout(()=>botTypingThen("Sto provando a richiamare la sua attenzione. Rimani ancora un attimo qui.", 850), 30000);
+      setTimeout(()=>{
+        botTypingThen("Mi dispiace, in questo momento è molto preso. Puoi attendere ancora un po’?", 850);
+        setTimeout(addChoices, 1100);
+      }, 60000);
+
+      setInterval(poll, 2500);
+    }catch(err){
+      statusText.textContent = "Chat non disponibile";
+      addBot("Mi dispiace, la chat non è disponibile in questo momento.");
+      console.error(err);
+    }
+  }
+
+  sendBtn.addEventListener("click", sendMessage);
+  input.addEventListener("keydown", function(e){
+    if(e.key === "Enter" && !e.shiftKey){
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  boot();
+})();
+</script>
+</body>
+</html>
