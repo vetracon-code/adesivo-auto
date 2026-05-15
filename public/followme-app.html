@@ -4948,6 +4948,11 @@ document.addEventListener("visibilitychange", function(){
     if(pushState) pushState.textContent = "attive";
 
     toastSafe("Notifiche attivate.");
+
+    if(typeof updateNotifyButtonByRealSubscription === "function"){
+      setTimeout(updateNotifyButtonByRealSubscription, 400);
+      setTimeout(updateNotifyButtonByRealSubscription, 1400);
+    }
   }
 
   window.followMeActivateNotifications = async function(ev){
@@ -5043,6 +5048,159 @@ document.addEventListener("visibilitychange", function(){
     }catch(e){}
   }
 
+
+  async function getCurrentFollowMeSubscription(){
+    try{
+      if(!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+
+      var reg = await navigator.serviceWorker.register("/service-worker.js?v=followme-apple-direct-real");
+      await navigator.serviceWorker.ready;
+
+      if(!reg || !reg.pushManager) return null;
+      return await reg.pushManager.getSubscription();
+    }catch(err){
+      console.warn("getCurrentFollowMeSubscription error:", err);
+      return null;
+    }
+  }
+
+  async function updateNotifyButtonByRealSubscription(){
+    try{
+      var btn = document.getElementById("notifyBtn");
+      var pushState = document.getElementById("detectedPushState");
+
+      if(!btn) return;
+
+      var sub = await getCurrentFollowMeSubscription();
+
+      if(sub){
+        btn.textContent = "Disattiva notifiche";
+        btn.dataset.followmePushActive = "1";
+        btn.disabled = false;
+        if(pushState) pushState.textContent = "attive";
+      }else{
+        btn.textContent = "Attiva notifiche";
+        btn.dataset.followmePushActive = "0";
+        btn.disabled = false;
+        if(pushState){
+          if("Notification" in window && Notification.permission === "granted"){
+            pushState.textContent = "da completare";
+          }else{
+            pushState.textContent = "da attivare";
+          }
+        }
+      }
+    }catch(err){
+      console.warn("updateNotifyButtonByRealSubscription error:", err);
+    }
+  }
+
+  async function followMeDisableNotifications(){
+    logPush("RICHIESTA DISATTIVAZIONE NOTIFICHE", true);
+
+    try{
+      var sub = await getCurrentFollowMeSubscription();
+
+      if(!sub){
+        logPush("Nessuna subscription attiva trovata.");
+        toastSafe("Nessuna notifica attiva trovata.");
+        await updateNotifyButtonByRealSubscription();
+        return;
+      }
+
+      var confirmed = window.confirm("Vuoi disattivare le notifiche FollowMe QR su questo dispositivo?");
+      if(!confirmed){
+        logPush("Disattivazione annullata dall’utente.");
+        return;
+      }
+
+      var endpoint = sub.endpoint;
+      logPush("Disattivo subscription browser...");
+
+      var unsubscribed = await sub.unsubscribe();
+      logPush("Browser unsubscribe: " + unsubscribed);
+
+      var code = getCodeSafe();
+
+      logPush("Comunico disattivazione al server...");
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/unsubscribe", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ endpoint:endpoint })
+      });
+
+      logPush("Server unsubscribe status: " + res.status);
+
+      var data = await res.json().catch(function(){ return null; });
+      logPush("Server response: " + JSON.stringify(data));
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Errore disattivazione server");
+      }
+
+      logPush("OK: notifiche disattivate.");
+      toastSafe("Notifiche disattivate.");
+
+      var btn = document.getElementById("notifyBtn");
+      if(btn){
+        btn.textContent = "Attiva notifiche";
+        btn.dataset.followmePushActive = "0";
+        btn.disabled = false;
+      }
+
+      var pushState = document.getElementById("detectedPushState");
+      if(pushState) pushState.textContent = "da attivare";
+
+      var state = document.getElementById("installState");
+      if(state){
+        state.classList.remove("install-ok","install-danger","install-info");
+        state.classList.add("install-warning");
+        state.innerHTML = "<strong>Notifiche disattivate.</strong><br>Puoi riattivarle quando vuoi da questo pulsante.";
+      }
+
+    }catch(err){
+      console.error("followMeDisableNotifications error:", err);
+      logPush("ERRORE DISATTIVA: " + (err.message || String(err)));
+      toastSafe("Errore disattivazione: " + (err.message || String(err)));
+    }
+
+    setTimeout(updateNotifyButtonByRealSubscription, 500);
+    setTimeout(updateNotifyButtonByRealSubscription, 1500);
+  }
+
+  var originalFollowMeActivateNotifications = window.followMeActivateNotifications;
+
+  window.followMeActivateNotifications = async function(ev){
+    if(ev){
+      try{
+        ev.preventDefault();
+        ev.stopPropagation();
+      }catch(e){}
+    }
+
+    var btn = document.getElementById("notifyBtn");
+    var sub = await getCurrentFollowMeSubscription();
+
+    if(sub || (btn && btn.dataset.followmePushActive === "1")){
+      await followMeDisableNotifications();
+      return;
+    }
+
+    if(typeof originalFollowMeActivateNotifications === "function"){
+      await originalFollowMeActivateNotifications(ev);
+      setTimeout(updateNotifyButtonByRealSubscription, 600);
+      setTimeout(updateNotifyButtonByRealSubscription, 1800);
+      return;
+    }
+
+    logPush("ERRORE: funzione attivazione originale non disponibile.", true);
+    toastSafe("Funzione notifiche non disponibile.");
+  };
+
+  window.followMeDisableNotifications = followMeDisableNotifications;
+  window.updateNotifyButtonByRealSubscription = updateNotifyButtonByRealSubscription;
+
+
   if(document.readyState === "loading"){
     document.addEventListener("DOMContentLoaded", syncBasicPushDiagnosis);
   }else{
@@ -5052,10 +5210,17 @@ document.addEventListener("visibilitychange", function(){
   window.addEventListener("load", function(){
     setTimeout(syncBasicPushDiagnosis, 200);
     setTimeout(syncBasicPushDiagnosis, 1200);
+    if(typeof updateNotifyButtonByRealSubscription === "function"){
+      setTimeout(updateNotifyButtonByRealSubscription, 500);
+      setTimeout(updateNotifyButtonByRealSubscription, 1600);
+    }
   });
 
   window.addEventListener("pageshow", function(){
     setTimeout(syncBasicPushDiagnosis, 300);
+    if(typeof updateNotifyButtonByRealSubscription === "function"){
+      setTimeout(updateNotifyButtonByRealSubscription, 700);
+    }
   });
 })();
 </script>
