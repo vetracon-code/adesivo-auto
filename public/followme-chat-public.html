@@ -300,6 +300,10 @@
     row("bot", text.replace(/\n/g,"<br>"));
   }
 
+  function addBotHtml(html){
+    row("bot", String(html || ""));
+  }
+
   function addUser(text){
     row("user", String(text || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
   }
@@ -323,18 +327,44 @@
   }
 
   function addChoices(){
+    if(realConversationStarted) return;
+
     const wrap = document.createElement("div");
     wrap.className = "choices";
-    const wait = document.createElement("button");
-    wait.className = "choice";
-    wait.textContent = "Attendo ancora";
-    const close = document.createElement("button");
-    close.className = "choice";
-    close.textContent = "Chiudo, riprovo più tardi";
-    wait.onclick = ()=>{ stopRobotSequence(); wrap.remove(); addUser("Attendo ancora"); };
-    close.onclick = ()=>{ stopRobotSequence(); wrap.remove(); addUser("Riprovo più tardi"); };
-    wrap.appendChild(wait);
-    wrap.appendChild(close);
+
+    const yes = document.createElement("button");
+    yes.className = "choice";
+    yes.textContent = "👀 Sì, raccontami";
+
+    const no = document.createElement("button");
+    no.className = "choice";
+    no.textContent = "No, aspetto";
+
+    yes.onclick = ()=>{
+      wrap.remove();
+      addUser("Sì, raccontami");
+      addBotHtml(
+        "<strong>Piacere, sono FollowMe QR.</strong><br><br>" +
+        "In questo momento sono in <strong>modalità Dialogo 💬</strong>: permetto al proprietario di risponderti direttamente qui.<br><br>" +
+        "Ma <strong>non sono solo una chat</strong>.<br><br>" +
+        "Sono un <strong>QR dinamico 🔄</strong>: posso cambiare destinazione senza essere ristampato. Oggi posso aprire un dialogo, domani un sito, una pagina personale, un’offerta, un contenuto speciale o qualsiasi link scelto dal proprietario.<br><br>" +
+        "Il QR resta sempre lo stesso.<br>" +
+        "Quello che comunica, invece, può cambiare quando serve, <strong>anche in meno di un secondo</strong>.<br><br>" +
+        "<strong>Creo movimento attorno a me 👀</strong><br>" +
+        "e trasformo un QR in un contatto 🤝<br><br>" +
+        "All’inizio è tutto anonimo.<br>" +
+        "Poi, se nasce il dialogo, decidete voi due."
+      );
+    };
+
+    no.onclick = ()=>{
+      wrap.remove();
+      addUser("No, aspetto");
+      addBot("Va bene, resto qui con te in attesa.");
+    };
+
+    wrap.appendChild(yes);
+    wrap.appendChild(no);
     messages.appendChild(wrap);
     scrollBottom();
   }
@@ -394,15 +424,13 @@
     try{
       await createSession();
 
-      botTypingThen("Sto informando che ti sei collegato...", 900);
-      scheduleRobot(()=>botTypingThen("Un attimo di pazienza.", 800), 2300);
-      scheduleRobot(()=>botTypingThen("⏳", 600), 3900);
+      botTypingThen("Ciao, sono <strong>FollowMe QR</strong> 👋", 800);
 
-      scheduleRobot(()=>botTypingThen("Sto provando a richiamare la sua attenzione. Rimani ancora un attimo qui.", 850), 30000);
-      scheduleRobot(()=>{
-        botTypingThen("Mi dispiace, in questo momento è molto preso. Puoi attendere ancora un po’?", 850);
-        scheduleRobot(addChoices, 1100);
-      }, 60000);
+      scheduleRobot(()=>botTypingThen("Ho avvisato il proprietario che ti sei collegato.<br>Se è disponibile, ti risponderà qui.", 850), 1800);
+
+      scheduleRobot(()=>botTypingThen("Mentre aspetti, vuoi sapere <strong>cosa sono</strong>?", 750), 4200);
+
+      scheduleRobot(addChoices, 5600);
 
       setInterval(poll, 1500);
     }catch(err){
