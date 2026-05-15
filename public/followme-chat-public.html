@@ -460,6 +460,42 @@
     statusText.textContent = "Connesso · in attesa del proprietario";
   }
 
+
+  function playFollowMeSendSound(){
+    try{
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if(!AudioCtx) return;
+
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const filter = ctx.createBiquadFilter();
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(720, now);
+      osc.frequency.exponentialRampToValueAtTime(1180, now + 0.055);
+      osc.frequency.exponentialRampToValueAtTime(520, now + 0.13);
+
+      filter.type = "highpass";
+      filter.frequency.setValueAtTime(420, now);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.075, now + 0.018);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.17);
+
+      setTimeout(()=>ctx.close().catch(()=>{}), 280);
+    }catch(e){}
+  }
+
   async function sendSystemNoteToOwner(message){
     if(!sessionId || !message) return;
 
@@ -482,6 +518,7 @@
 
     input.value = "";
     addUser(text);
+    playFollowMeSendSound();
 
     if(shouldRobotFallback){
       followMeRobotFallbackSent = true;
