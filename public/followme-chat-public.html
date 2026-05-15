@@ -232,6 +232,8 @@
   const TOKEN = (location.pathname.match(/\/fm\/chat\/c\/([^\/?#]+)/i)||[])[1] || "";
   let sessionId = "";
   let lastMessageId = 0;
+  let realConversationStarted = false;
+  let robotTimers = [];
   const messages = document.getElementById("messages");
   const statusText = document.getElementById("statusText");
   const input = document.getElementById("messageInput");
@@ -239,6 +241,27 @@
 
   function scrollBottom(){
     messages.scrollTop = messages.scrollHeight;
+  }
+
+  function scheduleRobot(fn, delay){
+    const t = setTimeout(function(){
+      if(!realConversationStarted){
+        fn();
+      }
+    }, delay);
+    robotTimers.push(t);
+    return t;
+  }
+
+  function stopRobotSequence(){
+    realConversationStarted = true;
+    robotTimers.forEach(clearTimeout);
+    robotTimers = [];
+
+    try{
+      document.querySelectorAll(".choices").forEach(el => el.remove());
+      document.querySelectorAll("[data-robot-typing='1']").forEach(el => el.remove());
+    }catch(e){}
   }
 
   function row(kind, html, typing){
@@ -262,6 +285,7 @@
     const b = document.createElement("div");
     b.className = "bubble";
     if(typing){
+      r.setAttribute("data-robot-typing", "1");
       b.innerHTML = '<span class="typing"><span></span><span></span><span></span></span>';
     }else{
       b.innerHTML = html;
@@ -285,8 +309,14 @@
   }
 
   function botTypingThen(text, delay){
+    if(realConversationStarted) return;
+
     const t = row("bot", "", true);
-    setTimeout(()=>{
+    scheduleRobot(()=>{
+      if(realConversationStarted){
+        t.remove();
+        return;
+      }
       t.remove();
       addBot(text);
     }, delay || 900);
@@ -301,8 +331,8 @@
     const close = document.createElement("button");
     close.className = "choice";
     close.textContent = "Chiudo, riprovo più tardi";
-    wait.onclick = ()=>{ wrap.remove(); addUser("Attendo ancora"); botTypingThen("Grazie, appena possibile riceverai risposta qui.", 700); };
-    close.onclick = ()=>{ wrap.remove(); addUser("Riprovo più tardi"); botTypingThen("Va bene, grazie per esserti collegato. A presto.", 700); };
+    wait.onclick = ()=>{ stopRobotSequence(); wrap.remove(); addUser("Attendo ancora"); };
+    close.onclick = ()=>{ stopRobotSequence(); wrap.remove(); addUser("Riprovo più tardi"); };
     wrap.appendChild(wait);
     wrap.appendChild(close);
     messages.appendChild(wrap);
@@ -324,6 +354,9 @@
   async function sendMessage(){
     const text = input.value.trim();
     if(!text || !sessionId) return;
+
+    stopRobotSequence();
+
     input.value = "";
     addUser(text);
 
@@ -348,7 +381,10 @@
       if(data.success && Array.isArray(data.messages)){
         data.messages.forEach(m=>{
           lastMessageId = Math.max(lastMessageId, Number(m.id)||0);
-          if(m.sender === "owner") addAdmin(String(m.message || ""));
+          if(m.sender === "owner"){
+            stopRobotSequence();
+            addAdmin(String(m.message || ""));
+          }
         });
       }
     }catch(e){}
@@ -359,13 +395,13 @@
       await createSession();
 
       botTypingThen("Sto informando che ti sei collegato...", 900);
-      setTimeout(()=>botTypingThen("Un attimo di pazienza.", 800), 2300);
-      setTimeout(()=>botTypingThen("⏳", 600), 3900);
+      scheduleRobot(()=>botTypingThen("Un attimo di pazienza.", 800), 2300);
+      scheduleRobot(()=>botTypingThen("⏳", 600), 3900);
 
-      setTimeout(()=>botTypingThen("Sto provando a richiamare la sua attenzione. Rimani ancora un attimo qui.", 850), 30000);
-      setTimeout(()=>{
+      scheduleRobot(()=>botTypingThen("Sto provando a richiamare la sua attenzione. Rimani ancora un attimo qui.", 850), 30000);
+      scheduleRobot(()=>{
         botTypingThen("Mi dispiace, in questo momento è molto preso. Puoi attendere ancora un po’?", 850);
-        setTimeout(addChoices, 1100);
+        scheduleRobot(addChoices, 1100);
       }, 60000);
 
       setInterval(poll, 1500);
