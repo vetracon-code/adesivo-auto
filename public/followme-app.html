@@ -2905,7 +2905,7 @@
         <a class="btn secondary" id="followmeOtherOpenQrPreview" href="#" target="_blank" rel="noopener">Apri anteprima QR</a>
         <a class="btn secondary" id="followmeOtherDownloadQrPng" href="#" download>Scarica QR PNG</a>
         <a class="btn secondary" id="followmeOtherDownloadQrSvg" href="#" download>Scarica QR SVG</a>
-        <a class="btn secondary" id="followmeOtherOpenChat" href="/followme-chat-demo.html" target="_blank" rel="noopener">Attiva chat</a>
+        <button class="btn secondary" id="followmeOtherOpenChat" type="button">Attiva chat</button>
       </div>
     </section>
 
@@ -7961,6 +7961,119 @@ document.addEventListener("visibilitychange", function(){
   }else{
     boot();
   }
+})();
+</script>
+
+
+<script id="followme-real-chat-button-fix">
+(function(){
+  function getFollowMeCodeForChat(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+
+      if(typeof getCode === "function"){
+        var c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+
+      return "FMDEMO";
+    }catch(e){
+      return "FMDEMO";
+    }
+  }
+
+  function toastChat(msg){
+    try{
+      if(typeof toast === "function") toast(msg);
+      else alert(msg);
+    }catch(e){
+      alert(msg);
+    }
+  }
+
+  async function enableRealFollowMeChat(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+
+    var btn = document.getElementById("followmeOtherOpenChat");
+    var code = getFollowMeCodeForChat();
+
+    if(btn){
+      btn.disabled = true;
+      btn.textContent = "Attivo la chat...";
+    }
+
+    try{
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/chat/enable", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({})
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Errore attivazione chat");
+      }
+
+      if(btn){
+        btn.textContent = "Chat attiva";
+        btn.disabled = false;
+      }
+
+      toastChat("Chat attivata. Ora il QR apre la chat reale.");
+
+      // Non apriamo la vecchia demo. Apriamo il QR pubblico vero,
+      // così verifichiamo che /fm/u/... venga convertito in /fm/chat/c/TOKEN.
+      setTimeout(function(){
+        window.open("/fm/u/" + encodeURIComponent(code) + "?v=real-chat-active-" + Date.now(), "_blank", "noopener");
+      }, 500);
+
+    }catch(err){
+      console.error("enableRealFollowMeChat error:", err);
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = "Attiva chat";
+      }
+      toastChat("Errore attivazione chat: " + (err.message || String(err)));
+    }
+  }
+
+  function bindRealChatButton(){
+    var btn = document.getElementById("followmeOtherOpenChat");
+    if(!btn) return;
+
+    // Se era ancora un link alla demo, lo neutralizziamo.
+    if(btn.tagName === "A"){
+      btn.removeAttribute("href");
+      btn.removeAttribute("target");
+    }
+
+    if(btn.dataset.realChatBound === "1") return;
+    btn.dataset.realChatBound = "1";
+
+    btn.addEventListener("click", enableRealFollowMeChat, true);
+  }
+
+  window.enableRealFollowMeChat = enableRealFollowMeChat;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bindRealChatButton);
+  }else{
+    bindRealChatButton();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(bindRealChatButton, 100);
+    setTimeout(bindRealChatButton, 800);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(bindRealChatButton, 150);
+  });
 })();
 </script>
 
