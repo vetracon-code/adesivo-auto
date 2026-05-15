@@ -9377,6 +9377,55 @@ app.post('/api/followme/chat/session/:session_id/message', express.json(), async
   }
 });
 
+
+app.get('/api/followme/:code/chat/latest-open-session', async (req, res) => {
+  try {
+    await ensureFollowMeChatSchema();
+
+    const code = normalizeFollowMeCode(req.params.code);
+
+    const projectRes = await pool.query(
+      `SELECT id, code, chat_mode_enabled
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!projectRes.rows.length) {
+      return res.status(404).json({ success:false, error:'FollowMe QR non trovato.' });
+    }
+
+    const project = projectRes.rows[0];
+
+    if (project.chat_mode_enabled !== true) {
+      return res.json({ success:true, chat_mode_enabled:false, session:null });
+    }
+
+    const sessionRes = await pool.query(
+      `SELECT id, visitor_label, status, created_at, last_seen_at, owner_opened_at
+       FROM followme_chat_sessions
+       WHERE project_id = $1
+         AND status = 'open'
+       ORDER BY
+         CASE WHEN owner_opened_at IS NULL THEN 0 ELSE 1 END,
+         created_at DESC
+       LIMIT 1`,
+      [project.id]
+    );
+
+    return res.json({
+      success:true,
+      chat_mode_enabled:true,
+      project_code:project.code,
+      session:sessionRes.rows[0] || null
+    });
+  } catch (err) {
+    console.error('followme latest open chat session error:', err);
+    return res.status(500).json({ success:false, error:'Errore lettura ultima chat.' });
+  }
+});
+
 app.get('/api/followme/:code/chat/session/:session_id', async (req, res) => {
   try {
     await ensureFollowMeChatSchema();

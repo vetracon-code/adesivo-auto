@@ -8202,5 +8202,104 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+<script id="followme-owner-chat-auto-poll-script">
+(function(){
+  let lastAutoOpenedSession = "";
+  let pollRunning = false;
+
+  function getOwnerChatAutoCode(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+    return "";
+  }
+
+  function isAlreadyInOwnerChat(){
+    try{
+      const p = new URLSearchParams(location.search || "");
+      return !!p.get("chatSession");
+    }catch(e){
+      return false;
+    }
+  }
+
+  async function checkLatestOpenChat(){
+    if(pollRunning) return;
+    if(isAlreadyInOwnerChat()) return;
+
+    const code = getOwnerChatAutoCode();
+    if(!code) return;
+
+    pollRunning = true;
+
+    try{
+      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/chat/latest-open-session?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data = await res.json().catch(()=>null);
+
+      if(!res.ok || !data || !data.success || data.chat_mode_enabled !== true || !data.session || !data.session.id){
+        return;
+      }
+
+      const sessionId = String(data.session.id);
+
+      if(lastAutoOpenedSession === sessionId){
+        return;
+      }
+
+      lastAutoOpenedSession = sessionId;
+
+      const target = "/fm/app/" + encodeURIComponent(data.project_code || code) +
+        "?chatSession=" + encodeURIComponent(sessionId) +
+        "&focus=chat&auto=latest-open";
+
+      location.href = target;
+
+    }catch(err){
+      console.warn("checkLatestOpenChat error:", err);
+    }finally{
+      pollRunning = false;
+    }
+  }
+
+  function bootOwnerChatAutoPoll(){
+    const code = getOwnerChatAutoCode();
+    if(!code) return;
+
+    setTimeout(checkLatestOpenChat, 1000);
+    setTimeout(checkLatestOpenChat, 3000);
+
+    setInterval(checkLatestOpenChat, 5000);
+  }
+
+  window.checkLatestOpenFollowMeChat = checkLatestOpenChat;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bootOwnerChatAutoPoll);
+  }else{
+    bootOwnerChatAutoPoll();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(checkLatestOpenChat, 800);
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible"){
+      setTimeout(checkLatestOpenChat, 800);
+    }
+  });
+})();
+</script>
+
 </body>
 </html>

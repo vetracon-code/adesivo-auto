@@ -1,4 +1,5 @@
 const ANDROID_FIX_VERSION = '20260428140657';
+const FOLLOWME_CHAT_DIRECT_OPEN_VERSION = '20260515-DIRECT-OPEN';
 const FOLLOWME_CHAT_PUSH_AUTO_OPEN_VERSION = '20260515-CHAT-AUTO-OPEN';
 const FOLLOWME_CHAT_CLICK_FIX_VERSION = '20260515-1558';
 self.addEventListener('install', (event) => {
@@ -103,6 +104,12 @@ self.addEventListener('notificationclick', (event) => {
   const targetUrl = new URL(rawTargetUrl, self.location.origin).href;
 
   event.waitUntil((async () => {
+    if (data.type === 'followme_chat_new_user') {
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    }
+
     if (notificationId && recipientId) {
       try {
         await fetch('/api/push/broadcast-opened', {
