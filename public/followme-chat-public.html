@@ -204,6 +204,24 @@
       border-bottom-left-radius:7px;
     }
 
+
+    /* Effetto digitazione presentazione FollowMe */
+    .typed-cursor{
+      display:inline-block;
+      width:7px;
+      height:1.05em;
+      margin-left:2px;
+      vertical-align:-2px;
+      background:rgba(255,255,255,.72);
+      border-radius:2px;
+      animation:followmeTypedCursorBlink .85s infinite;
+    }
+
+    @keyframes followmeTypedCursorBlink{
+      0%,45%{opacity:1}
+      46%,100%{opacity:.15}
+    }
+
 </style>
 </head>
 <body>
@@ -307,6 +325,58 @@
     row("bot", String(html || ""));
   }
 
+  function tokenizeHtmlForTyping(html){
+    const tokens = [];
+    const re = /(<[^>]+>|[^<])/g;
+    let m;
+    while((m = re.exec(String(html || ""))) !== null){
+      tokens.push(m[0]);
+    }
+    return tokens;
+  }
+
+  function typeBotHtml(html){
+    const r = row("bot", "", false);
+    const bubble = r.querySelector(".bubble");
+    if(!bubble) return;
+
+    const tokens = tokenizeHtmlForTyping(html);
+    let out = "";
+    let i = 0;
+
+    function currentDelay(token, previousOutput){
+      if(token && token.startsWith("<strong")) return 80;
+      if(previousOutput.endsWith("</strong>")) return 260;
+      if(/[.!?]$/.test(previousOutput.replace(/<[^>]+>/g,"").trim())) return 360;
+      if(/:$/.test(previousOutput.replace(/<[^>]+>/g,"").trim())) return 280;
+      if(token === "<br>") return 220;
+
+      // Rallenta leggermente quando siamo dentro un grassetto aperto.
+      const openStrong = (previousOutput.match(/<strong>/g) || []).length;
+      const closeStrong = (previousOutput.match(/<\/strong>/g) || []).length;
+      if(openStrong > closeStrong) return 44;
+
+      return 24;
+    }
+
+    function step(){
+      if(i >= tokens.length){
+        bubble.innerHTML = out;
+        scrollBottom();
+        return;
+      }
+
+      const token = tokens[i++];
+      out += token;
+      bubble.innerHTML = out + '<span class="typed-cursor"></span>';
+      scrollBottom();
+
+      setTimeout(step, currentDelay(token, out));
+    }
+
+    step();
+  }
+
   function addUser(text){
     row("user", String(text || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
   }
@@ -349,16 +419,16 @@
       followMeInfoExplained = true;
       followMeInfoChoiceSent = true;
       sendSystemNoteToOwner("Ok, info trasmesse.");
-      addBotHtml(
+
+      typeBotHtml(
         "<strong>Piacere, sono FollowMe QR.</strong><br><br>" +
-        "In questo momento sono in <strong>modalità Dialogo 💬</strong>: permetto al proprietario di risponderti direttamente qui.<br><br>" +
-        "Ma <strong>non sono solo una chat</strong>.<br><br>" +
-        "Sono un <strong>QR dinamico 🔄</strong>: posso cambiare destinazione senza essere ristampato. Oggi posso aprire un dialogo, domani un sito, una pagina personale, un’offerta, un contenuto speciale o qualsiasi link scelto dal proprietario.<br><br>" +
-        "Il QR resta sempre lo stesso.<br>" +
-        "Quello che comunica, invece, può cambiare quando serve, <strong>anche in meno di un secondo</strong>.<br><br>" +
-        "<strong>Creo movimento attorno a me 👀</strong><br>" +
+        "Ora sono in <strong>modalità Dialogo 💬</strong>: ho avvisato il proprietario che sei in attesa.<br><br>" +
+        "Sono un <strong>QR dinamico 🔄</strong>: posso cambiare destinazione senza essere ristampato. Ora sto aprendo questa chat; più tardi potrei aprire un sito, un canale social o qualsiasi link scelto dal proprietario.<br><br>" +
+        "Il QR resta sempre lo stesso.<br><br>" +
+        "Quello che comunica può cambiare quando serve, <strong>anche in meno di un secondo</strong>.<br><br>" +
+        "<strong>Creo movimento attorno a me 👀</strong><br><br>" +
         "e trasformo un QR in un contatto 🤝<br><br>" +
-        "All’inizio è tutto anonimo.<br>" +
+        "All’inizio è tutto anonimo.<br><br>" +
         "Poi, se nasce il dialogo, decidete voi due."
       );
     };
