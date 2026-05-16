@@ -9556,7 +9556,7 @@ app.get('/api/followme/debug/temp-attachments', async (req, res) => {
 });
 
 
-app.post('/api/followme/chat/session/:session_id/attachment', express.json({ limit: '15mb' }), async (req, res) => {
+app.post('/api/followme/chat/session/:session_id/attachment', express.json({ limit: '30mb' }), async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
 
@@ -9614,9 +9614,9 @@ app.post('/api/followme/chat/session/:session_id/attachment', express.json({ lim
       const base64 = m[2];
       const buffer = Buffer.from(base64, 'base64');
 
-      const maxBytes = 12 * 1024 * 1024;
+      const maxBytes = 20 * 1024 * 1024;
       if (buffer.length > maxBytes) {
-        return res.status(413).json({ success:false, error:'File troppo grande. Limite 12 MB.' });
+        return res.status(413).json({ success:false, error:'File troppo grande. Limite 20 MB.' });
       }
 
       const extByMime = {

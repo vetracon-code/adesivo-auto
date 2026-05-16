@@ -13400,5 +13400,254 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+<script id="followme-admin-upload-final-controller">
+(function(){
+  let bound = false;
+
+  function sessionId(){
+    try{
+      return new URLSearchParams(location.search || "").get("chatSession") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function fileToDataUrl(file){
+    return new Promise(function(resolve, reject){
+      const reader = new FileReader();
+      reader.onload = function(){ resolve(String(reader.result || "")); };
+      reader.onerror = function(){ reject(new Error("Impossibile leggere il file.")); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function uploadFile(file, kind){
+    const sid = sessionId();
+
+    console.log("[FollowMe upload] session:", sid, "file:", file && file.name, "kind:", kind);
+
+    if(!sid){
+      throw new Error("Nessuna chat attiva. Seleziona prima un utente/chat.");
+    }
+
+    if(!file){
+      throw new Error("Nessun file selezionato.");
+    }
+
+    const maxMb = 20;
+    if(file.size && file.size > maxMb * 1024 * 1024){
+      throw new Error("File troppo grande. Limite " + maxMb + " MB.");
+    }
+
+    const dataUrl = await fileToDataUrl(file);
+
+    const payload = {
+      sender: "owner",
+      kind: kind || ((file.type || "").startsWith("image/") ? "image" : "document"),
+      filename: file.name || ("allegato-" + Date.now()),
+      mime: file.type || "",
+      data_url: dataUrl,
+      label: file.name || "Allegato"
+    };
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/attachment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json().catch(function(){ return null; });
+
+    console.log("[FollowMe upload] response:", res.status, data);
+
+    if(!res.ok || !data || !data.success){
+      throw new Error((data && data.error) || ("Errore HTTP " + res.status));
+    }
+
+    if(typeof window.followMeOwnerChatFinalFix?.pollOwnerMessages === "function"){
+      setTimeout(function(){
+        window.followMeOwnerChatFinalFix.pollOwnerMessages(false);
+      }, 250);
+    }
+
+    if(typeof window.followMeTransformAttachmentBubbles === "function"){
+      setTimeout(window.followMeTransformAttachmentBubbles, 450);
+      setTimeout(window.followMeTransformAttachmentBubbles, 1200);
+    }
+
+    return data;
+  }
+
+  async function handleInputChange(ev, kind){
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation();
+
+    const input = ev.currentTarget;
+    const file = input.files && input.files[0];
+
+    try{
+      await uploadFile(file, kind);
+    }catch(err){
+      alert("Errore invio allegato: " + (err.message || String(err)));
+      console.error("[FollowMe upload] error:", err);
+    }finally{
+      input.value = "";
+
+      const camOverlay = document.getElementById("followmeCameraChoiceOverlay");
+      if(camOverlay) camOverlay.classList.remove("is-open");
+
+      const panel = document.getElementById("followmeAdminAttachPanel");
+      if(panel) panel.classList.remove("is-open");
+    }
+  }
+
+  function hardBindInput(id, kind){
+    const oldInput = document.getElementById(id);
+    if(!oldInput) return;
+
+    // Clono l'input per eliminare fisicamente tutti i vecchi event listener stratificati.
+    const fresh = oldInput.cloneNode(true);
+    oldInput.parentNode.replaceChild(fresh, oldInput);
+
+    fresh.addEventListener("change", function(ev){
+      handleInputChange(ev, kind);
+    }, true);
+  }
+
+  function openCameraChoice(){
+    const overlay = document.getElementById("followmeCameraChoiceOverlay");
+    if(overlay) overlay.classList.add("is-open");
+  }
+
+  function closeCameraChoice(){
+    const overlay = document.getElementById("followmeCameraChoiceOverlay");
+    if(overlay) overlay.classList.remove("is-open");
+  }
+
+  function clickInput(ids){
+    for(const id of ids){
+      const input = document.getElementById(id);
+      if(input){
+        input.click();
+        return;
+      }
+    }
+  }
+
+  function bindButtons(){
+    const camBtn = document.getElementById("followmeAdminCameraBtn");
+    const takeBtn = document.getElementById("followmeTakePhotoBtn");
+    const pickBtn = document.getElementById("followmePickPhotoBtn");
+    const cancelBtn = document.getElementById("followmeCameraCancelBtn");
+
+    if(camBtn){
+      const fresh = camBtn.cloneNode(true);
+      camBtn.parentNode.replaceChild(fresh, camBtn);
+      fresh.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        openCameraChoice();
+      }, true);
+    }
+
+    if(takeBtn){
+      const fresh = takeBtn.cloneNode(true);
+      takeBtn.parentNode.replaceChild(fresh, takeBtn);
+      fresh.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        clickInput(["followmeAdminTakePhotoInput", "followmeAdminCameraInput"]);
+      }, true);
+    }
+
+    if(pickBtn){
+      const fresh = pickBtn.cloneNode(true);
+      pickBtn.parentNode.replaceChild(fresh, pickBtn);
+      fresh.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        clickInput(["followmeAdminPickPhotoInput", "followmeAdminPhotoInput"]);
+      }, true);
+    }
+
+    if(cancelBtn){
+      const fresh = cancelBtn.cloneNode(true);
+      cancelBtn.parentNode.replaceChild(fresh, cancelBtn);
+      fresh.addEventListener("click", function(ev){
+        ev.preventDefault();
+        closeCameraChoice();
+      }, true);
+    }
+
+    document.querySelectorAll('.followme-admin-attach-item[data-action="camera"]').forEach(function(btn){
+      const fresh = btn.cloneNode(true);
+      btn.parentNode.replaceChild(fresh, btn);
+      fresh.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        openCameraChoice();
+      }, true);
+    });
+
+    document.querySelectorAll('.followme-admin-attach-item[data-action="photo"]').forEach(function(btn){
+      const fresh = btn.cloneNode(true);
+      btn.parentNode.replaceChild(fresh, btn);
+      fresh.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        clickInput(["followmeAdminPickPhotoInput", "followmeAdminPhotoInput"]);
+      }, true);
+    });
+
+    document.querySelectorAll('.followme-admin-attach-item[data-action="document"]').forEach(function(btn){
+      const fresh = btn.cloneNode(true);
+      btn.parentNode.replaceChild(fresh, btn);
+      fresh.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        clickInput(["followmeAdminDocumentInputFinal", "followmeAdminDocumentInput"]);
+      }, true);
+    });
+  }
+
+  function bind(){
+    if(bound) return;
+    bound = true;
+
+    hardBindInput("followmeAdminTakePhotoInput", "image");
+    hardBindInput("followmeAdminPickPhotoInput", "image");
+    hardBindInput("followmeAdminCameraInput", "image");
+    hardBindInput("followmeAdminPhotoInput", "image");
+
+    hardBindInput("followmeAdminDocumentInputFinal", "document");
+    hardBindInput("followmeAdminDocumentInput", "document");
+
+    bindButtons();
+
+    console.log("[FollowMe upload] final controller active");
+  }
+
+  window.followMeFinalUploadFile = uploadFile;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bind);
+  }else{
+    bind();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(bind, 300);
+  });
+})();
+</script>
+
 </body>
 </html>
