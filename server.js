@@ -9854,16 +9854,22 @@ app.post('/api/followme/chat/session/:session_id/message', express.json(), async
 
 
 
+/* disabled duplicate followme name endpoint */
+
+
+
 app.post('/api/followme/chat/session/:session_id/name', express.json(), async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
-    await ensureFollowMeChatDisplayNameColumn();
 
     const sessionId = Number(req.params.session_id || 0);
     let displayName = String(req.body?.display_name || '').trim();
 
     if (!sessionId) {
-      return res.status(400).json({ success:false, error:'Sessione mancante.' });
+      return res.status(400).json({
+        success:false,
+        error:'Sessione mancante.'
+      });
     }
 
     displayName = displayName
@@ -9873,29 +9879,54 @@ app.post('/api/followme/chat/session/:session_id/name', express.json(), async (r
       .trim();
 
     if (!displayName || displayName.length < 2) {
-      return res.status(400).json({ success:false, error:'Nome non valido.' });
+      return res.status(400).json({
+        success:false,
+        error:'Nome non valido.'
+      });
+    }
+
+    // Garantisce la colonna, senza dipendere da funzioni precedenti.
+    await pool.query(`
+      ALTER TABLE followme_chat_sessions
+      ADD COLUMN IF NOT EXISTS display_name TEXT
+    `);
+
+    // Verifica che la sessione esista prima dell'update.
+    const existing = await pool.query(
+      `SELECT id
+       FROM followme_chat_sessions
+       WHERE id = $1
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!existing.rows.length) {
+      return res.status(404).json({
+        success:false,
+        error:'Sessione non trovata.',
+        session_id:sessionId
+      });
     }
 
     const updated = await pool.query(
       `UPDATE followme_chat_sessions
-       SET display_name = $2,
-           updated_at = NOW()
+       SET display_name = $2
        WHERE id = $1
-       RETURNING id, display_name, visitor_label, project_id, code`,
+       RETURNING id, display_name`,
       [sessionId, displayName]
     );
-
-    if (!updated.rows.length) {
-      return res.status(404).json({ success:false, error:'Sessione non trovata.' });
-    }
 
     return res.json({
       success:true,
       session:updated.rows[0]
     });
+
   } catch (err) {
-    console.error('followme session name error:', err);
-    return res.status(500).json({ success:false, error:'Errore salvataggio nome.' });
+    console.error('followme session name final error:', err);
+    return res.status(500).json({
+      success:false,
+      error:err.message || 'Errore salvataggio nome.'
+    });
   }
 });
 

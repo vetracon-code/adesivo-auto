@@ -15264,7 +15264,7 @@ document.addEventListener("visibilitychange", function(){
     const data = await res.json().catch(()=>null);
 
     if(!res.ok || !data || !data.success){
-      alert("Errore salvataggio nome: " + ((data && data.error) || res.status));
+      alert("Errore salvataggio nome: " + ((data && data.error) || ("HTTP " + res.status)));
       return;
     }
 
@@ -15428,6 +15428,129 @@ document.addEventListener("visibilitychange", function(){
     scanLatestMessage();
     restoreNamesFromSessions();
   }, 1800);
+})();
+</script>
+
+
+<script id="followme-name-save-final-controller">
+(function(){
+  function currentSessionId(){
+    try{
+      return new URLSearchParams(location.search || "").get("chatSession") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function cssEscape(v){
+    try{
+      if(window.CSS && CSS.escape) return CSS.escape(String(v));
+    }catch(e){}
+    return String(v).replace(/"/g, '\\"');
+  }
+
+  function cleanName(v){
+    return String(v || "")
+      .replace(/[<>"]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 40);
+  }
+
+  function applyName(sessionId, name){
+    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sessionId) + '"]');
+
+    if(chip){
+      const u = chip.dataset.uLabel || chip.textContent || "";
+      chip.dataset.userName = name;
+      chip.classList.add("has-name");
+      chip.textContent = name.slice(0, 18);
+      chip.title = u ? (u + " · " + name) : name;
+
+      chip.style.width = "auto";
+      chip.style.minWidth = "54px";
+      chip.style.maxWidth = "128px";
+      chip.style.flexBasis = "auto";
+    }
+  }
+
+  async function saveNameFinal(){
+    const input = document.getElementById("followmeNameDetectInput");
+    const card = document.getElementById("followmeNameDetectCard");
+
+    const name = cleanName(input ? input.value : "");
+    const sid =
+      window.pendingSessionId ||
+      (typeof pendingSessionId !== "undefined" ? pendingSessionId : "") ||
+      currentSessionId();
+
+    if(!sid){
+      alert("Non riesco a identificare la chat da aggiornare.");
+      return false;
+    }
+
+    if(!name || name.length < 2){
+      alert("Nome non valido.");
+      return false;
+    }
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/name", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ display_name:name })
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      alert("Errore salvataggio nome: " + ((data && data.error) || ("HTTP " + res.status)));
+      return false;
+    }
+
+    applyName(sid, name);
+
+    if(card){
+      card.classList.remove("is-open");
+      card.setAttribute("aria-hidden", "true");
+    }
+
+    if(typeof window.followMeConfirmedNameRefresh === "function"){
+      setTimeout(window.followMeConfirmedNameRefresh, 300);
+      setTimeout(window.followMeConfirmedNameRefresh, 1200);
+    }
+
+    return true;
+  }
+
+  function bind(){
+    const confirm = document.getElementById("followmeNameDetectConfirm");
+    if(!confirm || confirm.dataset.nameSaveFinalBound === "1") return;
+
+    const fresh = confirm.cloneNode(true);
+    fresh.dataset.nameSaveFinalBound = "1";
+    confirm.parentNode.replaceChild(fresh, confirm);
+
+    fresh.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      saveNameFinal();
+    }, true);
+  }
+
+  window.followMeSaveNameFinal = saveNameFinal;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bind);
+  }else{
+    bind();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(bind, 300);
+  });
+
+  setInterval(bind, 1200);
 })();
 </script>
 
