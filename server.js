@@ -9476,6 +9476,16 @@ app.post('/api/followme/chat/:chat_token/session', express.json(), async (req, r
   }
 });
 
+
+async function ensureFollowMeChatDisplayNameColumn() {
+  try {
+    await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS display_name TEXT`);
+    await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`);
+  } catch (err) {
+    console.warn('ensureFollowMeChatDisplayNameColumn error:', err.message || err);
+  }
+}
+
 app.get('/api/followme/chat/session/:session_id/messages', async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
@@ -9840,9 +9850,14 @@ app.post('/api/followme/chat/session/:session_id/message', express.json(), async
 
 
 
+/* disabled old followme session name endpoint */
+
+
+
 app.post('/api/followme/chat/session/:session_id/name', express.json(), async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
+    await ensureFollowMeChatDisplayNameColumn();
 
     const sessionId = Number(req.params.session_id || 0);
     let displayName = String(req.body?.display_name || '').trim();
@@ -9854,7 +9869,7 @@ app.post('/api/followme/chat/session/:session_id/name', express.json(), async (r
     displayName = displayName
       .replace(/[<>"]/g, '')
       .replace(/\s+/g, ' ')
-      .slice(0, 32)
+      .slice(0, 40)
       .trim();
 
     if (!displayName || displayName.length < 2) {
@@ -9866,7 +9881,7 @@ app.post('/api/followme/chat/session/:session_id/name', express.json(), async (r
        SET display_name = $2,
            updated_at = NOW()
        WHERE id = $1
-       RETURNING id, display_name`,
+       RETURNING id, display_name, visitor_label, project_id, code`,
       [sessionId, displayName]
     );
 
