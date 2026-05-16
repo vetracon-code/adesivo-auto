@@ -9595,7 +9595,11 @@ app.post('/api/followme/chat/session/:session_id/attachment-raw', express.raw({
     );
 
     if (!sessionRes.rows.length) {
-      return res.status(404).json({ success:false, error:'Sessione non trovata.' });
+      return res.status(404).json({
+        success:false,
+        session_closed:true,
+        error:'Chat chiusa dal proprietario.'
+      });
     }
 
     const session = sessionRes.rows[0];

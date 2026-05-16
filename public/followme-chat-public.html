@@ -454,6 +454,33 @@
       font-weight:700;
     }
 
+
+    /* Chat chiusa da Admin */
+    .followme-public-admin-closed{
+      display:none;
+      margin:10px auto;
+      max-width:88%;
+      padding:10px 12px;
+      border-radius:14px;
+      background:rgba(255,255,255,.86);
+      color:#3a3f41;
+      border:1px solid rgba(0,0,0,.08);
+      box-shadow:0 1px 2px rgba(0,0,0,.08);
+      font-size:.86rem;
+      line-height:1.35;
+      font-weight:750;
+      text-align:center;
+    }
+
+    body.followme-public-session-closed .followme-public-admin-closed{
+      display:block;
+    }
+
+    body.followme-public-session-closed .composer{
+      opacity:.55;
+      pointer-events:none;
+    }
+
 </style>
 </head>
 <body class="followme-wa-chat">
@@ -1089,6 +1116,80 @@
   });
 
   setInterval(transformAttachmentBubbles, 1000);
+})();
+</script>
+
+
+<div class="followme-public-admin-closed" id="followmePublicAdminClosed">
+  La chat è stata chiusa dal proprietario.
+</div>
+
+
+<script id="followme-public-reset-sync-final">
+(function(){
+  let closed = false;
+
+  function closeBecauseAdminReset(){
+    if(closed) return;
+    closed = true;
+
+    document.body.classList.add("followme-public-session-closed");
+
+    const input =
+      document.getElementById("messageInput") ||
+      document.querySelector("textarea") ||
+      document.querySelector("input[type='text']");
+
+    const send =
+      document.getElementById("sendBtn") ||
+      document.querySelector("button[type='submit']");
+
+    if(input){
+      input.value = "";
+      input.disabled = true;
+      input.placeholder = "Chat chiusa";
+    }
+
+    if(send){
+      send.disabled = true;
+    }
+
+    try{
+      if(typeof addSystem === "function"){
+        addSystem("La chat è stata chiusa dal proprietario.");
+      }else if(typeof addBot === "function"){
+        addBot("La chat è stata chiusa dal proprietario.");
+      }
+    }catch(e){}
+  }
+
+  // Intercetta fetch dei messaggi: se il server risponde session_closed, chiude la UI utente.
+  if(!window.__followMePublicResetFetchPatched){
+    window.__followMePublicResetFetchPatched = true;
+
+    const originalFetch = window.fetch.bind(window);
+
+    window.fetch = async function(input, init){
+      const res = await originalFetch(input, init);
+
+      try{
+        const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+
+        if(url && url.includes("/api/followme/chat/session/") && url.includes("/messages")){
+          const clone = res.clone();
+          const data = await clone.json().catch(()=>null);
+
+          if(data && data.session_closed){
+            closeBecauseAdminReset();
+          }
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  window.followMePublicCloseBecauseAdminReset = closeBecauseAdminReset;
 })();
 </script>
 

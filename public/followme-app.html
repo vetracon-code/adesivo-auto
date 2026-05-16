@@ -4941,6 +4941,77 @@
       white-space:nowrap !important;
     }
 
+
+    /* Reset chat: scelta questa/tutte */
+    .followme-reset-choice-overlay{
+      display:none;
+      position:fixed;
+      inset:0;
+      z-index:1000007;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+      background:rgba(40,31,22,.42);
+      backdrop-filter:blur(7px);
+      -webkit-backdrop-filter:blur(7px);
+    }
+
+    .followme-reset-choice-overlay.is-open{
+      display:flex;
+    }
+
+    .followme-reset-choice-card{
+      width:min(350px,92vw);
+      border-radius:26px;
+      padding:18px;
+      background:linear-gradient(145deg,#f3e5cf,#d8bea0);
+      border:1px solid rgba(90,61,36,.22);
+      box-shadow:0 24px 70px rgba(58,38,20,.38);
+      color:#3b2a1c;
+      text-align:center;
+    }
+
+    .followme-reset-choice-card h3{
+      margin:0 0 8px;
+      font-size:1.08rem;
+      letter-spacing:-.035em;
+      color:#3b2a1c;
+    }
+
+    .followme-reset-choice-card p{
+      margin:0 0 14px;
+      color:#60452e;
+      font-size:.84rem;
+      line-height:1.35;
+      font-weight:650;
+    }
+
+    .followme-reset-choice-actions{
+      display:grid;
+      gap:8px;
+    }
+
+    .followme-reset-choice-actions button{
+      min-height:42px;
+      border-radius:999px;
+      border:1px solid rgba(72,47,25,.14);
+      background:rgba(255,255,255,.78);
+      color:#3b2a1c;
+      font-weight:950;
+      box-shadow:0 2px 8px rgba(0,0,0,.07);
+    }
+
+    .followme-reset-choice-actions .danger{
+      background:#ffffff;
+      color:#9a2f22;
+    }
+
+    .followme-reset-choice-actions .primary{
+      background:#25d366;
+      color:#ffffff;
+      border:0;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -14975,6 +15046,169 @@ document.addEventListener("visibilitychange", function(){
     scanVisibleMessages();
     normalizeConfirmedNames();
   }, 1500);
+})();
+</script>
+
+
+<script id="followme-reset-choice-sync-final">
+(function(){
+  function code(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+
+    return "FM-DEMO";
+  }
+
+  function sessionId(){
+    try{
+      return new URLSearchParams(location.search || "").get("chatSession") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function openResetChoice(){
+    const o = document.getElementById("followmeResetChoiceOverlay");
+    if(o){
+      o.classList.add("is-open");
+      o.setAttribute("aria-hidden","false");
+    }
+  }
+
+  function closeResetChoice(){
+    const o = document.getElementById("followmeResetChoiceOverlay");
+    if(o){
+      o.classList.remove("is-open");
+      o.setAttribute("aria-hidden","true");
+    }
+  }
+
+  async function resetCurrent(){
+    const sid = sessionId();
+
+    if(!sid){
+      alert("Nessuna chat corrente da cancellare.");
+      return;
+    }
+
+    if(!confirm("Vuoi cancellare questa chat anche per l’utente collegato?")) return;
+
+    const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/session/" + encodeURIComponent(sid) + "/reset", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({})
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      alert("Errore reset chat: " + ((data && data.error) || res.status));
+      return;
+    }
+
+    closeResetChoice();
+
+    // Torna alla sala d'attesa: eventuale utente vedrà session_closed al prossimo polling.
+    window.location.href = "/fm/app/" + encodeURIComponent(code()) + "?chatWaiting=1&focus=chat-waiting";
+  }
+
+  async function resetAll(){
+    if(!confirm("Vuoi cancellare tutte le chat attive anche per tutti gli utenti collegati?")) return;
+
+    const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/reset", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({})
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      alert("Errore reset totale: " + ((data && data.error) || res.status));
+      return;
+    }
+
+    closeResetChoice();
+
+    window.location.href = "/fm/app/" + encodeURIComponent(code()) + "?chatWaiting=1&focus=chat-waiting";
+  }
+
+  function bindResetButtons(){
+    const ids = [
+      "followmeTopResetChatBtn",
+      "followmeResetChatBtn",
+      "followmeChatWaitingReset"
+    ];
+
+    ids.forEach(function(id){
+      const btn = document.getElementById(id);
+      if(!btn || btn.dataset.resetChoiceSyncBound === "1") return;
+
+      btn.dataset.resetChoiceSyncBound = "1";
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        openResetChoice();
+      }, true);
+    });
+
+    const current = document.getElementById("followmeResetCurrentChatBtn");
+    if(current && current.dataset.resetChoiceSyncBound !== "1"){
+      current.dataset.resetChoiceSyncBound = "1";
+      current.addEventListener("click", function(ev){
+        ev.preventDefault();
+        resetCurrent();
+      });
+    }
+
+    const all = document.getElementById("followmeResetAllChatsBtn");
+    if(all && all.dataset.resetChoiceSyncBound !== "1"){
+      all.dataset.resetChoiceSyncBound = "1";
+      all.addEventListener("click", function(ev){
+        ev.preventDefault();
+        resetAll();
+      });
+    }
+
+    const cancel = document.getElementById("followmeResetCancelBtn");
+    if(cancel && cancel.dataset.resetChoiceSyncBound !== "1"){
+      cancel.dataset.resetChoiceSyncBound = "1";
+      cancel.addEventListener("click", function(ev){
+        ev.preventDefault();
+        closeResetChoice();
+      });
+    }
+
+    const overlay = document.getElementById("followmeResetChoiceOverlay");
+    if(overlay && overlay.dataset.resetChoiceOverlayBound !== "1"){
+      overlay.dataset.resetChoiceOverlayBound = "1";
+      overlay.addEventListener("click", function(ev){
+        if(ev.target === overlay) closeResetChoice();
+      });
+    }
+  }
+
+  window.followMeOpenResetChoice = openResetChoice;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bindResetButtons);
+  }else{
+    bindResetButtons();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(bindResetButtons, 300);
+  });
+
+  setInterval(bindResetButtons, 1200);
 })();
 </script>
 
