@@ -9175,6 +9175,71 @@ app.post('/api/followme/:code/chat/enable', express.json(), async (req, res) => 
 });
 
 
+
+app.post('/api/followme/:code/chat/session/:session_id/reset', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeChatSchema();
+
+    const code = normalizeFollowMeCode(req.params.code);
+    const sessionId = Number(req.params.session_id || 0);
+
+    if (!sessionId) {
+      return res.status(400).json({ success:false, error:'Sessione mancante.' });
+    }
+
+    const projectRes = await pool.query(
+      `SELECT id, code
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!projectRes.rows.length) {
+      return res.status(404).json({ success:false, error:'FollowMe QR non trovato.' });
+    }
+
+    const project = projectRes.rows[0];
+
+    const sessionCheck = await pool.query(
+      `SELECT id
+       FROM followme_chat_sessions
+       WHERE id = $1 AND project_id = $2
+       LIMIT 1`,
+      [sessionId, project.id]
+    );
+
+    if (!sessionCheck.rows.length) {
+      return res.status(404).json({ success:false, error:'Chat non trovata.' });
+    }
+
+    const deletedMessages = await pool.query(
+      `DELETE FROM followme_chat_messages
+       WHERE session_id = $1 AND project_id = $2
+       RETURNING id`,
+      [sessionId, project.id]
+    );
+
+    const deletedSession = await pool.query(
+      `DELETE FROM followme_chat_sessions
+       WHERE id = $1 AND project_id = $2
+       RETURNING id`,
+      [sessionId, project.id]
+    );
+
+    return res.json({
+      success:true,
+      reset:'single',
+      project_code:project.code,
+      deleted_sessions:deletedSession.rows.length,
+      deleted_messages:deletedMessages.rows.length
+    });
+  } catch (err) {
+    console.error('followme chat single reset error:', err);
+    return res.status(500).json({ success:false, error:'Errore pulizia chat corrente.' });
+  }
+});
+
 app.post('/api/followme/:code/chat/reset', express.json(), async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
