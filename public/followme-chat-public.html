@@ -402,6 +402,58 @@
       color:#667071 !important;
     }
 
+
+    /* Preview allegati lato utente FollowMe */
+    .followme-attachment-card{
+      display:grid;
+      gap:7px;
+      max-width:240px;
+    }
+
+    .followme-attachment-image{
+      display:block;
+      width:220px;
+      max-width:70vw;
+      border-radius:12px;
+      box-shadow:0 1px 2px rgba(0,0,0,.14);
+      background:#eee;
+    }
+
+    .followme-attachment-file,
+    .followme-attachment-location,
+    .followme-attachment-audio{
+      display:flex;
+      align-items:center;
+      gap:9px;
+      padding:10px 11px;
+      border-radius:12px;
+      background:rgba(255,255,255,.58);
+      border:1px solid rgba(0,0,0,.08);
+      color:#253033;
+      text-decoration:none;
+      font-weight:800;
+      line-height:1.25;
+    }
+
+    .followme-attachment-audio audio{
+      width:210px;
+      max-width:64vw;
+    }
+
+    .followme-attachment-name{
+      display:block;
+      font-size:.82rem;
+      word-break:break-word;
+    }
+
+    .followme-attachment-meta{
+      display:block;
+      margin-top:2px;
+      color:#667071;
+      font-size:.68rem;
+      font-weight:700;
+    }
+
 </style>
 </head>
 <body class="followme-wa-chat">
@@ -960,6 +1012,83 @@
   });
 
   setInterval(bindClose, 1200);
+})();
+</script>
+
+
+<script id="followme-real-attachments-public-script">
+(function(){
+  function esc(v){
+    return String(v || "").replace(/[&<>"']/g, c => ({
+      '&':'&amp;',
+      '<':'&lt;',
+      '>':'&gt;',
+      '"':'&quot;',
+      "'":'&#39;'
+    }[c]));
+  }
+
+  function parseAttachment(text){
+    try{
+      const obj = JSON.parse(String(text || "").trim());
+      if(obj && obj.__followme_attachment) return obj;
+    }catch(e){}
+    return null;
+  }
+
+  function attachmentHtml(a){
+    const url = a.url || "";
+    const name = a.label || a.filename || "Allegato";
+
+    if(a.kind === "image" || (a.mime || "").startsWith("image/")){
+      return '<div class="followme-attachment-card">' +
+        '<img class="followme-attachment-image" src="' + esc(url) + '" alt="' + esc(name) + '">' +
+        '<span class="followme-attachment-meta">' + esc(name) + '</span>' +
+      '</div>';
+    }
+
+    if(a.kind === "audio" || (a.mime || "").startsWith("audio/")){
+      return '<div class="followme-attachment-audio">' +
+        '<span>🎙️</span><audio controls src="' + esc(url) + '"></audio>' +
+      '</div>';
+    }
+
+    if(a.kind === "location"){
+      return '<a class="followme-attachment-location" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+        '<span>📍</span><span><span class="followme-attachment-name">Posizione condivisa</span><span class="followme-attachment-meta">Apri mappa</span></span>' +
+      '</a>';
+    }
+
+    return '<a class="followme-attachment-file" href="' + esc(url) + '" target="_blank" rel="noopener" download>' +
+      '<span>📄</span><span><span class="followme-attachment-name">' + esc(name) + '</span><span class="followme-attachment-meta">Apri documento</span></span>' +
+    '</a>';
+  }
+
+  function transformAttachmentBubbles(){
+    document.querySelectorAll("#messages .bubble").forEach(function(b){
+      if(b.dataset.attachmentRendered === "1") return;
+
+      const a = parseAttachment(b.textContent);
+      if(!a) return;
+
+      b.dataset.attachmentRendered = "1";
+      b.innerHTML = attachmentHtml(a);
+    });
+  }
+
+  window.followMeTransformPublicAttachmentBubbles = transformAttachmentBubbles;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", transformAttachmentBubbles);
+  }else{
+    transformAttachmentBubbles();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(transformAttachmentBubbles, 300);
+  });
+
+  setInterval(transformAttachmentBubbles, 1000);
 })();
 </script>
 

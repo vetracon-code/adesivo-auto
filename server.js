@@ -9450,6 +9450,128 @@ app.get('/api/followme/chat/session/:session_id/messages', async (req, res) => {
   }
 });
 
+
+app.post('/api/followme/chat/session/:session_id/attachment', express.json({ limit: '15mb' }), async (req, res) => {
+  try {
+    await ensureFollowMeChatSchema();
+
+    const fs = require('fs');
+    const path = require('path');
+
+    const sessionId = Number(req.params.session_id || 0);
+    const sender = String(req.body?.sender || 'owner').trim();
+    const kind = String(req.body?.kind || '').trim();
+    const filenameRaw = String(req.body?.filename || '').trim();
+    const mime = String(req.body?.mime || '').trim();
+    const dataUrl = String(req.body?.data_url || '').trim();
+    const url = String(req.body?.url || '').trim();
+    const label = String(req.body?.label || '').trim();
+
+    if (!sessionId) {
+      return res.status(400).json({ success:false, error:'Sessione mancante.' });
+    }
+
+    if (!['owner','visitor','system'].includes(sender)) {
+      return res.status(400).json({ success:false, error:'Sender non valido.' });
+    }
+
+    const sessionRes = await pool.query(
+      `SELECT id, project_id
+       FROM followme_chat_sessions
+       WHERE id = $1
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!sessionRes.rows.length) {
+      return res.status(404).json({ success:false, error:'Sessione non trovata.' });
+    }
+
+    const session = sessionRes.rows[0];
+
+    let attachmentUrl = url || '';
+    let safeFilename = filenameRaw
+      .replace(/[^\w.\-àèéìòùÀÈÉÌÒÙ ]+/g, '')
+      .replace(/\s+/g, '_')
+      .slice(0, 80);
+
+    if (!safeFilename) {
+      safeFilename = kind + '_' + Date.now();
+    }
+
+    if (dataUrl) {
+      const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+      if (!m) {
+        return res.status(400).json({ success:false, error:'Formato file non valido.' });
+      }
+
+      const realMime = mime || m[1];
+      const base64 = m[2];
+      const buffer = Buffer.from(base64, 'base64');
+
+      const maxBytes = 12 * 1024 * 1024;
+      if (buffer.length > maxBytes) {
+        return res.status(413).json({ success:false, error:'File troppo grande. Limite 12 MB.' });
+      }
+
+      const extByMime = {
+        'image/jpeg': '.jpg',
+        'image/png': '.png',
+        'image/webp': '.webp',
+        'image/gif': '.gif',
+        'audio/webm': '.webm',
+        'audio/mp4': '.m4a',
+        'audio/mpeg': '.mp3',
+        'application/pdf': '.pdf'
+      };
+
+      const ext = path.extname(safeFilename) || extByMime[realMime] || '';
+      const base = path.basename(safeFilename, path.extname(safeFilename)).replace(/[^\w.\-]+/g, '_') || kind;
+      const storedName = `${Date.now()}_${Math.random().toString(16).slice(2,8)}_${base}${ext}`;
+
+      const uploadDir = path.join(__dirname, 'public', 'uploads', 'followme-chat');
+      fs.mkdirSync(uploadDir, { recursive:true });
+
+      const fullPath = path.join(uploadDir, storedName);
+      fs.writeFileSync(fullPath, buffer);
+
+      attachmentUrl = `/uploads/followme-chat/${storedName}`;
+      safeFilename = filenameRaw || storedName;
+    }
+
+    if (!attachmentUrl && kind !== 'location') {
+      return res.status(400).json({ success:false, error:'Allegato mancante.' });
+    }
+
+    const payload = {
+      __followme_attachment: true,
+      kind,
+      url: attachmentUrl,
+      filename: safeFilename,
+      mime,
+      label: label || safeFilename,
+      created_at: new Date().toISOString()
+    };
+
+    const inserted = await pool.query(
+      `INSERT INTO followme_chat_messages
+       (session_id, project_id, sender, message, created_at)
+       VALUES ($1,$2,$3,$4,NOW())
+       RETURNING id, session_id, project_id, sender, message, created_at`,
+      [sessionId, session.project_id, sender, JSON.stringify(payload)]
+    );
+
+    return res.json({
+      success:true,
+      message: inserted.rows[0],
+      attachment: payload
+    });
+  } catch (err) {
+    console.error('followme attachment upload error:', err);
+    return res.status(500).json({ success:false, error:'Errore invio allegato.' });
+  }
+});
+
 app.post('/api/followme/chat/session/:session_id/message', express.json(), async (req, res) => {
   try {
     await ensureFollowMeChatSchema();

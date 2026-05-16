@@ -4620,6 +4620,64 @@
       overscroll-behavior:contain !important;
     }
 
+
+    /* Preview allegati FollowMe chat */
+    .followme-attachment-card{
+      display:grid;
+      gap:7px;
+      max-width:240px;
+    }
+
+    .followme-attachment-image{
+      display:block;
+      width:220px;
+      max-width:70vw;
+      border-radius:12px;
+      box-shadow:0 1px 2px rgba(0,0,0,.14);
+      background:#eee;
+    }
+
+    .followme-attachment-file,
+    .followme-attachment-location,
+    .followme-attachment-audio{
+      display:flex;
+      align-items:center;
+      gap:9px;
+      padding:10px 11px;
+      border-radius:12px;
+      background:rgba(255,255,255,.58);
+      border:1px solid rgba(0,0,0,.08);
+      color:#253033;
+      text-decoration:none;
+      font-weight:800;
+      line-height:1.25;
+    }
+
+    .followme-owner-chat-bubble.owner .followme-attachment-file,
+    .followme-owner-chat-bubble.owner .followme-attachment-location,
+    .followme-owner-chat-bubble.owner .followme-attachment-audio{
+      background:rgba(255,255,255,.42);
+    }
+
+    .followme-attachment-audio audio{
+      width:210px;
+      max-width:64vw;
+    }
+
+    .followme-attachment-name{
+      display:block;
+      font-size:.82rem;
+      word-break:break-word;
+    }
+
+    .followme-attachment-meta{
+      display:block;
+      margin-top:2px;
+      color:#667071;
+      font-size:.68rem;
+      font-weight:700;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -13014,6 +13072,331 @@ document.addEventListener("visibilitychange", function(){
     bindSwipe();
     bindTypingPause();
   }, 3000);
+})();
+</script>
+
+
+<script id="followme-real-attachments-admin-script">
+(function(){
+  function sessionId(){
+    try{
+      return new URLSearchParams(location.search || "").get("chatSession") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function esc(v){
+    return String(v || "").replace(/[&<>"']/g, c => ({
+      '&':'&amp;',
+      '<':'&lt;',
+      '>':'&gt;',
+      '"':'&quot;',
+      "'":'&#39;'
+    }[c]));
+  }
+
+  function parseAttachment(text){
+    try{
+      const obj = JSON.parse(String(text || "").trim());
+      if(obj && obj.__followme_attachment) return obj;
+    }catch(e){}
+    return null;
+  }
+
+  function attachmentHtml(a){
+    const url = a.url || "";
+    const name = a.label || a.filename || "Allegato";
+
+    if(a.kind === "image" || (a.mime || "").startsWith("image/")){
+      return '<div class="followme-attachment-card">' +
+        '<img class="followme-attachment-image" src="' + esc(url) + '" alt="' + esc(name) + '">' +
+        '<span class="followme-attachment-meta">' + esc(name) + '</span>' +
+      '</div>';
+    }
+
+    if(a.kind === "audio" || (a.mime || "").startsWith("audio/")){
+      return '<div class="followme-attachment-audio">' +
+        '<span>🎙️</span><audio controls src="' + esc(url) + '"></audio>' +
+      '</div>';
+    }
+
+    if(a.kind === "location"){
+      return '<a class="followme-attachment-location" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+        '<span>📍</span><span><span class="followme-attachment-name">Posizione condivisa</span><span class="followme-attachment-meta">Apri mappa</span></span>' +
+      '</a>';
+    }
+
+    return '<a class="followme-attachment-file" href="' + esc(url) + '" target="_blank" rel="noopener" download>' +
+      '<span>📄</span><span><span class="followme-attachment-name">' + esc(name) + '</span><span class="followme-attachment-meta">Apri documento</span></span>' +
+    '</a>';
+  }
+
+  function transformAttachmentBubbles(){
+    document.querySelectorAll("#followmeOwnerChatMessages .followme-owner-chat-bubble").forEach(function(b){
+      if(b.dataset.attachmentRendered === "1") return;
+
+      const a = parseAttachment(b.textContent);
+      if(!a) return;
+
+      b.dataset.attachmentRendered = "1";
+      b.innerHTML = attachmentHtml(a);
+    });
+  }
+
+  function fileToDataUrl(file){
+    return new Promise((resolve, reject)=>{
+      const r = new FileReader();
+      r.onload = ()=>resolve(String(r.result || ""));
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+  }
+
+  async function uploadAttachment({ file, kind, url, label }){
+    const sid = sessionId();
+    if(!sid){
+      alert("Nessuna chat attiva.");
+      return;
+    }
+
+    let dataUrl = "";
+    let filename = "";
+    let mime = "";
+
+    if(file){
+      dataUrl = await fileToDataUrl(file);
+      filename = file.name || "";
+      mime = file.type || "";
+    }
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/attachment", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({
+        sender:"owner",
+        kind,
+        filename,
+        mime,
+        data_url:dataUrl,
+        url:url || "",
+        label:label || filename
+      })
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      throw new Error((data && data.error) || "Errore invio allegato");
+    }
+
+    if(typeof window.followMeOwnerChatFinalFix?.pollOwnerMessages === "function"){
+      setTimeout(()=>window.followMeOwnerChatFinalFix.pollOwnerMessages(false), 250);
+    }
+
+    setTimeout(transformAttachmentBubbles, 500);
+  }
+
+  function bindAttachmentInputs(){
+    const map = [
+      ["followmeAdminTakePhotoInput", "image"],
+      ["followmeAdminPickPhotoInput", "image"],
+      ["followmeAdminPhotoInput", "image"],
+      ["followmeAdminDocumentInput", "document"],
+      ["followmeAdminDocumentInputFinal", "document"]
+    ];
+
+    map.forEach(([id, kind])=>{
+      const input = document.getElementById(id);
+      if(!input || input.dataset.realAttachmentBound === "1") return;
+
+      input.dataset.realAttachmentBound = "1";
+
+      input.addEventListener("change", async function(ev){
+        ev.stopImmediatePropagation();
+
+        const file = input.files && input.files[0];
+        if(!file) return;
+
+        try{
+          await uploadAttachment({ file, kind });
+        }catch(err){
+          alert("Errore allegato: " + (err.message || String(err)));
+        }finally{
+          input.value = "";
+        }
+      }, true);
+    });
+  }
+
+  function bindLocationButtons(){
+    document.querySelectorAll('.followme-admin-attach-item[data-action="location"]').forEach(btn=>{
+      if(btn.dataset.realLocationBound === "1") return;
+      btn.dataset.realLocationBound = "1";
+
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+
+        if(!navigator.geolocation){
+          alert("Posizione non disponibile su questo dispositivo.");
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(async function(pos){
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const url = "https://www.google.com/maps?q=" + encodeURIComponent(lat + "," + lng);
+
+          try{
+            await uploadAttachment({ kind:"location", url, label:"Posizione condivisa" });
+          }catch(err){
+            alert("Errore posizione: " + (err.message || String(err)));
+          }
+        }, function(){
+          alert("Non riesco a recuperare la posizione.");
+        }, {
+          enableHighAccuracy:true,
+          timeout:9000,
+          maximumAge:60000
+        });
+      }, true);
+    });
+  }
+
+  let recorder = null;
+  let chunks = [];
+
+  function blobToDataUrl(blob){
+    return new Promise((resolve, reject)=>{
+      const r = new FileReader();
+      r.onload = ()=>resolve(String(r.result || ""));
+      r.onerror = reject;
+      r.readAsDataURL(blob);
+    });
+  }
+
+  function bindAudioUpload(){
+    const mic = document.getElementById("followmeAdminMicBtn");
+    if(mic && mic.dataset.realAudioBound !== "1"){
+      mic.dataset.realAudioBound = "1";
+
+      mic.addEventListener("click", async function(ev){
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+
+        const overlay = document.getElementById("followmeAudioRecorderOverlay");
+        if(overlay) overlay.classList.add("is-open");
+      }, true);
+    }
+
+    const start = document.getElementById("followmeAudioStartBtn");
+    const stop = document.getElementById("followmeAudioStopBtn");
+    const cancel = document.getElementById("followmeAudioCancelBtn");
+    const status = document.getElementById("followmeAudioStatus");
+
+    if(start && start.dataset.realAudioBound !== "1"){
+      start.dataset.realAudioBound = "1";
+      start.addEventListener("click", async function(ev){
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+
+        try{
+          if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+            alert("Microfono non disponibile.");
+            return;
+          }
+
+          const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+          chunks = [];
+          recorder = new MediaRecorder(stream);
+
+          recorder.ondataavailable = e=>{
+            if(e.data && e.data.size) chunks.push(e.data);
+          };
+
+          recorder.onstop = async ()=>{
+            try{ stream.getTracks().forEach(t=>t.stop()); }catch(e){}
+
+            const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+            const file = new File([blob], "audio-followme-" + Date.now() + ".webm", { type: blob.type });
+
+            try{
+              await uploadAttachment({ file, kind:"audio", label:"Messaggio audio" });
+            }catch(err){
+              alert("Errore audio: " + (err.message || String(err)));
+            }
+
+            if(status) status.textContent = "Pronto per registrare";
+            if(start) start.style.display = "";
+            if(stop) stop.style.display = "none";
+
+            const overlay = document.getElementById("followmeAudioRecorderOverlay");
+            if(overlay) overlay.classList.remove("is-open");
+          };
+
+          recorder.start();
+
+          if(status) status.innerHTML = '<span class="followme-audio-recording-dot"></span>Registrazione in corso...';
+          start.style.display = "none";
+          if(stop) stop.style.display = "";
+        }catch(err){
+          alert("Microfono non autorizzato o non disponibile.");
+        }
+      }, true);
+    }
+
+    if(stop && stop.dataset.realAudioBound !== "1"){
+      stop.dataset.realAudioBound = "1";
+      stop.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+
+        if(recorder && recorder.state !== "inactive"){
+          recorder.stop();
+        }
+      }, true);
+    }
+
+    if(cancel && cancel.dataset.realAudioBound !== "1"){
+      cancel.dataset.realAudioBound = "1";
+      cancel.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+
+        try{
+          if(recorder && recorder.state !== "inactive"){
+            recorder.stop();
+          }
+        }catch(e){}
+
+        const overlay = document.getElementById("followmeAudioRecorderOverlay");
+        if(overlay) overlay.classList.remove("is-open");
+      }, true);
+    }
+  }
+
+  function boot(){
+    bindAttachmentInputs();
+    bindLocationButtons();
+    bindAudioUpload();
+    transformAttachmentBubbles();
+  }
+
+  window.followMeTransformAttachmentBubbles = transformAttachmentBubbles;
+  window.followMeUploadAttachment = uploadAttachment;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 300);
+  });
+
+  setInterval(boot, 1500);
 })();
 </script>
 
