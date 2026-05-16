@@ -4927,6 +4927,20 @@
       text-transform:uppercase !important;
     }
 
+
+    /* Nome confermato sostituisce U1/U2/U3 */
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip .followme-chat-session-chip.has-name{
+      flex:0 0 auto !important;
+      width:auto !important;
+      min-width:54px !important;
+      max-width:118px !important;
+      padding:0 10px !important;
+      text-transform:none !important;
+      overflow:hidden !important;
+      text-overflow:ellipsis !important;
+      white-space:nowrap !important;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -14401,12 +14415,16 @@ document.addEventListener("visibilitychange", function(){
       btn.dataset.sessionId = String(s.id);
       btn.dataset.uLabel = "U" + n;
       btn.dataset.userName = String(s.display_name || "");
-      btn.textContent = "U" + n;
 
-      // Il nome eventuale non sostituisce mai U1/U2: resta solo come tooltip.
-      btn.title = s.display_name
-        ? "U" + n + " · " + s.display_name
-        : "U" + n;
+      if(s.display_name){
+        btn.classList.add("has-name");
+        btn.textContent = String(s.display_name).slice(0, 18);
+        btn.title = "U" + n + " · " + s.display_name;
+      }else{
+        btn.classList.remove("has-name");
+        btn.textContent = "U" + n;
+        btn.title = "U" + n;
+      }
 
       btn.addEventListener("click", function(ev){
         ev.preventDefault();
@@ -14450,15 +14468,31 @@ document.addEventListener("visibilitychange", function(){
         btn.dataset.uLabel = label;
       }
 
-      if(btn.textContent !== label){
-        btn.textContent = label;
-      }
+      const userName = btn.dataset.userName || "";
 
-      // Stabilizza larghezza anche se altri CSS tentano di allargarla.
-      btn.style.width = "42px";
-      btn.style.minWidth = "42px";
-      btn.style.maxWidth = "42px";
-      btn.style.flexBasis = "42px";
+      if(userName){
+        btn.classList.add("has-name");
+        const visibleName = String(userName).slice(0, 18);
+        if(btn.textContent !== visibleName){
+          btn.textContent = visibleName;
+        }
+        btn.title = label + " · " + userName;
+
+        btn.style.width = "auto";
+        btn.style.minWidth = "54px";
+        btn.style.maxWidth = "118px";
+        btn.style.flexBasis = "auto";
+      }else{
+        btn.classList.remove("has-name");
+        if(btn.textContent !== label){
+          btn.textContent = label;
+        }
+
+        btn.style.width = "42px";
+        btn.style.minWidth = "42px";
+        btn.style.maxWidth = "42px";
+        btn.style.flexBasis = "42px";
+      }
     });
   }
 
@@ -14749,13 +14783,19 @@ document.addEventListener("visibilitychange", function(){
       return;
     }
 
-    // Il tab deve restare U1/U2/U3: aggiorniamo solo tooltip/dataset.
+    // Dopo conferma, il nome sostituisce U1/U2/U3 nel tab visibile.
     const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + CSS.escape(pendingSessionId) + '"]');
     if(chip){
-      chip.dataset.userName = pendingName;
       const u = chip.dataset.uLabel || chip.textContent || "U?";
-      chip.textContent = u;
+      chip.dataset.userName = pendingName;
+      chip.classList.add("has-name");
+      chip.textContent = pendingName.slice(0, 18);
       chip.title = u + " · " + pendingName;
+
+      chip.style.width = "auto";
+      chip.style.minWidth = "54px";
+      chip.style.maxWidth = "118px";
+      chip.style.flexBasis = "auto";
     }
 
     if(typeof window.followMeULabelsNormalize === "function"){
@@ -14837,12 +14877,18 @@ document.addEventListener("visibilitychange", function(){
         chip.dataset.uLabel = label;
       }
 
-      if(chip.textContent !== label){
-        chip.textContent = label;
-      }
-
       if(chip.dataset.userName){
+        chip.classList.add("has-name");
+        const visibleName = String(chip.dataset.userName).slice(0, 18);
+        if(chip.textContent !== visibleName){
+          chip.textContent = visibleName;
+        }
         chip.title = label + " · " + chip.dataset.userName;
+      }else{
+        chip.classList.remove("has-name");
+        if(chip.textContent !== label){
+          chip.textContent = label;
+        }
       }
     });
   }
