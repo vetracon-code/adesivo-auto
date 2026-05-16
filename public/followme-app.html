@@ -4527,6 +4527,99 @@
       50%{opacity:1;transform:scale(1.1)}
     }
 
+
+    /* DISATTIVA DEFINITIVAMENTE LISTA VERTICALE CHAT */
+    #followmeChatUsersPanel,
+    .followme-chat-users-panel{
+      display:none !important;
+      visibility:hidden !important;
+      height:0 !important;
+      min-height:0 !important;
+      max-height:0 !important;
+      overflow:hidden !important;
+      padding:0 !important;
+      margin:0 !important;
+      pointer-events:none !important;
+    }
+
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip{
+      display:flex !important;
+      flex-direction:row !important;
+      align-items:center !important;
+      gap:6px !important;
+      overflow-x:auto !important;
+      overflow-y:hidden !important;
+      width:100% !important;
+      min-height:38px !important;
+      max-height:42px !important;
+      padding:6px 8px !important;
+      margin:0 !important;
+      background:#efe7db !important;
+      border:0 !important;
+      box-shadow:none !important;
+      -webkit-overflow-scrolling:touch !important;
+      scroll-behavior:smooth !important;
+      touch-action:pan-x !important;
+    }
+
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip .followme-chat-session-chip{
+      flex:0 0 auto !important;
+      display:inline-flex !important;
+      align-items:center !important;
+      justify-content:center !important;
+      width:auto !important;
+      min-width:42px !important;
+      max-width:118px !important;
+      height:28px !important;
+      min-height:28px !important;
+      padding:0 10px !important;
+      border-radius:999px !important;
+      background:#ffffff !important;
+      color:#3a3f41 !important;
+      border:1px solid rgba(0,0,0,.08) !important;
+      box-shadow:0 1px 1px rgba(0,0,0,.08) !important;
+      font-size:11px !important;
+      font-weight:850 !important;
+      white-space:nowrap !important;
+      overflow:hidden !important;
+      text-overflow:ellipsis !important;
+    }
+
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip .followme-chat-session-chip.active{
+      background:#25d366 !important;
+      color:#ffffff !important;
+      border:0 !important;
+      box-shadow:0 1px 2px rgba(0,0,0,.14) !important;
+    }
+
+    body.followme-chat-only-mode #followmeHorizontalChatDots{
+      display:flex !important;
+      justify-content:center !important;
+      align-items:center !important;
+      gap:5px !important;
+      padding:3px 0 7px !important;
+      min-height:18px !important;
+      background:#efe7db !important;
+    }
+
+    body.followme-chat-only-mode .followme-horizontal-chat-dot{
+      width:7px !important;
+      height:7px !important;
+      border-radius:999px !important;
+      background:#bdb6ad !important;
+      transition:all .18s ease !important;
+    }
+
+    body.followme-chat-only-mode .followme-horizontal-chat-dot.active{
+      width:18px !important;
+      background:#25d366 !important;
+    }
+
+    body.followme-chat-only-mode #followmeOwnerChatMessages{
+      touch-action:pan-y !important;
+      overscroll-behavior:contain !important;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -11460,258 +11553,7 @@ document.addEventListener("visibilitychange", function(){
 </div>
 
 
-<script id="followme-multi-chat-ux-final">
-(function(){
-  let sessionsCache = [];
-  let activeTypingTimer = null;
-  let pauseTimer = null;
-
-  function code(){
-    try{
-      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
-      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
-      if(typeof getCode === "function"){
-        const c = getCode();
-        if(c) return String(c).trim().toUpperCase();
-      }
-    }catch(e){}
-    return "FM-DEMO";
-  }
-
-  function sessionId(){
-    try{ return new URLSearchParams(location.search || "").get("chatSession") || ""; }
-    catch(e){ return ""; }
-  }
-
-  function esc(v){
-    return String(v || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  }
-
-  function labelForSession(s, idx){
-    const n = Number(s.display_index || idx + 1);
-    const base = "Utente " + n;
-    return s.display_name ? base + " · " + s.display_name : base;
-  }
-
-  function openSession(id){
-    if(!id) return;
-    location.href = "/fm/app/" + encodeURIComponent(code()) + "?chatSession=" + encodeURIComponent(id) + "&focus=chat";
-  }
-
-  async function fetchSessions(){
-    const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), { cache:"no-store" });
-    const data = await res.json().catch(()=>null);
-    if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)) return [];
-    sessionsCache = data.sessions.slice().sort((a,b)=>Number(a.display_index||0)-Number(b.display_index||0));
-    return sessionsCache;
-  }
-
-  function renderVerticalSessions(sessions){
-    const list = document.getElementById("followmeChatUsersList");
-    const dots = document.getElementById("followmeChatDots");
-    const current = sessionId();
-
-    if(list){
-      list.innerHTML = "";
-
-      sessions.forEach((s, idx)=>{
-        const row = document.createElement("div");
-        row.className = "followme-chat-user-row" + (String(s.id) === String(current) ? " active" : "");
-        row.dataset.sessionId = String(s.id);
-
-        const last = s.last_message || "In attesa";
-        row.innerHTML =
-          '<div class="followme-chat-user-dot"></div>' +
-          '<div class="followme-chat-user-text">' +
-            '<div class="followme-chat-user-name">' + esc(labelForSession(s, idx)) + '</div>' +
-            '<span class="followme-chat-user-last">' + esc(last) + '</span>' +
-          '</div>' +
-          '<div class="followme-chat-user-pause" title="In pausa breve">⏳</div>';
-
-        row.addEventListener("click", ()=>openSession(s.id));
-        list.appendChild(row);
-      });
-    }
-
-    if(dots){
-      dots.innerHTML = "";
-      sessions.forEach((s)=>{
-        const d = document.createElement("span");
-        d.className = "followme-chat-dot" + (String(s.id) === String(current) ? " active" : "");
-        dots.appendChild(d);
-      });
-    }
-  }
-
-  async function refreshSessions(){
-    try{
-      const sessions = await fetchSessions();
-      renderVerticalSessions(sessions);
-    }catch(e){}
-  }
-
-  function markOtherChatsPaused(){
-    const current = sessionId();
-    document.querySelectorAll(".followme-chat-user-row").forEach(row=>{
-      row.classList.toggle("paused", row.dataset.sessionId && row.dataset.sessionId !== String(current));
-    });
-  }
-
-  function clearPaused(){
-    document.querySelectorAll(".followme-chat-user-row.paused").forEach(row=>row.classList.remove("paused"));
-  }
-
-  function bindTypingPause(){
-    const input = document.getElementById("followmeOwnerChatInput");
-    if(!input || input.dataset.pauseBound === "1") return;
-
-    input.dataset.pauseBound = "1";
-
-    input.addEventListener("input", function(){
-      clearPaused();
-
-      if(pauseTimer) clearTimeout(pauseTimer);
-      pauseTimer = setTimeout(markOtherChatsPaused, 8000);
-    });
-  }
-
-  function openResetChoice(){
-    const o = document.getElementById("followmeResetChoiceOverlay");
-    if(o){
-      o.classList.add("is-open");
-      o.setAttribute("aria-hidden","false");
-    }
-  }
-
-  function closeResetChoice(){
-    const o = document.getElementById("followmeResetChoiceOverlay");
-    if(o){
-      o.classList.remove("is-open");
-      o.setAttribute("aria-hidden","true");
-    }
-  }
-
-  async function resetCurrentChat(){
-    const sid = sessionId();
-    if(!sid){
-      alert("Nessuna chat corrente da pulire.");
-      return;
-    }
-
-    if(!confirm("Vuoi eliminare solo questa chat?")) return;
-
-    try{
-      const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/session/" + encodeURIComponent(sid) + "/reset", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({})
-      });
-
-      const data = await res.json().catch(()=>null);
-      if(!res.ok || !data || !data.success){
-        throw new Error((data && data.error) || "Errore reset chat corrente");
-      }
-
-      closeResetChoice();
-      location.href = "/fm/app/" + encodeURIComponent(code()) + "?chatWaiting=1&focus=chat-waiting";
-    }catch(err){
-      alert("Errore: " + (err.message || String(err)));
-    }
-  }
-
-  async function resetAllChats(){
-    if(!confirm("Vuoi eliminare tutte le chat attive?")) return;
-
-    try{
-      const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/reset", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({})
-      });
-
-      const data = await res.json().catch(()=>null);
-      if(!res.ok || !data || !data.success){
-        throw new Error((data && data.error) || "Errore reset totale");
-      }
-
-      closeResetChoice();
-      location.href = "/fm/app/" + encodeURIComponent(code()) + "?chatWaiting=1&focus=chat-waiting";
-    }catch(err){
-      alert("Errore: " + (err.message || String(err)));
-    }
-  }
-
-  function overrideResetButtons(){
-    ["followmeTopResetChatBtn", "followmeResetChatBtn", "followmeChatWaitingReset"].forEach(id=>{
-      const btn = document.getElementById(id);
-      if(!btn || btn.dataset.multiResetBound === "1") return;
-
-      btn.dataset.multiResetBound = "1";
-      btn.onclick = function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        openResetChoice();
-        return false;
-      };
-    });
-  }
-
-  function bindResetChoice(){
-    const current = document.getElementById("followmeResetCurrentChatBtn");
-    const all = document.getElementById("followmeResetAllChatsBtn");
-    const cancel = document.getElementById("followmeResetCancelBtn");
-    const overlay = document.getElementById("followmeResetChoiceOverlay");
-
-    if(current && current.dataset.bound !== "1"){
-      current.dataset.bound = "1";
-      current.onclick = resetCurrentChat;
-    }
-
-    if(all && all.dataset.bound !== "1"){
-      all.dataset.bound = "1";
-      all.onclick = resetAllChats;
-    }
-
-    if(cancel && cancel.dataset.bound !== "1"){
-      cancel.dataset.bound = "1";
-      cancel.onclick = closeResetChoice;
-    }
-
-    if(overlay && overlay.dataset.bound !== "1"){
-      overlay.dataset.bound = "1";
-      overlay.addEventListener("click", ev=>{
-        if(ev.target === overlay) closeResetChoice();
-      });
-    }
-  }
-
-  function boot(){
-    overrideResetButtons();
-    bindResetChoice();
-    bindTypingPause();
-
-    refreshSessions();
-    setTimeout(refreshSessions, 900);
-    setTimeout(refreshSessions, 2200);
-  }
-
-  window.followMeRefreshVerticalChats = refreshSessions;
-  window.followMeOpenResetChoice = openResetChoice;
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", boot);
-  }else{
-    boot();
-  }
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 400);
-  });
-
-  setInterval(refreshSessions, 3500);
-  setInterval(overrideResetButtons, 1200);
-})();
-</script>
+<script id="followme-multi-chat-ux-final-disabled">/* disabled: replaced by horizontal carousel */</script>
 
 
 <script id="followme-horizontal-chat-carousel-final">
@@ -12849,6 +12691,329 @@ document.addEventListener("visibilitychange", function(){
   });
 
   setInterval(bind, 1000);
+})();
+</script>
+
+
+<script id="followme-horizontal-carousel-clean-final">
+(function(){
+  let sessions = [];
+  let lastMoveAt = 0;
+  let startX = 0;
+  let startY = 0;
+  let startTime = 0;
+  let tracking = false;
+
+  function code(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+
+    return "FM-DEMO";
+  }
+
+  function currentSessionId(){
+    try{
+      return new URLSearchParams(location.search || "").get("chatSession") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function esc(v){
+    return String(v || "").replace(/[&<>"']/g, c => ({
+      '&':'&amp;',
+      '<':'&lt;',
+      '>':'&gt;',
+      '"':'&quot;',
+      "'":'&#39;'
+    }[c]));
+  }
+
+  async function loadSessions(){
+    try{
+      const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data = await res.json().catch(()=>null);
+
+      if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)){
+        sessions = [];
+        return sessions;
+      }
+
+      sessions = data.sessions.slice().sort(function(a,b){
+        return Number(a.display_index || 0) - Number(b.display_index || 0);
+      });
+
+      return sessions;
+    }catch(e){
+      sessions = [];
+      return sessions;
+    }
+  }
+
+  function labelFor(s, idx){
+    const n = Number(s.display_index || idx + 1);
+    return "U" + n + (s.display_name ? " · " + s.display_name : "");
+  }
+
+  function renderTabs(){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+    if(!strip) return;
+
+    const current = currentSessionId();
+    strip.innerHTML = "";
+
+    sessions.forEach(function(s, idx){
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className =
+        "followme-chat-session-chip" +
+        (String(s.id) === String(current) ? " active" : " waiting") +
+        (!s.owner_opened_at ? " new" : "");
+
+      btn.dataset.sessionId = String(s.id);
+      btn.textContent = labelFor(s, idx);
+      btn.title = "Utente " + Number(s.display_index || idx + 1) + (s.display_name ? " · " + s.display_name : "");
+
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        openSession(s.id);
+      });
+
+      strip.appendChild(btn);
+    });
+
+    const active = strip.querySelector(".followme-chat-session-chip.active");
+    if(active){
+      setTimeout(function(){
+        try{
+          active.scrollIntoView({ behavior:"smooth", inline:"center", block:"nearest" });
+        }catch(e){}
+      }, 60);
+    }
+  }
+
+  function renderDots(paused){
+    const dots = document.getElementById("followmeHorizontalChatDots");
+    if(!dots) return;
+
+    const current = currentSessionId();
+    dots.innerHTML = "";
+
+    sessions.forEach(function(s){
+      const d = document.createElement("span");
+      d.className =
+        "followme-horizontal-chat-dot" +
+        (String(s.id) === String(current) ? " active" : "") +
+        (paused && String(s.id) !== String(current) ? " paused" : "");
+      dots.appendChild(d);
+    });
+  }
+
+  async function refresh(){
+    await loadSessions();
+    renderTabs();
+    renderDots(false);
+  }
+
+  function currentIndex(){
+    const current = currentSessionId();
+    return sessions.findIndex(function(s){
+      return String(s.id) === String(current);
+    });
+  }
+
+  function showHint(text){
+    let h = document.getElementById("followmeCarouselTransitionHint");
+    if(!h){
+      h = document.createElement("div");
+      h.id = "followmeCarouselTransitionHint";
+      h.className = "followme-carousel-transition-hint";
+      document.body.appendChild(h);
+    }
+
+    h.textContent = text || "Cambio chat...";
+    h.classList.add("is-visible");
+
+    clearTimeout(h._hideTimer);
+    h._hideTimer = setTimeout(function(){
+      h.classList.remove("is-visible");
+    }, 700);
+  }
+
+  function openSession(id){
+    if(!id) return;
+
+    window.location.href = "/fm/app/" + encodeURIComponent(code()) +
+      "?chatSession=" + encodeURIComponent(id) +
+      "&focus=chat";
+  }
+
+  async function go(delta){
+    const now = Date.now();
+    if(now - lastMoveAt < 700) return;
+    lastMoveAt = now;
+
+    if(!sessions.length){
+      await loadSessions();
+    }
+
+    if(!sessions.length || sessions.length < 2){
+      showHint("Una sola chat attiva");
+      return;
+    }
+
+    let idx = currentIndex();
+
+    if(idx < 0) idx = 0;
+
+    const next = idx + delta;
+
+    if(next < 0){
+      showHint("Prima chat");
+      return;
+    }
+
+    if(next >= sessions.length){
+      showHint("Ultima chat");
+      return;
+    }
+
+    const target = sessions[next];
+
+    showHint("Utente " + Number(target.display_index || next + 1));
+    openSession(target.id);
+  }
+
+  function pointerStart(x,y){
+    tracking = true;
+    startX = x;
+    startY = y;
+    startTime = Date.now();
+  }
+
+  function pointerEnd(x,y){
+    if(!tracking) return;
+    tracking = false;
+
+    const dx = x - startX;
+    const dy = y - startY;
+    const dt = Date.now() - startTime;
+
+    if(Math.abs(dx) < 50) return;
+    if(Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    if(dt > 1300) return;
+
+    if(dx < 0) go(1);
+    else go(-1);
+  }
+
+  function bindSwipe(){
+    const targets = [
+      document.getElementById("followmeOwnerChatMessages"),
+      document.getElementById("followmeOwnerChatScreen")
+    ].filter(Boolean);
+
+    targets.forEach(function(target){
+      if(target.dataset.cleanCarouselBound === "1") return;
+      target.dataset.cleanCarouselBound = "1";
+
+      target.addEventListener("touchstart", function(ev){
+        if(!ev.touches || !ev.touches[0]) return;
+        pointerStart(ev.touches[0].clientX, ev.touches[0].clientY);
+      }, { passive:true });
+
+      target.addEventListener("touchend", function(ev){
+        if(!ev.changedTouches || !ev.changedTouches[0]) return;
+        pointerEnd(ev.changedTouches[0].clientX, ev.changedTouches[0].clientY);
+      }, { passive:true });
+
+      target.addEventListener("pointerdown", function(ev){
+        if(ev.pointerType === "touch") return;
+        pointerStart(ev.clientX, ev.clientY);
+      });
+
+      target.addEventListener("pointerup", function(ev){
+        if(ev.pointerType === "touch") return;
+        pointerEnd(ev.clientX, ev.clientY);
+      });
+    });
+  }
+
+  function bindKeyboard(){
+    if(window.__followMeCarouselKeyboardBound) return;
+    window.__followMeCarouselKeyboardBound = true;
+
+    document.addEventListener("keydown", function(ev){
+      const tag = String(ev.target && ev.target.tagName || "").toLowerCase();
+      if(tag === "textarea" || tag === "input") return;
+
+      if(ev.key === "ArrowRight") go(1);
+      if(ev.key === "ArrowLeft") go(-1);
+    });
+  }
+
+  function bindTypingPause(){
+    const input = document.getElementById("followmeOwnerChatInput");
+    if(!input || input.dataset.cleanCarouselPauseBound === "1") return;
+
+    input.dataset.cleanCarouselPauseBound = "1";
+
+    let pauseTimer = null;
+
+    input.addEventListener("input", function(){
+      renderDots(false);
+
+      if(pauseTimer) clearTimeout(pauseTimer);
+
+      pauseTimer = setTimeout(function(){
+        renderDots(true);
+      }, 8000);
+    });
+  }
+
+  async function boot(){
+    // Rimuove eventuali righe verticali già disegnate da script vecchi.
+    const vertical = document.getElementById("followmeChatUsersPanel");
+    if(vertical){
+      vertical.innerHTML = "";
+      vertical.style.display = "none";
+    }
+
+    await refresh();
+    bindSwipe();
+    bindKeyboard();
+    bindTypingPause();
+  }
+
+  window.followMeCleanCarouselRefresh = refresh;
+  window.followMeCleanCarouselNext = function(){ go(1); };
+  window.followMeCleanCarouselPrev = function(){ go(-1); };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 300);
+  });
+
+  setInterval(function(){
+    refresh();
+    bindSwipe();
+    bindTypingPause();
+  }, 3000);
 })();
 </script>
 
