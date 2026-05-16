@@ -5199,6 +5199,26 @@
       letter-spacing:-.025em !important;
     }
 
+
+    /* Blocco definitivo label tab: mai "Utente 1", solo U1/U2/U3 */
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip .followme-chat-session-chip{
+      text-transform:none !important;
+      min-width:42px !important;
+      max-width:42px !important;
+      width:42px !important;
+      flex:0 0 42px !important;
+      overflow:hidden !important;
+      white-space:nowrap !important;
+      text-overflow:clip !important;
+    }
+
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip .followme-chat-session-chip.has-name{
+      width:auto !important;
+      min-width:58px !important;
+      max-width:104px !important;
+      flex:0 0 auto !important;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -15651,6 +15671,113 @@ document.addEventListener("visibilitychange", function(){
   setInterval(refreshTabs, 3000);
   setInterval(scanLatestMessage, 1800);
   setInterval(bindCardButtons, 1200);
+})();
+</script>
+
+
+<script id="followme-force-u-label-only-final">
+(function(){
+  function compactName(name){
+    const n = String(name || "").replace(/\s+/g, " ").trim();
+    if(!n) return "";
+
+    const first = n.split(" ")[0] || n;
+
+    if(first.length <= 8){
+      return first;
+    }
+
+    return first.slice(0, 4) + "..." + first.charAt(first.length - 1);
+  }
+
+  function normalizeChip(chip, index){
+    if(!chip) return;
+
+    const savedName = String(chip.dataset.userName || "").replace(/\s+/g, " ").trim();
+
+    if(savedName){
+      const visible = compactName(savedName);
+      chip.classList.add("has-name");
+
+      if(chip.textContent !== visible){
+        chip.textContent = visible;
+      }
+
+      return;
+    }
+
+    let label = String(chip.dataset.uLabel || "").trim();
+
+    if(!label){
+      const raw = String(chip.textContent || "").trim();
+      const m = raw.match(/(?:U|Utente)\s*(\d+)/i);
+      label = m ? ("U" + m[1]) : ("U" + (index + 1));
+      chip.dataset.uLabel = label;
+    }
+
+    const m2 = String(chip.textContent || "").match(/Utente\s*(\d+)/i);
+    if(m2){
+      label = "U" + m2[1];
+      chip.dataset.uLabel = label;
+    }
+
+    chip.classList.remove("has-name");
+
+    if(chip.textContent !== label){
+      chip.textContent = label;
+    }
+
+    chip.title = label;
+    chip.style.width = "42px";
+    chip.style.minWidth = "42px";
+    chip.style.maxWidth = "42px";
+    chip.style.flexBasis = "42px";
+  }
+
+  function normalizeAll(){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+    if(!strip) return;
+
+    strip.querySelectorAll(".followme-chat-session-chip").forEach(function(chip, index){
+      normalizeChip(chip, index);
+    });
+  }
+
+  function installObserver(){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+    if(!strip || strip.dataset.forceULabelObserver === "1") return;
+
+    strip.dataset.forceULabelObserver = "1";
+
+    const observer = new MutationObserver(function(){
+      normalizeAll();
+    });
+
+    observer.observe(strip, {
+      childList:true,
+      subtree:true,
+      characterData:true
+    });
+  }
+
+  function boot(){
+    normalizeAll();
+    installObserver();
+  }
+
+  window.followMeForceULabelOnly = normalizeAll;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 200);
+  });
+
+  setInterval(normalizeAll, 150);
 })();
 </script>
 
