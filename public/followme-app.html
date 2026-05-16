@@ -4678,6 +4678,31 @@
       font-weight:700;
     }
 
+
+    /* Fix stabilità chat admin: niente flicker, label solo U1/U2/U3 */
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip{
+      min-height:38px !important;
+      max-height:42px !important;
+      overflow-x:auto !important;
+      overflow-y:hidden !important;
+      background:#efe7db !important;
+    }
+
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip .followme-chat-session-chip{
+      min-width:42px !important;
+      height:28px !important;
+      min-height:28px !important;
+      max-width:58px !important;
+      padding:0 10px !important;
+      font-size:11px !important;
+      font-weight:900 !important;
+    }
+
+    body.followme-chat-only-mode #followmeOwnerChatMessages{
+      opacity:1 !important;
+      visibility:visible !important;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -11390,63 +11415,7 @@ document.addEventListener("visibilitychange", function(){
 </script>
 
 
-<script id="followme-admin-message-dedupe-final">
-(function(){
-  const seenOwnerMessages = new Set();
-
-  function normalizeText(v){
-    return String(v || "").replace(/\s+/g, " ").trim();
-  }
-
-  function keyFor(sender, text, id){
-    if(id) return "id:" + id;
-    return String(sender || "") + ":" + normalizeText(text).slice(0, 180);
-  }
-
-  function removeDuplicateBubbles(){
-    const localSeen = new Set();
-    document.querySelectorAll("#followmeOwnerChatMessages .followme-owner-chat-bubble").forEach(function(b){
-      const id = b.getAttribute("data-message-id") || "";
-      const sender = b.classList.contains("owner") ? "owner" : (b.classList.contains("system") ? "system" : "visitor");
-      const key = keyFor(sender, b.textContent || "", id);
-
-      if(localSeen.has(key)){
-        b.remove();
-        return;
-      }
-
-      localSeen.add(key);
-    });
-  }
-
-  const originalAppendChild = Element.prototype.appendChild;
-  if(!window.__followMeAdminAppendDedupeInstalled){
-    window.__followMeAdminAppendDedupeInstalled = true;
-
-    Element.prototype.appendChild = function(child){
-      try{
-        if(this && this.id === "followmeOwnerChatMessages" && child && child.classList && child.classList.contains("followme-owner-chat-bubble")){
-          const sender = child.classList.contains("owner") ? "owner" : (child.classList.contains("system") ? "system" : "visitor");
-          const key = keyFor(sender, child.textContent || "", child.getAttribute && child.getAttribute("data-message-id"));
-
-          if(seenOwnerMessages.has(key)){
-            return child;
-          }
-
-          seenOwnerMessages.add(key);
-          setTimeout(removeDuplicateBubbles, 50);
-        }
-      }catch(e){}
-
-      return originalAppendChild.call(this, child);
-    };
-  }
-
-  window.followMeRemoveDuplicateChatBubbles = removeDuplicateBubbles;
-
-  setInterval(removeDuplicateBubbles, 1200);
-})();
-</script>
+<script id="followme-admin-message-dedupe-final-disabled">/* disabled: caused disappearing messages after polling redraw */</script>
 
 
 <script id="followme-admin-enter-send-final">
@@ -11614,240 +11583,7 @@ document.addEventListener("visibilitychange", function(){
 <script id="followme-multi-chat-ux-final-disabled">/* disabled: replaced by horizontal carousel */</script>
 
 
-<script id="followme-horizontal-chat-carousel-final">
-(function(){
-  let carouselSessions = [];
-  let pauseTimer = null;
-
-  function code(){
-    try{
-      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
-      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
-      if(typeof getCode === "function"){
-        const c = getCode();
-        if(c) return String(c).trim().toUpperCase();
-      }
-    }catch(e){}
-    return "FM-DEMO";
-  }
-
-  function currentSessionId(){
-    try{ return new URLSearchParams(location.search || "").get("chatSession") || ""; }
-    catch(e){ return ""; }
-  }
-
-  function esc(v){
-    return String(v || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  }
-
-  function labelFor(s, idx){
-    const n = Number(s.display_index || idx + 1);
-    return "U" + n + (s.display_name ? " · " + s.display_name : "");
-  }
-
-  function openSession(id){
-    if(!id) return;
-    location.href = "/fm/app/" + encodeURIComponent(code()) + "?chatSession=" + encodeURIComponent(id) + "&focus=chat";
-  }
-
-  async function fetchSessions(){
-    const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), { cache:"no-store" });
-    const data = await res.json().catch(()=>null);
-    if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)) return [];
-    carouselSessions = data.sessions.slice().sort((a,b)=>Number(a.display_index||0)-Number(b.display_index||0));
-    return carouselSessions;
-  }
-
-  function renderTabs(sessions){
-    const strip = document.getElementById("followmeOwnerChatSessionStrip");
-    if(!strip) return;
-
-    const current = currentSessionId();
-    strip.innerHTML = "";
-
-    sessions.forEach((s, idx)=>{
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className =
-        "followme-chat-session-chip" +
-        (String(s.id) === String(current) ? " active" : " waiting") +
-        (!s.owner_opened_at ? " new" : "");
-
-      btn.textContent = labelFor(s, idx);
-      btn.title = "Utente " + Number(s.display_index || idx + 1) + (s.display_name ? " · " + s.display_name : "");
-      btn.dataset.sessionId = String(s.id);
-      btn.onclick = ()=>openSession(s.id);
-
-      strip.appendChild(btn);
-    });
-
-    const active = strip.querySelector(".followme-chat-session-chip.active");
-    if(active){
-      setTimeout(()=>{
-        try{ active.scrollIntoView({ behavior:"smooth", inline:"center", block:"nearest" }); }catch(e){}
-      }, 80);
-    }
-  }
-
-  function renderDots(sessions, paused){
-    const dots = document.getElementById("followmeHorizontalChatDots");
-    if(!dots) return;
-
-    const current = currentSessionId();
-    dots.innerHTML = "";
-
-    sessions.forEach(s=>{
-      const d = document.createElement("span");
-      d.className =
-        "followme-horizontal-chat-dot" +
-        (String(s.id) === String(current) ? " active" : "") +
-        (paused && String(s.id) !== String(current) ? " paused" : "");
-      dots.appendChild(d);
-    });
-  }
-
-  async function refreshCarousel(){
-    try{
-      const sessions = await fetchSessions();
-      renderTabs(sessions);
-      renderDots(sessions, false);
-    }catch(e){}
-  }
-
-  function currentIndex(){
-    const current = currentSessionId();
-    return carouselSessions.findIndex(s => String(s.id) === String(current));
-  }
-
-  function goDelta(delta){
-    if(!carouselSessions.length) return;
-
-    let idx = currentIndex();
-    if(idx < 0) idx = 0;
-
-    const next = idx + delta;
-    if(next < 0 || next >= carouselSessions.length) return;
-
-    openSession(carouselSessions[next].id);
-  }
-
-  function bindSwipe(){
-    const screen = document.getElementById("followmeOwnerChatScreen");
-    const messages = document.getElementById("followmeOwnerChatMessages");
-    const target = messages || screen;
-    if(!target || target.dataset.swipeBound === "1") return;
-
-    target.dataset.swipeBound = "1";
-
-    let startX = 0;
-    let startY = 0;
-    let startT = 0;
-
-    target.addEventListener("touchstart", function(ev){
-      if(!ev.touches || !ev.touches.length) return;
-      startX = ev.touches[0].clientX;
-      startY = ev.touches[0].clientY;
-      startT = Date.now();
-    }, { passive:true });
-
-    target.addEventListener("touchend", function(ev){
-      if(!ev.changedTouches || !ev.changedTouches.length) return;
-
-      const dx = ev.changedTouches[0].clientX - startX;
-      const dy = ev.changedTouches[0].clientY - startY;
-      const dt = Date.now() - startT;
-
-      if(Math.abs(dx) < 55) return;
-      if(Math.abs(dx) < Math.abs(dy) * 1.4) return;
-      if(dt > 900) return;
-
-      // Swipe sinistra = utente successivo; swipe destra = precedente.
-      if(dx < 0) goDelta(1);
-      else goDelta(-1);
-    }, { passive:true });
-
-    // Anche mouse/trackpad: trascinamento orizzontale.
-    let mouseDown = false;
-    let mouseStartX = 0;
-    let mouseStartY = 0;
-
-    target.addEventListener("mousedown", function(ev){
-      mouseDown = true;
-      mouseStartX = ev.clientX;
-      mouseStartY = ev.clientY;
-    });
-
-    target.addEventListener("mouseup", function(ev){
-      if(!mouseDown) return;
-      mouseDown = false;
-
-      const dx = ev.clientX - mouseStartX;
-      const dy = ev.clientY - mouseStartY;
-
-      if(Math.abs(dx) < 70) return;
-      if(Math.abs(dx) < Math.abs(dy) * 1.4) return;
-
-      if(dx < 0) goDelta(1);
-      else goDelta(-1);
-    });
-  }
-
-  function bindTypingPause(){
-    const input = document.getElementById("followmeOwnerChatInput");
-    if(!input || input.dataset.carouselPauseBound === "1") return;
-
-    input.dataset.carouselPauseBound = "1";
-
-    input.addEventListener("input", function(){
-      if(pauseTimer) clearTimeout(pauseTimer);
-      renderDots(carouselSessions, false);
-
-      pauseTimer = setTimeout(function(){
-        renderDots(carouselSessions, true);
-      }, 8000);
-    });
-  }
-
-  function showHintOnce(){
-    try{
-      if(localStorage.getItem("followme_carousel_hint_seen") === "1") return;
-      localStorage.setItem("followme_carousel_hint_seen", "1");
-
-      const h = document.getElementById("followmeCarouselSwipeHint");
-      if(!h) return;
-
-      h.classList.add("is-visible");
-      setTimeout(()=>h.classList.remove("is-visible"), 2800);
-    }catch(e){}
-  }
-
-  function boot(){
-    refreshCarousel();
-    bindSwipe();
-    bindTypingPause();
-    setTimeout(refreshCarousel, 700);
-    setTimeout(showHintOnce, 900);
-  }
-
-  window.followMeRefreshHorizontalCarousel = refreshCarousel;
-  window.followMeCarouselNext = ()=>goDelta(1);
-  window.followMeCarouselPrev = ()=>goDelta(-1);
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", boot);
-  }else{
-    boot();
-  }
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 400);
-  });
-
-  setInterval(refreshCarousel, 3500);
-  setInterval(bindSwipe, 1500);
-  setInterval(bindTypingPause, 1500);
-})();
-</script>
+<script id="followme-horizontal-chat-carousel-final-disabled">/* disabled: replaced by clean carousel */</script>
 
 
 <div class="followme-admin-attach-panel" id="followmeAdminAttachPanel">
@@ -14084,6 +13820,273 @@ document.addEventListener("visibilitychange", function(){
   });
 
   setInterval(boot, 1500);
+})();
+</script>
+
+<input type="file" id="followmeAdminAudioFileInput" accept="audio/*" capture="microphone" style="display:none">
+
+<script id="followme-admin-chat-stability-final">
+(function(){
+  let lastTabSignature = "";
+
+  function code(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function currentSessionId(){
+    try{
+      return new URLSearchParams(location.search || "").get("chatSession") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function normalizeText(v){
+    return String(v || "").replace(/\s+/g, " ").trim();
+  }
+
+  function safeDedupeMessages(){
+    const box = document.getElementById("followmeOwnerChatMessages");
+    if(!box) return;
+
+    const seen = new Set();
+
+    box.querySelectorAll(".followme-owner-chat-bubble").forEach(function(b){
+      const id = b.getAttribute("data-message-id") || "";
+      const sender = b.classList.contains("owner") ? "owner" : (b.classList.contains("system") ? "system" : "visitor");
+      const key = id ? ("id:" + id) : (sender + ":" + normalizeText(b.textContent).slice(0, 220));
+
+      if(seen.has(key)){
+        b.remove();
+      }else{
+        seen.add(key);
+      }
+    });
+  }
+
+  async function fetchSessions(){
+    try{
+      const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), { cache:"no-store" });
+      const data = await res.json().catch(()=>null);
+      if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)) return [];
+
+      return data.sessions.slice().sort(function(a,b){
+        return Number(a.display_index || 0) - Number(b.display_index || 0);
+      });
+    }catch(e){
+      return [];
+    }
+  }
+
+  function renderOnlyULabels(sessions){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+    const dots = document.getElementById("followmeHorizontalChatDots");
+    if(!strip) return;
+
+    const current = currentSessionId();
+    const signature = sessions.map(s => String(s.id) + ":" + String(s.display_index || "") + ":" + String(s.owner_opened_at || "")).join("|") + "|cur:" + current;
+
+    // Ridisegna solo se cambia davvero qualcosa. Questo riduce molto lo sfarfallio.
+    if(signature !== lastTabSignature){
+      lastTabSignature = signature;
+
+      strip.innerHTML = "";
+
+      sessions.forEach(function(s, idx){
+        const n = Number(s.display_index || idx + 1);
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className =
+          "followme-chat-session-chip" +
+          (String(s.id) === String(current) ? " active" : " waiting") +
+          (!s.owner_opened_at ? " new" : "");
+
+        btn.dataset.sessionId = String(s.id);
+        btn.textContent = "U" + n;
+        btn.title = "Utente " + n;
+
+        btn.addEventListener("click", function(ev){
+          ev.preventDefault();
+          window.location.href = "/fm/app/" + encodeURIComponent(code()) +
+            "?chatSession=" + encodeURIComponent(s.id) +
+            "&focus=chat";
+        });
+
+        strip.appendChild(btn);
+      });
+
+      const active = strip.querySelector(".followme-chat-session-chip.active");
+      if(active){
+        setTimeout(function(){
+          try{ active.scrollIntoView({ behavior:"smooth", inline:"center", block:"nearest" }); }catch(e){}
+        }, 60);
+      }
+    }else{
+      // Anche se altri script riscrivono "Utente 1", qui lo correggiamo senza ridisegnare.
+      strip.querySelectorAll(".followme-chat-session-chip").forEach(function(btn, idx){
+        const expected = "U" + (idx + 1);
+        if(btn.textContent !== expected){
+          btn.textContent = expected;
+        }
+        btn.title = "Utente " + (idx + 1);
+      });
+    }
+
+    if(dots){
+      dots.innerHTML = "";
+      sessions.forEach(function(s){
+        const d = document.createElement("span");
+        d.className = "followme-horizontal-chat-dot" + (String(s.id) === String(current) ? " active" : "");
+        dots.appendChild(d);
+      });
+    }
+  }
+
+  async function stabilizeTabs(){
+    const sessions = await fetchSessions();
+    renderOnlyULabels(sessions);
+  }
+
+  function fileToArrayBuffer(file){
+    return file.arrayBuffer();
+  }
+
+  async function uploadAudioFallback(file){
+    const sid = currentSessionId();
+    if(!sid){
+      alert("Nessuna chat attiva.");
+      return;
+    }
+
+    if(!file){
+      alert("Nessun audio selezionato.");
+      return;
+    }
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/attachment-raw", {
+      method:"POST",
+      headers:{
+        "Content-Type": file.type || "audio/webm",
+        "X-FollowMe-Sender": "owner",
+        "X-FollowMe-Kind": "audio",
+        "X-FollowMe-Filename": encodeURIComponent(file.name || ("audio-" + Date.now() + ".webm"))
+      },
+      body: await fileToArrayBuffer(file)
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      throw new Error((data && data.error) || ("Errore HTTP " + res.status));
+    }
+
+    if(typeof window.followMeOwnerChatFinalFix?.pollOwnerMessages === "function"){
+      setTimeout(()=>window.followMeOwnerChatFinalFix.pollOwnerMessages(false), 250);
+    }
+
+    if(typeof window.followMeTransformAttachmentBubbles === "function"){
+      setTimeout(window.followMeTransformAttachmentBubbles, 500);
+    }
+  }
+
+  function bindAudioFallback(){
+    const input = document.getElementById("followmeAdminAudioFileInput");
+    if(input && input.dataset.audioFallbackBound !== "1"){
+      input.dataset.audioFallbackBound = "1";
+
+      input.addEventListener("change", async function(){
+        const file = input.files && input.files[0];
+
+        try{
+          await uploadAudioFallback(file);
+        }catch(err){
+          alert("Errore invio audio: " + (err.message || String(err)));
+        }finally{
+          input.value = "";
+          const overlay = document.getElementById("followmeAudioRecorderOverlay");
+          if(overlay) overlay.classList.remove("is-open");
+        }
+      });
+    }
+
+    const mic = document.getElementById("followmeAdminMicBtn");
+    if(mic && mic.dataset.audioFallbackMicBound !== "1"){
+      mic.dataset.audioFallbackMicBound = "1";
+
+      mic.addEventListener("click", function(ev){
+        // Non blocco gli altri listener: se la registrazione funziona, userà quella.
+        // Se però il browser nega il microfono, l'utente può usare il fallback da pannello.
+        setTimeout(function(){
+          const overlay = document.getElementById("followmeAudioRecorderOverlay");
+          if(overlay) overlay.classList.add("is-open");
+        }, 80);
+      }, true);
+    }
+
+    const status = document.getElementById("followmeAudioStatus");
+    const overlay = document.getElementById("followmeAudioRecorderOverlay");
+    const card = overlay ? overlay.querySelector(".followme-audio-actions") : null;
+
+    if(card && !document.getElementById("followmeAudioFileFallbackBtn")){
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.id = "followmeAudioFileFallbackBtn";
+      btn.textContent = "Allega audio dal dispositivo";
+      btn.onclick = function(){
+        const input = document.getElementById("followmeAdminAudioFileInput");
+        if(input) input.click();
+      };
+      card.appendChild(btn);
+    }
+
+    if(status && !status.dataset.audioHintUpdated){
+      status.dataset.audioHintUpdated = "1";
+      status.textContent = "Registra un audio oppure allegalo dal dispositivo.";
+    }
+  }
+
+  function boot(){
+    safeDedupeMessages();
+    stabilizeTabs();
+    bindAudioFallback();
+  }
+
+  window.followMeAdminChatStabilityFinal = {
+    dedupe: safeDedupeMessages,
+    tabs: stabilizeTabs,
+    audioFallback: bindAudioFallback
+  };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 300);
+  });
+
+  setInterval(function(){
+    safeDedupeMessages();
+  }, 1200);
+
+  setInterval(function(){
+    stabilizeTabs();
+  }, 2500);
+
+  setInterval(function(){
+    bindAudioFallback();
+  }, 1500);
 })();
 </script>
 
