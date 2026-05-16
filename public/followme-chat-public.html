@@ -1,4 +1,4 @@
-<!doctype html>
+<!doctype html><button type="button" class="followme-public-close-chat" id="followmePublicCloseChatBtn">Chiudi</button>
 <html lang="it">
 <head>
   <meta charset="utf-8">
@@ -357,6 +357,33 @@
     body.followme-wa-chat .boticon{
       background:transparent !important;
       box-shadow:none !important;
+    }
+
+
+    /* Pulsante chiusura chat utente */
+    .followme-public-close-chat{
+      position:absolute;
+      right:10px;
+      top:calc(10px + env(safe-area-inset-top));
+      z-index:5;
+      min-height:32px;
+      border-radius:999px;
+      border:1px solid rgba(0,0,0,.08);
+      background:rgba(255,255,255,.82);
+      color:#3a3f41;
+      font-size:.74rem;
+      font-weight:850;
+      padding:0 10px;
+      box-shadow:0 1px 2px rgba(0,0,0,.08);
+    }
+
+    body.followme-chat-closed .composer{
+      opacity:.55;
+      pointer-events:none;
+    }
+
+    body.followme-chat-closed .followme-public-close-chat{
+      display:none;
     }
 
 </style>
@@ -808,6 +835,98 @@
   window.addEventListener("pageshow", function(){
     setTimeout(bindEnterSend, 300);
   });
+})();
+</script>
+
+
+<script id="followme-public-close-chat-script">
+(function(){
+  let closeBound = false;
+
+  function safeSessionId(){
+    try{
+      return String(window.sessionId || sessionId || "");
+    }catch(e){
+      return "";
+    }
+  }
+
+  async function sendCloseNoteToOwner(){
+    try{
+      const sid = safeSessionId();
+      if(!sid) return;
+
+      await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/message", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({
+          sender:"visitor",
+          message:"Chat chiusa dall’utente."
+        })
+      });
+    }catch(e){}
+  }
+
+  function closePublicChat(){
+    if(!confirm("Vuoi chiudere questa chat?")) return;
+
+    try{
+      if(typeof stopRobotSequence === "function") stopRobotSequence();
+    }catch(e){}
+
+    document.body.classList.add("followme-chat-closed");
+
+    const input = document.getElementById("messageInput");
+    const send = document.getElementById("sendBtn");
+
+    if(input){
+      input.value = "";
+      input.placeholder = "Chat chiusa";
+      input.disabled = true;
+    }
+
+    if(send){
+      send.disabled = true;
+    }
+
+    try{
+      if(typeof addSystem === "function"){
+        addSystem("Hai chiuso la chat. Puoi chiudere questa pagina.");
+      }else if(typeof addBot === "function"){
+        addBot("Hai chiuso la chat. Puoi chiudere questa pagina.");
+      }
+    }catch(e){}
+
+    sendCloseNoteToOwner();
+  }
+
+  function bindClose(){
+    if(closeBound) return;
+
+    const btn = document.getElementById("followmePublicCloseChatBtn");
+    if(!btn) return;
+
+    closeBound = true;
+
+    btn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      closePublicChat();
+    });
+  }
+
+  window.followMeClosePublicChat = closePublicChat;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bindClose);
+  }else{
+    bindClose();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(bindClose, 300);
+  });
+
+  setInterval(bindClose, 1200);
 })();
 </script>
 
