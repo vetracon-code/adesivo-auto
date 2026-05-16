@@ -5184,6 +5184,21 @@
       display:block;
     }
 
+
+    /* Tab nome confermato: più spazio e abbreviazione controllata */
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip .followme-chat-session-chip.has-name{
+      flex:0 0 auto !important;
+      width:auto !important;
+      min-width:58px !important;
+      max-width:104px !important;
+      padding:0 11px !important;
+      text-transform:none !important;
+      overflow:hidden !important;
+      text-overflow:clip !important;
+      white-space:nowrap !important;
+      letter-spacing:-.025em !important;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -14787,735 +14802,13 @@ document.addEventListener("visibilitychange", function(){
 </script>
 
 
-<script id="followme-advanced-name-recognition-final">
-(function(){
-  let pendingSessionId = "";
-  let pendingULabel = "";
-  let lastAutoKey = "";
-  const ignored = new Set();
-
-  const blacklist = new Set([
-    "ciao","salve","buongiorno","buonasera","buonanotte","ok","okay","si","sì","no",
-    "grazie","prego","quanto","costa","prezzo","dove","come","quando","perché",
-    "followme","qr","chat","info","informazioni","aspetto","raccontami","proprietario",
-    "hello","hi","thanks","thank","price","cost","where","how","yes","not",
-    "bonjour","merci","hola","gracias"
-  ]);
-
-  function code(){
-    try{
-      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
-      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
-      if(typeof getCode === "function"){
-        const c = getCode();
-        if(c) return String(c).trim().toUpperCase();
-      }
-    }catch(e){}
-    return "FM-DEMO";
-  }
-
-  function currentSessionId(){
-    try{
-      return new URLSearchParams(location.search || "").get("chatSession") || "";
-    }catch(e){
-      return "";
-    }
-  }
-
-  function cssEscape(v){
-    try{
-      if(window.CSS && CSS.escape) return CSS.escape(String(v));
-    }catch(e){}
-    return String(v).replace(/"/g, '\\"');
-  }
-
-  function cleanName(raw){
-    let v = String(raw || "")
-      .replace(/[0-9@#€$%^*_+=()[\]{}|\\:;"“”.,!?/<>]+/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    // Rimuove parole di contesto finite dentro il gruppo.
-    v = v.replace(/^(mi|io|sono|chiamo|piacere|ciao|salve|hello|hi|bonjour|hola)\s+/i, "").trim();
-    v = v.replace(/\s+(piacere|grazie|thanks|merci|gracias)$/i, "").trim();
-
-    const parts = v.split(" ").filter(Boolean).slice(0, 2);
-    v = parts.join(" ").trim();
-
-    if(v.length > 32) v = v.slice(0, 32).trim();
-
-    return v;
-  }
-
-  function looksLikeName(name){
-    const n = cleanName(name);
-    if(!n || n.length < 2) return false;
-
-    const lower = n.toLowerCase();
-    if(blacklist.has(lower)) return false;
-
-    const parts = lower.split(/\s+/);
-    if(parts.some(p => blacklist.has(p))) return false;
-
-    // Deve contenere lettere. Accetta nomi italiani/stranieri con accenti, apostrofi e trattini.
-    if(!/[\p{L}]/u.test(n)) return false;
-
-    // Evita frasi lunghe mascherate.
-    if(parts.length > 2) return false;
-
-    return true;
-  }
-
-  function titleCaseName(name){
-    return cleanName(name)
-      .split(" ")
-      .map(part => {
-        if(!part) return "";
-        return part.charAt(0).toLocaleUpperCase("it-IT") + part.slice(1);
-      })
-      .join(" ")
-      .trim();
-  }
-
-  function extractNameFromText(text){
-    const original = String(text || "").trim();
-    if(!original) return "";
-
-    const normalized = original
-      .replace(/[’]/g, "'")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    const patterns = [
-      // Italiano
-      /\b(?:ciao|salve|buongiorno|buonasera)?\s*,?\s*(?:io\s+)?(?:sono|mi chiamo|io sono|il mio nome è|il mio nome e')\s+([\p{L}][\p{L}' -]{1,35})/iu,
-      /\b(?:piacere)\s*,?\s*(?:sono|mi chiamo)?\s*([\p{L}][\p{L}' -]{1,35})/iu,
-      /\b([\p{L}][\p{L}'-]{1,24})\s*,?\s*piacere\b/iu,
-
-      // Inglese
-      /\b(?:i am|i'm|im|my name is|this is)\s+([\p{L}][\p{L}' -]{1,35})/iu,
-      /\b(?:nice to meet you|pleased to meet you)\s*,?\s*(?:i am|i'm|im)?\s*([\p{L}][\p{L}' -]{1,35})/iu,
-
-      // Francese / spagnolo / portoghese molto base
-      /\b(?:je suis|moi c'est|mon nom est|me llamo|soy|mi nombre es|sou|me chamo)\s+([\p{L}][\p{L}' -]{1,35})/iu,
-
-      // Solo nome in un messaggio breve
-      /^([\p{L}][\p{L}'-]{1,24})(?:\s+[\p{L}][\p{L}'-]{1,24})?$/iu
-    ];
-
-    for(const re of patterns){
-      const m = normalized.match(re);
-      if(m && m[1]){
-        const candidate = titleCaseName(m[1]);
-        if(looksLikeName(candidate)){
-          return candidate;
-        }
-      }
-    }
-
-    // Fallback: se il testo contiene "piacere" e un solo nome vicino.
-    if(/\bpiacere\b/i.test(normalized)){
-      const words = normalized.match(/[\p{L}][\p{L}'-]{1,24}/gu) || [];
-      const candidates = words
-        .map(titleCaseName)
-        .filter(looksLikeName)
-        .filter(w => !["Piacere", "Ciao", "Salve"].includes(w));
-
-      if(candidates.length){
-        return candidates[0];
-      }
-    }
-
-    return "";
-  }
-
-  async function fetchSessions(){
-    try{
-      const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), { cache:"no-store" });
-      const data = await res.json().catch(()=>null);
-      if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)) return [];
-      return data.sessions.slice().sort((a,b)=>Number(a.display_index||0)-Number(b.display_index||0));
-    }catch(e){
-      return [];
-    }
-  }
-
-  async function resolveULabel(sessionId){
-    const sid = String(sessionId || currentSessionId() || "").trim();
-    if(!sid) return "U?";
-
-    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
-    if(chip){
-      if(chip.dataset.uLabel) return chip.dataset.uLabel;
-      const t = String(chip.textContent || "");
-      const m = t.match(/(?:U|Utente)\s*(\d+)/i);
-      if(m) return "U" + m[1];
-    }
-
-    const sessions = await fetchSessions();
-    const idx = sessions.findIndex(s => String(s.id) === sid);
-    if(idx >= 0){
-      return "U" + Number(sessions[idx].display_index || idx + 1);
-    }
-
-    return "U?";
-  }
-
-  function getCurrentVisitorBubbleFromEvent(ev){
-    const target = ev.target && ev.target.closest
-      ? ev.target.closest(".followme-owner-chat-bubble")
-      : null;
-
-    if(!target) return null;
-    if(target.classList.contains("owner") || target.classList.contains("system")) return null;
-
-    return target;
-  }
-
-  function getLatestVisitorBubble(){
-    const box = document.getElementById("followmeOwnerChatMessages");
-    if(!box) return null;
-
-    const bubbles = Array.from(box.querySelectorAll(".followme-owner-chat-bubble:not(.owner):not(.system)"));
-    return bubbles.length ? bubbles[bubbles.length - 1] : null;
-  }
-
-  async function openNameCard({ name, sessionId, context, manual }){
-    const sid = String(sessionId || currentSessionId() || "").trim();
-    if(!sid) {
-      alert("Non riesco a identificare la chat attiva.");
-      return;
-    }
-
-    const u = await resolveULabel(sid);
-
-    pendingSessionId = sid;
-    pendingULabel = u;
-
-    const card = document.getElementById("followmeNameDetectCard");
-    const input = document.getElementById("followmeNameDetectInput");
-    const text = document.getElementById("followmeNameDetectText");
-    const ctx = document.getElementById("followmeNameDetectContext");
-
-    if(input){
-      input.value = name || "";
-      input.placeholder = manual ? "Scrivi o correggi il nome" : "Nome utente";
-    }
-
-    if(text){
-      text.textContent = manual
-        ? "Ho letto questo messaggio. Confermi il nome da associare a " + u + "?"
-        : "Vuoi associare questa chat a " + (name || "questo nome") + " · " + u + "?";
-    }
-
-    if(ctx){
-      ctx.textContent = context ? "Messaggio: “" + context + "”" : "";
-      ctx.style.display = context ? "block" : "none";
-    }
-
-    if(card){
-      card.classList.add("is-open");
-      card.setAttribute("aria-hidden", "false");
-    }
-
-    setTimeout(()=>{ try{ input && input.focus(); input && input.select(); }catch(e){} }, 80);
-  }
-
-  function closeNameCard(){
-    const card = document.getElementById("followmeNameDetectCard");
-    if(card){
-      card.classList.remove("is-open");
-      card.setAttribute("aria-hidden", "true");
-    }
-    pendingSessionId = "";
-    pendingULabel = "";
-  }
-
-  async function savePendingName(){
-    const input = document.getElementById("followmeNameDetectInput");
-    const name = titleCaseName(input ? input.value : "");
-
-    if(!looksLikeName(name)){
-      alert("Il nome non sembra valido. Correggilo e riprova.");
-      return;
-    }
-
-    if(!pendingSessionId){
-      alert("Non riesco a identificare la chat da aggiornare.");
-      return;
-    }
-
-    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(pendingSessionId) + "/name", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ display_name:name })
-    });
-
-    const data = await res.json().catch(()=>null);
-
-    if(!res.ok || !data || !data.success){
-      alert("Errore salvataggio nome: " + ((data && data.error) || ("HTTP " + res.status)));
-      return;
-    }
-
-    applyNameToTab(pendingSessionId, name, pendingULabel);
-    closeNameCard();
-
-    if(typeof window.followMeConfirmedNameRefresh === "function"){
-      setTimeout(window.followMeConfirmedNameRefresh, 250);
-      setTimeout(window.followMeConfirmedNameRefresh, 1000);
-    }
-  }
-
-  function applyNameToTab(sessionId, name, uLabel){
-    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sessionId) + '"]');
-    if(!chip) return;
-
-    chip.dataset.userName = name;
-    chip.dataset.uLabel = uLabel || chip.dataset.uLabel || chip.textContent || "";
-    chip.classList.add("has-name");
-    chip.textContent = name.slice(0, 18);
-    chip.title = (chip.dataset.uLabel || "") + " · " + name;
-
-    chip.style.width = "auto";
-    chip.style.minWidth = "54px";
-    chip.style.maxWidth = "128px";
-    chip.style.flexBasis = "auto";
-  }
-
-  function bindCardButtons(){
-    const confirm = document.getElementById("followmeNameDetectConfirm");
-    const cancel = document.getElementById("followmeNameDetectCancel");
-    const input = document.getElementById("followmeNameDetectInput");
-
-    if(confirm && confirm.dataset.advancedNameBound !== "1"){
-      confirm.dataset.advancedNameBound = "1";
-      confirm.addEventListener("click", ev=>{
-        ev.preventDefault();
-        savePendingName();
-      });
-    }
-
-    if(cancel && cancel.dataset.advancedNameBound !== "1"){
-      cancel.dataset.advancedNameBound = "1";
-      cancel.addEventListener("click", ev=>{
-        ev.preventDefault();
-        const value = input ? titleCaseName(input.value) : "";
-        if(value && pendingSessionId){
-          ignored.add(pendingSessionId + ":" + value.toLowerCase());
-        }
-        closeNameCard();
-      });
-    }
-
-    if(input && input.dataset.advancedNameBound !== "1"){
-      input.dataset.advancedNameBound = "1";
-      input.addEventListener("keydown", ev=>{
-        if(ev.key === "Enter"){
-          ev.preventDefault();
-          savePendingName();
-        }
-        if(ev.key === "Escape"){
-          ev.preventDefault();
-          closeNameCard();
-        }
-      });
-    }
-  }
-
-  function bindDoubleClick(){
-    const box = document.getElementById("followmeOwnerChatMessages");
-    if(!box || box.dataset.advancedNameDblBound === "1") return;
-
-    box.dataset.advancedNameDblBound = "1";
-
-    box.addEventListener("dblclick", async function(ev){
-      const bubble = getCurrentVisitorBubbleFromEvent(ev);
-      if(!bubble) return;
-
-      const text = String(bubble.textContent || "").trim();
-      const candidate = extractNameFromText(text);
-
-      await openNameCard({
-        name: candidate,
-        sessionId: currentSessionId(),
-        context: text,
-        manual: true
-      });
-    });
-  }
-
-  async function scanLatestMessage(){
-    const sid = currentSessionId();
-    if(!sid) return;
-
-    const bubble = getLatestVisitorBubble();
-    if(!bubble) return;
-
-    const text = String(bubble.textContent || "").trim();
-    if(!text) return;
-
-    const key = sid + ":" + text;
-    if(key === lastAutoKey) return;
-    lastAutoKey = key;
-
-    const candidate = extractNameFromText(text);
-    if(!candidate) return;
-
-    const ignoreKey = sid + ":" + candidate.toLowerCase();
-    if(ignored.has(ignoreKey)) return;
-
-    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
-    if(chip && chip.dataset.userName) return;
-
-    await openNameCard({
-      name: candidate,
-      sessionId: sid,
-      context: text,
-      manual: false
-    });
-  }
-
-  function restoreNamesFromSessions(){
-    fetchSessions().then(sessions=>{
-      sessions.forEach((s, idx)=>{
-        if(!s.display_name) return;
-        const u = "U" + Number(s.display_index || idx + 1);
-        applyNameToTab(String(s.id), String(s.display_name), u);
-      });
-    }).catch(()=>{});
-  }
-
-  function boot(){
-    bindCardButtons();
-    bindDoubleClick();
-    scanLatestMessage();
-    restoreNamesFromSessions();
-  }
-
-  window.followMeExtractNameFromText = extractNameFromText;
-  window.followMeOpenNameCardManual = function(text){
-    openNameCard({
-      name: extractNameFromText(text || ""),
-      sessionId: currentSessionId(),
-      context: text || "",
-      manual: true
-    });
-  };
-  window.followMeAdvancedNameScan = scanLatestMessage;
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", boot);
-  }else{
-    boot();
-  }
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 300);
-  });
-
-  setInterval(function(){
-    scanLatestMessage();
-    restoreNamesFromSessions();
-  }, 1800);
-})();
-</script>
+<script id="followme-advanced-name-recognition-final-disabled-no-reconfirm">/* disabled: replaced by no-reconfirm name recognition */</script>
 
 
 <script id="followme-name-save-final-controller-disabled-name-wins">/* disabled: name must permanently replace U label */</script>
 
 
-<script id="followme-name-wins-final">
-(function(){
-  let lastRenderSignature = "";
-
-  function code(){
-    try{
-      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
-      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
-      if(typeof getCode === "function"){
-        const c = getCode();
-        if(c) return String(c).trim().toUpperCase();
-      }
-    }catch(e){}
-    return "FM-DEMO";
-  }
-
-  function currentSessionId(){
-    try{
-      return new URLSearchParams(location.search || "").get("chatSession") || "";
-    }catch(e){
-      return "";
-    }
-  }
-
-  function cleanName(v){
-    return String(v || "")
-      .replace(/[<>"]/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 40);
-  }
-
-  function cssEscape(v){
-    try{
-      if(window.CSS && CSS.escape) return CSS.escape(String(v));
-    }catch(e){}
-    return String(v).replace(/"/g, '\\"');
-  }
-
-  async function fetchSessions(){
-    const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), {
-      cache:"no-store"
-    });
-
-    const data = await res.json().catch(()=>null);
-
-    if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)){
-      return [];
-    }
-
-    return data.sessions.slice().sort(function(a,b){
-      return Number(a.display_index || 0) - Number(b.display_index || 0);
-    });
-  }
-
-  function visibleLabel(session, index){
-    const name = cleanName(session.display_name || "");
-    if(name) return name.slice(0, 18);
-
-    return "U" + Number(session.display_index || index + 1);
-  }
-
-  function baseULabel(session, index){
-    return "U" + Number(session.display_index || index + 1);
-  }
-
-  function renderTabs(sessions){
-    const strip = document.getElementById("followmeOwnerChatSessionStrip");
-    const dots = document.getElementById("followmeHorizontalChatDots");
-    if(!strip) return;
-
-    const current = currentSessionId();
-
-    const signature = sessions.map(function(s, idx){
-      return [
-        s.id,
-        s.display_index || idx + 1,
-        cleanName(s.display_name || ""),
-        s.owner_opened_at || "",
-        String(s.id) === String(current) ? "active" : ""
-      ].join(":");
-    }).join("|");
-
-    // Se la struttura è uguale, non ridisegna tutto: corregge solo eventuali U riscritti.
-    if(signature === lastRenderSignature){
-      enforceNames(sessions);
-      return;
-    }
-
-    lastRenderSignature = signature;
-    strip.innerHTML = "";
-
-    sessions.forEach(function(s, idx){
-      const name = cleanName(s.display_name || "");
-      const u = baseULabel(s, idx);
-
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className =
-        "followme-chat-session-chip" +
-        (String(s.id) === String(current) ? " active" : " waiting") +
-        (!s.owner_opened_at ? " new" : "") +
-        (name ? " has-name" : "");
-
-      btn.dataset.sessionId = String(s.id);
-      btn.dataset.uLabel = u;
-      btn.dataset.userName = name;
-
-      btn.textContent = name ? name.slice(0, 18) : u;
-      btn.title = name ? (u + " · " + name) : u;
-
-      btn.addEventListener("click", function(ev){
-        ev.preventDefault();
-        window.location.href = "/fm/app/" + encodeURIComponent(code()) +
-          "?chatSession=" + encodeURIComponent(s.id) +
-          "&focus=chat";
-      });
-
-      strip.appendChild(btn);
-    });
-
-    if(dots){
-      dots.innerHTML = "";
-      sessions.forEach(function(s){
-        const d = document.createElement("span");
-        d.className = "followme-horizontal-chat-dot" + (String(s.id) === String(current) ? " active" : "");
-        dots.appendChild(d);
-      });
-    }
-
-    const active = strip.querySelector(".followme-chat-session-chip.active");
-    if(active){
-      setTimeout(function(){
-        try{ active.scrollIntoView({ behavior:"smooth", inline:"center", block:"nearest" }); }catch(e){}
-      }, 80);
-    }
-  }
-
-  function enforceNames(sessions){
-    sessions.forEach(function(s, idx){
-      const sid = String(s.id);
-      const name = cleanName(s.display_name || "");
-      const u = baseULabel(s, idx);
-
-      const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
-      if(!chip) return;
-
-      chip.dataset.uLabel = u;
-      chip.dataset.userName = name;
-
-      if(name){
-        chip.classList.add("has-name");
-        const wanted = name.slice(0, 18);
-        if(chip.textContent !== wanted){
-          chip.textContent = wanted;
-        }
-        chip.title = u + " · " + name;
-        chip.style.width = "auto";
-        chip.style.minWidth = "58px";
-        chip.style.maxWidth = "140px";
-        chip.style.flexBasis = "auto";
-      }else{
-        chip.classList.remove("has-name");
-        if(chip.textContent !== u){
-          chip.textContent = u;
-        }
-        chip.title = u;
-      }
-    });
-  }
-
-  async function refresh(){
-    try{
-      const sessions = await fetchSessions();
-      renderTabs(sessions);
-      enforceNames(sessions);
-    }catch(e){}
-  }
-
-  async function saveNameForCurrent(name){
-    const sid = currentSessionId();
-    const clean = cleanName(name);
-
-    if(!sid){
-      alert("Non riesco a identificare la chat attiva.");
-      return false;
-    }
-
-    if(!clean || clean.length < 2){
-      alert("Nome non valido.");
-      return false;
-    }
-
-    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/name", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ display_name:clean })
-    });
-
-    const data = await res.json().catch(()=>null);
-
-    if(!res.ok || !data || !data.success){
-      alert("Errore salvataggio nome: " + ((data && data.error) || ("HTTP " + res.status)));
-      return false;
-    }
-
-    const card = document.getElementById("followmeNameDetectCard");
-    if(card){
-      card.classList.remove("is-open");
-      card.setAttribute("aria-hidden","true");
-    }
-
-    // Aggiorna subito il chip corrente, senza aspettare refresh.
-    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
-    if(chip){
-      const u = chip.dataset.uLabel || chip.textContent || "";
-      chip.dataset.userName = clean;
-      chip.classList.add("has-name");
-      chip.textContent = clean.slice(0, 18);
-      chip.title = u ? (u + " · " + clean) : clean;
-      chip.style.width = "auto";
-      chip.style.minWidth = "58px";
-      chip.style.maxWidth = "140px";
-      chip.style.flexBasis = "auto";
-    }
-
-    setTimeout(refresh, 250);
-    setTimeout(refresh, 1000);
-    return true;
-  }
-
-  function bindConfirm(){
-    const btn = document.getElementById("followmeNameDetectConfirm");
-    if(!btn || btn.dataset.nameWinsBound === "1") return;
-
-    const fresh = btn.cloneNode(true);
-    fresh.dataset.nameWinsBound = "1";
-    btn.parentNode.replaceChild(fresh, btn);
-
-    fresh.addEventListener("click", function(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
-      ev.stopImmediatePropagation();
-
-      const input = document.getElementById("followmeNameDetectInput");
-      const name = input ? input.value : "";
-      saveNameForCurrent(name);
-    }, true);
-  }
-
-  function observeStrip(){
-    const strip = document.getElementById("followmeOwnerChatSessionStrip");
-    if(!strip || strip.dataset.nameWinsObserver === "1") return;
-
-    strip.dataset.nameWinsObserver = "1";
-
-    const observer = new MutationObserver(function(){
-      // Se qualche script prova a riscrivere U2, lo correggiamo subito col nome salvato.
-      refresh();
-    });
-
-    observer.observe(strip, {
-      childList:true,
-      characterData:true,
-      subtree:true
-    });
-  }
-
-  function boot(){
-    bindConfirm();
-    observeStrip();
-    refresh();
-  }
-
-  window.followMeNameWinsRefresh = refresh;
-  window.followMeNameWinsSaveCurrent = saveNameForCurrent;
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", boot);
-  }else{
-    boot();
-  }
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 300);
-  });
-
-  setInterval(bindConfirm, 1000);
-  setInterval(refresh, 3000);
-})();
-</script>
+<script id="followme-name-wins-final-disabled-abbrev">/* disabled: replaced by abbreviated name controller */</script>
 
 
 <div class="followme-swipe-edge left" id="followmeSwipePrevEdge" aria-hidden="true"></div>
@@ -15772,6 +15065,592 @@ document.addEventListener("visibilitychange", function(){
     bindSwipeTarget(document.getElementById("followmeOwnerChatScreen"));
     bindEdges();
   }, 2500);
+})();
+</script>
+
+
+<script id="followme-name-no-reconfirm-abbrev-final">
+(function(){
+  let lastRenderSignature = "";
+  let lastScannedMessageKey = "";
+  const ignored = new Set();
+  const confirmedLocal = new Map();
+
+  const blacklist = new Set([
+    "ciao","salve","buongiorno","buonasera","buonanotte","ok","okay","si","sì","no",
+    "grazie","prego","quanto","costa","prezzo","dove","come","quando","perché",
+    "followme","qr","chat","info","informazioni","aspetto","raccontami","proprietario",
+    "hello","hi","thanks","thank","price","cost","where","how","yes","not",
+    "bonjour","merci","hola","gracias"
+  ]);
+
+  function code(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+
+    return "FM-DEMO";
+  }
+
+  function currentSessionId(){
+    try{
+      return new URLSearchParams(location.search || "").get("chatSession") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function cssEscape(v){
+    try{
+      if(window.CSS && CSS.escape) return CSS.escape(String(v));
+    }catch(e){}
+    return String(v).replace(/"/g, '\\"');
+  }
+
+  function cleanName(v){
+    return String(v || "")
+      .replace(/[<>"]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 40);
+  }
+
+  function titleCaseName(name){
+    return cleanName(name)
+      .split(" ")
+      .map(function(part){
+        if(!part) return "";
+        return part.charAt(0).toLocaleUpperCase("it-IT") + part.slice(1);
+      })
+      .join(" ")
+      .trim();
+  }
+
+  function compactName(name){
+    const n = cleanName(name);
+    if(!n) return "";
+
+    // Se ci sono nome + cognome, abbrevia solo il primo nome e lascia eventualmente iniziale cognome.
+    const parts = n.split(" ").filter(Boolean);
+    const first = parts[0] || n;
+    const suffix = parts.length > 1 ? " " + parts[1].charAt(0).toLocaleUpperCase("it-IT") + "." : "";
+
+    if(first.length <= 8){
+      return (first + suffix).slice(0, 18);
+    }
+
+    // Mantiene ultima lettera visibile: Alessandro -> Ales...o / Francesca -> Fran...a
+    const last = first.charAt(first.length - 1);
+    const start = first.slice(0, 4);
+    return (start + "..." + last + suffix).slice(0, 18);
+  }
+
+  function looksLikeName(name){
+    const n = cleanName(name);
+    if(!n || n.length < 2) return false;
+
+    const lower = n.toLowerCase();
+    if(blacklist.has(lower)) return false;
+
+    const parts = lower.split(/\s+/);
+    if(parts.some(p => blacklist.has(p))) return false;
+    if(parts.length > 2) return false;
+    if(!/[\p{L}]/u.test(n)) return false;
+
+    return true;
+  }
+
+  function extractNameFromText(text){
+    const original = String(text || "").trim();
+    if(!original) return "";
+
+    const normalized = original
+      .replace(/[’]/g, "'")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const patterns = [
+      /\b(?:ciao|salve|buongiorno|buonasera)?\s*,?\s*(?:io\s+)?(?:sono|mi chiamo|io sono|il mio nome è|il mio nome e')\s+([\p{L}][\p{L}' -]{1,35})/iu,
+      /\b(?:piacere)\s*,?\s*(?:sono|mi chiamo)?\s*([\p{L}][\p{L}' -]{1,35})/iu,
+      /\b([\p{L}][\p{L}'-]{1,24})\s*,?\s*piacere\b/iu,
+      /\b(?:i am|i'm|im|my name is|this is)\s+([\p{L}][\p{L}' -]{1,35})/iu,
+      /\b(?:nice to meet you|pleased to meet you)\s*,?\s*(?:i am|i'm|im)?\s*([\p{L}][\p{L}' -]{1,35})/iu,
+      /\b(?:je suis|moi c'est|mon nom est|me llamo|soy|mi nombre es|sou|me chamo)\s+([\p{L}][\p{L}' -]{1,35})/iu,
+      /^([\p{L}][\p{L}'-]{1,24})(?:\s+[\p{L}][\p{L}'-]{1,24})?$/iu
+    ];
+
+    for(const re of patterns){
+      const m = normalized.match(re);
+      if(m && m[1]){
+        const candidate = titleCaseName(m[1]);
+        if(looksLikeName(candidate)) return candidate;
+      }
+    }
+
+    if(/\bpiacere\b/i.test(normalized)){
+      const words = normalized.match(/[\p{L}][\p{L}'-]{1,24}/gu) || [];
+      const candidates = words
+        .map(titleCaseName)
+        .filter(looksLikeName)
+        .filter(w => !["Piacere", "Ciao", "Salve"].includes(w));
+
+      if(candidates.length) return candidates[0];
+    }
+
+    return "";
+  }
+
+  async function fetchSessions(){
+    const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)){
+      return [];
+    }
+
+    return data.sessions.slice().sort(function(a,b){
+      return Number(a.display_index || 0) - Number(b.display_index || 0);
+    });
+  }
+
+  function baseULabel(session, index){
+    return "U" + Number(session.display_index || index + 1);
+  }
+
+  function hasConfirmedName(session){
+    const name = cleanName(session.display_name || confirmedLocal.get(String(session.id)) || "");
+    return !!name;
+  }
+
+  function getConfirmedName(session){
+    return cleanName(session.display_name || confirmedLocal.get(String(session.id)) || "");
+  }
+
+  function applyNameToTab(sessionId, name, uLabel){
+    const sid = String(sessionId || "").trim();
+    const n = cleanName(name);
+    if(!sid || !n) return false;
+
+    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
+    if(!chip) return false;
+
+    chip.dataset.userName = n;
+    chip.dataset.confirmedName = "1";
+    if(uLabel) chip.dataset.uLabel = uLabel;
+
+    chip.classList.add("has-name");
+    chip.textContent = compactName(n);
+    chip.title = (chip.dataset.uLabel ? chip.dataset.uLabel + " · " : "") + n;
+
+    chip.style.width = "auto";
+    chip.style.minWidth = "58px";
+    chip.style.maxWidth = "104px";
+    chip.style.flexBasis = "auto";
+
+    return true;
+  }
+
+  function renderTabs(sessions){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+    const dots = document.getElementById("followmeHorizontalChatDots");
+    if(!strip) return;
+
+    const current = currentSessionId();
+
+    const signature = sessions.map(function(s, idx){
+      return [
+        s.id,
+        s.display_index || idx + 1,
+        getConfirmedName(s),
+        s.owner_opened_at || "",
+        String(s.id) === String(current) ? "active" : ""
+      ].join(":");
+    }).join("|");
+
+    if(signature === lastRenderSignature){
+      enforceNames(sessions);
+      return;
+    }
+
+    lastRenderSignature = signature;
+    strip.innerHTML = "";
+
+    sessions.forEach(function(s, idx){
+      const name = getConfirmedName(s);
+      const u = baseULabel(s, idx);
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className =
+        "followme-chat-session-chip" +
+        (String(s.id) === String(current) ? " active" : " waiting") +
+        (!s.owner_opened_at ? " new" : "") +
+        (name ? " has-name" : "");
+
+      btn.dataset.sessionId = String(s.id);
+      btn.dataset.uLabel = u;
+      btn.dataset.userName = name;
+      if(name) btn.dataset.confirmedName = "1";
+
+      btn.textContent = name ? compactName(name) : u;
+      btn.title = name ? (u + " · " + name) : u;
+
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        window.location.href = "/fm/app/" + encodeURIComponent(code()) +
+          "?chatSession=" + encodeURIComponent(s.id) +
+          "&focus=chat";
+      });
+
+      strip.appendChild(btn);
+    });
+
+    if(dots){
+      dots.innerHTML = "";
+      sessions.forEach(function(s){
+        const d = document.createElement("span");
+        d.className = "followme-horizontal-chat-dot" + (String(s.id) === String(current) ? " active" : "");
+        dots.appendChild(d);
+      });
+    }
+  }
+
+  function enforceNames(sessions){
+    sessions.forEach(function(s, idx){
+      const sid = String(s.id);
+      const name = getConfirmedName(s);
+      const u = baseULabel(s, idx);
+
+      const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
+      if(!chip) return;
+
+      chip.dataset.uLabel = u;
+
+      if(name){
+        applyNameToTab(sid, name, u);
+      }else{
+        chip.classList.remove("has-name");
+        chip.dataset.userName = "";
+        chip.dataset.confirmedName = "";
+        if(chip.textContent !== u) chip.textContent = u;
+        chip.title = u;
+      }
+    });
+  }
+
+  async function refreshTabs(){
+    try{
+      const sessions = await fetchSessions();
+      renderTabs(sessions);
+      enforceNames(sessions);
+    }catch(e){}
+  }
+
+  async function resolveULabel(sessionId){
+    const sid = String(sessionId || currentSessionId() || "").trim();
+    if(!sid) return "U?";
+
+    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
+    if(chip){
+      if(chip.dataset.uLabel) return chip.dataset.uLabel;
+      const m = String(chip.textContent || "").match(/U(\d+)/i);
+      if(m) return "U" + m[1];
+    }
+
+    try{
+      const sessions = await fetchSessions();
+      const idx = sessions.findIndex(s => String(s.id) === sid);
+      if(idx >= 0) return baseULabel(sessions[idx], idx);
+    }catch(e){}
+
+    return "U?";
+  }
+
+  async function sessionAlreadyHasName(sessionId){
+    const sid = String(sessionId || "").trim();
+    if(!sid) return false;
+
+    if(confirmedLocal.has(sid)) return true;
+
+    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
+    if(chip && cleanName(chip.dataset.userName || "")) return true;
+
+    try{
+      const sessions = await fetchSessions();
+      const s = sessions.find(x => String(x.id) === sid);
+      return !!(s && cleanName(s.display_name || ""));
+    }catch(e){
+      return false;
+    }
+  }
+
+  function getVisitorBubbleFromEvent(ev){
+    const target = ev.target && ev.target.closest
+      ? ev.target.closest(".followme-owner-chat-bubble")
+      : null;
+
+    if(!target) return null;
+    if(target.classList.contains("owner") || target.classList.contains("system")) return null;
+
+    return target;
+  }
+
+  function getLatestVisitorBubble(){
+    const box = document.getElementById("followmeOwnerChatMessages");
+    if(!box) return null;
+
+    const bubbles = Array.from(box.querySelectorAll(".followme-owner-chat-bubble:not(.owner):not(.system)"));
+    return bubbles.length ? bubbles[bubbles.length - 1] : null;
+  }
+
+  async function openNameCard({ name, sessionId, context, manual }){
+    const sid = String(sessionId || currentSessionId() || "").trim();
+    if(!sid) return;
+
+    // Regola chiave: se il nome è già confermato, non riproporre mai.
+    if(await sessionAlreadyHasName(sid)) return;
+
+    const u = await resolveULabel(sid);
+
+    window.__followMePendingNameSessionId = sid;
+    window.__followMePendingNameULabel = u;
+
+    const card = document.getElementById("followmeNameDetectCard");
+    const input = document.getElementById("followmeNameDetectInput");
+    const text = document.getElementById("followmeNameDetectText");
+    const ctx = document.getElementById("followmeNameDetectContext");
+
+    if(input){
+      input.value = name || "";
+      input.placeholder = manual ? "Scrivi o correggi il nome" : "Nome utente";
+    }
+
+    if(text){
+      text.textContent = manual
+        ? "Ho letto questo messaggio. Confermi il nome da associare a " + u + "?"
+        : "Vuoi associare questa chat a " + (name || "questo nome") + " · " + u + "?";
+    }
+
+    if(ctx){
+      ctx.textContent = context ? "Messaggio: “" + context + "”" : "";
+      ctx.style.display = context ? "block" : "none";
+    }
+
+    if(card){
+      card.classList.add("is-open");
+      card.setAttribute("aria-hidden", "false");
+    }
+
+    setTimeout(function(){
+      try{ input && input.focus(); input && input.select(); }catch(e){}
+    }, 80);
+  }
+
+  function closeNameCard(){
+    const card = document.getElementById("followmeNameDetectCard");
+    if(card){
+      card.classList.remove("is-open");
+      card.setAttribute("aria-hidden","true");
+    }
+
+    window.__followMePendingNameSessionId = "";
+    window.__followMePendingNameULabel = "";
+  }
+
+  async function saveName(){
+    const input = document.getElementById("followmeNameDetectInput");
+    const name = titleCaseName(input ? input.value : "");
+    const sid = String(window.__followMePendingNameSessionId || currentSessionId() || "").trim();
+    const u = String(window.__followMePendingNameULabel || await resolveULabel(sid) || "");
+
+    if(!sid){
+      alert("Non riesco a identificare la chat attiva.");
+      return false;
+    }
+
+    if(!looksLikeName(name)){
+      alert("Il nome non sembra valido. Correggilo e riprova.");
+      return false;
+    }
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/name", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ display_name:name })
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      alert("Errore salvataggio nome: " + ((data && data.error) || ("HTTP " + res.status)));
+      return false;
+    }
+
+    confirmedLocal.set(sid, name);
+    applyNameToTab(sid, name, u);
+    closeNameCard();
+
+    setTimeout(refreshTabs, 250);
+    setTimeout(refreshTabs, 1000);
+
+    return true;
+  }
+
+  function bindCardButtons(){
+    const confirm = document.getElementById("followmeNameDetectConfirm");
+    const cancel = document.getElementById("followmeNameDetectCancel");
+    const input = document.getElementById("followmeNameDetectInput");
+
+    if(confirm && confirm.dataset.noReconfirmBound !== "1"){
+      const fresh = confirm.cloneNode(true);
+      fresh.dataset.noReconfirmBound = "1";
+      confirm.parentNode.replaceChild(fresh, confirm);
+
+      fresh.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        saveName();
+      }, true);
+    }
+
+    const cancelNow = document.getElementById("followmeNameDetectCancel");
+    if(cancelNow && cancelNow.dataset.noReconfirmBound !== "1"){
+      cancelNow.dataset.noReconfirmBound = "1";
+      cancelNow.addEventListener("click", function(ev){
+        ev.preventDefault();
+        const value = input ? titleCaseName(input.value) : "";
+        const sid = String(window.__followMePendingNameSessionId || currentSessionId() || "");
+        if(value && sid) ignored.add(sid + ":" + value.toLowerCase());
+        closeNameCard();
+      });
+    }
+
+    const inputNow = document.getElementById("followmeNameDetectInput");
+    if(inputNow && inputNow.dataset.noReconfirmBound !== "1"){
+      inputNow.dataset.noReconfirmBound = "1";
+      inputNow.addEventListener("keydown", function(ev){
+        if(ev.key === "Enter"){
+          ev.preventDefault();
+          saveName();
+        }
+
+        if(ev.key === "Escape"){
+          ev.preventDefault();
+          closeNameCard();
+        }
+      });
+    }
+  }
+
+  function bindDoubleClick(){
+    const box = document.getElementById("followmeOwnerChatMessages");
+    if(!box || box.dataset.noReconfirmDblBound === "1") return;
+
+    box.dataset.noReconfirmDblBound = "1";
+
+    box.addEventListener("dblclick", async function(ev){
+      const bubble = getVisitorBubbleFromEvent(ev);
+      if(!bubble) return;
+
+      const sid = currentSessionId();
+
+      // Se già salvato, non riproporre neppure col doppio click.
+      if(await sessionAlreadyHasName(sid)) return;
+
+      const text = String(bubble.textContent || "").trim();
+      const candidate = extractNameFromText(text);
+
+      await openNameCard({
+        name: candidate,
+        sessionId: sid,
+        context: text,
+        manual: true
+      });
+    });
+  }
+
+  async function scanLatestMessage(){
+    const sid = currentSessionId();
+    if(!sid) return;
+
+    if(await sessionAlreadyHasName(sid)) return;
+
+    const bubble = getLatestVisitorBubble();
+    if(!bubble) return;
+
+    const text = String(bubble.textContent || "").trim();
+    if(!text) return;
+
+    const key = sid + ":" + text;
+    if(key === lastScannedMessageKey) return;
+    lastScannedMessageKey = key;
+
+    const candidate = extractNameFromText(text);
+    if(!candidate) return;
+
+    const ignoreKey = sid + ":" + candidate.toLowerCase();
+    if(ignored.has(ignoreKey)) return;
+
+    await openNameCard({
+      name: candidate,
+      sessionId: sid,
+      context: text,
+      manual: false
+    });
+  }
+
+  function observeStrip(){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+    if(!strip || strip.dataset.noReconfirmObserver === "1") return;
+
+    strip.dataset.noReconfirmObserver = "1";
+
+    const observer = new MutationObserver(function(){
+      refreshTabs();
+    });
+
+    observer.observe(strip, {
+      childList:true,
+      characterData:true,
+      subtree:true
+    });
+  }
+
+  function boot(){
+    bindCardButtons();
+    bindDoubleClick();
+    observeStrip();
+    refreshTabs();
+    scanLatestMessage();
+  }
+
+  window.followMeNameNoReconfirmRefresh = refreshTabs;
+  window.followMeCompactFollowMeName = compactName;
+  window.followMeExtractNameFromText = extractNameFromText;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 300);
+  });
+
+  setInterval(refreshTabs, 3000);
+  setInterval(scanLatestMessage, 1800);
+  setInterval(bindCardButtons, 1200);
 })();
 </script>
 
