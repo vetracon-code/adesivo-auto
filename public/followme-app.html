@@ -5131,6 +5131,59 @@
       white-space:nowrap !important;
     }
 
+
+    /* Swipe finale indipendente tra chat FollowMe */
+    body.followme-chat-only-mode #followmeOwnerChatMessages,
+    body.followme-chat-only-mode #followmeOwnerChatScreen{
+      touch-action:pan-y !important;
+      overscroll-behavior:contain !important;
+    }
+
+    .followme-swipe-edge{
+      display:none;
+      position:fixed;
+      top:126px;
+      bottom:76px;
+      width:34px;
+      z-index:999997;
+      background:transparent;
+      opacity:0;
+      pointer-events:auto;
+    }
+
+    body.followme-chat-only-mode .followme-swipe-edge{
+      display:block;
+    }
+
+    .followme-swipe-edge.left{
+      left:0;
+    }
+
+    .followme-swipe-edge.right{
+      right:0;
+    }
+
+    .followme-swipe-toast{
+      display:none;
+      position:fixed;
+      left:50%;
+      top:50%;
+      transform:translate(-50%,-50%);
+      z-index:1000010;
+      padding:8px 13px;
+      border-radius:999px;
+      background:rgba(255,255,255,.90);
+      color:#3a3f41;
+      font-size:.78rem;
+      font-weight:900;
+      box-shadow:0 4px 18px rgba(0,0,0,.16);
+      pointer-events:none;
+    }
+
+    .followme-swipe-toast.is-open{
+      display:block;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -15461,6 +15514,264 @@ document.addEventListener("visibilitychange", function(){
 
   setInterval(bindConfirm, 1000);
   setInterval(refresh, 3000);
+})();
+</script>
+
+
+<div class="followme-swipe-edge left" id="followmeSwipePrevEdge" aria-hidden="true"></div>
+<div class="followme-swipe-edge right" id="followmeSwipeNextEdge" aria-hidden="true"></div>
+<div class="followme-swipe-toast" id="followmeSwipeToast">Cambio chat</div>
+
+
+<script id="followme-swipe-navigation-final">
+(function(){
+  let sessions = [];
+  let lastMoveAt = 0;
+  let sx = 0;
+  let sy = 0;
+  let st = 0;
+  let tracking = false;
+
+  function code(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+
+    return "FM-DEMO";
+  }
+
+  function currentSessionId(){
+    try{
+      return new URLSearchParams(location.search || "").get("chatSession") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  async function fetchSessions(){
+    try{
+      const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data = await res.json().catch(()=>null);
+
+      if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)){
+        sessions = [];
+        return sessions;
+      }
+
+      sessions = data.sessions.slice().sort(function(a,b){
+        return Number(a.display_index || 0) - Number(b.display_index || 0);
+      });
+
+      return sessions;
+    }catch(e){
+      sessions = [];
+      return sessions;
+    }
+  }
+
+  function toast(text){
+    const t = document.getElementById("followmeSwipeToast");
+    if(!t) return;
+
+    t.textContent = text || "Cambio chat";
+    t.classList.add("is-open");
+
+    clearTimeout(t._timer);
+    t._timer = setTimeout(function(){
+      t.classList.remove("is-open");
+    }, 650);
+  }
+
+  function currentIndex(){
+    const sid = currentSessionId();
+    return sessions.findIndex(function(s){
+      return String(s.id) === String(sid);
+    });
+  }
+
+  function go(delta){
+    const now = Date.now();
+
+    if(now - lastMoveAt < 700){
+      return;
+    }
+
+    lastMoveAt = now;
+
+    if(!sessions.length){
+      toast("Nessuna chat");
+      fetchSessions();
+      return;
+    }
+
+    if(sessions.length < 2){
+      toast("Una sola chat");
+      return;
+    }
+
+    let idx = currentIndex();
+
+    if(idx < 0){
+      idx = 0;
+    }
+
+    const next = idx + delta;
+
+    if(next < 0){
+      toast("Prima chat");
+      return;
+    }
+
+    if(next >= sessions.length){
+      toast("Ultima chat");
+      return;
+    }
+
+    const target = sessions[next];
+    const label = target.display_name || ("U" + Number(target.display_index || next + 1));
+
+    toast(label);
+
+    window.location.href =
+      "/fm/app/" + encodeURIComponent(code()) +
+      "?chatSession=" + encodeURIComponent(target.id) +
+      "&focus=chat";
+  }
+
+  function pointerStart(x, y){
+    tracking = true;
+    sx = x;
+    sy = y;
+    st = Date.now();
+  }
+
+  function pointerEnd(x, y){
+    if(!tracking) return;
+
+    tracking = false;
+
+    const dx = x - sx;
+    const dy = y - sy;
+    const dt = Date.now() - st;
+
+    if(Math.abs(dx) < 52) return;
+    if(Math.abs(dx) < Math.abs(dy) * 1.25) return;
+    if(dt > 1300) return;
+
+    // Sinistra = prossima chat, destra = precedente.
+    if(dx < 0){
+      go(1);
+    }else{
+      go(-1);
+    }
+  }
+
+  function bindSwipeTarget(target){
+    if(!target || target.dataset.swipeNavigationFinalBound === "1") return;
+
+    target.dataset.swipeNavigationFinalBound = "1";
+
+    target.addEventListener("touchstart", function(ev){
+      if(!ev.touches || !ev.touches[0]) return;
+      pointerStart(ev.touches[0].clientX, ev.touches[0].clientY);
+    }, { passive:true });
+
+    target.addEventListener("touchend", function(ev){
+      if(!ev.changedTouches || !ev.changedTouches[0]) return;
+      pointerEnd(ev.changedTouches[0].clientX, ev.changedTouches[0].clientY);
+    }, { passive:true });
+
+    target.addEventListener("pointerdown", function(ev){
+      if(ev.pointerType === "touch") return;
+      pointerStart(ev.clientX, ev.clientY);
+    });
+
+    target.addEventListener("pointerup", function(ev){
+      if(ev.pointerType === "touch") return;
+      pointerEnd(ev.clientX, ev.clientY);
+    });
+  }
+
+  function bindEdges(){
+    const prev = document.getElementById("followmeSwipePrevEdge");
+    const next = document.getElementById("followmeSwipeNextEdge");
+
+    if(prev && prev.dataset.swipeNavigationFinalBound !== "1"){
+      prev.dataset.swipeNavigationFinalBound = "1";
+      prev.addEventListener("click", function(ev){
+        ev.preventDefault();
+        go(-1);
+      });
+    }
+
+    if(next && next.dataset.swipeNavigationFinalBound !== "1"){
+      next.dataset.swipeNavigationFinalBound = "1";
+      next.addEventListener("click", function(ev){
+        ev.preventDefault();
+        go(1);
+      });
+    }
+  }
+
+  function bindKeyboard(){
+    if(window.__followMeSwipeKeyboardFinalBound) return;
+    window.__followMeSwipeKeyboardFinalBound = true;
+
+    document.addEventListener("keydown", function(ev){
+      const tag = String(ev.target && ev.target.tagName || "").toLowerCase();
+
+      if(tag === "textarea" || tag === "input"){
+        return;
+      }
+
+      if(ev.key === "ArrowLeft"){
+        go(-1);
+      }
+
+      if(ev.key === "ArrowRight"){
+        go(1);
+      }
+    });
+  }
+
+  async function boot(){
+    await fetchSessions();
+
+    bindSwipeTarget(document.getElementById("followmeOwnerChatMessages"));
+    bindSwipeTarget(document.getElementById("followmeOwnerChatScreen"));
+    bindEdges();
+    bindKeyboard();
+  }
+
+  window.followMeSwipeNextFinal = function(){ go(1); };
+  window.followMeSwipePrevFinal = function(){ go(-1); };
+  window.followMeSwipeReloadFinal = fetchSessions;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 300);
+  });
+
+  setInterval(function(){
+    fetchSessions();
+    bindSwipeTarget(document.getElementById("followmeOwnerChatMessages"));
+    bindSwipeTarget(document.getElementById("followmeOwnerChatScreen"));
+    bindEdges();
+  }, 2500);
 })();
 </script>
 
