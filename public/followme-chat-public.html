@@ -386,6 +386,22 @@
       display:none;
     }
 
+
+    /* Scelta info discreta se l'utente scrive subito */
+    .choices .choice-prompt{
+      grid-column:1 / -1;
+      margin:0 0 4px;
+      padding:0 2px;
+      color:#667071;
+      font-size:.78rem;
+      font-weight:800;
+      text-align:left;
+    }
+
+    body.followme-wa-chat .choices .choice-prompt{
+      color:#667071 !important;
+    }
+
 </style>
 </head>
 <body class="followme-wa-chat">
@@ -419,6 +435,7 @@
   let followMeInfoChoiceSent = false;
   let followMeInfoExplained = false;
   let followMeRobotFallbackSent = false;
+  let followMeInfoChoiceRendered = false;
   const renderedMessageKeys = new Set();
   const messages = document.getElementById("messages");
   const statusText = document.getElementById("statusText");
@@ -577,10 +594,18 @@
   }
 
   function addChoices(){
-    if(realConversationStarted) return;
+    if(followMeInfoChoiceRendered) return;
+    followMeInfoChoiceRendered = true;
 
     const wrap = document.createElement("div");
     wrap.className = "choices";
+
+    if(realConversationStarted){
+      const prompt = document.createElement("div");
+      prompt.className = "choice-prompt";
+      prompt.textContent = "Vuoi sapere cosa sono?";
+      wrap.appendChild(prompt);
+    }
 
     const yes = document.createElement("button");
     yes.className = "choice";
@@ -593,6 +618,7 @@
     yes.onclick = ()=>{
       wrap.remove();
       addUser("Sì, raccontami");
+      followMeInfoChoiceSent = true;
       followMeInfoExplained = true;
       followMeInfoChoiceSent = true;
       sendSystemNoteToOwner("Ok, info trasmesse.");
@@ -614,6 +640,7 @@
     no.onclick = ()=>{
       wrap.remove();
       addUser("No, aspetto");
+      followMeInfoChoiceSent = true;
       followMeInfoExplained = false;
       followMeInfoChoiceSent = true;
       sendSystemNoteToOwner("No, nessuna presentazione.");
@@ -738,6 +765,12 @@
     addUser(text);
     playFollowMeSendSound();
     alreadyRendered("visitor", text, null);
+
+    if(!followMeInfoChoiceSent && !followMeInfoChoiceRendered){
+      setTimeout(function(){
+        addChoices();
+      }, 650);
+    }
 
     if(shouldRobotFallback){
       followMeRobotFallbackSent = true;
