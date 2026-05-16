@@ -9835,6 +9835,52 @@ app.post('/api/followme/chat/session/:session_id/message', express.json(), async
 
 
 
+
+app.post('/api/followme/chat/session/:session_id/name', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeChatSchema();
+
+    const sessionId = Number(req.params.session_id || 0);
+    let displayName = String(req.body?.display_name || '').trim();
+
+    if (!sessionId) {
+      return res.status(400).json({ success:false, error:'Sessione mancante.' });
+    }
+
+    displayName = displayName
+      .replace(/[<>"]/g, '')
+      .replace(/\s+/g, ' ')
+      .slice(0, 32)
+      .trim();
+
+    if (!displayName || displayName.length < 2) {
+      return res.status(400).json({ success:false, error:'Nome non valido.' });
+    }
+
+    const updated = await pool.query(
+      `UPDATE followme_chat_sessions
+       SET display_name = $2,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, display_name`,
+      [sessionId, displayName]
+    );
+
+    if (!updated.rows.length) {
+      return res.status(404).json({ success:false, error:'Sessione non trovata.' });
+    }
+
+    return res.json({
+      success:true,
+      session:updated.rows[0]
+    });
+  } catch (err) {
+    console.error('followme session name error:', err);
+    return res.status(500).json({ success:false, error:'Errore salvataggio nome.' });
+  }
+});
+
+
 app.get('/api/followme/:code/chat/sessions', async (req, res) => {
   try {
     await ensureFollowMeChatSchema();

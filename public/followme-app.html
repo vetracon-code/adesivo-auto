@@ -4845,6 +4845,88 @@
       font-weight:900 !important;
     }
 
+
+    /* Fix riconoscimento nome utente - tema WhatsApp-like */
+    .followme-name-detect-card{
+      display:none;
+      position:fixed;
+      left:50%;
+      bottom:calc(78px + env(safe-area-inset-bottom));
+      transform:translateX(-50%);
+      z-index:1000006;
+      width:min(350px,92vw);
+      border-radius:22px;
+      padding:14px;
+      background:#fffaf2;
+      color:#2f3437;
+      border:1px solid rgba(90,61,36,.18);
+      box-shadow:0 16px 46px rgba(58,38,20,.22);
+      font-family:inherit;
+    }
+
+    .followme-name-detect-card.is-open{
+      display:block;
+    }
+
+    .followme-name-detect-title{
+      margin:0 0 5px;
+      color:#2f3437;
+      font-size:.96rem;
+      line-height:1.2;
+      font-weight:950;
+      letter-spacing:-.025em;
+    }
+
+    .followme-name-detect-text{
+      margin:0 0 11px;
+      color:#5f6a6d;
+      font-size:.82rem;
+      line-height:1.35;
+      font-weight:650;
+    }
+
+    .followme-name-detect-name{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:26px;
+      padding:0 9px;
+      border-radius:999px;
+      background:#dcf8c6;
+      color:#1f2c2f;
+      font-weight:950;
+      border:1px solid rgba(37,211,102,.26);
+    }
+
+    .followme-name-detect-actions{
+      display:flex;
+      gap:8px;
+      justify-content:flex-end;
+      align-items:center;
+    }
+
+    .followme-name-detect-actions button{
+      min-height:34px;
+      border-radius:999px;
+      padding:0 12px;
+      font-size:.78rem;
+      font-weight:900;
+      border:1px solid rgba(0,0,0,.08);
+      background:#ffffff;
+      color:#3a3f41;
+      box-shadow:0 1px 2px rgba(0,0,0,.07);
+    }
+
+    .followme-name-detect-actions .primary{
+      background:#25d366;
+      color:#ffffff;
+      border:0;
+    }
+
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip .followme-chat-session-chip{
+      text-transform:uppercase !important;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -14518,6 +14600,276 @@ document.addEventListener("visibilitychange", function(){
   });
 
   setInterval(bindAlwaysQr, 1200);
+})();
+</script>
+
+
+<div class="followme-name-detect-card" id="followmeNameDetectCard" aria-hidden="true">
+  <div class="followme-name-detect-title">Ho riconosciuto un possibile nome</div>
+  <div class="followme-name-detect-text">
+    Vuoi associare questa chat a <span class="followme-name-detect-name" id="followmeNameDetectValue"></span>?
+  </div>
+  <div class="followme-name-detect-actions">
+    <button type="button" id="followmeNameDetectCancel">Annulla</button>
+    <button type="button" class="primary" id="followmeNameDetectConfirm">Conferma</button>
+  </div>
+</div>
+
+
+<script id="followme-name-recognition-u-label-final">
+(function(){
+  let pendingName = "";
+  let pendingSessionId = "";
+  let lastCheckedKey = "";
+  let ignored = new Set();
+
+  function currentSessionId(){
+    try{
+      return new URLSearchParams(location.search || "").get("chatSession") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function code(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function cleanName(v){
+    return String(v || "")
+      .replace(/[^\p{L}'’ -]/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 32);
+  }
+
+  function extractName(text){
+    const t = String(text || "").trim();
+    if(!t) return "";
+
+    const patterns = [
+      /\b(?:mi chiamo|sono|io sono|ciao sono|ciao,\s*sono|piacere sono)\s+([A-ZÀ-Ü][a-zà-ü]+(?:\s+[A-ZÀ-Ü][a-zà-ü]+)?)/i,
+      /\b(?:il mio nome è|il mio nome e')\s+([A-ZÀ-Ü][a-zà-ü]+(?:\s+[A-ZÀ-Ü][a-zà-ü]+)?)/i,
+      /^([A-ZÀ-Ü][a-zà-ü]{2,})(?:[.!? ]*)$/
+    ];
+
+    for(const re of patterns){
+      const m = t.match(re);
+      if(m && m[1]){
+        const name = cleanName(m[1]);
+        const lower = name.toLowerCase();
+
+        const blacklist = new Set([
+          "followme",
+          "qr",
+          "ciao",
+          "buongiorno",
+          "buonasera",
+          "buonanotte",
+          "ok",
+          "si",
+          "no",
+          "grazie",
+          "quanto",
+          "dove",
+          "come"
+        ]);
+
+        if(name.length >= 2 && !blacklist.has(lower)){
+          return name;
+        }
+      }
+    }
+
+    return "";
+  }
+
+  function getSessionLabel(){
+    const sid = currentSessionId();
+    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + CSS.escape(sid) + '"]');
+    if(chip){
+      return chip.dataset.uLabel || chip.textContent || "U?";
+    }
+    return "U?";
+  }
+
+  function openCard(name, sid){
+    if(!name || !sid) return;
+
+    pendingName = name;
+    pendingSessionId = sid;
+
+    const card = document.getElementById("followmeNameDetectCard");
+    const value = document.getElementById("followmeNameDetectValue");
+
+    if(value){
+      value.textContent = name + " · " + getSessionLabel();
+    }
+
+    if(card){
+      card.classList.add("is-open");
+      card.setAttribute("aria-hidden","false");
+    }
+  }
+
+  function closeCard(){
+    const card = document.getElementById("followmeNameDetectCard");
+    if(card){
+      card.classList.remove("is-open");
+      card.setAttribute("aria-hidden","true");
+    }
+
+    pendingName = "";
+    pendingSessionId = "";
+  }
+
+  async function saveName(){
+    if(!pendingName || !pendingSessionId) return;
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(pendingSessionId) + "/name", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({
+        display_name:pendingName
+      })
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      alert("Errore salvataggio nome: " + ((data && data.error) || res.status));
+      return;
+    }
+
+    // Il tab deve restare U1/U2/U3: aggiorniamo solo tooltip/dataset.
+    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + CSS.escape(pendingSessionId) + '"]');
+    if(chip){
+      chip.dataset.userName = pendingName;
+      const u = chip.dataset.uLabel || chip.textContent || "U?";
+      chip.textContent = u;
+      chip.title = u + " · " + pendingName;
+    }
+
+    if(typeof window.followMeULabelsNormalize === "function"){
+      window.followMeULabelsNormalize();
+    }
+
+    if(typeof window.followMeULabelsRefresh === "function"){
+      setTimeout(window.followMeULabelsRefresh, 300);
+    }
+
+    closeCard();
+  }
+
+  function bindCard(){
+    const confirm = document.getElementById("followmeNameDetectConfirm");
+    const cancel = document.getElementById("followmeNameDetectCancel");
+
+    if(confirm && confirm.dataset.nameDetectBound !== "1"){
+      confirm.dataset.nameDetectBound = "1";
+      confirm.addEventListener("click", function(ev){
+        ev.preventDefault();
+        saveName();
+      });
+    }
+
+    if(cancel && cancel.dataset.nameDetectBound !== "1"){
+      cancel.dataset.nameDetectBound = "1";
+      cancel.addEventListener("click", function(ev){
+        ev.preventDefault();
+        if(pendingSessionId && pendingName){
+          ignored.add(pendingSessionId + ":" + pendingName.toLowerCase());
+        }
+        closeCard();
+      });
+    }
+  }
+
+  function scanVisibleMessages(){
+    const sid = currentSessionId();
+    if(!sid) return;
+
+    const box = document.getElementById("followmeOwnerChatMessages");
+    if(!box) return;
+
+    const visitorBubbles = Array.from(box.querySelectorAll(".followme-owner-chat-bubble:not(.owner):not(.system)"));
+
+    if(!visitorBubbles.length) return;
+
+    const last = visitorBubbles[visitorBubbles.length - 1];
+    const text = last.textContent || "";
+    const key = sid + ":" + text;
+
+    if(key === lastCheckedKey) return;
+    lastCheckedKey = key;
+
+    const name = extractName(text);
+    if(!name) return;
+
+    const ignoreKey = sid + ":" + name.toLowerCase();
+    if(ignored.has(ignoreKey)) return;
+
+    // Se la sessione ha già un nome, non insistere.
+    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + CSS.escape(sid) + '"]');
+    if(chip && chip.dataset.userName){
+      return;
+    }
+
+    openCard(name, sid);
+  }
+
+  function normalizeULabelsAfterNames(){
+    document.querySelectorAll("#followmeOwnerChatSessionStrip .followme-chat-session-chip").forEach(function(chip, idx){
+      let label = chip.dataset.uLabel;
+
+      if(!label){
+        const text = String(chip.textContent || "").trim();
+        const m = text.match(/(?:U|Utente)\s*(\d+)/i);
+        label = m ? ("U" + m[1]) : ("U" + (idx + 1));
+        chip.dataset.uLabel = label;
+      }
+
+      if(chip.textContent !== label){
+        chip.textContent = label;
+      }
+
+      if(chip.dataset.userName){
+        chip.title = label + " · " + chip.dataset.userName;
+      }
+    });
+  }
+
+  function boot(){
+    bindCard();
+    scanVisibleMessages();
+    normalizeULabelsAfterNames();
+  }
+
+  window.followMeNameRecognitionScan = scanVisibleMessages;
+  window.followMeNameRecognitionClose = closeCard;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 300);
+  });
+
+  setInterval(function(){
+    scanVisibleMessages();
+    normalizeULabelsAfterNames();
+  }, 1500);
 })();
 </script>
 
