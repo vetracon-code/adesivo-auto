@@ -5117,6 +5117,20 @@
       white-space:nowrap !important;
     }
 
+
+    /* Nome confermato: sostituisce definitivamente U1/U2/U3 */
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip .followme-chat-session-chip.has-name{
+      flex:0 0 auto !important;
+      width:auto !important;
+      min-width:58px !important;
+      max-width:140px !important;
+      padding:0 11px !important;
+      text-transform:none !important;
+      overflow:hidden !important;
+      text-overflow:ellipsis !important;
+      white-space:nowrap !important;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -14491,284 +14505,7 @@ document.addEventListener("visibilitychange", function(){
 </script>
 
 
-<script id="followme-u-labels-stable-final">
-(function(){
-  let lastSignature = "";
-  let sessionsCache = [];
-  let lastRenderAt = 0;
-
-  function code(){
-    try{
-      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
-      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
-
-      if(typeof getCode === "function"){
-        const c = getCode();
-        if(c) return String(c).trim().toUpperCase();
-      }
-    }catch(e){}
-
-    return "FM-DEMO";
-  }
-
-  function currentSessionId(){
-    try{
-      return new URLSearchParams(location.search || "").get("chatSession") || "";
-    }catch(e){
-      return "";
-    }
-  }
-
-  async function fetchSessions(){
-    try{
-      const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), {
-        cache:"no-store"
-      });
-
-      const data = await res.json().catch(()=>null);
-
-      if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)){
-        return [];
-      }
-
-      return data.sessions.slice().sort(function(a,b){
-        return Number(a.display_index || 0) - Number(b.display_index || 0);
-      });
-    }catch(e){
-      return [];
-    }
-  }
-
-  function sessionNumber(session, index){
-    return Number(session.display_index || index + 1);
-  }
-
-  function openSession(id){
-    if(!id) return;
-
-    window.location.href = "/fm/app/" + encodeURIComponent(code()) +
-      "?chatSession=" + encodeURIComponent(id) +
-      "&focus=chat";
-  }
-
-  function renderTabs(sessions){
-    const strip = document.getElementById("followmeOwnerChatSessionStrip");
-    const dots = document.getElementById("followmeHorizontalChatDots");
-    if(!strip) return;
-
-    const current = currentSessionId();
-
-    const signature = sessions.map(function(s, idx){
-      return String(s.id) + ":" +
-        String(sessionNumber(s, idx)) + ":" +
-        String(s.owner_opened_at || "") + ":" +
-        String(s.display_name || "");
-    }).join("|") + "|current:" + current;
-
-    const now = Date.now();
-
-    // Evita ridisegni troppo ravvicinati: è la causa principale dello sfarfallio.
-    if(signature === lastSignature && now - lastRenderAt < 4000){
-      normalizeVisibleLabels();
-      return;
-    }
-
-    lastSignature = signature;
-    lastRenderAt = now;
-
-    strip.innerHTML = "";
-
-    sessions.forEach(function(s, idx){
-      const n = sessionNumber(s, idx);
-      const btn = document.createElement("button");
-
-      btn.type = "button";
-      btn.className =
-        "followme-chat-session-chip" +
-        (String(s.id) === String(current) ? " active" : " waiting") +
-        (!s.owner_opened_at ? " new" : "");
-
-      btn.dataset.sessionId = String(s.id);
-      btn.dataset.uLabel = "U" + n;
-      btn.dataset.userName = String(s.display_name || "");
-
-      if(s.display_name){
-        btn.classList.add("has-name");
-        btn.textContent = String(s.display_name).slice(0, 18);
-        btn.title = "U" + n + " · " + s.display_name;
-      }else{
-        btn.classList.remove("has-name");
-        btn.textContent = "U" + n;
-        btn.title = "U" + n;
-      }
-
-      btn.addEventListener("click", function(ev){
-        ev.preventDefault();
-        openSession(s.id);
-      });
-
-      strip.appendChild(btn);
-    });
-
-    if(dots){
-      dots.innerHTML = "";
-
-      sessions.forEach(function(s){
-        const d = document.createElement("span");
-        d.className = "followme-horizontal-chat-dot" + (String(s.id) === String(current) ? " active" : "");
-        dots.appendChild(d);
-      });
-    }
-
-    const active = strip.querySelector(".followme-chat-session-chip.active");
-    if(active){
-      setTimeout(function(){
-        try{
-          active.scrollIntoView({ behavior:"smooth", inline:"center", block:"nearest" });
-        }catch(e){}
-      }, 80);
-    }
-  }
-
-  function normalizeVisibleLabels(){
-    const strip = document.getElementById("followmeOwnerChatSessionStrip");
-    if(!strip) return;
-
-    strip.querySelectorAll(".followme-chat-session-chip").forEach(function(btn, idx){
-      let label = btn.dataset.uLabel;
-
-      if(!label){
-        const text = String(btn.textContent || "").trim();
-        const m = text.match(/(?:U|Utente)\s*(\d+)/i);
-        label = m ? ("U" + m[1]) : ("U" + (idx + 1));
-        btn.dataset.uLabel = label;
-      }
-
-      const userName = btn.dataset.userName || "";
-
-      if(userName){
-        btn.classList.add("has-name");
-        const visibleName = String(userName).slice(0, 18);
-        if(btn.textContent !== visibleName){
-          btn.textContent = visibleName;
-        }
-        btn.title = label + " · " + userName;
-
-        btn.style.width = "auto";
-        btn.style.minWidth = "54px";
-        btn.style.maxWidth = "118px";
-        btn.style.flexBasis = "auto";
-      }else{
-        btn.classList.remove("has-name");
-        if(btn.textContent !== label){
-          btn.textContent = label;
-        }
-
-        btn.style.width = "42px";
-        btn.style.minWidth = "42px";
-        btn.style.maxWidth = "42px";
-        btn.style.flexBasis = "42px";
-      }
-    });
-  }
-
-  async function refresh(){
-    const sessions = await fetchSessions();
-    sessionsCache = sessions;
-    renderTabs(sessions);
-    normalizeVisibleLabels();
-  }
-
-  function observeTabMutations(){
-    const strip = document.getElementById("followmeOwnerChatSessionStrip");
-    if(!strip || strip.dataset.uLabelObserver === "1") return;
-
-    strip.dataset.uLabelObserver = "1";
-
-    const observer = new MutationObserver(function(){
-      normalizeVisibleLabels();
-    });
-
-    observer.observe(strip, {
-      childList:true,
-      subtree:true,
-      characterData:true
-    });
-  }
-
-  function swipe(delta){
-    const current = currentSessionId();
-    const idx = sessionsCache.findIndex(function(s){
-      return String(s.id) === String(current);
-    });
-
-    if(idx < 0) return;
-
-    const next = idx + delta;
-    if(next < 0 || next >= sessionsCache.length) return;
-
-    openSession(sessionsCache[next].id);
-  }
-
-  function bindSwipe(){
-    const target = document.getElementById("followmeOwnerChatMessages") || document.getElementById("followmeOwnerChatScreen");
-    if(!target || target.dataset.uLabelSwipeBound === "1") return;
-
-    target.dataset.uLabelSwipeBound = "1";
-
-    let sx = 0;
-    let sy = 0;
-    let st = 0;
-
-    target.addEventListener("touchstart", function(ev){
-      if(!ev.touches || !ev.touches[0]) return;
-      sx = ev.touches[0].clientX;
-      sy = ev.touches[0].clientY;
-      st = Date.now();
-    }, { passive:true });
-
-    target.addEventListener("touchend", function(ev){
-      if(!ev.changedTouches || !ev.changedTouches[0]) return;
-
-      const dx = ev.changedTouches[0].clientX - sx;
-      const dy = ev.changedTouches[0].clientY - sy;
-      const dt = Date.now() - st;
-
-      if(Math.abs(dx) < 55) return;
-      if(Math.abs(dx) < Math.abs(dy) * 1.3) return;
-      if(dt > 1200) return;
-
-      if(dx < 0) swipe(1);
-      else swipe(-1);
-    }, { passive:true });
-  }
-
-  function boot(){
-    refresh();
-    observeTabMutations();
-    bindSwipe();
-  }
-
-  window.followMeULabelsRefresh = refresh;
-  window.followMeULabelsNormalize = normalizeVisibleLabels;
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", boot);
-  }else{
-    boot();
-  }
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 300);
-  });
-
-  // Normalizzazione frequente ma leggerissima: non ridisegna, corregge solo testo.
-  setInterval(normalizeVisibleLabels, 350);
-
-  // Refresh reale più lento: riduce lo sfarfallio.
-  setInterval(refresh, 6000);
-})();
-</script>
+<script id="followme-u-labels-stable-final-disabled-name-wins">/* disabled: name must permanently replace U label */</script>
 
 
 <script id="followme-qr-always-visible-script">
@@ -15432,21 +15169,31 @@ document.addEventListener("visibilitychange", function(){
 </script>
 
 
-<script id="followme-name-save-final-controller">
+<script id="followme-name-save-final-controller-disabled-name-wins">/* disabled: name must permanently replace U label */</script>
+
+
+<script id="followme-name-wins-final">
 (function(){
+  let lastRenderSignature = "";
+
+  function code(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
   function currentSessionId(){
     try{
       return new URLSearchParams(location.search || "").get("chatSession") || "";
     }catch(e){
       return "";
     }
-  }
-
-  function cssEscape(v){
-    try{
-      if(window.CSS && CSS.escape) return CSS.escape(String(v));
-    }catch(e){}
-    return String(v).replace(/"/g, '\\"');
   }
 
   function cleanName(v){
@@ -15457,39 +15204,163 @@ document.addEventListener("visibilitychange", function(){
       .slice(0, 40);
   }
 
-  function applyName(sessionId, name){
-    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sessionId) + '"]');
+  function cssEscape(v){
+    try{
+      if(window.CSS && CSS.escape) return CSS.escape(String(v));
+    }catch(e){}
+    return String(v).replace(/"/g, '\\"');
+  }
 
-    if(chip){
-      const u = chip.dataset.uLabel || chip.textContent || "";
-      chip.dataset.userName = name;
-      chip.classList.add("has-name");
-      chip.textContent = name.slice(0, 18);
-      chip.title = u ? (u + " · " + name) : name;
+  async function fetchSessions(){
+    const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), {
+      cache:"no-store"
+    });
 
-      chip.style.width = "auto";
-      chip.style.minWidth = "54px";
-      chip.style.maxWidth = "128px";
-      chip.style.flexBasis = "auto";
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)){
+      return [];
+    }
+
+    return data.sessions.slice().sort(function(a,b){
+      return Number(a.display_index || 0) - Number(b.display_index || 0);
+    });
+  }
+
+  function visibleLabel(session, index){
+    const name = cleanName(session.display_name || "");
+    if(name) return name.slice(0, 18);
+
+    return "U" + Number(session.display_index || index + 1);
+  }
+
+  function baseULabel(session, index){
+    return "U" + Number(session.display_index || index + 1);
+  }
+
+  function renderTabs(sessions){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+    const dots = document.getElementById("followmeHorizontalChatDots");
+    if(!strip) return;
+
+    const current = currentSessionId();
+
+    const signature = sessions.map(function(s, idx){
+      return [
+        s.id,
+        s.display_index || idx + 1,
+        cleanName(s.display_name || ""),
+        s.owner_opened_at || "",
+        String(s.id) === String(current) ? "active" : ""
+      ].join(":");
+    }).join("|");
+
+    // Se la struttura è uguale, non ridisegna tutto: corregge solo eventuali U riscritti.
+    if(signature === lastRenderSignature){
+      enforceNames(sessions);
+      return;
+    }
+
+    lastRenderSignature = signature;
+    strip.innerHTML = "";
+
+    sessions.forEach(function(s, idx){
+      const name = cleanName(s.display_name || "");
+      const u = baseULabel(s, idx);
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className =
+        "followme-chat-session-chip" +
+        (String(s.id) === String(current) ? " active" : " waiting") +
+        (!s.owner_opened_at ? " new" : "") +
+        (name ? " has-name" : "");
+
+      btn.dataset.sessionId = String(s.id);
+      btn.dataset.uLabel = u;
+      btn.dataset.userName = name;
+
+      btn.textContent = name ? name.slice(0, 18) : u;
+      btn.title = name ? (u + " · " + name) : u;
+
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        window.location.href = "/fm/app/" + encodeURIComponent(code()) +
+          "?chatSession=" + encodeURIComponent(s.id) +
+          "&focus=chat";
+      });
+
+      strip.appendChild(btn);
+    });
+
+    if(dots){
+      dots.innerHTML = "";
+      sessions.forEach(function(s){
+        const d = document.createElement("span");
+        d.className = "followme-horizontal-chat-dot" + (String(s.id) === String(current) ? " active" : "");
+        dots.appendChild(d);
+      });
+    }
+
+    const active = strip.querySelector(".followme-chat-session-chip.active");
+    if(active){
+      setTimeout(function(){
+        try{ active.scrollIntoView({ behavior:"smooth", inline:"center", block:"nearest" }); }catch(e){}
+      }, 80);
     }
   }
 
-  async function saveNameFinal(){
-    const input = document.getElementById("followmeNameDetectInput");
-    const card = document.getElementById("followmeNameDetectCard");
+  function enforceNames(sessions){
+    sessions.forEach(function(s, idx){
+      const sid = String(s.id);
+      const name = cleanName(s.display_name || "");
+      const u = baseULabel(s, idx);
 
-    const name = cleanName(input ? input.value : "");
-    const sid =
-      window.pendingSessionId ||
-      (typeof pendingSessionId !== "undefined" ? pendingSessionId : "") ||
-      currentSessionId();
+      const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
+      if(!chip) return;
+
+      chip.dataset.uLabel = u;
+      chip.dataset.userName = name;
+
+      if(name){
+        chip.classList.add("has-name");
+        const wanted = name.slice(0, 18);
+        if(chip.textContent !== wanted){
+          chip.textContent = wanted;
+        }
+        chip.title = u + " · " + name;
+        chip.style.width = "auto";
+        chip.style.minWidth = "58px";
+        chip.style.maxWidth = "140px";
+        chip.style.flexBasis = "auto";
+      }else{
+        chip.classList.remove("has-name");
+        if(chip.textContent !== u){
+          chip.textContent = u;
+        }
+        chip.title = u;
+      }
+    });
+  }
+
+  async function refresh(){
+    try{
+      const sessions = await fetchSessions();
+      renderTabs(sessions);
+      enforceNames(sessions);
+    }catch(e){}
+  }
+
+  async function saveNameForCurrent(name){
+    const sid = currentSessionId();
+    const clean = cleanName(name);
 
     if(!sid){
-      alert("Non riesco a identificare la chat da aggiornare.");
+      alert("Non riesco a identificare la chat attiva.");
       return false;
     }
 
-    if(!name || name.length < 2){
+    if(!clean || clean.length < 2){
       alert("Nome non valido.");
       return false;
     }
@@ -15497,7 +15368,7 @@ document.addEventListener("visibilitychange", function(){
     const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/name", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ display_name:name })
+      body:JSON.stringify({ display_name:clean })
     });
 
     const data = await res.json().catch(()=>null);
@@ -15507,50 +15378,89 @@ document.addEventListener("visibilitychange", function(){
       return false;
     }
 
-    applyName(sid, name);
-
+    const card = document.getElementById("followmeNameDetectCard");
     if(card){
       card.classList.remove("is-open");
-      card.setAttribute("aria-hidden", "true");
+      card.setAttribute("aria-hidden","true");
     }
 
-    if(typeof window.followMeConfirmedNameRefresh === "function"){
-      setTimeout(window.followMeConfirmedNameRefresh, 300);
-      setTimeout(window.followMeConfirmedNameRefresh, 1200);
+    // Aggiorna subito il chip corrente, senza aspettare refresh.
+    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
+    if(chip){
+      const u = chip.dataset.uLabel || chip.textContent || "";
+      chip.dataset.userName = clean;
+      chip.classList.add("has-name");
+      chip.textContent = clean.slice(0, 18);
+      chip.title = u ? (u + " · " + clean) : clean;
+      chip.style.width = "auto";
+      chip.style.minWidth = "58px";
+      chip.style.maxWidth = "140px";
+      chip.style.flexBasis = "auto";
     }
 
+    setTimeout(refresh, 250);
+    setTimeout(refresh, 1000);
     return true;
   }
 
-  function bind(){
-    const confirm = document.getElementById("followmeNameDetectConfirm");
-    if(!confirm || confirm.dataset.nameSaveFinalBound === "1") return;
+  function bindConfirm(){
+    const btn = document.getElementById("followmeNameDetectConfirm");
+    if(!btn || btn.dataset.nameWinsBound === "1") return;
 
-    const fresh = confirm.cloneNode(true);
-    fresh.dataset.nameSaveFinalBound = "1";
-    confirm.parentNode.replaceChild(fresh, confirm);
+    const fresh = btn.cloneNode(true);
+    fresh.dataset.nameWinsBound = "1";
+    btn.parentNode.replaceChild(fresh, btn);
 
     fresh.addEventListener("click", function(ev){
       ev.preventDefault();
       ev.stopPropagation();
       ev.stopImmediatePropagation();
-      saveNameFinal();
+
+      const input = document.getElementById("followmeNameDetectInput");
+      const name = input ? input.value : "";
+      saveNameForCurrent(name);
     }, true);
   }
 
-  window.followMeSaveNameFinal = saveNameFinal;
+  function observeStrip(){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+    if(!strip || strip.dataset.nameWinsObserver === "1") return;
+
+    strip.dataset.nameWinsObserver = "1";
+
+    const observer = new MutationObserver(function(){
+      // Se qualche script prova a riscrivere U2, lo correggiamo subito col nome salvato.
+      refresh();
+    });
+
+    observer.observe(strip, {
+      childList:true,
+      characterData:true,
+      subtree:true
+    });
+  }
+
+  function boot(){
+    bindConfirm();
+    observeStrip();
+    refresh();
+  }
+
+  window.followMeNameWinsRefresh = refresh;
+  window.followMeNameWinsSaveCurrent = saveNameForCurrent;
 
   if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", bind);
+    document.addEventListener("DOMContentLoaded", boot);
   }else{
-    bind();
+    boot();
   }
 
   window.addEventListener("pageshow", function(){
-    setTimeout(bind, 300);
+    setTimeout(boot, 300);
   });
 
-  setInterval(bind, 1200);
+  setInterval(bindConfirm, 1000);
+  setInterval(refresh, 3000);
 })();
 </script>
 
