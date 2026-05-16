@@ -13797,5 +13797,295 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+<script id="followme-admin-raw-binary-upload-final">
+(function(){
+  function sessionId(){
+    try{
+      return new URLSearchParams(location.search || "").get("chatSession") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function isImage(file){
+    return file && String(file.type || "").startsWith("image/");
+  }
+
+  function canvasToBlob(canvas, type, quality){
+    return new Promise(resolve => canvas.toBlob(resolve, type, quality));
+  }
+
+  async function compressImage(file){
+    if(!isImage(file)) return file;
+
+    const maxSide = 1100;
+    const quality = 0.68;
+    const objectUrl = URL.createObjectURL(file);
+
+    try{
+      const img = new Image();
+
+      await new Promise((resolve, reject)=>{
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = objectUrl;
+      });
+
+      const w = img.naturalWidth || img.width;
+      const h = img.naturalHeight || img.height;
+
+      if(!w || !h) return file;
+
+      const scale = Math.min(1, maxSide / Math.max(w, h));
+      const nw = Math.max(1, Math.round(w * scale));
+      const nh = Math.max(1, Math.round(h * scale));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = nw;
+      canvas.height = nh;
+
+      const ctx = canvas.getContext("2d", { alpha:false });
+      ctx.drawImage(img, 0, 0, nw, nh);
+
+      const blob = await canvasToBlob(canvas, "image/jpeg", quality);
+
+      if(!blob) return file;
+
+      const originalName = String(file.name || "foto").replace(/\.[^.]+$/, "");
+      const compressed = new File([blob], originalName + "-chat.jpg", {
+        type:"image/jpeg",
+        lastModified:Date.now()
+      });
+
+      console.log("[FollowMe RAW upload] compressione immagine", {
+        originale:file.size,
+        compressa:compressed.size,
+        width:nw,
+        height:nh
+      });
+
+      return compressed;
+    }catch(err){
+      console.warn("[FollowMe RAW upload] compressione fallita, uso originale", err);
+      return file;
+    }finally{
+      try{ URL.revokeObjectURL(objectUrl); }catch(e){}
+    }
+  }
+
+  async function uploadRaw(file, kind){
+    const sid = sessionId();
+
+    if(!sid){
+      throw new Error("Nessuna chat attiva. Seleziona prima un utente/chat.");
+    }
+
+    if(!file){
+      throw new Error("Nessun file selezionato.");
+    }
+
+    let finalFile = file;
+
+    if(isImage(file)){
+      finalFile = await compressImage(file);
+    }
+
+    const maxMb = 20;
+    if(finalFile.size && finalFile.size > maxMb * 1024 * 1024){
+      throw new Error("File troppo grande anche dopo la compressione. Limite " + maxMb + " MB.");
+    }
+
+    const url = "/api/followme/chat/session/" + encodeURIComponent(sid) + "/attachment-raw";
+
+    const res = await fetch(url, {
+      method:"POST",
+      headers:{
+        "Content-Type": finalFile.type || "application/octet-stream",
+        "X-FollowMe-Sender": "owner",
+        "X-FollowMe-Kind": kind || (isImage(finalFile) ? "image" : "document"),
+        "X-FollowMe-Filename": encodeURIComponent(finalFile.name || "allegato")
+      },
+      body: finalFile
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    console.log("[FollowMe RAW upload] response", res.status, data);
+
+    if(!res.ok || !data || !data.success){
+      throw new Error((data && data.error) || ("Errore HTTP " + res.status));
+    }
+
+    if(typeof window.followMeOwnerChatFinalFix?.pollOwnerMessages === "function"){
+      setTimeout(()=>window.followMeOwnerChatFinalFix.pollOwnerMessages(false), 250);
+    }
+
+    if(typeof window.followMeTransformAttachmentBubbles === "function"){
+      setTimeout(window.followMeTransformAttachmentBubbles, 450);
+      setTimeout(window.followMeTransformAttachmentBubbles, 1200);
+    }
+
+    return data;
+  }
+
+  function cloneAndBindInput(id, kind){
+    const old = document.getElementById(id);
+    if(!old || old.dataset.rawBinaryBound === "1") return;
+
+    const fresh = old.cloneNode(true);
+    fresh.dataset.rawBinaryBound = "1";
+    old.parentNode.replaceChild(fresh, old);
+
+    fresh.addEventListener("change", async function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+
+      const file = fresh.files && fresh.files[0];
+
+      try{
+        await uploadRaw(file, kind);
+      }catch(err){
+        alert("Errore invio allegato: " + (err.message || String(err)));
+        console.error("[FollowMe RAW upload] error", err);
+      }finally{
+        fresh.value = "";
+
+        const camOverlay = document.getElementById("followmeCameraChoiceOverlay");
+        if(camOverlay) camOverlay.classList.remove("is-open");
+
+        const panel = document.getElementById("followmeAdminAttachPanel");
+        if(panel) panel.classList.remove("is-open");
+      }
+    }, true);
+  }
+
+  function clickFirst(ids){
+    for(const id of ids){
+      const el = document.getElementById(id);
+      if(el){
+        el.click();
+        return;
+      }
+    }
+  }
+
+  function bindButtons(){
+    const camBtn = document.getElementById("followmeAdminCameraBtn");
+    const takeBtn = document.getElementById("followmeTakePhotoBtn");
+    const pickBtn = document.getElementById("followmePickPhotoBtn");
+    const cancelBtn = document.getElementById("followmeCameraCancelBtn");
+
+    if(camBtn && camBtn.dataset.rawBinaryBtnBound !== "1"){
+      camBtn.dataset.rawBinaryBtnBound = "1";
+      camBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+
+        const o = document.getElementById("followmeCameraChoiceOverlay");
+        if(o) o.classList.add("is-open");
+      }, true);
+    }
+
+    if(takeBtn && takeBtn.dataset.rawBinaryBtnBound !== "1"){
+      takeBtn.dataset.rawBinaryBtnBound = "1";
+      takeBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        clickFirst(["followmeAdminTakePhotoInput", "followmeAdminCameraInput"]);
+      }, true);
+    }
+
+    if(pickBtn && pickBtn.dataset.rawBinaryBtnBound !== "1"){
+      pickBtn.dataset.rawBinaryBtnBound = "1";
+      pickBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        clickFirst(["followmeAdminPickPhotoInput", "followmeAdminPhotoInput"]);
+      }, true);
+    }
+
+    if(cancelBtn && cancelBtn.dataset.rawBinaryBtnBound !== "1"){
+      cancelBtn.dataset.rawBinaryBtnBound = "1";
+      cancelBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        const o = document.getElementById("followmeCameraChoiceOverlay");
+        if(o) o.classList.remove("is-open");
+      }, true);
+    }
+
+    document.querySelectorAll('.followme-admin-attach-item[data-action="photo"]').forEach(btn=>{
+      if(btn.dataset.rawBinaryBtnBound === "1") return;
+      btn.dataset.rawBinaryBtnBound = "1";
+
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        clickFirst(["followmeAdminPickPhotoInput", "followmeAdminPhotoInput"]);
+      }, true);
+    });
+
+    document.querySelectorAll('.followme-admin-attach-item[data-action="camera"]').forEach(btn=>{
+      if(btn.dataset.rawBinaryBtnBound === "1") return;
+      btn.dataset.rawBinaryBtnBound = "1";
+
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+
+        const o = document.getElementById("followmeCameraChoiceOverlay");
+        if(o) o.classList.add("is-open");
+      }, true);
+    });
+
+    document.querySelectorAll('.followme-admin-attach-item[data-action="document"]').forEach(btn=>{
+      if(btn.dataset.rawBinaryBtnBound === "1") return;
+      btn.dataset.rawBinaryBtnBound = "1";
+
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        clickFirst(["followmeAdminDocumentInputFinal", "followmeAdminDocumentInput"]);
+      }, true);
+    });
+  }
+
+  function boot(){
+    cloneAndBindInput("followmeAdminTakePhotoInput", "image");
+    cloneAndBindInput("followmeAdminPickPhotoInput", "image");
+    cloneAndBindInput("followmeAdminCameraInput", "image");
+    cloneAndBindInput("followmeAdminPhotoInput", "image");
+
+    cloneAndBindInput("followmeAdminDocumentInputFinal", "document");
+    cloneAndBindInput("followmeAdminDocumentInput", "document");
+
+    bindButtons();
+
+    console.log("[FollowMe RAW upload] controller attivo");
+  }
+
+  window.followMeUploadRawAttachment = uploadRaw;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 300);
+  });
+
+  setInterval(boot, 1500);
+})();
+</script>
+
 </body>
 </html>

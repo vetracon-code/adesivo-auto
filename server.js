@@ -9556,6 +9556,117 @@ app.get('/api/followme/debug/temp-attachments', async (req, res) => {
 });
 
 
+
+app.post('/api/followme/chat/session/:session_id/attachment-raw', express.raw({
+  type: '*/*',
+  limit: '25mb'
+}), async (req, res) => {
+  try {
+    await ensureFollowMeChatSchema();
+
+    const fs = require('fs');
+    const path = require('path');
+
+    const sessionId = Number(req.params.session_id || 0);
+    const sender = String(req.headers['x-followme-sender'] || 'owner').trim();
+    const kind = String(req.headers['x-followme-kind'] || '').trim();
+    const filenameHeader = String(req.headers['x-followme-filename'] || '').trim();
+    const mime = String(req.headers['content-type'] || req.headers['x-followme-mime'] || '').trim();
+
+    if (!sessionId) {
+      return res.status(400).json({ success:false, error:'Sessione mancante.' });
+    }
+
+    if (!req.body || !Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return res.status(400).json({ success:false, error:'File mancante.' });
+    }
+
+    const maxBytes = 20 * 1024 * 1024;
+    if (req.body.length > maxBytes) {
+      return res.status(413).json({ success:false, error:'File troppo grande. Limite 20 MB.' });
+    }
+
+    const sessionRes = await pool.query(
+      `SELECT id, project_id
+       FROM followme_chat_sessions
+       WHERE id = $1
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!sessionRes.rows.length) {
+      return res.status(404).json({ success:false, error:'Sessione non trovata.' });
+    }
+
+    const session = sessionRes.rows[0];
+
+    let safeFilename = decodeURIComponent(filenameHeader || '')
+      .replace(/[^\w.\-àèéìòùÀÈÉÌÒÙ ]+/g, '')
+      .replace(/\s+/g, '_')
+      .slice(0, 80);
+
+    if (!safeFilename) {
+      safeFilename = `${kind || 'allegato'}_${Date.now()}`;
+    }
+
+    const extByMime = {
+      'image/jpeg': '.jpg',
+      'image/png': '.png',
+      'image/webp': '.webp',
+      'image/gif': '.gif',
+      'audio/webm': '.webm',
+      'audio/mp4': '.m4a',
+      'audio/mpeg': '.mp3',
+      'application/pdf': '.pdf'
+    };
+
+    const cleanMime = mime.split(';')[0].trim();
+    const ext = path.extname(safeFilename) || extByMime[cleanMime] || '';
+    const base = path.basename(safeFilename, path.extname(safeFilename)).replace(/[^\w.\-]+/g, '_') || (kind || 'file');
+    const storedName = `${Date.now()}_${Math.random().toString(16).slice(2,8)}_${base}${ext}`;
+
+    const uploadDir = path.join(__dirname, 'public', 'uploads', 'followme-chat');
+    fs.mkdirSync(uploadDir, { recursive:true });
+
+    const fullPath = path.join(uploadDir, storedName);
+    fs.writeFileSync(fullPath, req.body);
+
+    const attachmentUrl = `/uploads/followme-chat/${storedName}`;
+
+    const payload = {
+      __followme_attachment: true,
+      temporary: true,
+      expires_in_seconds: 120,
+      kind: kind || (cleanMime.startsWith('image/') ? 'image' : cleanMime.startsWith('audio/') ? 'audio' : 'document'),
+      url: attachmentUrl,
+      filename: safeFilename,
+      mime: cleanMime,
+      label: safeFilename,
+      created_at: new Date().toISOString()
+    };
+
+    const inserted = await pool.query(
+      `INSERT INTO followme_chat_messages
+       (session_id, project_id, sender, message, created_at)
+       VALUES ($1,$2,$3,$4,NOW())
+       RETURNING id, session_id, project_id, sender, message, created_at`,
+      [sessionId, session.project_id, sender, JSON.stringify(payload)]
+    );
+
+    return res.json({
+      success:true,
+      mode:'raw_binary',
+      size_bytes:req.body.length,
+      message: inserted.rows[0],
+      attachment: payload
+    });
+  } catch (err) {
+    console.error('followme raw attachment upload error:', err);
+    return res.status(500).json({ success:false, error:'Errore invio allegato raw.' });
+  }
+});
+
+
 app.post('/api/followme/chat/session/:session_id/attachment', express.json({ limit: '50mb' }), async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
