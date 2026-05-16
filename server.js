@@ -1920,6 +1920,59 @@ app.get('/come-funziona', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'come-funziona.html'));
 });
 
+
+// FollowMe temporary attachment cleanup.
+// Cancella automaticamente i file caricati in public/uploads/followme-chat dopo 2 minuti.
+const FOLLOWME_ATTACHMENT_TTL_MS = 2 * 60 * 1000;
+const FOLLOWME_ATTACHMENT_CLEANUP_INTERVAL_MS = 30 * 1000;
+
+function cleanupFollowMeTemporaryAttachments() {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+
+    const uploadDir = path.join(__dirname, 'public', 'uploads', 'followme-chat');
+    if (!fs.existsSync(uploadDir)) return;
+
+    const now = Date.now();
+    const files = fs.readdirSync(uploadDir);
+
+    for (const file of files) {
+      const fullPath = path.join(uploadDir, file);
+
+      let stat;
+      try {
+        stat = fs.statSync(fullPath);
+      } catch (e) {
+        continue;
+      }
+
+      if (!stat.isFile()) continue;
+
+      const age = now - stat.mtimeMs;
+
+      if (age > FOLLOWME_ATTACHMENT_TTL_MS) {
+        try {
+          fs.unlinkSync(fullPath);
+          console.log('[followme cleanup] deleted temporary attachment:', file);
+        } catch (e) {
+          console.warn('[followme cleanup] cannot delete temporary attachment:', file, e.message || e);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[followme cleanup] error:', err.message || err);
+  }
+}
+
+if (!global.__followMeAttachmentCleanupStarted) {
+  global.__followMeAttachmentCleanupStarted = true;
+
+  setTimeout(cleanupFollowMeTemporaryAttachments, 5000);
+  setInterval(cleanupFollowMeTemporaryAttachments, FOLLOWME_ATTACHMENT_CLEANUP_INTERVAL_MS);
+}
+
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
@@ -9451,6 +9504,58 @@ app.get('/api/followme/chat/session/:session_id/messages', async (req, res) => {
 });
 
 
+
+app.get('/api/followme/debug/temp-attachments', async (req, res) => {
+  try {
+    const key = String(req.query.key || '').trim();
+    const expected = process.env.FOLLOWME_DEBUG_KEY || process.env.ADMIN_PASSWORD || '';
+
+    if (!expected || key !== expected) {
+      return res.status(401).json({ success:false, error:'Chiave debug non valida.' });
+    }
+
+    const fs = require('fs');
+    const path = require('path');
+
+    const uploadDir = path.join(__dirname, 'public', 'uploads', 'followme-chat');
+    const now = Date.now();
+
+    if (!fs.existsSync(uploadDir)) {
+      return res.json({
+        success:true,
+        ttl_seconds:120,
+        files:[]
+      });
+    }
+
+    const files = fs.readdirSync(uploadDir)
+      .map(file => {
+        const fullPath = path.join(uploadDir, file);
+        const stat = fs.statSync(fullPath);
+
+        return {
+          file,
+          size_bytes: stat.size,
+          age_seconds: Math.round((now - stat.mtimeMs) / 1000),
+          delete_in_seconds: Math.max(0, Math.round((FOLLOWME_ATTACHMENT_TTL_MS - (now - stat.mtimeMs)) / 1000))
+        };
+      })
+      .sort((a,b) => b.age_seconds - a.age_seconds);
+
+    return res.json({
+      success:true,
+      ttl_seconds:120,
+      files
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success:false,
+      error:err.message || String(err)
+    });
+  }
+});
+
+
 app.post('/api/followme/chat/session/:session_id/attachment', express.json({ limit: '15mb' }), async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
@@ -9545,6 +9650,8 @@ app.post('/api/followme/chat/session/:session_id/attachment', express.json({ lim
 
     const payload = {
       __followme_attachment: true,
+      temporary: true,
+      expires_in_seconds: 120,
       kind,
       url: attachmentUrl,
       filename: safeFilename,
