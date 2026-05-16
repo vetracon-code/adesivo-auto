@@ -3769,6 +3769,136 @@
       display:none !important;
     }
 
+
+    /* Ripristino carosello orizzontale utenti chat */
+    body.followme-chat-only-mode .followme-chat-users-panel{
+      display:none !important;
+    }
+
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip{
+      display:flex !important;
+      flex-direction:row !important;
+      align-items:center !important;
+      gap:6px !important;
+      overflow-x:auto !important;
+      overflow-y:hidden !important;
+      width:100% !important;
+      min-height:36px !important;
+      max-height:40px !important;
+      padding:6px 6px 6px !important;
+      margin:0 0 2px !important;
+      background:#efe7db !important;
+      border:0 !important;
+      box-shadow:none !important;
+      -webkit-overflow-scrolling:touch !important;
+      scroll-snap-type:x proximity;
+    }
+
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip .followme-chat-session-chip{
+      appearance:none !important;
+      -webkit-appearance:none !important;
+      flex:0 0 auto !important;
+      display:inline-flex !important;
+      align-items:center !important;
+      justify-content:center !important;
+      width:auto !important;
+      min-width:42px !important;
+      max-width:118px !important;
+      height:27px !important;
+      min-height:27px !important;
+      padding:0 9px !important;
+      margin:0 !important;
+      border-radius:999px !important;
+      border:1px solid rgba(0,0,0,.08) !important;
+      background:#ffffff !important;
+      color:#3a3f41 !important;
+      font-size:11px !important;
+      line-height:1 !important;
+      font-weight:850 !important;
+      letter-spacing:-.02em !important;
+      white-space:nowrap !important;
+      overflow:hidden !important;
+      text-overflow:ellipsis !important;
+      box-shadow:0 1px 1px rgba(0,0,0,.08) !important;
+      scroll-snap-align:start;
+    }
+
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip .followme-chat-session-chip.active{
+      color:#ffffff !important;
+      background:#25d366 !important;
+      border:0 !important;
+      box-shadow:0 1px 2px rgba(0,0,0,.14) !important;
+    }
+
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip .followme-chat-session-chip.new:not(.active){
+      color:#128c7e !important;
+      border-color:rgba(18,140,126,.22) !important;
+    }
+
+    .followme-horizontal-chat-dots{
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      gap:5px;
+      padding:3px 0 6px;
+      background:#efe7db;
+    }
+
+    .followme-horizontal-chat-dot{
+      width:7px;
+      height:7px;
+      border-radius:999px;
+      background:#bdb6ad;
+      transition:all .18s ease;
+    }
+
+    .followme-horizontal-chat-dot.active{
+      width:18px;
+      background:#25d366;
+    }
+
+    .followme-horizontal-chat-dot.paused{
+      position:relative;
+    }
+
+    .followme-horizontal-chat-dot.paused::after{
+      content:"⏳";
+      position:absolute;
+      left:50%;
+      top:50%;
+      transform:translate(-50%,-50%);
+      font-size:8px;
+      line-height:1;
+      opacity:.85;
+      animation:followmeCarouselHourglass 1.4s infinite ease-in-out;
+    }
+
+    @keyframes followmeCarouselHourglass{
+      0%,100%{transform:translate(-50%,-50%) rotate(0deg)}
+      50%{transform:translate(-50%,-50%) rotate(180deg)}
+    }
+
+    .followme-carousel-swipe-hint{
+      display:none;
+      position:absolute;
+      left:50%;
+      bottom:78px;
+      transform:translateX(-50%);
+      z-index:1000000;
+      padding:7px 11px;
+      border-radius:999px;
+      background:rgba(255,255,255,.86);
+      color:#5e5a54;
+      font-size:.72rem;
+      font-weight:800;
+      box-shadow:0 2px 12px rgba(0,0,0,.10);
+      pointer-events:none;
+    }
+
+    body.followme-chat-only-mode .followme-carousel-swipe-hint.is-visible{
+      display:block;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -8854,6 +8984,8 @@ document.addEventListener("visibilitychange", function(){
     <div class="followme-chat-dots" id="followmeChatDots"></div>
   </div>
   <div class="followme-chat-session-strip" id="followmeOwnerChatSessionStrip"></div>
+  <div class="followme-horizontal-chat-dots" id="followmeHorizontalChatDots"></div>
+  <div class="followme-carousel-swipe-hint" id="followmeCarouselSwipeHint">Scorri per cambiare utente</div>
   <div class="followme-current-chat-user" id="followmeCurrentChatUserBox">
     <div>
       <strong id="followmeCurrentChatUserLabel">Stai scrivendo a: Utente</strong>
@@ -10931,6 +11063,242 @@ document.addEventListener("visibilitychange", function(){
 
   setInterval(refreshSessions, 3500);
   setInterval(overrideResetButtons, 1200);
+})();
+</script>
+
+
+<script id="followme-horizontal-chat-carousel-final">
+(function(){
+  let carouselSessions = [];
+  let pauseTimer = null;
+
+  function code(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function currentSessionId(){
+    try{ return new URLSearchParams(location.search || "").get("chatSession") || ""; }
+    catch(e){ return ""; }
+  }
+
+  function esc(v){
+    return String(v || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function labelFor(s, idx){
+    const n = Number(s.display_index || idx + 1);
+    return "U" + n + (s.display_name ? " · " + s.display_name : "");
+  }
+
+  function openSession(id){
+    if(!id) return;
+    location.href = "/fm/app/" + encodeURIComponent(code()) + "?chatSession=" + encodeURIComponent(id) + "&focus=chat";
+  }
+
+  async function fetchSessions(){
+    const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), { cache:"no-store" });
+    const data = await res.json().catch(()=>null);
+    if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)) return [];
+    carouselSessions = data.sessions.slice().sort((a,b)=>Number(a.display_index||0)-Number(b.display_index||0));
+    return carouselSessions;
+  }
+
+  function renderTabs(sessions){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+    if(!strip) return;
+
+    const current = currentSessionId();
+    strip.innerHTML = "";
+
+    sessions.forEach((s, idx)=>{
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className =
+        "followme-chat-session-chip" +
+        (String(s.id) === String(current) ? " active" : " waiting") +
+        (!s.owner_opened_at ? " new" : "");
+
+      btn.textContent = labelFor(s, idx);
+      btn.title = "Utente " + Number(s.display_index || idx + 1) + (s.display_name ? " · " + s.display_name : "");
+      btn.dataset.sessionId = String(s.id);
+      btn.onclick = ()=>openSession(s.id);
+
+      strip.appendChild(btn);
+    });
+
+    const active = strip.querySelector(".followme-chat-session-chip.active");
+    if(active){
+      setTimeout(()=>{
+        try{ active.scrollIntoView({ behavior:"smooth", inline:"center", block:"nearest" }); }catch(e){}
+      }, 80);
+    }
+  }
+
+  function renderDots(sessions, paused){
+    const dots = document.getElementById("followmeHorizontalChatDots");
+    if(!dots) return;
+
+    const current = currentSessionId();
+    dots.innerHTML = "";
+
+    sessions.forEach(s=>{
+      const d = document.createElement("span");
+      d.className =
+        "followme-horizontal-chat-dot" +
+        (String(s.id) === String(current) ? " active" : "") +
+        (paused && String(s.id) !== String(current) ? " paused" : "");
+      dots.appendChild(d);
+    });
+  }
+
+  async function refreshCarousel(){
+    try{
+      const sessions = await fetchSessions();
+      renderTabs(sessions);
+      renderDots(sessions, false);
+    }catch(e){}
+  }
+
+  function currentIndex(){
+    const current = currentSessionId();
+    return carouselSessions.findIndex(s => String(s.id) === String(current));
+  }
+
+  function goDelta(delta){
+    if(!carouselSessions.length) return;
+
+    let idx = currentIndex();
+    if(idx < 0) idx = 0;
+
+    const next = idx + delta;
+    if(next < 0 || next >= carouselSessions.length) return;
+
+    openSession(carouselSessions[next].id);
+  }
+
+  function bindSwipe(){
+    const screen = document.getElementById("followmeOwnerChatScreen");
+    const messages = document.getElementById("followmeOwnerChatMessages");
+    const target = messages || screen;
+    if(!target || target.dataset.swipeBound === "1") return;
+
+    target.dataset.swipeBound = "1";
+
+    let startX = 0;
+    let startY = 0;
+    let startT = 0;
+
+    target.addEventListener("touchstart", function(ev){
+      if(!ev.touches || !ev.touches.length) return;
+      startX = ev.touches[0].clientX;
+      startY = ev.touches[0].clientY;
+      startT = Date.now();
+    }, { passive:true });
+
+    target.addEventListener("touchend", function(ev){
+      if(!ev.changedTouches || !ev.changedTouches.length) return;
+
+      const dx = ev.changedTouches[0].clientX - startX;
+      const dy = ev.changedTouches[0].clientY - startY;
+      const dt = Date.now() - startT;
+
+      if(Math.abs(dx) < 55) return;
+      if(Math.abs(dx) < Math.abs(dy) * 1.4) return;
+      if(dt > 900) return;
+
+      // Swipe sinistra = utente successivo; swipe destra = precedente.
+      if(dx < 0) goDelta(1);
+      else goDelta(-1);
+    }, { passive:true });
+
+    // Anche mouse/trackpad: trascinamento orizzontale.
+    let mouseDown = false;
+    let mouseStartX = 0;
+    let mouseStartY = 0;
+
+    target.addEventListener("mousedown", function(ev){
+      mouseDown = true;
+      mouseStartX = ev.clientX;
+      mouseStartY = ev.clientY;
+    });
+
+    target.addEventListener("mouseup", function(ev){
+      if(!mouseDown) return;
+      mouseDown = false;
+
+      const dx = ev.clientX - mouseStartX;
+      const dy = ev.clientY - mouseStartY;
+
+      if(Math.abs(dx) < 70) return;
+      if(Math.abs(dx) < Math.abs(dy) * 1.4) return;
+
+      if(dx < 0) goDelta(1);
+      else goDelta(-1);
+    });
+  }
+
+  function bindTypingPause(){
+    const input = document.getElementById("followmeOwnerChatInput");
+    if(!input || input.dataset.carouselPauseBound === "1") return;
+
+    input.dataset.carouselPauseBound = "1";
+
+    input.addEventListener("input", function(){
+      if(pauseTimer) clearTimeout(pauseTimer);
+      renderDots(carouselSessions, false);
+
+      pauseTimer = setTimeout(function(){
+        renderDots(carouselSessions, true);
+      }, 8000);
+    });
+  }
+
+  function showHintOnce(){
+    try{
+      if(localStorage.getItem("followme_carousel_hint_seen") === "1") return;
+      localStorage.setItem("followme_carousel_hint_seen", "1");
+
+      const h = document.getElementById("followmeCarouselSwipeHint");
+      if(!h) return;
+
+      h.classList.add("is-visible");
+      setTimeout(()=>h.classList.remove("is-visible"), 2800);
+    }catch(e){}
+  }
+
+  function boot(){
+    refreshCarousel();
+    bindSwipe();
+    bindTypingPause();
+    setTimeout(refreshCarousel, 700);
+    setTimeout(showHintOnce, 900);
+  }
+
+  window.followMeRefreshHorizontalCarousel = refreshCarousel;
+  window.followMeCarouselNext = ()=>goDelta(1);
+  window.followMeCarouselPrev = ()=>goDelta(-1);
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 400);
+  });
+
+  setInterval(refreshCarousel, 3500);
+  setInterval(bindSwipe, 1500);
+  setInterval(bindTypingPause, 1500);
 })();
 </script>
 
