@@ -13825,7 +13825,7 @@ document.addEventListener("visibilitychange", function(){
 
 <input type="file" id="followmeAdminAudioFileInput" accept="audio/*" capture="microphone" style="display:none">
 
-<script id="followme-admin-chat-stability-final">
+<script id="followme-admin-chat-stability-final-disabled-audio-conflict">
 (function(){
   let lastTabSignature = "";
 
@@ -14087,6 +14087,311 @@ document.addEventListener("visibilitychange", function(){
   setInterval(function(){
     bindAudioFallback();
   }, 1500);
+})();
+</script>
+
+
+<script id="followme-admin-audio-raw-final">
+(function(){
+  let recorder = null;
+  let chunks = [];
+  let streamRef = null;
+  let startedAt = 0;
+
+  function sessionId(){
+    try{
+      return new URLSearchParams(location.search || "").get("chatSession") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function setStatus(html){
+    const status = document.getElementById("followmeAudioStatus");
+    if(status) status.innerHTML = html;
+  }
+
+  function openAudioOverlay(){
+    const o = document.getElementById("followmeAudioRecorderOverlay");
+    if(o) o.classList.add("is-open");
+    setStatus("Pronto per registrare");
+  }
+
+  function closeAudioOverlay(){
+    const o = document.getElementById("followmeAudioRecorderOverlay");
+    if(o) o.classList.remove("is-open");
+  }
+
+  async function uploadAudioRaw(file){
+    const sid = sessionId();
+
+    if(!sid){
+      throw new Error("Nessuna chat attiva. Seleziona prima un utente/chat.");
+    }
+
+    if(!file){
+      throw new Error("Audio mancante.");
+    }
+
+    const maxMb = 20;
+    if(file.size && file.size > maxMb * 1024 * 1024){
+      throw new Error("Audio troppo grande. Limite " + maxMb + " MB.");
+    }
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/attachment-raw", {
+      method:"POST",
+      headers:{
+        "Content-Type": file.type || "audio/webm",
+        "X-FollowMe-Sender": "owner",
+        "X-FollowMe-Kind": "audio",
+        "X-FollowMe-Filename": encodeURIComponent(file.name || ("audio-followme-" + Date.now() + ".webm"))
+      },
+      body:file
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    console.log("[FollowMe audio raw] response", res.status, data);
+
+    if(!res.ok || !data || !data.success){
+      throw new Error((data && data.error) || ("Errore HTTP " + res.status));
+    }
+
+    if(typeof window.followMeOwnerChatFinalFix?.pollOwnerMessages === "function"){
+      setTimeout(()=>window.followMeOwnerChatFinalFix.pollOwnerMessages(false), 250);
+      setTimeout(()=>window.followMeOwnerChatFinalFix.pollOwnerMessages(false), 900);
+    }
+
+    if(typeof window.followMeTransformAttachmentBubbles === "function"){
+      setTimeout(window.followMeTransformAttachmentBubbles, 500);
+      setTimeout(window.followMeTransformAttachmentBubbles, 1300);
+    }
+
+    return data;
+  }
+
+  function preferredMime(){
+    const options = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4",
+      "audio/mpeg"
+    ];
+
+    if(typeof MediaRecorder === "undefined") return "";
+
+    for(const type of options){
+      try{
+        if(MediaRecorder.isTypeSupported(type)) return type;
+      }catch(e){}
+    }
+
+    return "";
+  }
+
+  async function startRecording(){
+    try{
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        throw new Error("Microfono non disponibile su questo dispositivo.");
+      }
+
+      streamRef = await navigator.mediaDevices.getUserMedia({ audio:true });
+      chunks = [];
+
+      const mime = preferredMime();
+      recorder = mime
+        ? new MediaRecorder(streamRef, { mimeType:mime })
+        : new MediaRecorder(streamRef);
+
+      recorder.ondataavailable = function(ev){
+        if(ev.data && ev.data.size > 0){
+          chunks.push(ev.data);
+        }
+      };
+
+      recorder.onerror = function(ev){
+        console.error("[FollowMe audio raw] recorder error", ev);
+        setStatus("Errore durante la registrazione.");
+      };
+
+      recorder.onstop = async function(){
+        try{
+          if(streamRef){
+            streamRef.getTracks().forEach(t => t.stop());
+          }
+        }catch(e){}
+
+        const type = recorder && recorder.mimeType ? recorder.mimeType : "audio/webm";
+        const blob = new Blob(chunks, { type });
+        const ext = type.includes("mp4") ? "m4a" : type.includes("mpeg") ? "mp3" : "webm";
+        const duration = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+
+        const file = new File(
+          [blob],
+          "audio-followme-" + Date.now() + "." + ext,
+          { type, lastModified:Date.now() }
+        );
+
+        try{
+          setStatus("Invio audio in corso...");
+          await uploadAudioRaw(file);
+          setStatus("Audio inviato.");
+          setTimeout(closeAudioOverlay, 500);
+        }catch(err){
+          console.error("[FollowMe audio raw] upload error", err);
+          setStatus("Errore invio audio: " + (err.message || String(err)));
+          alert("Errore invio audio: " + (err.message || String(err)));
+        }finally{
+          const start = document.getElementById("followmeAudioStartBtn");
+          const stop = document.getElementById("followmeAudioStopBtn");
+
+          if(start) start.style.display = "";
+          if(stop) stop.style.display = "none";
+
+          recorder = null;
+          streamRef = null;
+          chunks = [];
+        }
+      };
+
+      startedAt = Date.now();
+      recorder.start();
+
+      const start = document.getElementById("followmeAudioStartBtn");
+      const stop = document.getElementById("followmeAudioStopBtn");
+
+      if(start) start.style.display = "none";
+      if(stop) stop.style.display = "";
+
+      setStatus('<span class="followme-audio-recording-dot"></span>Registrazione in corso...');
+
+    }catch(err){
+      console.error("[FollowMe audio raw] start error", err);
+      setStatus("Microfono non autorizzato o non disponibile.");
+      alert("Microfono non autorizzato o non disponibile. Puoi usare il pulsante “Allega audio dal dispositivo”, se presente.");
+    }
+  }
+
+  function stopRecording(){
+    try{
+      if(recorder && recorder.state !== "inactive"){
+        recorder.stop();
+      }
+    }catch(err){
+      console.error("[FollowMe audio raw] stop error", err);
+      setStatus("Errore chiusura registrazione.");
+    }
+  }
+
+  function cancelRecording(){
+    try{
+      if(recorder && recorder.state !== "inactive"){
+        recorder.onstop = null;
+        recorder.stop();
+      }
+
+      if(streamRef){
+        streamRef.getTracks().forEach(t => t.stop());
+      }
+    }catch(e){}
+
+    recorder = null;
+    streamRef = null;
+    chunks = [];
+
+    const start = document.getElementById("followmeAudioStartBtn");
+    const stop = document.getElementById("followmeAudioStopBtn");
+
+    if(start) start.style.display = "";
+    if(stop) stop.style.display = "none";
+
+    closeAudioOverlay();
+  }
+
+  function bindAudio(){
+    const mic = document.getElementById("followmeAdminMicBtn");
+    const start = document.getElementById("followmeAudioStartBtn");
+    const stop = document.getElementById("followmeAudioStopBtn");
+    const cancel = document.getElementById("followmeAudioCancelBtn");
+
+    if(mic && mic.dataset.audioRawFinalBound !== "1"){
+      const fresh = mic.cloneNode(true);
+      fresh.dataset.audioRawFinalBound = "1";
+      mic.parentNode.replaceChild(fresh, mic);
+
+      fresh.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        openAudioOverlay();
+      }, true);
+    }
+
+    if(start && start.dataset.audioRawFinalBound !== "1"){
+      const fresh = start.cloneNode(true);
+      fresh.dataset.audioRawFinalBound = "1";
+      start.parentNode.replaceChild(fresh, start);
+
+      fresh.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        startRecording();
+      }, true);
+    }
+
+    const stopNow = document.getElementById("followmeAudioStopBtn");
+    if(stopNow && stopNow.dataset.audioRawFinalBound !== "1"){
+      const fresh = stopNow.cloneNode(true);
+      fresh.dataset.audioRawFinalBound = "1";
+      stopNow.parentNode.replaceChild(fresh, stopNow);
+
+      fresh.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        stopRecording();
+      }, true);
+    }
+
+    const cancelNow = document.getElementById("followmeAudioCancelBtn");
+    if(cancelNow && cancelNow.dataset.audioRawFinalBound !== "1"){
+      const fresh = cancelNow.cloneNode(true);
+      fresh.dataset.audioRawFinalBound = "1";
+      cancelNow.parentNode.replaceChild(fresh, cancelNow);
+
+      fresh.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        cancelRecording();
+      }, true);
+    }
+  }
+
+  function boot(){
+    bindAudio();
+    console.log("[FollowMe audio raw] controller attivo");
+  }
+
+  window.followMeAudioRawFinal = {
+    open: openAudioOverlay,
+    start: startRecording,
+    stop: stopRecording,
+    upload: uploadAudioRaw
+  };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 300);
+  });
+
+  setInterval(boot, 1500);
 })();
 </script>
 
