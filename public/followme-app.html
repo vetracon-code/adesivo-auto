@@ -4831,6 +4831,20 @@
       border-color:rgba(18,140,126,.24) !important;
     }
 
+
+    /* QR sempre disponibile anche in attesa chat */
+    body.followme-chat-waiting-mode #followmeWaitingQrBtn,
+    body.followme-chat-only-mode #followmeOwnerQrBtn{
+      background:#ffffff !important;
+      color:#3a3f41 !important;
+      border:1px solid rgba(0,0,0,.08) !important;
+      box-shadow:0 1px 2px rgba(0,0,0,.08) !important;
+      min-height:38px !important;
+      border-radius:14px !important;
+      padding:0 12px !important;
+      font-weight:900 !important;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -10423,6 +10437,7 @@ document.addEventListener("visibilitychange", function(){
     </div>
     <div class="followme-chat-waiting-actions">
       <button type="button" id="followmeChatWaitingClose">Chiudi</button>
+      <button type="button" id="followmeWaitingQrBtn">QR</button>
       <button type="button" id="followmeChatWaitingReset">Reset</button>
       <button type="button" id="followmeChatWaitingDisable">Spegni</button>
     </div>
@@ -14460,6 +14475,49 @@ document.addEventListener("visibilitychange", function(){
 
   // Refresh reale più lento: riduce lo sfarfallio.
   setInterval(refresh, 6000);
+})();
+</script>
+
+
+<script id="followme-qr-always-visible-script">
+(function(){
+  function bindAlwaysQr(){
+    const ids = ["followmeOwnerQrBtn", "followmeWaitingQrBtn"];
+
+    ids.forEach(function(id){
+      const btn = document.getElementById(id);
+      if(!btn || btn.dataset.alwaysQrBound === "1") return;
+
+      btn.dataset.alwaysQrBound = "1";
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        if(typeof window.followMeOpenAdminQrOverlay === "function"){
+          window.followMeOpenAdminQrOverlay();
+          return;
+        }
+
+        const overlay = document.getElementById("followmeAdminQrOverlay");
+        if(overlay){
+          overlay.classList.add("is-open");
+          overlay.setAttribute("aria-hidden","false");
+        }
+      }, true);
+    });
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bindAlwaysQr);
+  }else{
+    bindAlwaysQr();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(bindAlwaysQr, 300);
+  });
+
+  setInterval(bindAlwaysQr, 1200);
 })();
 </script>
 
