@@ -9556,7 +9556,7 @@ app.get('/api/followme/debug/temp-attachments', async (req, res) => {
 });
 
 
-app.post('/api/followme/chat/session/:session_id/attachment', express.json({ limit: '30mb' }), async (req, res) => {
+app.post('/api/followme/chat/session/:session_id/attachment', express.json({ limit: '50mb' }), async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
 

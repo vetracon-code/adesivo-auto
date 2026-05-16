@@ -13649,5 +13649,153 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+<script id="followme-admin-image-compress-before-upload">
+(function(){
+  function isImageFile(file){
+    return !!file && String(file.type || "").startsWith("image/");
+  }
+
+  function canvasToBlob(canvas, type, quality){
+    return new Promise(function(resolve){
+      canvas.toBlob(function(blob){
+        resolve(blob);
+      }, type, quality);
+    });
+  }
+
+  async function compressImageFile(file){
+    if(!isImageFile(file)) return file;
+
+    const maxSide = 1280;
+    const quality = 0.72;
+
+    const bitmapUrl = URL.createObjectURL(file);
+
+    try{
+      const img = new Image();
+      img.decoding = "async";
+
+      await new Promise(function(resolve, reject){
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = bitmapUrl;
+      });
+
+      let w = img.naturalWidth || img.width;
+      let h = img.naturalHeight || img.height;
+
+      if(!w || !h) return file;
+
+      const scale = Math.min(1, maxSide / Math.max(w, h));
+      const nw = Math.max(1, Math.round(w * scale));
+      const nh = Math.max(1, Math.round(h * scale));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = nw;
+      canvas.height = nh;
+
+      const ctx = canvas.getContext("2d", { alpha:false });
+      ctx.drawImage(img, 0, 0, nw, nh);
+
+      const blob = await canvasToBlob(canvas, "image/jpeg", quality);
+
+      if(!blob) return file;
+
+      const originalName = String(file.name || "foto.jpg").replace(/\.[^.]+$/, "");
+      const compressed = new File(
+        [blob],
+        originalName + "-chat.jpg",
+        { type:"image/jpeg", lastModified:Date.now() }
+      );
+
+      console.log("[FollowMe upload] compressed image:", {
+        original_name:file.name,
+        original_size:file.size,
+        compressed_size:compressed.size,
+        width:nw,
+        height:nh
+      });
+
+      return compressed;
+    }catch(err){
+      console.warn("[FollowMe upload] image compression failed, using original:", err);
+      return file;
+    }finally{
+      try{ URL.revokeObjectURL(bitmapUrl); }catch(e){}
+    }
+  }
+
+  const originalUpload = window.followMeFinalUploadFile;
+
+  window.followMeFinalUploadFileCompressed = async function(file, kind){
+    const finalFile = await compressImageFile(file);
+    if(typeof originalUpload === "function"){
+      return originalUpload(finalFile, kind || "image");
+    }
+    throw new Error("Controller upload non disponibile.");
+  };
+
+  function rebindInputsWithCompression(){
+    const bindings = [
+      ["followmeAdminTakePhotoInput", "image"],
+      ["followmeAdminPickPhotoInput", "image"],
+      ["followmeAdminCameraInput", "image"],
+      ["followmeAdminPhotoInput", "image"]
+    ];
+
+    bindings.forEach(function(pair){
+      const id = pair[0];
+      const kind = pair[1];
+      const oldInput = document.getElementById(id);
+      if(!oldInput || oldInput.dataset.compressRebound === "1") return;
+
+      const fresh = oldInput.cloneNode(true);
+      fresh.dataset.compressRebound = "1";
+      oldInput.parentNode.replaceChild(fresh, oldInput);
+
+      fresh.addEventListener("change", async function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+
+        const file = fresh.files && fresh.files[0];
+
+        try{
+          await window.followMeFinalUploadFileCompressed(file, kind);
+        }catch(err){
+          alert("Errore invio allegato: " + (err.message || String(err)));
+          console.error("[FollowMe upload compressed] error:", err);
+        }finally{
+          fresh.value = "";
+
+          const camOverlay = document.getElementById("followmeCameraChoiceOverlay");
+          if(camOverlay) camOverlay.classList.remove("is-open");
+
+          const panel = document.getElementById("followmeAdminAttachPanel");
+          if(panel) panel.classList.remove("is-open");
+        }
+      }, true);
+    });
+  }
+
+  function boot(){
+    rebindInputsWithCompression();
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 300);
+  });
+
+  setInterval(boot, 1200);
+})();
+</script>
+
 </body>
 </html>
