@@ -5219,6 +5219,22 @@
       flex:0 0 auto !important;
     }
 
+
+    /* PC only: dopo la prima visualizzazione nasconde il balloon installazione Web App */
+    @media (min-width: 900px){
+      body.followme-desktop-install-balloon-dismissed .followme-install-helper,
+      body.followme-desktop-install-balloon-dismissed #followmeInstallHelper,
+      body.followme-desktop-install-balloon-dismissed #followmeInstallPrompt,
+      body.followme-desktop-install-balloon-dismissed .followme-pwa-install,
+      body.followme-desktop-install-balloon-dismissed .followme-save-app-helper,
+      body.followme-desktop-install-balloon-dismissed [data-install-helper],
+      body.followme-desktop-install-balloon-dismissed [data-pwa-helper]{
+        display:none !important;
+        visibility:hidden !important;
+        pointer-events:none !important;
+      }
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -15778,6 +15794,169 @@ document.addEventListener("visibilitychange", function(){
   });
 
   setInterval(normalizeAll, 150);
+})();
+</script>
+
+
+<script id="followme-desktop-install-balloon-once-final">
+(function(){
+  const KEY = "followme_desktop_install_balloon_seen_v1";
+
+  function isDesktop(){
+    return window.matchMedia && window.matchMedia("(min-width: 900px)").matches;
+  }
+
+  function installSelectors(){
+    return [
+      ".followme-install-helper",
+      "#followmeInstallHelper",
+      "#followmeInstallPrompt",
+      ".followme-pwa-install",
+      ".followme-save-app-helper",
+      "[data-install-helper]",
+      "[data-pwa-helper]"
+    ];
+  }
+
+  function getInstallElements(){
+    const out = [];
+    installSelectors().forEach(function(sel){
+      document.querySelectorAll(sel).forEach(function(el){
+        if(!out.includes(el)) out.push(el);
+      });
+    });
+    return out;
+  }
+
+  function markDismissed(){
+    if(!isDesktop()) return;
+
+    try{
+      localStorage.setItem(KEY, "1");
+    }catch(e){}
+
+    document.body.classList.add("followme-desktop-install-balloon-dismissed");
+    hideInstallElements();
+  }
+
+  function hideInstallElements(){
+    if(!isDesktop()) return;
+
+    const seen = (() => {
+      try{ return localStorage.getItem(KEY) === "1"; }catch(e){ return false; }
+    })();
+
+    if(!seen) return;
+
+    document.body.classList.add("followme-desktop-install-balloon-dismissed");
+
+    getInstallElements().forEach(function(el){
+      el.style.display = "none";
+      el.style.visibility = "hidden";
+      el.style.pointerEvents = "none";
+      el.setAttribute("aria-hidden", "true");
+    });
+  }
+
+  function rememberFirstView(){
+    if(!isDesktop()) return;
+
+    const seen = (() => {
+      try{ return localStorage.getItem(KEY) === "1"; }catch(e){ return false; }
+    })();
+
+    if(seen){
+      hideInstallElements();
+      return;
+    }
+
+    const els = getInstallElements().filter(function(el){
+      const r = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+    });
+
+    if(els.length){
+      /*
+        Su PC lo facciamo vedere una sola volta.
+        Appena risulta comparso, lo segniamo come visto:
+        al prossimo reload o riapertura non comparirà più.
+      */
+      try{
+        localStorage.setItem(KEY, "1");
+      }catch(e){}
+    }
+  }
+
+  function bindDismissButtons(){
+    if(!isDesktop()) return;
+
+    const words = [
+      "chiudi",
+      "ok",
+      "ho capito",
+      "lo farò dopo",
+      "lo faro dopo",
+      "più tardi",
+      "piu tardi",
+      "dopo",
+      "non ora"
+    ];
+
+    document.querySelectorAll("button, a").forEach(function(btn){
+      if(btn.dataset.desktopInstallOnceBound === "1") return;
+
+      const txt = String(btn.textContent || "").trim().toLowerCase();
+      if(!txt) return;
+
+      const matches = words.some(function(w){ return txt.includes(w); });
+      if(!matches) return;
+
+      const insideInstall =
+        btn.closest(".followme-install-helper") ||
+        btn.closest("#followmeInstallHelper") ||
+        btn.closest("#followmeInstallPrompt") ||
+        btn.closest(".followme-pwa-install") ||
+        btn.closest(".followme-save-app-helper") ||
+        btn.closest("[data-install-helper]") ||
+        btn.closest("[data-pwa-helper]");
+
+      if(!insideInstall) return;
+
+      btn.dataset.desktopInstallOnceBound = "1";
+
+      btn.addEventListener("click", function(){
+        markDismissed();
+      }, true);
+    });
+  }
+
+  function boot(){
+    if(!isDesktop()) return;
+
+    hideInstallElements();
+    bindDismissButtons();
+    rememberFirstView();
+  }
+
+  window.followMeDesktopInstallBalloonHideForever = markDismissed;
+  window.followMeDesktopInstallBalloonOnceBoot = boot;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  window.addEventListener("resize", function(){
+    setTimeout(boot, 100);
+  });
+
+  setInterval(boot, 1000);
 })();
 </script>
 
