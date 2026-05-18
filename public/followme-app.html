@@ -17770,5 +17770,176 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-reload-data-button-restore-20260518">
+(function(){
+  if(window.__followMeReloadDataButtonRestore20260518) return;
+  window.__followMeReloadDataButtonRestore20260518 = true;
+
+  function toastMsg(msg){
+    try{
+      if(typeof toast === "function") toast(msg);
+      else alert(msg);
+    }catch(e){
+      alert(msg);
+    }
+  }
+
+  function isChatMode(){
+    return document.body.classList.contains("followme-chat-only-mode") ||
+           document.body.classList.contains("followme-chat-waiting-mode") ||
+           !!document.getElementById("followmeOwnerChatScreen")?.offsetParent;
+  }
+
+  function findGoodContainer(){
+    return document.getElementById("installNotificationsBox") ||
+           document.getElementById("simpleDestinationPreviewBlock") ||
+           document.getElementById("premiumHistoryTrack")?.parentNode ||
+           document.querySelector(".app") ||
+           document.querySelector("main") ||
+           document.body;
+  }
+
+  async function runReloadData(){
+    const btn = document.getElementById("followmeReloadDataBtn20260518");
+    if(btn){
+      btn.disabled = true;
+      btn.textContent = "Ricarico...";
+    }
+
+    toastMsg("Ricarico i dati...");
+
+    const calls = [
+      "renderPremiumHistoryFromApi",
+      "renderPremiumHistory",
+      "refreshFollowMeOwnerChatSessions",
+      "updateNotifyButtonByRealSubscription",
+      "updateInstalledNotificationBox",
+      "followMeRefreshUserChipStatesHardFinal"
+    ];
+
+    async function runKnownFunctions(){
+      for(const name of calls){
+        try{
+          if(typeof window[name] === "function"){
+            await window[name]();
+          }
+        }catch(e){
+          console.warn("Errore funzione refresh", name, e);
+        }
+      }
+
+      try{
+        if(typeof updateSimpleDestinationPreview === "function" && window.__followMeActiveUrl){
+          updateSimpleDestinationPreview(window.__followMeActiveUrl);
+        }
+      }catch(e){}
+    }
+
+    await runKnownFunctions();
+    setTimeout(runKnownFunctions, 700);
+    setTimeout(runKnownFunctions, 1800);
+
+    setTimeout(function(){
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = "Ricarica dati";
+      }
+      toastMsg("Dati aggiornati.");
+    }, 2200);
+  }
+
+  function injectCss(){
+    if(document.getElementById("followmeReloadDataBtnCss20260518")) return;
+
+    const style = document.createElement("style");
+    style.id = "followmeReloadDataBtnCss20260518";
+    style.textContent = `
+      #followmeReloadDataBox20260518{
+        width:100%;
+        display:flex;
+        justify-content:center;
+        padding:10px 16px 4px;
+        box-sizing:border-box;
+      }
+
+      #followmeReloadDataBtn20260518{
+        min-height:42px;
+        padding:0 18px;
+        border-radius:999px;
+        border:1px solid rgba(0,0,0,.10);
+        background:#ffffff;
+        color:#202629;
+        font-size:.86rem;
+        font-weight:950;
+        box-shadow:0 8px 24px rgba(0,0,0,.10);
+        cursor:pointer;
+      }
+
+      #followmeReloadDataBtn20260518:disabled{
+        opacity:.65;
+        cursor:wait;
+      }
+
+      body.followme-chat-only-mode #followmeReloadDataBox20260518,
+      body.followme-chat-waiting-mode #followmeReloadDataBox20260518{
+        display:none !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function ensureButton(){
+    if(isChatMode()) return;
+
+    let box = document.getElementById("followmeReloadDataBox20260518");
+    if(box) return;
+
+    injectCss();
+
+    box = document.createElement("div");
+    box.id = "followmeReloadDataBox20260518";
+    box.innerHTML = '<button type="button" id="followmeReloadDataBtn20260518">Ricarica dati</button>';
+
+    const container = findGoodContainer();
+
+    if(container && container.parentNode && container !== document.body){
+      container.parentNode.insertBefore(box, container.nextSibling);
+    }else{
+      document.body.appendChild(box);
+    }
+
+    const btn = document.getElementById("followmeReloadDataBtn20260518");
+    if(btn){
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        runReloadData();
+      });
+    }
+  }
+
+  function boot(){
+    injectCss();
+    ensureButton();
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 300);
+    setTimeout(boot, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 300);
+  });
+})();
+</script>
+
 </body>
 </html>
