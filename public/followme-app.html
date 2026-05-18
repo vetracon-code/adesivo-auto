@@ -5888,6 +5888,105 @@ html.desktop-no-install-ui-light #installActionResult {
 }
 </style>
 
+
+<script>
+/* PC: pulsante "Non richiedermelo più" sul balloon salvataggio */
+(function(){
+  var STORAGE_KEY = "followme_pc_install_prompt_dismissed";
+
+  function isPcDesktop(){
+    var ua = navigator.userAgent || "";
+    var mobileUA = /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua);
+    var coarse = false;
+    try { coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches; } catch(e) {}
+    return !mobileUA && !coarse;
+  }
+
+  function isDismissed(){
+    try { return localStorage.getItem(STORAGE_KEY) === "1"; } catch(e) { return false; }
+  }
+
+  function dismissForever(){
+    try { localStorage.setItem(STORAGE_KEY, "1"); } catch(e) {}
+    hideInstallBalloon();
+  }
+
+  function hideInstallBalloon(){
+    [
+      "installAssistantBalloon",
+      "followmeInstallFrame",
+      "followmeSafeInstallFrame",
+      "followmeInstallSheet",
+      "followmeInstallBanner",
+      "installAppSection"
+    ].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el){
+        el.style.display = "none";
+        el.style.visibility = "hidden";
+        el.setAttribute("aria-hidden", "true");
+      }
+    });
+  }
+
+  function addDontAskButton(){
+    if (!isPcDesktop()) return;
+
+    if (isDismissed()) {
+      hideInstallBalloon();
+      return;
+    }
+
+    var balloon =
+      document.getElementById("installAssistantBalloon") ||
+      document.getElementById("followmeInstallFrame") ||
+      document.getElementById("followmeSafeInstallFrame") ||
+      document.getElementById("followmeInstallSheet") ||
+      document.getElementById("followmeInstallBanner");
+
+    if (!balloon) return;
+    if (document.getElementById("pcDontAskInstallBtn")) return;
+
+    var btn = document.createElement("button");
+    btn.id = "pcDontAskInstallBtn";
+    btn.type = "button";
+    btn.textContent = "Solo per PC: non richiedermelo più";
+    btn.style.cssText = [
+      "margin-top:10px",
+      "width:100%",
+      "border:1px solid rgba(255,255,255,.22)",
+      "background:rgba(255,255,255,.10)",
+      "color:inherit",
+      "border-radius:12px",
+      "padding:10px 12px",
+      "font-weight:700",
+      "cursor:pointer"
+    ].join(";");
+
+    btn.addEventListener("click", function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      dismissForever();
+    });
+
+    var footer =
+      document.getElementById("installAssistantActions") ||
+      document.getElementById("installAssistantBody") ||
+      balloon;
+
+    footer.appendChild(btn);
+  }
+
+  document.addEventListener("DOMContentLoaded", addDontAskButton);
+  window.addEventListener("load", addDontAskButton);
+  window.addEventListener("pageshow", addDontAskButton);
+
+  setTimeout(addDontAskButton, 500);
+  setTimeout(addDontAskButton, 1500);
+  setTimeout(addDontAskButton, 3000);
+})();
+</script>
+
 </head>
 <body>
   <main class="app">
