@@ -16685,5 +16685,210 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+<script id="followme-user-settings-stable-final">
+(function(){
+  let activeSessionId = "";
+  let activeUploads = false;
+  let activeBlocked = false;
+
+  function code(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  async function fetchSessions(){
+    const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)){
+      return [];
+    }
+
+    return data.sessions;
+  }
+
+  function getActiveSessionIdFromUi(){
+    const overlay = document.getElementById("followmeUserManageOverlay");
+
+    if(overlay && overlay.dataset.sessionId){
+      return overlay.dataset.sessionId;
+    }
+
+    const active = document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active");
+    if(active && active.dataset.sessionId){
+      return active.dataset.sessionId;
+    }
+
+    try{
+      return new URLSearchParams(location.search || "").get("chatSession") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  async function loadSession(sessionId){
+    const sid = String(sessionId || getActiveSessionIdFromUi() || "");
+    if(!sid) return null;
+
+    const sessions = await fetchSessions();
+    return sessions.find(function(s){
+      return String(s.id) === sid;
+    }) || null;
+  }
+
+  function applyButtons(session){
+    if(!session) return;
+
+    activeSessionId = String(session.id);
+    activeUploads = !!session.uploads_enabled;
+    activeBlocked = !!session.is_blocked;
+
+    const overlay = document.getElementById("followmeUserManageOverlay");
+    if(overlay){
+      overlay.dataset.sessionId = activeSessionId;
+    }
+
+    const uploadsBtn = document.getElementById("followmeUserManageUploads");
+    const blockBtn = document.getElementById("followmeUserManageBlock");
+
+    if(uploadsBtn){
+      uploadsBtn.textContent = activeUploads
+        ? "Disabilita caricamenti completi"
+        : "Abilita caricamenti completi";
+
+      uploadsBtn.className = activeUploads ? "warn" : "ok";
+    }
+
+    if(blockBtn){
+      blockBtn.textContent = activeBlocked
+        ? "Riabilita utente"
+        : "Blocca utente";
+
+      blockBtn.className = activeBlocked ? "ok" : "danger";
+    }
+  }
+
+  async function updateSettings(payload){
+    const sid = activeSessionId || getActiveSessionIdFromUi();
+
+    if(!sid){
+      alert("Non riesco a identificare l’utente selezionato.");
+      return;
+    }
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/settings", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(payload)
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      alert("Errore aggiornamento utente: " + ((data && data.error) || ("HTTP " + res.status)));
+      return;
+    }
+
+    applyButtons(data.session);
+
+    if(typeof window.followMeUserManagementMenuBoot === "function"){
+      window.followMeUserManagementMenuBoot();
+    }
+
+    if(typeof window.followMeCleanFinalRefreshTabs === "function"){
+      window.followMeCleanFinalRefreshTabs();
+    }
+
+    alert(
+      payload.hasOwnProperty("uploads_enabled")
+        ? (data.session.uploads_enabled ? "Caricamenti completi abilitati." : "Caricamenti completi disabilitati.")
+        : (data.session.is_blocked ? "Utente bloccato." : "Utente riabilitato.")
+    );
+  }
+
+  function bindButtons(){
+    const uploadsBtn = document.getElementById("followmeUserManageUploads");
+    const blockBtn = document.getElementById("followmeUserManageBlock");
+    const overlay = document.getElementById("followmeUserManageOverlay");
+
+    if(uploadsBtn && uploadsBtn.dataset.userSettingsStableBound !== "1"){
+      const fresh = uploadsBtn.cloneNode(true);
+      fresh.dataset.userSettingsStableBound = "1";
+      uploadsBtn.parentNode.replaceChild(fresh, uploadsBtn);
+
+      fresh.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        updateSettings({ uploads_enabled: !activeUploads });
+      }, true);
+    }
+
+    const blockNow = document.getElementById("followmeUserManageBlock");
+    if(blockNow && blockNow.dataset.userSettingsStableBound !== "1"){
+      const fresh = blockNow.cloneNode(true);
+      fresh.dataset.userSettingsStableBound = "1";
+      blockNow.parentNode.replaceChild(fresh, blockNow);
+
+      fresh.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        updateSettings({ is_blocked: !activeBlocked });
+      }, true);
+    }
+
+    if(overlay && overlay.dataset.userSettingsStableObserver !== "1"){
+      overlay.dataset.userSettingsStableObserver = "1";
+
+      const obs = new MutationObserver(async function(){
+        if(overlay.classList.contains("is-open")){
+          const session = await loadSession(overlay.dataset.sessionId || getActiveSessionIdFromUi()).catch(()=>null);
+          if(session) applyButtons(session);
+        }
+      });
+
+      obs.observe(overlay, { attributes:true, attributeFilter:["class","data-session-id"] });
+    }
+  }
+
+  async function boot(){
+    bindButtons();
+
+    const overlay = document.getElementById("followmeUserManageOverlay");
+    if(overlay && overlay.classList.contains("is-open")){
+      const session = await loadSession(overlay.dataset.sessionId || getActiveSessionIdFromUi()).catch(()=>null);
+      if(session) applyButtons(session);
+    }
+  }
+
+  window.followMeUserSettingsStableBoot = boot;
+  window.followMeUserSettingsStableApply = applyButtons;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(boot, 1000);
+})();
+</script>
+
 </body>
 </html>
