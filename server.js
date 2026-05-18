@@ -10007,28 +10007,6 @@ app.post('/api/followme/chat/session/:session_id/settings', express.json(), asyn
 
     const updatedSession = updated.rows[0];
 
-    try {
-      const controlPayload = {
-        __followme_control_refresh: true,
-        type: 'user_settings_changed',
-        session_id: updatedSession.id,
-        uploads_enabled: updatedSession.uploads_enabled === true,
-        is_blocked: updatedSession.is_blocked === true,
-        message: updatedSession.is_blocked === true
-          ? 'Sei stato bloccato dal sistema.'
-          : 'Impostazioni aggiornate.',
-        created_at: new Date().toISOString()
-      };
-
-      await pool.query(
-        `INSERT INTO followme_chat_messages
-         (session_id, project_id, sender, message, created_at)
-         VALUES ($1,$2,'system',$3,NOW())`,
-        [updatedSession.id, updatedSession.project_id, JSON.stringify(controlPayload)]
-      );
-    } catch (controlErr) {
-      console.warn('followme settings control refresh message error:', controlErr.message || controlErr);
-    }
 
     return res.json({
       success:true,
