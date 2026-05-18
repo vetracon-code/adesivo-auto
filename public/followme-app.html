@@ -17772,10 +17772,12 @@ document.addEventListener("visibilitychange", function(){
 
 
 
-<script id="followme-reload-data-button-restore-20260518">
+
+
+<script id="followme-reload-data-under-more-options-20260518">
 (function(){
-  if(window.__followMeReloadDataButtonRestore20260518) return;
-  window.__followMeReloadDataButtonRestore20260518 = true;
+  if(window.__followMeReloadDataUnderMoreOptions20260518) return;
+  window.__followMeReloadDataUnderMoreOptions20260518 = true;
 
   function toastMsg(msg){
     try{
@@ -17788,21 +17790,59 @@ document.addEventListener("visibilitychange", function(){
 
   function isChatMode(){
     return document.body.classList.contains("followme-chat-only-mode") ||
-           document.body.classList.contains("followme-chat-waiting-mode") ||
-           !!document.getElementById("followmeOwnerChatScreen")?.offsetParent;
+           document.body.classList.contains("followme-chat-waiting-mode");
   }
 
-  function findGoodContainer(){
-    return document.getElementById("installNotificationsBox") ||
-           document.getElementById("simpleDestinationPreviewBlock") ||
-           document.getElementById("premiumHistoryTrack")?.parentNode ||
-           document.querySelector(".app") ||
-           document.querySelector("main") ||
-           document.body;
+  function normalizeText(el){
+    try{
+      return String(el && el.textContent || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+    }catch(e){
+      return "";
+    }
+  }
+
+  function findMoreOptionsAnchor(){
+    const candidates = Array.from(document.querySelectorAll("button, a, div, section"));
+
+    // Cerca il pulsante/frame "Altre opzioni"
+    let el = candidates.find(function(x){
+      const t = normalizeText(x);
+      return t === "altre opzioni" || t.includes("altre opzioni");
+    });
+
+    if(!el) return null;
+
+    // Risale a un contenitore sensato, non troppo grande.
+    let box = el;
+    for(let i = 0; i < 5; i++){
+      if(!box.parentElement) break;
+
+      const parent = box.parentElement;
+      const rect = parent.getBoundingClientRect ? parent.getBoundingClientRect() : null;
+      const txt = normalizeText(parent);
+
+      if(
+        parent !== document.body &&
+        txt.includes("altre opzioni") &&
+        rect &&
+        rect.height > 35 &&
+        rect.height < 260
+      ){
+        box = parent;
+      }else{
+        break;
+      }
+    }
+
+    return box || el;
   }
 
   async function runReloadData(){
     const btn = document.getElementById("followmeReloadDataBtn20260518");
+
     if(btn){
       btn.disabled = true;
       btn.textContent = "Ricarico...";
@@ -17813,10 +17853,10 @@ document.addEventListener("visibilitychange", function(){
     const calls = [
       "renderPremiumHistoryFromApi",
       "renderPremiumHistory",
-      "refreshFollowMeOwnerChatSessions",
       "updateNotifyButtonByRealSubscription",
       "updateInstalledNotificationBox",
-      "followMeRefreshUserChipStatesHardFinal"
+      "followMeRefreshUserChipStatesHardFinal",
+      "fmPublicFetchUserState"
     ];
 
     async function runKnownFunctions(){
@@ -17826,7 +17866,7 @@ document.addEventListener("visibilitychange", function(){
             await window[name]();
           }
         }catch(e){
-          console.warn("Errore funzione refresh", name, e);
+          console.warn("Errore refresh dati:", name, e);
         }
       }
 
@@ -17851,29 +17891,66 @@ document.addEventListener("visibilitychange", function(){
   }
 
   function injectCss(){
-    if(document.getElementById("followmeReloadDataBtnCss20260518")) return;
+    if(document.getElementById("followmeReloadDataUnderMoreOptionsCss20260518")) return;
 
     const style = document.createElement("style");
-    style.id = "followmeReloadDataBtnCss20260518";
+    style.id = "followmeReloadDataUnderMoreOptionsCss20260518";
     style.textContent = `
       #followmeReloadDataBox20260518{
         width:100%;
-        display:flex;
-        justify-content:center;
-        padding:10px 16px 4px;
         box-sizing:border-box;
+        padding:0 16px 18px;
+        margin-top:10px;
+      }
+
+      #followmeReloadDataFrame20260518{
+        width:100%;
+        box-sizing:border-box;
+        border-radius:22px;
+        border:1px solid rgba(255,255,255,.16);
+        background:rgba(255,255,255,.08);
+        backdrop-filter:blur(14px);
+        -webkit-backdrop-filter:blur(14px);
+        box-shadow:0 14px 34px rgba(0,0,0,.18);
+        padding:12px;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+      }
+
+      #followmeReloadDataText20260518{
+        display:flex;
+        flex-direction:column;
+        gap:2px;
+        min-width:0;
+      }
+
+      #followmeReloadDataText20260518 strong{
+        font-size:.86rem;
+        line-height:1.12;
+        color:inherit;
+        font-weight:950;
+      }
+
+      #followmeReloadDataText20260518 span{
+        font-size:.72rem;
+        line-height:1.18;
+        color:rgba(255,255,255,.68);
+        font-weight:750;
       }
 
       #followmeReloadDataBtn20260518{
-        min-height:42px;
-        padding:0 18px;
+        flex:0 0 auto;
+        min-height:38px;
+        padding:0 14px;
         border-radius:999px;
-        border:1px solid rgba(0,0,0,.10);
+        border:1px solid rgba(255,255,255,.18);
         background:#ffffff;
         color:#202629;
-        font-size:.86rem;
+        font-size:.78rem;
         font-weight:950;
-        box-shadow:0 8px 24px rgba(0,0,0,.10);
+        box-shadow:0 8px 22px rgba(0,0,0,.14);
         cursor:pointer;
       }
 
@@ -17886,6 +17963,27 @@ document.addEventListener("visibilitychange", function(){
       body.followme-chat-waiting-mode #followmeReloadDataBox20260518{
         display:none !important;
       }
+
+      @media (max-width:520px){
+        #followmeReloadDataFrame20260518{
+          border-radius:20px;
+          padding:11px;
+        }
+
+        #followmeReloadDataText20260518 strong{
+          font-size:.82rem;
+        }
+
+        #followmeReloadDataText20260518 span{
+          font-size:.68rem;
+        }
+
+        #followmeReloadDataBtn20260518{
+          min-height:36px;
+          padding:0 12px;
+          font-size:.74rem;
+        }
+      }
     `;
     document.head.appendChild(style);
   }
@@ -17893,25 +17991,38 @@ document.addEventListener("visibilitychange", function(){
   function ensureButton(){
     if(isChatMode()) return;
 
-    let box = document.getElementById("followmeReloadDataBox20260518");
-    if(box) return;
-
     injectCss();
 
-    box = document.createElement("div");
-    box.id = "followmeReloadDataBox20260518";
-    box.innerHTML = '<button type="button" id="followmeReloadDataBtn20260518">Ricarica dati</button>';
+    let box = document.getElementById("followmeReloadDataBox20260518");
 
-    const container = findGoodContainer();
+    if(!box){
+      box = document.createElement("div");
+      box.id = "followmeReloadDataBox20260518";
+      box.innerHTML = `
+        <div id="followmeReloadDataFrame20260518">
+          <div id="followmeReloadDataText20260518">
+            <strong>Ricarica dati</strong>
+            <span>Aggiorna subito stato, destinazione e notifiche.</span>
+          </div>
+          <button type="button" id="followmeReloadDataBtn20260518">Ricarica dati</button>
+        </div>
+      `;
+    }
 
-    if(container && container.parentNode && container !== document.body){
-      container.parentNode.insertBefore(box, container.nextSibling);
+    const anchor = findMoreOptionsAnchor();
+
+    if(anchor && anchor.parentNode){
+      if(anchor.nextSibling !== box){
+        anchor.parentNode.insertBefore(box, anchor.nextSibling);
+      }
     }else{
+      // Fallback: fondo pagina, ma solo se non trova "Altre opzioni".
       document.body.appendChild(box);
     }
 
     const btn = document.getElementById("followmeReloadDataBtn20260518");
-    if(btn){
+    if(btn && btn.dataset.reloadBound !== "1"){
+      btn.dataset.reloadBound = "1";
       btn.addEventListener("click", function(ev){
         ev.preventDefault();
         runReloadData();
@@ -17920,7 +18031,6 @@ document.addEventListener("visibilitychange", function(){
   }
 
   function boot(){
-    injectCss();
     ensureButton();
   }
 
@@ -17933,10 +18043,18 @@ document.addEventListener("visibilitychange", function(){
   window.addEventListener("load", function(){
     setTimeout(boot, 300);
     setTimeout(boot, 1200);
+    setTimeout(boot, 2500);
   });
 
   window.addEventListener("pageshow", function(){
     setTimeout(boot, 300);
+    setTimeout(boot, 1200);
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible"){
+      setTimeout(boot, 300);
+    }
   });
 })();
 </script>
