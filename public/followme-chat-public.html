@@ -1286,10 +1286,12 @@
 
 
 
-<script id="followme-public-extra-admin-style-clean-20260519">
+
+
+<script id="followme-public-plus-attachments-clean-20260519">
 (function(){
-  if(window.__FollowMePublicExtraAdminStyleClean20260519) return;
-  window.__FollowMePublicExtraAdminStyleClean20260519 = true;
+  if(window.__FollowMePublicPlusAttachmentsClean20260519) return;
+  window.__FollowMePublicPlusAttachmentsClean20260519 = true;
 
   let lastKey = "";
   let inFlight = false;
@@ -1342,7 +1344,6 @@
 
   function extractSid(data){
     if(!data) return "";
-
     return cleanSid(
       data.session_id ||
       data.sessionId ||
@@ -1377,76 +1378,95 @@
            document.body;
   }
 
+  function esc(v){
+    return String(v == null ? "" : v)
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;");
+  }
+
+  function parseAttachmentMessage(message){
+    try{
+      const obj = typeof message === "string" ? JSON.parse(message) : message;
+      if(obj && obj.__followme_attachment) return obj;
+    }catch(e){}
+    return null;
+  }
+
   function injectCss(){
-    if(document.getElementById("followmePublicExtraAdminStyleCleanCss20260519")) return;
+    if(document.getElementById("followmePublicPlusAttachmentsCss20260519")) return;
 
     const style = document.createElement("style");
-    style.id = "followmePublicExtraAdminStyleCleanCss20260519";
+    style.id = "followmePublicPlusAttachmentsCss20260519";
     style.textContent = `
-      #fmPublicExtraAdminStyleClean20260519{
-        display:none;
-        width:100%;
-        box-sizing:border-box;
-        margin:0 0 8px 0;
-        padding:8px;
-        border-radius:22px;
-        background:rgba(255,255,255,.94);
-        border:1px solid rgba(0,0,0,.08);
-        box-shadow:0 8px 24px rgba(0,0,0,.10);
-        gap:7px;
-        align-items:center;
-        grid-template-columns:38px 38px 38px 1fr 38px;
-        position:relative;
-        z-index:60;
-      }
-
-      body.fm-public-extra-clean-on:not(.fm-public-clean-blocked) #fmPublicExtraAdminStyleClean20260519{
-        display:grid !important;
-      }
-
-      body.fm-public-clean-blocked #fmPublicExtraAdminStyleClean20260519{
+      body:not(.fm-public-extra-plus-on) #fmPublicPlusBtn20260519,
+      body.fm-public-clean-blocked #fmPublicPlusBtn20260519{
         display:none !important;
       }
 
-      #fmPublicExtraAdminStyleClean20260519 button{
-        width:38px;
-        height:38px;
-        min-width:38px;
-        border-radius:999px;
-        border:1px solid rgba(0,0,0,.08);
+      #fmPublicPlusBtn20260519{
+        width:38px !important;
+        height:38px !important;
+        min-width:38px !important;
+        border-radius:999px !important;
+        border:1px solid rgba(0,0,0,.10) !important;
+        background:#ffffff !important;
+        color:#202629 !important;
+        display:inline-flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        font-size:1.32rem !important;
+        line-height:1 !important;
+        font-weight:900 !important;
+        box-shadow:0 1px 5px rgba(0,0,0,.10) !important;
+        padding:0 !important;
+        cursor:pointer !important;
+        flex:0 0 38px !important;
+        order:-10 !important;
+        pointer-events:auto !important;
+        touch-action:manipulation !important;
+      }
+
+      #fmPublicAttachPanel20260519{
+        display:none;
+        position:absolute;
+        left:10px;
+        right:10px;
+        bottom:58px;
+        z-index:9999;
         background:#ffffff;
         color:#202629;
-        display:inline-flex;
-        align-items:center;
-        justify-content:center;
-        font-size:1rem;
-        font-weight:950;
-        box-shadow:0 1px 5px rgba(0,0,0,.08);
-        padding:0;
-        cursor:pointer;
+        border-radius:22px;
+        border:1px solid rgba(0,0,0,.10);
+        box-shadow:0 18px 60px rgba(0,0,0,.24);
+        padding:10px;
+        box-sizing:border-box;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:8px;
       }
 
-      #fmPublicExtraAdminStyleClean20260519 .fm-label{
-        min-width:0;
-        height:38px;
-        border-radius:999px;
+      body.fm-public-extra-plus-on #fmPublicAttachPanel20260519.is-open{
+        display:grid !important;
+      }
+
+      body.fm-public-clean-blocked #fmPublicAttachPanel20260519{
+        display:none !important;
+      }
+
+      #fmPublicAttachPanel20260519 button{
+        min-height:42px;
+        border-radius:16px;
+        border:1px solid rgba(0,0,0,.08);
         background:#f6f7f8;
-        color:#475467;
+        color:#202629;
+        font-size:.86rem;
+        font-weight:900;
         display:flex;
         align-items:center;
-        padding:0 12px;
-        box-sizing:border-box;
-        font-size:.78rem;
-        font-weight:850;
-        white-space:nowrap;
-        overflow:hidden;
-        text-overflow:ellipsis;
-      }
-
-      #fmPublicExtraAdminStyleClean20260519 .fm-send{
-        background:#25d366;
-        color:#ffffff;
-        border-color:rgba(37,211,102,.45);
+        justify-content:center;
+        gap:7px;
+        cursor:pointer;
       }
 
       #fmPublicBlockedCleanNotice20260519{
@@ -1481,28 +1501,78 @@
         pointer-events:none !important;
       }
 
+      .followme-attachment-card{
+        display:block;
+        max-width:260px;
+        border-radius:16px;
+        overflow:hidden;
+        background:rgba(0,0,0,.08);
+        text-decoration:none;
+        color:inherit;
+      }
+
+      .followme-attachment-image{
+        display:block;
+        width:100%;
+        max-width:260px;
+        max-height:260px;
+        object-fit:cover;
+        border-radius:16px;
+      }
+
+      .followme-attachment-file,
+      .followme-attachment-location,
+      .followme-attachment-audio{
+        display:flex;
+        align-items:center;
+        gap:10px;
+        padding:10px 12px;
+        border-radius:16px;
+        background:rgba(255,255,255,.16);
+        color:inherit;
+        text-decoration:none;
+        font-weight:800;
+      }
+
+      .followme-attachment-audio audio{
+        width:190px;
+        max-width:100%;
+      }
+
+      .followme-attachment-name{
+        display:block;
+        font-size:.86rem;
+        font-weight:900;
+      }
+
+      .followme-attachment-meta{
+        display:block;
+        font-size:.72rem;
+        opacity:.72;
+        margin-top:2px;
+      }
+
       @media(max-width:420px){
-        #fmPublicExtraAdminStyleClean20260519{
-          grid-template-columns:34px 34px 34px 1fr 34px;
+        #fmPublicPlusBtn20260519{
+          width:36px !important;
+          height:36px !important;
+          min-width:36px !important;
+          flex-basis:36px !important;
+          font-size:1.22rem !important;
+        }
+
+        #fmPublicAttachPanel20260519{
+          bottom:54px;
           border-radius:18px;
-          padding:7px;
-          gap:6px;
         }
 
-        #fmPublicExtraAdminStyleClean20260519 button{
-          width:34px;
-          height:34px;
-          min-width:34px;
-          font-size:.92rem;
-        }
-
-        #fmPublicExtraAdminStyleClean20260519 .fm-label{
-          height:34px;
-          font-size:.7rem;
-          padding:0 9px;
+        #fmPublicAttachPanel20260519 button{
+          min-height:40px;
+          font-size:.8rem;
         }
       }
     `;
+
     document.head.appendChild(style);
   }
 
@@ -1524,36 +1594,70 @@
     return notice;
   }
 
-  function ensureBar(){
-    let bar = document.getElementById("fmPublicExtraAdminStyleClean20260519");
-    if(bar) return bar;
-
-    bar = document.createElement("div");
-    bar.id = "fmPublicExtraAdminStyleClean20260519";
-    bar.innerHTML = `
-      <button type="button" id="fmPublicCleanPlus20260519" aria-label="Allega">＋</button>
-      <button type="button" id="fmPublicCleanPhoto20260519" aria-label="Foto">📷</button>
-      <button type="button" id="fmPublicCleanLocation20260519" aria-label="Posizione">📍</button>
-      <div class="fm-label">Funzioni extra attive</div>
-      <button type="button" id="fmPublicCleanSend20260519" class="fm-send" aria-label="Invia">➤</button>
-      <input type="file" id="fmPublicCleanPhotoInput20260519" accept="image/*" capture="environment" hidden>
-      <input type="file" id="fmPublicCleanFileInput20260519" hidden>
-    `;
-
+  function ensurePlusAndPanel(){
     const input = findInput();
     const composer = findComposer();
 
-    if(input && input.parentNode) input.parentNode.insertBefore(bar, input);
-    else if(composer && composer.insertBefore) composer.insertBefore(bar, composer.firstChild);
-    else document.body.appendChild(bar);
+    if(!composer) return;
 
-    bindBar(bar);
-    return bar;
+    try{
+      if(getComputedStyle(composer).position === "static"){
+        composer.style.position = "relative";
+      }
+    }catch(e){
+      composer.style.position = "relative";
+    }
+
+    let plus = document.getElementById("fmPublicPlusBtn20260519");
+    if(!plus){
+      plus = document.createElement("button");
+      plus.type = "button";
+      plus.id = "fmPublicPlusBtn20260519";
+      plus.setAttribute("aria-label", "Aggiungi");
+      plus.textContent = "+";
+
+      if(input && input.parentNode){
+        input.parentNode.insertBefore(plus, input);
+      }else{
+        composer.insertBefore(plus, composer.firstChild);
+      }
+    }
+
+    let panel = document.getElementById("fmPublicAttachPanel20260519");
+    if(!panel){
+      panel = document.createElement("div");
+      panel.id = "fmPublicAttachPanel20260519";
+      panel.innerHTML = `
+        <button type="button" id="fmPublicPhotoBtn20260519">📷 Foto</button>
+        <button type="button" id="fmPublicFileBtn20260519">📎 Documento</button>
+        <button type="button" id="fmPublicLocationBtn20260519">📍 Posizione</button>
+        <button type="button" id="fmPublicAudioBtn20260519">🎙️ Audio</button>
+        <input type="file" id="fmPublicPhotoInput20260519" accept="image/*" capture="environment" hidden>
+        <input type="file" id="fmPublicFileInput20260519" hidden>
+      `;
+
+      composer.appendChild(panel);
+    }
+
+    bindPlusPanel();
   }
 
   function canUseExtra(){
-    return document.body.classList.contains("fm-public-extra-clean-on") &&
+    return document.body.classList.contains("fm-public-extra-plus-on") &&
            !document.body.classList.contains("fm-public-clean-blocked");
+  }
+
+  function togglePanel(force){
+    const panel = document.getElementById("fmPublicAttachPanel20260519");
+    if(!panel) return;
+
+    if(!canUseExtra()){
+      panel.classList.remove("is-open");
+      return;
+    }
+
+    const open = typeof force === "boolean" ? force : !panel.classList.contains("is-open");
+    panel.classList.toggle("is-open", open);
   }
 
   async function sendRawFile(file, kind){
@@ -1573,114 +1677,206 @@
     });
 
     const data = await res.json().catch(()=>null);
+
     if(!res.ok || !data || !data.success){
       throw new Error((data && data.error) || "Errore invio allegato.");
     }
 
+    togglePanel(false);
+    forceLoadMessages();
+  }
+
+  function forceLoadMessages(){
     try{
       if(typeof window.followMePublicLoadMessages === "function") window.followMePublicLoadMessages();
     }catch(e){}
+
+    try{
+      if(typeof window.loadMessages === "function") window.loadMessages();
+    }catch(e){}
   }
 
-  function clickOriginalSend(){
-    const send = findSend();
-    if(send && !send.disabled) send.click();
-  }
+  function bindPlusPanel(){
+    const plus = document.getElementById("fmPublicPlusBtn20260519");
+    const photoBtn = document.getElementById("fmPublicPhotoBtn20260519");
+    const fileBtn = document.getElementById("fmPublicFileBtn20260519");
+    const locBtn = document.getElementById("fmPublicLocationBtn20260519");
+    const audioBtn = document.getElementById("fmPublicAudioBtn20260519");
+    const photoInput = document.getElementById("fmPublicPhotoInput20260519");
+    const fileInput = document.getElementById("fmPublicFileInput20260519");
 
-  function bindBar(bar){
-    if(bar.dataset.cleanBound === "1") return;
-    bar.dataset.cleanBound = "1";
+    if(plus && plus.dataset.boundPlus !== "1"){
+      plus.dataset.boundPlus = "1";
+      plus.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        togglePanel();
+      }, true);
+    }
 
-    const plus = document.getElementById("fmPublicCleanPlus20260519");
-    const photo = document.getElementById("fmPublicCleanPhoto20260519");
-    const loc = document.getElementById("fmPublicCleanLocation20260519");
-    const send = document.getElementById("fmPublicCleanSend20260519");
-    const photoInput = document.getElementById("fmPublicCleanPhotoInput20260519");
-    const fileInput = document.getElementById("fmPublicCleanFileInput20260519");
+    if(photoBtn && photoBtn.dataset.boundPlus !== "1"){
+      photoBtn.dataset.boundPlus = "1";
+      photoBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        if(canUseExtra() && photoInput) photoInput.click();
+      }, true);
+    }
 
-    plus.addEventListener("click", ev => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      if(canUseExtra() && fileInput) fileInput.click();
-    });
+    if(fileBtn && fileBtn.dataset.boundPlus !== "1"){
+      fileBtn.dataset.boundPlus = "1";
+      fileBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        if(canUseExtra() && fileInput) fileInput.click();
+      }, true);
+    }
 
-    photo.addEventListener("click", ev => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      if(canUseExtra() && photoInput) photoInput.click();
-    });
+    if(photoInput && photoInput.dataset.boundPlus !== "1"){
+      photoInput.dataset.boundPlus = "1";
+      photoInput.addEventListener("change", async function(){
+        const file = photoInput.files && photoInput.files[0];
+        if(!file) return;
 
-    send.addEventListener("click", ev => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      clickOriginalSend();
-    });
-
-    photoInput.addEventListener("change", async () => {
-      const file = photoInput.files && photoInput.files[0];
-      if(!file) return;
-      try{ await sendRawFile(file, "image"); }
-      catch(e){ alert(e.message || "Errore invio foto."); }
-      finally{ photoInput.value = ""; }
-    });
-
-    fileInput.addEventListener("change", async () => {
-      const file = fileInput.files && fileInput.files[0];
-      if(!file) return;
-      try{ await sendRawFile(file, "document"); }
-      catch(e){ alert(e.message || "Errore invio file."); }
-      finally{ fileInput.value = ""; }
-    });
-
-    loc.addEventListener("click", ev => {
-      ev.preventDefault();
-      ev.stopPropagation();
-
-      if(!canUseExtra()) return;
-
-      if(!navigator.geolocation){
-        alert("Geolocalizzazione non disponibile.");
-        return;
-      }
-
-      navigator.geolocation.getCurrentPosition(async pos => {
         try{
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
-          const url = "https://www.google.com/maps?q=" + encodeURIComponent(lat + "," + lng);
-          const sid = getSid();
-
-          const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/attachment", {
-            method:"POST",
-            headers:{ "Content-Type":"application/json" },
-            body:JSON.stringify({
-              sender:"visitor",
-              kind:"location",
-              url:url,
-              label:"Posizione condivisa",
-              mime:"text/uri-list",
-              filename:"posizione"
-            })
-          });
-
-          const data = await res.json().catch(()=>null);
-          if(!res.ok || !data || !data.success){
-            throw new Error((data && data.error) || "Errore invio posizione.");
-          }
-
-          try{
-            if(typeof window.followMePublicLoadMessages === "function") window.followMePublicLoadMessages();
-          }catch(e){}
+          await sendRawFile(file, "image");
         }catch(e){
-          alert(e.message || "Errore invio posizione.");
+          alert(e.message || "Errore invio foto.");
+        }finally{
+          photoInput.value = "";
         }
-      }, () => {
-        alert("Posizione non autorizzata.");
-      }, {
-        enableHighAccuracy:true,
-        timeout:10000,
-        maximumAge:0
       });
+    }
+
+    if(fileInput && fileInput.dataset.boundPlus !== "1"){
+      fileInput.dataset.boundPlus = "1";
+      fileInput.addEventListener("change", async function(){
+        const file = fileInput.files && fileInput.files[0];
+        if(!file) return;
+
+        try{
+          await sendRawFile(file, "document");
+        }catch(e){
+          alert(e.message || "Errore invio documento.");
+        }finally{
+          fileInput.value = "";
+        }
+      });
+    }
+
+    if(locBtn && locBtn.dataset.boundPlus !== "1"){
+      locBtn.dataset.boundPlus = "1";
+      locBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        if(!canUseExtra()) return;
+
+        if(!navigator.geolocation){
+          alert("Geolocalizzazione non disponibile.");
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(async function(pos){
+          try{
+            const sid = getSid();
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            const url = "https://www.google.com/maps?q=" + encodeURIComponent(lat + "," + lng);
+
+            const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/attachment", {
+              method:"POST",
+              headers:{ "Content-Type":"application/json" },
+              body:JSON.stringify({
+                sender:"visitor",
+                kind:"location",
+                url:url,
+                label:"Posizione condivisa",
+                mime:"text/uri-list",
+                filename:"posizione"
+              })
+            });
+
+            const data = await res.json().catch(()=>null);
+            if(!res.ok || !data || !data.success){
+              throw new Error((data && data.error) || "Errore invio posizione.");
+            }
+
+            togglePanel(false);
+            forceLoadMessages();
+          }catch(e){
+            alert(e.message || "Errore invio posizione.");
+          }
+        }, function(){
+          alert("Posizione non autorizzata.");
+        }, {
+          enableHighAccuracy:true,
+          timeout:10000,
+          maximumAge:0
+        });
+      }, true);
+    }
+
+    if(audioBtn && audioBtn.dataset.boundPlus !== "1"){
+      audioBtn.dataset.boundPlus = "1";
+      audioBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        alert("Invio audio in preparazione. Foto, documenti e posizione sono già attivi.");
+      }, true);
+    }
+
+    document.addEventListener("click", function(ev){
+      const panel = document.getElementById("fmPublicAttachPanel20260519");
+      const plus = document.getElementById("fmPublicPlusBtn20260519");
+      if(!panel || !panel.classList.contains("is-open")) return;
+
+      if(panel.contains(ev.target) || (plus && plus.contains(ev.target))) return;
+      panel.classList.remove("is-open");
+    }, true);
+  }
+
+  function renderAttachment(a){
+    const url = a.url || "";
+    const name = a.label || a.filename || "Allegato";
+    const mime = a.mime || "";
+    const kind = a.kind || "";
+
+    if(kind === "image" || mime.indexOf("image/") === 0){
+      return '<a class="followme-attachment-card" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+        '<img class="followme-attachment-image" src="' + esc(url) + '" alt="' + esc(name) + '">' +
+        '<span class="followme-attachment-meta">' + esc(name) + (a.temporary ? ' · Allegato temporaneo' : '') + '</span>' +
+      '</a>';
+    }
+
+    if(kind === "audio" || mime.indexOf("audio/") === 0){
+      return '<div class="followme-attachment-audio">' +
+        '<span>🎙️</span><audio controls src="' + esc(url) + '"></audio>' +
+      '</div>';
+    }
+
+    if(kind === "location"){
+      return '<a class="followme-attachment-location" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+        '<span>📍</span><span><span class="followme-attachment-name">Posizione condivisa</span><span class="followme-attachment-meta">Apri mappa</span></span>' +
+      '</a>';
+    }
+
+    return '<a class="followme-attachment-file" href="' + esc(url) + '" target="_blank" rel="noopener" download>' +
+      '<span>📎</span><span><span class="followme-attachment-name">' + esc(name) + '</span><span class="followme-attachment-meta">Apri documento</span></span>' +
+    '</a>';
+  }
+
+  function renderAttachmentsInBubbles(){
+    document.querySelectorAll(".message, .bubble, .followme-public-bubble, .followme-owner-chat-bubble").forEach(function(b){
+      if(b.dataset.fmAttachmentRendered === "1") return;
+
+      const txt = (b.textContent || "").trim();
+      const a = parseAttachmentMessage(txt);
+
+      if(!a) return;
+
+      b.dataset.fmAttachmentRendered = "1";
+      b.innerHTML = renderAttachment(a);
     });
   }
 
@@ -1709,32 +1905,36 @@
     const blocked = !!session.is_blocked;
     const key = String(sid) + "|" + uploads + "|" + blocked + "|" + String(session.updated_at || "");
 
-    if(key === lastKey) return;
-    lastKey = key;
+    if(key !== lastKey){
+      lastKey = key;
 
-    document.body.classList.toggle("fm-public-extra-clean-on", uploads);
-    document.body.classList.toggle("fm-public-clean-blocked", blocked);
+      document.body.classList.toggle("fm-public-extra-plus-on", uploads);
+      document.body.classList.toggle("fm-public-clean-blocked", blocked);
 
-    document.body.classList.toggle("followme-public-uploads-enabled", uploads);
-    document.body.classList.toggle("followme-public-user-blocked", blocked);
+      document.body.classList.toggle("followme-public-uploads-enabled", uploads);
+      document.body.classList.toggle("followme-public-user-blocked", blocked);
 
-    const input = findInput();
-    const send = findSend();
+      const input = findInput();
+      const send = findSend();
 
-    if(input){
-      input.disabled = blocked;
-      if(blocked){
-        input.dataset.oldPlaceholder = input.dataset.oldPlaceholder || input.placeholder || "";
-        input.placeholder = "Sei stato bloccato dal sistema.";
-      }else if(input.dataset.oldPlaceholder){
-        input.placeholder = input.dataset.oldPlaceholder;
+      if(input){
+        input.disabled = blocked;
+        if(blocked){
+          input.dataset.oldPlaceholder = input.dataset.oldPlaceholder || input.placeholder || "";
+          input.placeholder = "Sei stato bloccato dal sistema.";
+        }else if(input.dataset.oldPlaceholder){
+          input.placeholder = input.dataset.oldPlaceholder;
+        }
       }
+
+      if(send) send.disabled = blocked;
+
+      if(!uploads) togglePanel(false);
     }
 
-    if(send) send.disabled = blocked;
-
     ensureBlockedNotice();
-    ensureBar();
+    ensurePlusAndPanel();
+    renderAttachmentsInBubbles();
   }
 
   async function fetchState(force){
@@ -1774,14 +1974,14 @@
 
       applyState(data.session);
     }catch(e){
-      console.warn("[FM public clean extra] state error", e);
+      console.warn("[FM public plus] state error", e);
     }finally{
       inFlight = false;
     }
   }
 
-  if(!window.__fmPublicCleanFetchBridge20260519){
-    window.__fmPublicCleanFetchBridge20260519 = true;
+  if(!window.__fmPublicPlusFetchBridge20260519){
+    window.__fmPublicPlusFetchBridge20260519 = true;
     const oldFetch = window.fetch.bind(window);
 
     window.fetch = async function(input, init){
@@ -1797,8 +1997,13 @@
 
           if(sid){
             saveSid(sid);
-            setTimeout(() => fetchState(true), 120);
+            setTimeout(function(){ fetchState(true); }, 120);
           }
+        }
+
+        if(url && url.includes("/api/followme/chat/session/") && url.includes("/messages")){
+          setTimeout(renderAttachmentsInBubbles, 80);
+          setTimeout(renderAttachmentsInBubbles, 400);
         }
       }catch(e){}
 
@@ -1806,49 +2011,40 @@
     };
   }
 
-  function guardSubmit(){
-    if(window.__fmPublicCleanGuard20260519) return;
-    window.__fmPublicCleanGuard20260519 = true;
-
-    document.addEventListener("submit", ev => {
-      if(document.body.classList.contains("fm-public-clean-blocked")){
-        ev.preventDefault();
-        ev.stopPropagation();
-        ev.stopImmediatePropagation();
-        alert("Sei stato bloccato dal sistema.");
-      }
-    }, true);
-  }
-
   function boot(){
     injectCss();
     ensureBlockedNotice();
-    ensureBar();
-    guardSubmit();
+    ensurePlusAndPanel();
     fetchState(true);
+    renderAttachmentsInBubbles();
 
     if(!pollTimer){
-      pollTimer = setInterval(() => fetchState(false), 2500);
+      pollTimer = setInterval(function(){
+        fetchState(false);
+        renderAttachmentsInBubbles();
+      }, 2500);
     }
   }
 
-  window.fmPublicForceFetchState20260518 = () => fetchState(true);
-  window.fmPublicCleanExtraState20260519 = () => ({ sid:getSid(), lastKey });
+  window.fmPublicForceFetchState20260518 = function(){ return fetchState(true); };
+  window.fmPublicPlusAttachmentState20260519 = function(){ return { sid:getSid(), lastKey:lastKey }; };
 
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 
-  window.addEventListener("load", () => {
-    setTimeout(() => fetchState(true), 250);
-    setTimeout(() => fetchState(true), 1200);
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(function(){ fetchState(true); renderAttachmentsInBubbles(); }, 1200);
   });
 
-  window.addEventListener("pageshow", () => {
-    setTimeout(() => fetchState(true), 250);
+  window.addEventListener("pageshow", function(){
+    setTimeout(function(){ fetchState(true); renderAttachmentsInBubbles(); }, 250);
   });
 
-  document.addEventListener("visibilitychange", () => {
-    if(document.visibilityState === "visible") setTimeout(() => fetchState(true), 250);
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible"){
+      setTimeout(function(){ fetchState(true); renderAttachmentsInBubbles(); }, 250);
+    }
   });
 })();
 </script>
