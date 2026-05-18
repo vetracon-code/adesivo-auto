@@ -17379,403 +17379,6 @@ document.addEventListener("visibilitychange", function(){
 
 
 
-<script id="followme-user-controls-live-definitive-20260518">
-(function(){
-  if(window.__followMeUserControlsLiveDefinitive20260518) return;
-  window.__followMeUserControlsLiveDefinitive20260518 = true;
-
-  let activeSessionId = "";
-  let activeState = null;
-  let lastSessions = [];
-
-  function log(){
-    try{ console.log.apply(console, ["[FM USER CTRL]"].concat([].slice.call(arguments))); }catch(e){}
-  }
-
-  function toastMsg(msg){
-    try{
-      if(typeof toast === "function") toast(msg);
-      else alert(msg);
-    }catch(e){ alert(msg); }
-  }
-
-  function code(){
-    try{
-      if(typeof getCode === "function") return getCode();
-      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
-      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
-      const p = new URLSearchParams(location.search || "");
-      return String(p.get("code") || "").trim().toUpperCase();
-    }catch(e){ return ""; }
-  }
-
-  function cleanSid(v){
-    const s = String(v || "").trim();
-    return /^\d+$/.test(s) ? s : "";
-  }
-
-  function chipSid(chip){
-    if(!chip) return "";
-    return cleanSid(
-      chip.dataset.sessionId ||
-      chip.dataset.session ||
-      chip.dataset.id ||
-      chip.getAttribute("data-session-id") ||
-      chip.getAttribute("data-session") ||
-      chip.getAttribute("data-id") ||
-      ""
-    );
-  }
-
-  function activeChip(){
-    return document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active") ||
-           document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip");
-  }
-
-  function getActiveSid(){
-    return cleanSid(activeSessionId) || chipSid(activeChip());
-  }
-
-  function labelFor(s){
-    if(!s) return "Utente";
-    return s.display_name || s.visitor_label || ("U" + (s.display_index || s.id || ""));
-  }
-
-  function injectCss(){
-    if(document.getElementById("followmeUserControlsLiveDefCss20260518")) return;
-    const style = document.createElement("style");
-    style.id = "followmeUserControlsLiveDefCss20260518";
-    style.textContent = `
-      #fmLiveUserControls20260518{
-        margin:8px 12px 10px;
-        padding:10px;
-        border-radius:18px;
-        background:rgba(255,255,255,.96);
-        border:1px solid rgba(0,0,0,.08);
-        box-shadow:0 8px 28px rgba(0,0,0,.10);
-        position:relative;
-        z-index:20;
-      }
-      #fmLiveUserControls20260518 .fm-title{
-        font-size:.72rem;
-        font-weight:950;
-        text-transform:uppercase;
-        letter-spacing:.06em;
-        color:#667085;
-        margin-bottom:8px;
-        text-align:center;
-      }
-      #fmLiveUserControls20260518 .fm-row{
-        display:grid;
-        grid-template-columns:1fr 1fr;
-        gap:8px;
-      }
-      #fmLiveUserControls20260518 button{
-        min-height:38px;
-        border-radius:999px;
-        border:1px solid rgba(0,0,0,.08);
-        background:#fff;
-        color:#202629;
-        font-size:.78rem;
-        font-weight:950;
-        cursor:pointer;
-      }
-      #fmLiveUserControls20260518 button.ok{background:#effaf4;color:#0c7f45;}
-      #fmLiveUserControls20260518 button.warn{background:#fff7e8;color:#9a5b00;}
-      #fmLiveUserControls20260518 button.danger{background:#fff1ef;color:#a5241c;}
-      #fmLiveUserControls20260518 button.blocked{background:#ffe1df;color:#b42318;border-color:rgba(180,35,24,.35);}
-      #fmLiveUserControls20260518 .fm-note{
-        margin-top:7px;
-        font-size:.72rem;
-        line-height:1.25;
-        color:#667085;
-        font-weight:800;
-        text-align:center;
-      }
-      #followmeOwnerChatSessionStrip .followme-chat-session-chip.fm-blocked{
-        background:#ffe1df !important;
-        color:#b42318 !important;
-        border-color:rgba(180,35,24,.42) !important;
-      }
-      #followmeOwnerChatSessionStrip .followme-chat-session-chip.fm-extra:not(.fm-blocked){
-        box-shadow:0 0 0 2px rgba(12,127,69,.20) inset !important;
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  function ensureControls(){
-    let box = document.getElementById("fmLiveUserControls20260518");
-    if(box) return box;
-
-    box = document.createElement("div");
-    box.id = "fmLiveUserControls20260518";
-    box.innerHTML = `
-      <div class="fm-title">Gestione utente selezionato</div>
-      <div class="fm-row">
-        <button type="button" id="fmLiveExtraBtn20260518">Abilita utente ad extra</button>
-        <button type="button" id="fmLiveBlockBtn20260518">Blocca</button>
-      </div>
-      <div class="fm-note" id="fmLiveUserNote20260518">Seleziona U1/U2 per gestire i servizi.</div>
-    `;
-
-    const actions = document.querySelector(".followme-owner-chat-actions");
-    const top = document.querySelector(".followme-owner-chat-top");
-    const screen = document.getElementById("followmeOwnerChatScreen");
-
-    if(actions && actions.parentNode){
-      actions.parentNode.insertBefore(box, actions.nextSibling);
-    }else if(top && top.parentNode){
-      top.parentNode.insertBefore(box, top.nextSibling);
-    }else if(screen){
-      screen.insertBefore(box, screen.firstChild);
-    }else{
-      document.body.appendChild(box);
-    }
-
-    box.querySelector("#fmLiveExtraBtn20260518").addEventListener("click", async function(ev){
-      ev.preventDefault();
-      await toggleExtra();
-    });
-
-    box.querySelector("#fmLiveBlockBtn20260518").addEventListener("click", async function(ev){
-      ev.preventDefault();
-      await toggleBlock();
-    });
-
-    return box;
-  }
-
-  function paintControls(){
-    const box = ensureControls();
-    const extra = box.querySelector("#fmLiveExtraBtn20260518");
-    const block = box.querySelector("#fmLiveBlockBtn20260518");
-    const note = box.querySelector("#fmLiveUserNote20260518");
-
-    const st = activeState;
-
-    if(!st){
-      extra.textContent = "Abilita utente ad extra";
-      extra.className = "";
-      block.textContent = "Blocca";
-      block.className = "danger";
-      note.textContent = "Seleziona U1/U2 per gestire i servizi.";
-      return;
-    }
-
-    extra.textContent = st.uploads_enabled ? "Disabilita extra" : "Abilita utente ad extra";
-    extra.className = st.uploads_enabled ? "warn" : "ok";
-
-    block.textContent = st.is_blocked ? "Sblocca utente" : "Blocca";
-    block.className = st.is_blocked ? "blocked" : "danger";
-
-    note.textContent = labelFor(st) + " · " + (st.is_blocked ? "BLOCCATO" : (st.uploads_enabled ? "extra abilitati" : "standard"));
-    note.style.color = st.is_blocked ? "#b42318" : "#667085";
-  }
-
-  function paintChips(){
-    const map = {};
-    lastSessions.forEach(s => { map[String(s.id)] = s; });
-
-    document.querySelectorAll("#followmeOwnerChatSessionStrip .followme-chat-session-chip").forEach(function(chip){
-      const sid = chipSid(chip);
-      const st = map[sid];
-      if(!sid || !st) return;
-
-      chip.classList.toggle("fm-blocked", !!st.is_blocked);
-      chip.classList.toggle("fm-extra", !!st.uploads_enabled);
-      chip.dataset.sessionId = sid;
-      chip.dataset.uploadsEnabled = st.uploads_enabled ? "1" : "0";
-      chip.dataset.isBlocked = st.is_blocked ? "1" : "0";
-      chip.title = st.is_blocked ? "Utente bloccato" : (st.uploads_enabled ? "Extra abilitati" : "Gestisci utente");
-    });
-  }
-
-  async function fetchSessions(){
-    const c = code();
-    if(!c) return [];
-
-    const res = await fetch("/api/followme/" + encodeURIComponent(c) + "/chat/sessions?v=" + Date.now(), {
-      cache:"no-store"
-    });
-    const data = await res.json().catch(()=>null);
-    if(!res.ok || !data || !data.success) return [];
-
-    lastSessions = Array.isArray(data.sessions) ? data.sessions : [];
-
-    // Se non ho sessione attiva, prendo la chip attiva o la prima sessione.
-    if(!activeSessionId){
-      activeSessionId = chipSid(activeChip()) || (lastSessions[0] ? String(lastSessions[0].id) : "");
-    }
-
-    const current = lastSessions.find(s => String(s.id) === String(activeSessionId));
-    if(current) activeState = current;
-
-    paintChips();
-    paintControls();
-
-    return lastSessions;
-  }
-
-  async function fetchState(sid){
-    sid = cleanSid(sid || getActiveSid());
-    if(!sid) return null;
-
-    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/state?v=" + Date.now(), {
-      cache:"no-store"
-    });
-
-    const data = await res.json().catch(()=>null);
-    if(!res.ok || !data || !data.success) return null;
-
-    activeSessionId = sid;
-    activeState = data.session;
-    paintControls();
-    paintChips();
-    return activeState;
-  }
-
-  async function saveSettings(payload){
-    const sid = cleanSid(activeSessionId || getActiveSid());
-    if(!sid){
-      toastMsg("Seleziona prima un utente.");
-      return null;
-    }
-
-    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/settings", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify(payload || {})
-    });
-
-    const data = await res.json().catch(()=>null);
-
-    if(!res.ok || !data || !data.success){
-      throw new Error((data && data.error) || "Errore aggiornamento utente.");
-    }
-
-    activeSessionId = sid;
-    activeState = data.session;
-
-    // aggiorno cache locale
-    lastSessions = lastSessions.map(s => String(s.id) === sid ? Object.assign({}, s, data.session) : s);
-
-    paintControls();
-    paintChips();
-
-    setTimeout(fetchSessions, 150);
-    setTimeout(function(){ fetchState(sid); }, 450);
-
-    return activeState;
-  }
-
-  async function toggleExtra(){
-    try{
-      const st = activeState || await fetchState();
-      if(!st) return toastMsg("Seleziona prima un utente.");
-
-      const updated = await saveSettings({ uploads_enabled: !st.uploads_enabled });
-      toastMsg(updated.uploads_enabled ? "Extra abilitati." : "Extra disabilitati.");
-    }catch(err){
-      toastMsg(err.message || "Errore extra.");
-    }
-  }
-
-  async function toggleBlock(){
-    try{
-      const st = activeState || await fetchState();
-      if(!st) return toastMsg("Seleziona prima un utente.");
-
-      const updated = await saveSettings({ is_blocked: !st.is_blocked });
-      toastMsg(updated.is_blocked ? "Utente bloccato." : "Utente sbloccato.");
-    }catch(err){
-      toastMsg(err.message || "Errore blocco.");
-    }
-  }
-
-  function bindStrip(){
-    const strip = document.getElementById("followmeOwnerChatSessionStrip");
-    if(!strip || strip.dataset.fmLiveDefBound === "1") return;
-
-    strip.dataset.fmLiveDefBound = "1";
-
-    strip.addEventListener("click", function(ev){
-      const chip = ev.target && ev.target.closest ? ev.target.closest(".followme-chat-session-chip") : null;
-      if(!chip) return;
-
-      const sid = chipSid(chip);
-      if(!sid) return;
-
-      activeSessionId = sid;
-
-      const cached = lastSessions.find(s => String(s.id) === sid);
-      if(cached){
-        activeState = cached;
-        paintControls();
-      }
-
-      setTimeout(function(){ fetchState(sid); }, 120);
-    }, true);
-  }
-
-  function exposeDebug(){
-    window.fmLiveUserControlsState = function(){
-      return {
-        activeSessionId,
-        activeState,
-        lastSessions
-      };
-    };
-  }
-
-  function boot(){
-    injectCss();
-    ensureControls();
-    bindStrip();
-    exposeDebug();
-    fetchSessions();
-
-    setTimeout(bindStrip, 500);
-    setTimeout(fetchSessions, 900);
-    setTimeout(fetchSessions, 2200);
-  }
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", boot);
-  }else{
-    boot();
-  }
-
-  window.addEventListener("load", function(){
-    setTimeout(boot, 250);
-    setTimeout(fetchSessions, 1200);
-  });
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 250);
-    setTimeout(fetchSessions, 800);
-  });
-
-  document.addEventListener("visibilitychange", function(){
-    if(document.visibilityState === "visible"){
-      setTimeout(fetchSessions, 300);
-    }
-  });
-
-  setInterval(function(){
-    if(document.body.classList.contains("followme-chat-only-mode")){
-      fetchSessions();
-    }
-  }, 2500);
-})();
-</script>
-
-
-
-
-
-
-
 <script id="followme-reload-data-under-more-options-clean-20260518">
 (function(){
   if(window.__followMeReloadDataUnderMoreOptionsClean20260518) return;
@@ -18105,6 +17708,549 @@ document.addEventListener("visibilitychange", function(){
       setTimeout(boot, 300);
     }
   });
+})();
+</script>
+
+
+
+<script id="followme-user-controls-mobile-layout-final-20260518">
+(function(){
+  if(window.__followMeUserControlsMobileLayoutFinal20260518) return;
+  window.__followMeUserControlsMobileLayoutFinal20260518 = true;
+
+  let activeSessionId = "";
+  let activeState = null;
+  let lastSessions = [];
+
+  function toastMsg(msg){
+    try{
+      if(typeof toast === "function") toast(msg);
+      else alert(msg);
+    }catch(e){
+      alert(msg);
+    }
+  }
+
+  function code(){
+    try{
+      if(typeof getCode === "function") return getCode();
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      const q = new URLSearchParams(location.search || "");
+      return String(q.get("code") || "").trim().toUpperCase();
+    }catch(e){
+      return "";
+    }
+  }
+
+  function cleanSid(v){
+    const s = String(v || "").trim();
+    return /^\d+$/.test(s) ? s : "";
+  }
+
+  function chipSid(chip){
+    if(!chip) return "";
+    return cleanSid(
+      chip.dataset.sessionId ||
+      chip.dataset.session ||
+      chip.dataset.id ||
+      chip.getAttribute("data-session-id") ||
+      chip.getAttribute("data-session") ||
+      chip.getAttribute("data-id") ||
+      ""
+    );
+  }
+
+  function activeChip(){
+    return document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active") ||
+           document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip");
+  }
+
+  function getActiveSid(){
+    return cleanSid(activeSessionId) || chipSid(activeChip());
+  }
+
+  function labelFor(s){
+    if(!s) return "Utente";
+    return s.display_name || s.visitor_label || ("U" + (s.display_index || s.id || ""));
+  }
+
+  function findTopActionsContainer(){
+    return document.querySelector(".followme-owner-chat-actions") ||
+           document.querySelector(".followme-chat-waiting-actions") ||
+           document.getElementById("followmeOwnerChatActions") ||
+           null;
+  }
+
+  function findSafeInsertTarget(){
+    const actions = findTopActionsContainer();
+    if(actions && actions.parentNode) return { parent: actions.parentNode, after: actions };
+
+    const top = document.querySelector(".followme-owner-chat-top") ||
+                document.querySelector(".followme-chat-waiting-top");
+
+    if(top && top.parentNode) return { parent: top.parentNode, after: top };
+
+    const screen = document.getElementById("followmeOwnerChatScreen") ||
+                   document.getElementById("followmeOwnerChatWaitingScreen");
+
+    if(screen) return { parent: screen, after: screen.firstElementChild };
+
+    return { parent: document.body, after: null };
+  }
+
+  function injectCss(){
+    if(document.getElementById("followmeUserControlsMobileLayoutCss20260518")) return;
+
+    const style = document.createElement("style");
+    style.id = "followmeUserControlsMobileLayoutCss20260518";
+    style.textContent = `
+      #fmLiveUserControls20260518{
+        width:calc(100% - 24px);
+        margin:8px 12px 10px;
+        padding:10px;
+        box-sizing:border-box;
+        border-radius:18px;
+        background:rgba(255,255,255,.96);
+        border:1px solid rgba(0,0,0,.08);
+        box-shadow:0 8px 28px rgba(0,0,0,.10);
+        position:relative;
+        z-index:50;
+        flex:0 0 auto;
+      }
+
+      #fmLiveUserControls20260518 .fm-title{
+        font-size:.7rem;
+        font-weight:950;
+        text-transform:uppercase;
+        letter-spacing:.06em;
+        color:#667085;
+        margin-bottom:8px;
+        text-align:center;
+      }
+
+      #fmLiveUserControls20260518 .fm-row{
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:8px;
+        width:100%;
+      }
+
+      #fmLiveUserControls20260518 button{
+        min-height:40px;
+        width:100%;
+        border-radius:999px;
+        border:1px solid rgba(0,0,0,.08);
+        background:#fff;
+        color:#202629;
+        font-size:.78rem;
+        line-height:1.05;
+        font-weight:950;
+        cursor:pointer;
+        padding:0 8px;
+        white-space:normal;
+      }
+
+      #fmLiveUserControls20260518 button.ok{
+        background:#effaf4;
+        color:#0c7f45;
+      }
+
+      #fmLiveUserControls20260518 button.warn{
+        background:#fff7e8;
+        color:#9a5b00;
+      }
+
+      #fmLiveUserControls20260518 button.danger{
+        background:#fff1ef;
+        color:#a5241c;
+      }
+
+      #fmLiveUserControls20260518 button.blocked{
+        background:#ffe1df;
+        color:#b42318;
+        border-color:rgba(180,35,24,.35);
+      }
+
+      #fmLiveUserControls20260518 .fm-note{
+        margin-top:7px;
+        font-size:.72rem;
+        line-height:1.25;
+        color:#667085;
+        font-weight:800;
+        text-align:center;
+      }
+
+      #followmeOwnerChatSessionStrip .followme-chat-session-chip.fm-blocked{
+        background:#ffe1df !important;
+        color:#b42318 !important;
+        border-color:rgba(180,35,24,.42) !important;
+      }
+
+      #followmeOwnerChatSessionStrip .followme-chat-session-chip.fm-extra:not(.fm-blocked){
+        box-shadow:0 0 0 2px rgba(12,127,69,.20) inset !important;
+      }
+
+      body.followme-chat-only-mode .followme-owner-chat-top,
+      body.followme-chat-waiting-mode .followme-chat-waiting-top{
+        overflow:visible !important;
+      }
+
+      body.followme-chat-only-mode .followme-owner-chat-actions,
+      body.followme-chat-waiting-mode .followme-chat-waiting-actions{
+        flex-wrap:wrap !important;
+        overflow:visible !important;
+      }
+
+      @media (max-width:640px){
+        #fmLiveUserControls20260518{
+          display:block !important;
+          width:calc(100% - 20px);
+          margin:6px 10px 9px;
+          padding:9px;
+          border-radius:16px;
+        }
+
+        #fmLiveUserControls20260518 .fm-row{
+          grid-template-columns:1fr 1fr;
+          gap:7px;
+        }
+
+        #fmLiveUserControls20260518 button{
+          min-height:38px;
+          font-size:.72rem;
+          padding:0 6px;
+        }
+
+        #fmLiveUserControls20260518 .fm-title{
+          font-size:.66rem;
+          margin-bottom:7px;
+        }
+
+        #fmLiveUserControls20260518 .fm-note{
+          font-size:.68rem;
+        }
+
+        body.followme-chat-only-mode #followmeOwnerChatScreen{
+          display:flex !important;
+          flex-direction:column !important;
+          overflow:hidden !important;
+        }
+
+        body.followme-chat-only-mode #followmeOwnerChatMessages{
+          flex:1 1 auto !important;
+          min-height:0 !important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function ensureControls(){
+    let box = document.getElementById("fmLiveUserControls20260518");
+
+    if(!box){
+      box = document.createElement("div");
+      box.id = "fmLiveUserControls20260518";
+      box.innerHTML = `
+        <div class="fm-title">Gestione utente selezionato</div>
+        <div class="fm-row">
+          <button type="button" id="fmLiveExtraBtn20260518">Abilita utente ad extra</button>
+          <button type="button" id="fmLiveBlockBtn20260518">Blocca</button>
+        </div>
+        <div class="fm-note" id="fmLiveUserNote20260518">Seleziona U1/U2 per gestire i servizi.</div>
+      `;
+    }
+
+    const target = findSafeInsertTarget();
+
+    if(target.parent){
+      if(target.after && target.after.nextSibling !== box){
+        target.parent.insertBefore(box, target.after.nextSibling);
+      }else if(!target.after && box.parentNode !== target.parent){
+        target.parent.insertBefore(box, target.parent.firstChild);
+      }
+    }
+
+    const extra = document.getElementById("fmLiveExtraBtn20260518");
+    const block = document.getElementById("fmLiveBlockBtn20260518");
+
+    if(extra && extra.dataset.bound !== "1"){
+      extra.dataset.bound = "1";
+      extra.addEventListener("click", async function(ev){
+        ev.preventDefault();
+        await toggleExtra();
+      });
+    }
+
+    if(block && block.dataset.bound !== "1"){
+      block.dataset.bound = "1";
+      block.addEventListener("click", async function(ev){
+        ev.preventDefault();
+        await toggleBlock();
+      });
+    }
+
+    return box;
+  }
+
+  function paintControls(){
+    const box = ensureControls();
+    const extra = box.querySelector("#fmLiveExtraBtn20260518");
+    const block = box.querySelector("#fmLiveBlockBtn20260518");
+    const note = box.querySelector("#fmLiveUserNote20260518");
+
+    const st = activeState;
+
+    if(!st){
+      extra.textContent = "Abilita utente ad extra";
+      extra.className = "ok";
+      block.textContent = "Blocca";
+      block.className = "danger";
+      note.textContent = "Seleziona U1/U2 per gestire i servizi.";
+      note.style.color = "#667085";
+      return;
+    }
+
+    extra.textContent = st.uploads_enabled ? "Disabilita extra" : "Abilita utente ad extra";
+    extra.className = st.uploads_enabled ? "warn" : "ok";
+
+    block.textContent = st.is_blocked ? "Sblocca utente" : "Blocca";
+    block.className = st.is_blocked ? "blocked" : "danger";
+
+    note.textContent = labelFor(st) + " · " + (
+      st.is_blocked
+        ? "BLOCCATO"
+        : (st.uploads_enabled ? "extra abilitati" : "standard")
+    );
+
+    note.style.color = st.is_blocked ? "#b42318" : "#667085";
+  }
+
+  function paintChips(){
+    const map = {};
+    lastSessions.forEach(function(s){
+      map[String(s.id)] = s;
+    });
+
+    document.querySelectorAll("#followmeOwnerChatSessionStrip .followme-chat-session-chip").forEach(function(chip){
+      const sid = chipSid(chip);
+      const st = map[sid];
+      if(!sid || !st) return;
+
+      chip.classList.toggle("fm-blocked", !!st.is_blocked);
+      chip.classList.toggle("fm-extra", !!st.uploads_enabled);
+      chip.dataset.sessionId = sid;
+      chip.dataset.uploadsEnabled = st.uploads_enabled ? "1" : "0";
+      chip.dataset.isBlocked = st.is_blocked ? "1" : "0";
+      chip.title = st.is_blocked ? "Utente bloccato" : (st.uploads_enabled ? "Extra abilitati" : "Gestisci utente");
+    });
+  }
+
+  async function fetchSessions(){
+    const c = code();
+    if(!c) return [];
+
+    const res = await fetch("/api/followme/" + encodeURIComponent(c) + "/chat/sessions?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    const data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || !data.success) return [];
+
+    lastSessions = Array.isArray(data.sessions) ? data.sessions : [];
+
+    if(!activeSessionId){
+      activeSessionId = chipSid(activeChip()) || (lastSessions[0] ? String(lastSessions[0].id) : "");
+    }
+
+    const current = lastSessions.find(function(s){
+      return String(s.id) === String(activeSessionId);
+    });
+
+    if(current) activeState = current;
+
+    paintChips();
+    paintControls();
+
+    return lastSessions;
+  }
+
+  async function fetchState(sid){
+    sid = cleanSid(sid || getActiveSid());
+    if(!sid) return null;
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/state?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    const data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || !data.success) return null;
+
+    activeSessionId = sid;
+    activeState = data.session;
+
+    paintControls();
+    paintChips();
+
+    return activeState;
+  }
+
+  async function saveSettings(payload){
+    const sid = cleanSid(activeSessionId || getActiveSid());
+
+    if(!sid){
+      toastMsg("Seleziona prima un utente.");
+      return null;
+    }
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/settings", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(payload || {})
+    });
+
+    const data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || !data.success){
+      throw new Error((data && data.error) || "Errore aggiornamento utente.");
+    }
+
+    activeSessionId = sid;
+    activeState = data.session;
+
+    lastSessions = lastSessions.map(function(s){
+      return String(s.id) === sid ? Object.assign({}, s, data.session) : s;
+    });
+
+    paintControls();
+    paintChips();
+
+    setTimeout(fetchSessions, 150);
+    setTimeout(function(){ fetchState(sid); }, 450);
+
+    return activeState;
+  }
+
+  async function toggleExtra(){
+    try{
+      const st = activeState || await fetchState();
+
+      if(!st){
+        toastMsg("Seleziona prima un utente.");
+        return;
+      }
+
+      const updated = await saveSettings({
+        uploads_enabled: !st.uploads_enabled
+      });
+
+      toastMsg(updated.uploads_enabled ? "Extra abilitati." : "Extra disabilitati.");
+    }catch(err){
+      toastMsg(err.message || "Errore extra.");
+    }
+  }
+
+  async function toggleBlock(){
+    try{
+      const st = activeState || await fetchState();
+
+      if(!st){
+        toastMsg("Seleziona prima un utente.");
+        return;
+      }
+
+      const updated = await saveSettings({
+        is_blocked: !st.is_blocked
+      });
+
+      toastMsg(updated.is_blocked ? "Utente bloccato." : "Utente sbloccato.");
+    }catch(err){
+      toastMsg(err.message || "Errore blocco.");
+    }
+  }
+
+  function bindStrip(){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+
+    if(!strip || strip.dataset.fmMobileControlsBound === "1") return;
+
+    strip.dataset.fmMobileControlsBound = "1";
+
+    strip.addEventListener("click", function(ev){
+      const chip = ev.target && ev.target.closest
+        ? ev.target.closest(".followme-chat-session-chip")
+        : null;
+
+      if(!chip) return;
+
+      const sid = chipSid(chip);
+      if(!sid) return;
+
+      activeSessionId = sid;
+
+      const cached = lastSessions.find(function(s){
+        return String(s.id) === sid;
+      });
+
+      if(cached){
+        activeState = cached;
+        paintControls();
+      }
+
+      setTimeout(function(){
+        fetchState(sid);
+      }, 120);
+    }, true);
+  }
+
+  function boot(){
+    injectCss();
+    ensureControls();
+    bindStrip();
+    fetchSessions();
+
+    setTimeout(ensureControls, 300);
+    setTimeout(bindStrip, 500);
+    setTimeout(fetchSessions, 900);
+    setTimeout(fetchSessions, 2200);
+  }
+
+  window.fmFollowMeUserControlsMobileFinalState = function(){
+    return { activeSessionId, activeState, lastSessions };
+  };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(fetchSessions, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+    setTimeout(fetchSessions, 800);
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible"){
+      setTimeout(fetchSessions, 300);
+    }
+  });
+
+  setInterval(function(){
+    if(document.body.classList.contains("followme-chat-only-mode") ||
+       document.body.classList.contains("followme-chat-waiting-mode")){
+      ensureControls();
+      fetchSessions();
+    }
+  }, 2500);
 })();
 </script>
 
