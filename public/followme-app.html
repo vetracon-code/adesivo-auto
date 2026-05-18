@@ -5663,6 +5663,78 @@
       border:1px solid rgba(255,255,255,.22) !important;
     }
 
+
+    /* =====================================================
+       KILL DEFINITIVO BALLOON INSTALLAZIONE WEB APP IN CHAT
+       - In chat non deve mai comparire
+       - Su PC viene rimosso anche se qualche vecchio script lo rigenera
+       ===================================================== */
+
+    body.followme-chat-only-mode .followme-install-helper,
+    body.followme-chat-only-mode #followmeInstallHelper,
+    body.followme-chat-only-mode #followmeInstallPrompt,
+    body.followme-chat-only-mode .followme-pwa-install,
+    body.followme-chat-only-mode .followme-save-app-helper,
+    body.followme-chat-only-mode [data-install-helper],
+    body.followme-chat-only-mode [data-pwa-helper],
+    body.followme-chat-only-mode [id*="Install"],
+    body.followme-chat-only-mode [id*="install"],
+    body.followme-chat-only-mode [class*="install"],
+    body.followme-chat-only-mode [class*="pwa"],
+    body.followme-desktop-chat-active .followme-install-helper,
+    body.followme-desktop-chat-active #followmeInstallHelper,
+    body.followme-desktop-chat-active #followmeInstallPrompt,
+    body.followme-desktop-chat-active .followme-pwa-install,
+    body.followme-desktop-chat-active .followme-save-app-helper,
+    body.followme-desktop-chat-active [data-install-helper],
+    body.followme-desktop-chat-active [data-pwa-helper],
+    body.followme-desktop-chat-active [id*="Install"],
+    body.followme-desktop-chat-active [id*="install"],
+    body.followme-desktop-chat-active [class*="install"],
+    body.followme-desktop-chat-active [class*="pwa"],
+    body.followme-kill-install-balloon .followme-install-helper,
+    body.followme-kill-install-balloon #followmeInstallHelper,
+    body.followme-kill-install-balloon #followmeInstallPrompt,
+    body.followme-kill-install-balloon .followme-pwa-install,
+    body.followme-kill-install-balloon .followme-save-app-helper,
+    body.followme-kill-install-balloon [data-install-helper],
+    body.followme-kill-install-balloon [data-pwa-helper],
+    body.followme-kill-install-balloon [id*="Install"],
+    body.followme-kill-install-balloon [id*="install"],
+    body.followme-kill-install-balloon [class*="install"],
+    body.followme-kill-install-balloon [class*="pwa"]{
+      display:none !important;
+      visibility:hidden !important;
+      opacity:0 !important;
+      pointer-events:none !important;
+      z-index:-999999 !important;
+      width:0 !important;
+      height:0 !important;
+      max-width:0 !important;
+      max-height:0 !important;
+      overflow:hidden !important;
+    }
+
+    @media (min-width:900px){
+      body.followme-chat-only-mode .followme-install-helper,
+      body.followme-chat-only-mode #followmeInstallHelper,
+      body.followme-chat-only-mode #followmeInstallPrompt,
+      body.followme-chat-only-mode .followme-pwa-install,
+      body.followme-chat-only-mode .followme-save-app-helper,
+      body.followme-chat-only-mode [data-install-helper],
+      body.followme-chat-only-mode [data-pwa-helper],
+      body.followme-chat-only-mode [id*="Install"],
+      body.followme-chat-only-mode [id*="install"],
+      body.followme-chat-only-mode [class*="install"],
+      body.followme-chat-only-mode [class*="pwa"]{
+        display:none !important;
+        visibility:hidden !important;
+        opacity:0 !important;
+        pointer-events:none !important;
+        z-index:-999999 !important;
+      }
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -16490,6 +16562,274 @@ document.addEventListener("visibilitychange", function(){
     refreshTabs();
     scanNameProposal();
   }, 1800);
+})();
+</script>
+
+
+<script id="followme-kill-install-balloon-chat-pc-final">
+(function(){
+  const KEYS = [
+    "followme_desktop_install_balloon_seen_v1",
+    "followme_desktop_install_balloon_seen_v2",
+    "followme_install_instructions_dismissed_v1",
+    "followme_install_instructions_later_v1",
+    "followme_pwa_install_dismissed",
+    "followme_install_prompt_dismissed",
+    "followme_save_app_prompt_dismissed"
+  ];
+
+  function isDesktop(){
+    return window.matchMedia && window.matchMedia("(min-width:900px)").matches;
+  }
+
+  function hasChatSession(){
+    try{
+      const p = new URLSearchParams(location.search || "");
+      return p.has("chatSession") || p.get("focus") === "chat";
+    }catch(e){
+      return false;
+    }
+  }
+
+  function isChatContext(){
+    return (
+      hasChatSession() ||
+      document.body.classList.contains("followme-chat-only-mode") ||
+      document.body.classList.contains("followme-desktop-chat-active") ||
+      !!document.getElementById("followmeOwnerChatMessages") ||
+      !!document.getElementById("followmeOwnerChatScreen")
+    );
+  }
+
+  function rememberDismissed(){
+    try{
+      KEYS.forEach(function(k){
+        localStorage.setItem(k, "1");
+      });
+    }catch(e){}
+  }
+
+  function looksLikeInstallPrompt(el){
+    if(!el) return false;
+
+    const id = String(el.id || "").toLowerCase();
+    const cls = String(el.className || "").toLowerCase();
+    const txt = String(el.textContent || "").toLowerCase().replace(/\s+/g, " ").trim();
+
+    if(id.includes("install") || id.includes("pwa")) return true;
+    if(cls.includes("install") || cls.includes("pwa")) return true;
+
+    const hasInstallWords =
+      txt.includes("installa") ||
+      txt.includes("installare") ||
+      txt.includes("salva") ||
+      txt.includes("salvare") ||
+      txt.includes("web app") ||
+      txt.includes("schermata home") ||
+      txt.includes("schermata principale") ||
+      txt.includes("aggiungi alla schermata") ||
+      txt.includes("aggiungi a home") ||
+      txt.includes("come salvo") ||
+      txt.includes("salvo l’app") ||
+      txt.includes("salvo l'app");
+
+    if(!hasInstallWords) return false;
+
+    const r = el.getBoundingClientRect();
+
+    /*
+      Evitiamo di cancellare contenitori enormi tipo body/main.
+      Target: balloon, card, helper, box, prompt.
+    */
+    if(r.width > 0 && r.height > 0 && r.width < 900 && r.height < 520){
+      return true;
+    }
+
+    return false;
+  }
+
+  function hardHide(el){
+    if(!el) return;
+
+    el.style.setProperty("display", "none", "important");
+    el.style.setProperty("visibility", "hidden", "important");
+    el.style.setProperty("opacity", "0", "important");
+    el.style.setProperty("pointer-events", "none", "important");
+    el.style.setProperty("z-index", "-999999", "important");
+    el.style.setProperty("width", "0", "important");
+    el.style.setProperty("height", "0", "important");
+    el.style.setProperty("max-width", "0", "important");
+    el.style.setProperty("max-height", "0", "important");
+    el.style.setProperty("overflow", "hidden", "important");
+    el.setAttribute("aria-hidden", "true");
+    el.dataset.followmeKilledInstallBalloon = "1";
+  }
+
+  function removeIfSafe(el){
+    if(!el || el === document.body || el === document.documentElement) return;
+
+    if(looksLikeInstallPrompt(el)){
+      hardHide(el);
+
+      /*
+        Se è chiaramente un balloon/prompt dedicato, lo rimuoviamo proprio.
+        Se è un contenitore generico, lo lasciamo nascosto per evitare danni.
+      */
+      const id = String(el.id || "").toLowerCase();
+      const cls = String(el.className || "").toLowerCase();
+
+      if(
+        id.includes("install") ||
+        id.includes("pwa") ||
+        cls.includes("install") ||
+        cls.includes("pwa") ||
+        cls.includes("helper") ||
+        cls.includes("prompt")
+      ){
+        try{ el.remove(); }catch(e){}
+      }
+    }
+  }
+
+  function killInstallBalloon(){
+    /*
+      Richiesta: nella pagina chat PC non deve MAI comparire.
+      Su mobile non alteriamo la prima pagina, ma se siamo in chat lo nascondiamo comunque.
+    */
+    if(!isChatContext() && !isDesktop()) return;
+
+    if(isChatContext()){
+      document.body.classList.add("followme-kill-install-balloon");
+      document.body.classList.add("followme-hide-install-balloon-in-chat");
+    }
+
+    if(isDesktop()){
+      document.body.classList.add("followme-desktop-install-balloon-dismissed");
+      rememberDismissed();
+    }
+
+    const selectors = [
+      ".followme-install-helper",
+      "#followmeInstallHelper",
+      "#followmeInstallPrompt",
+      ".followme-pwa-install",
+      ".followme-save-app-helper",
+      "[data-install-helper]",
+      "[data-pwa-helper]",
+      "[id*='Install']",
+      "[id*='install']",
+      "[class*='install']",
+      "[class*='pwa']"
+    ];
+
+    selectors.forEach(function(sel){
+      document.querySelectorAll(sel).forEach(function(el){
+        hardHide(el);
+        removeIfSafe(el);
+      });
+    });
+
+    /*
+      Fallback testuale per balloon senza classe identificabile.
+      Cerca solo tra elementi piccoli/medi, non body/main.
+    */
+    document.querySelectorAll("div, section, aside, article, dialog").forEach(function(el){
+      removeIfSafe(el);
+    });
+  }
+
+  function patchKnownOpeners(){
+    /*
+      Se qualche vecchia funzione prova ad aprire il balloon, la neutralizziamo.
+      Non tocchiamo mobile fuori dalla chat.
+    */
+    const names = [
+      "showInstallPrompt",
+      "openInstallPrompt",
+      "showPwaInstallPrompt",
+      "openPwaInstallPrompt",
+      "showFollowMeInstallPrompt",
+      "followMeShowInstallPrompt",
+      "followMeOpenInstallPrompt",
+      "followMeShowInstallHelper",
+      "followMeOpenInstallHelper"
+    ];
+
+    names.forEach(function(name){
+      try{
+        if(typeof window[name] === "function" && !window[name].__followmeKilled){
+          const original = window[name];
+
+          const replacement = function(){
+            if(isDesktop() || isChatContext()){
+              killInstallBalloon();
+              return false;
+            }
+
+            return original.apply(this, arguments);
+          };
+
+          replacement.__followmeKilled = true;
+          window[name] = replacement;
+        }
+      }catch(e){}
+    });
+  }
+
+  function boot(){
+    patchKnownOpeners();
+    killInstallBalloon();
+  }
+
+  window.followMeKillInstallBalloonChatPc = killInstallBalloon;
+  window.followMeKillInstallBalloonChatPcBoot = boot;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 50);
+    setTimeout(boot, 250);
+    setTimeout(boot, 800);
+  });
+
+  window.addEventListener("resize", function(){
+    setTimeout(boot, 100);
+  });
+
+  /*
+    Observer globale: se il balloon viene ricreato dopo, viene eliminato subito.
+  */
+  const observer = new MutationObserver(function(mutations){
+    if(!isDesktop() && !isChatContext()) return;
+
+    for(const m of mutations){
+      if(m.addedNodes && m.addedNodes.length){
+        m.addedNodes.forEach(function(node){
+          if(node && node.nodeType === 1){
+            removeIfSafe(node);
+            try{
+              node.querySelectorAll && node.querySelectorAll("*").forEach(removeIfSafe);
+            }catch(e){}
+          }
+        });
+      }
+    }
+
+    killInstallBalloon();
+  });
+
+  try{
+    observer.observe(document.documentElement, {
+      childList:true,
+      subtree:true
+    });
+  }catch(e){}
+
+  setInterval(boot, 250);
 })();
 </script>
 
