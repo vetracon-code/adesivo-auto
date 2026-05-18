@@ -9959,6 +9959,77 @@ app.get('/api/followme/chat/session/:session_id/state', async (req, res) => {
   }
 });
 
+
+
+// followme-user-toggle-atomic-20260518
+app.post('/api/followme/chat/session/:session_id/toggle-user-control', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeChatSchema();
+    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
+
+    const sessionId = Number(req.params.session_id || 0);
+    const action = String(req.body?.action || '').trim();
+
+    if (!sessionId) {
+      return res.status(400).json({ success:false, error:'Sessione mancante.' });
+    }
+
+    if (!['uploads','block'].includes(action)) {
+      return res.status(400).json({ success:false, error:'Azione non valida.' });
+    }
+
+    const existing = await pool.query(
+      `SELECT id, project_id, display_name, visitor_label, uploads_enabled, is_blocked
+       FROM followme_chat_sessions
+       WHERE id = $1
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!existing.rows.length) {
+      return res.status(404).json({ success:false, error:'Sessione non trovata.' });
+    }
+
+    let updated;
+
+    if (action === 'uploads') {
+      updated = await pool.query(
+        `UPDATE followme_chat_sessions
+         SET uploads_enabled = NOT COALESCE(uploads_enabled, FALSE),
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING id, project_id, display_name, visitor_label, uploads_enabled, is_blocked, blocked_at, updated_at`,
+        [sessionId]
+      );
+    } else {
+      updated = await pool.query(
+        `UPDATE followme_chat_sessions
+         SET is_blocked = NOT COALESCE(is_blocked, FALSE),
+             blocked_at = CASE
+               WHEN NOT COALESCE(is_blocked, FALSE) = TRUE THEN NOW()
+               ELSE NULL
+             END,
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING id, project_id, display_name, visitor_label, uploads_enabled, is_blocked, blocked_at, updated_at`,
+        [sessionId]
+      );
+    }
+
+    return res.json({
+      success:true,
+      action,
+      session:updated.rows[0]
+    });
+  } catch (err) {
+    console.error('followme atomic user toggle error:', err);
+    return res.status(500).json({
+      success:false,
+      error:err.message || 'Errore aggiornamento utente.'
+    });
+  }
+});
+
 app.post('/api/followme/chat/session/:session_id/settings', express.json(), async (req, res) => {
   try {
     await ensureFollowMeChatSchema();

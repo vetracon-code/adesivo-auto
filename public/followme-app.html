@@ -17715,10 +17715,12 @@ document.addEventListener("visibilitychange", function(){
 
 
 
-<script id="followme-user-controls-mobile-compact-final-20260518">
+
+
+<script id="followme-user-controls-atomic-final-20260518">
 (function(){
-  if(window.__followMeUserControlsMobileCompactFinal20260518) return;
-  window.__followMeUserControlsMobileCompactFinal20260518 = true;
+  if(window.__followMeUserControlsAtomicFinal20260518) return;
+  window.__followMeUserControlsAtomicFinal20260518 = true;
 
   let activeSessionId = "";
   let activeState = null;
@@ -17777,6 +17779,10 @@ document.addEventListener("visibilitychange", function(){
     return s.display_name || s.visitor_label || ("U" + (s.display_index || s.id || ""));
   }
 
+  function isMobile(){
+    return window.matchMedia && window.matchMedia("(max-width:640px)").matches;
+  }
+
   function findTopActionsContainer(){
     return document.querySelector(".followme-owner-chat-actions") ||
            document.querySelector(".followme-chat-waiting-actions") ||
@@ -17801,15 +17807,11 @@ document.addEventListener("visibilitychange", function(){
     return { parent: document.body, after: null };
   }
 
-  function isMobile(){
-    return window.matchMedia && window.matchMedia("(max-width:640px)").matches;
-  }
-
   function injectCss(){
-    if(document.getElementById("followmeUserControlsMobileCompactCss20260518")) return;
+    if(document.getElementById("followmeUserControlsAtomicCss20260518")) return;
 
     const style = document.createElement("style");
-    style.id = "followmeUserControlsMobileCompactCss20260518";
+    style.id = "followmeUserControlsAtomicCss20260518";
     style.textContent = `
       #fmLiveUserControls20260518{
         width:auto;
@@ -17909,6 +17911,11 @@ document.addEventListener("visibilitychange", function(){
         box-sizing:border-box;
       }
 
+      #fmLiveUserControls20260518 button:disabled{
+        opacity:.55;
+        cursor:wait;
+      }
+
       #fmLiveUserControls20260518 button.ok{
         background:#effaf4;
         color:#0c7f45;
@@ -17930,10 +17937,6 @@ document.addEventListener("visibilitychange", function(){
         border-color:rgba(180,35,24,.35);
       }
 
-      #fmLiveUserControls20260518 .fm-note{
-        display:none;
-      }
-
       #followmeOwnerChatSessionStrip .followme-chat-session-chip.fm-blocked{
         background:#ffe1df !important;
         color:#b42318 !important;
@@ -17942,19 +17945,6 @@ document.addEventListener("visibilitychange", function(){
 
       #followmeOwnerChatSessionStrip .followme-chat-session-chip.fm-extra:not(.fm-blocked){
         box-shadow:0 0 0 2px rgba(12,127,69,.20) inset !important;
-      }
-
-      body.followme-chat-only-mode .followme-owner-chat-top,
-      body.followme-chat-waiting-mode .followme-chat-waiting-top{
-        overflow:visible !important;
-        max-width:100% !important;
-      }
-
-      body.followme-chat-only-mode .followme-owner-chat-actions,
-      body.followme-chat-waiting-mode .followme-chat-waiting-actions{
-        max-width:100% !important;
-        overflow:visible !important;
-        flex-wrap:wrap !important;
       }
 
       @media (max-width:640px){
@@ -17999,7 +17989,6 @@ document.addEventListener("visibilitychange", function(){
           min-height:34px !important;
           font-size:.68rem !important;
           padding:0 6px !important;
-          border-radius:999px !important;
         }
 
         body.followme-chat-only-mode #followmeOwnerChatMessages{
@@ -18051,7 +18040,6 @@ document.addEventListener("visibilitychange", function(){
           <button type="button" id="fmLiveExtraBtn20260518">Extra ON</button>
           <button type="button" id="fmLiveBlockBtn20260518">Blocca</button>
         </div>
-        <div class="fm-note" id="fmLiveUserNote20260518">Seleziona U1/U2 per gestire i servizi.</div>
       `;
     }
 
@@ -18068,21 +18056,21 @@ document.addEventListener("visibilitychange", function(){
     const extra = document.getElementById("fmLiveExtraBtn20260518");
     const block = document.getElementById("fmLiveBlockBtn20260518");
 
-    if(extra && extra.dataset.bound !== "1"){
-      extra.dataset.bound = "1";
+    if(extra && extra.dataset.boundAtomic !== "1"){
+      extra.dataset.boundAtomic = "1";
       extra.addEventListener("click", async function(ev){
         ev.preventDefault();
         ev.stopPropagation();
-        await toggleExtra();
+        await toggleAtomic("uploads");
       });
     }
 
-    if(block && block.dataset.bound !== "1"){
-      block.dataset.bound = "1";
+    if(block && block.dataset.boundAtomic !== "1"){
+      block.dataset.boundAtomic = "1";
       block.addEventListener("click", async function(ev){
         ev.preventDefault();
         ev.stopPropagation();
-        await toggleBlock();
+        await toggleAtomic("block");
       });
     }
 
@@ -18093,7 +18081,6 @@ document.addEventListener("visibilitychange", function(){
     const box = ensureControls();
     const extra = box.querySelector("#fmLiveExtraBtn20260518");
     const block = box.querySelector("#fmLiveBlockBtn20260518");
-    const note = box.querySelector("#fmLiveUserNote20260518");
     const pill = box.querySelector("#fmLiveStatusPill20260518");
 
     const st = activeState;
@@ -18104,7 +18091,6 @@ document.addEventListener("visibilitychange", function(){
       block.textContent = "Blocca";
       block.className = "danger";
 
-      if(note) note.textContent = "Seleziona U1/U2 per gestire i servizi.";
       if(pill){
         pill.textContent = "Nessun utente";
         pill.className = "fm-status-pill";
@@ -18124,16 +18110,8 @@ document.addEventListener("visibilitychange", function(){
     block.textContent = blocked ? "Sblocca" : "Blocca";
     block.className = blocked ? "blocked" : "danger";
 
-    const label = labelFor(st);
-
-    if(note){
-      note.textContent = label + " · " + (
-        blocked ? "BLOCCATO" : (extraEnabled ? "extra abilitati" : "standard")
-      );
-    }
-
     if(pill){
-      pill.textContent = blocked ? "BLOCCATO" : (extraEnabled ? "EXTRA" : label);
+      pill.textContent = blocked ? "BLOCCATO" : (extraEnabled ? "EXTRA" : labelFor(st));
       pill.className = "fm-status-pill " + (blocked ? "danger" : (extraEnabled ? "warn" : "ok"));
     }
   }
@@ -18154,7 +18132,6 @@ document.addEventListener("visibilitychange", function(){
       chip.dataset.sessionId = sid;
       chip.dataset.uploadsEnabled = st.uploads_enabled ? "1" : "0";
       chip.dataset.isBlocked = st.is_blocked ? "1" : "0";
-      chip.title = st.is_blocked ? "Utente bloccato" : (st.uploads_enabled ? "Extra abilitati" : "Gestisci utente");
     });
   }
 
@@ -18167,6 +18144,7 @@ document.addEventListener("visibilitychange", function(){
     });
 
     const data = await res.json().catch(function(){ return null; });
+
     if(!res.ok || !data || !data.success) return [];
 
     lastSessions = Array.isArray(data.sessions) ? data.sessions : [];
@@ -18196,10 +18174,16 @@ document.addEventListener("visibilitychange", function(){
     });
 
     const data = await res.json().catch(function(){ return null; });
+
     if(!res.ok || !data || !data.success) return null;
 
     activeSessionId = sid;
     activeState = data.session;
+
+    // aggiorna cache
+    lastSessions = lastSessions.map(function(s){
+      return String(s.id) === String(sid) ? Object.assign({}, s, data.session) : s;
+    });
 
     paintControls();
     paintChips();
@@ -18207,7 +18191,7 @@ document.addEventListener("visibilitychange", function(){
     return activeState;
   }
 
-  async function saveSettings(payload){
+  async function toggleAtomic(action){
     const sid = cleanSid(activeSessionId || getActiveSid());
 
     if(!sid){
@@ -18215,78 +18199,62 @@ document.addEventListener("visibilitychange", function(){
       return null;
     }
 
-    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/settings", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify(payload || {})
-    });
+    const extra = document.getElementById("fmLiveExtraBtn20260518");
+    const block = document.getElementById("fmLiveBlockBtn20260518");
 
-    const data = await res.json().catch(function(){ return null; });
+    if(extra) extra.disabled = true;
+    if(block) block.disabled = true;
 
-    if(!res.ok || !data || !data.success){
-      throw new Error((data && data.error) || "Errore aggiornamento utente.");
-    }
-
-    activeSessionId = sid;
-    activeState = data.session;
-
-    lastSessions = lastSessions.map(function(s){
-      return String(s.id) === sid ? Object.assign({}, s, data.session) : s;
-    });
-
-    paintControls();
-    paintChips();
-
-    setTimeout(fetchSessions, 150);
-    setTimeout(function(){ fetchState(sid); }, 450);
-
-    return activeState;
-  }
-
-  async function toggleExtra(){
     try{
-      const st = activeState || await fetchState();
-
-      if(!st){
-        toastMsg("Seleziona prima un utente.");
-        return;
-      }
-
-      const updated = await saveSettings({
-        uploads_enabled: !st.uploads_enabled
+      const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/toggle-user-control", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ action })
       });
 
-      toastMsg(updated.uploads_enabled ? "Extra abilitati." : "Extra disabilitati.");
-    }catch(err){
-      toastMsg(err.message || "Errore extra.");
-    }
-  }
+      const data = await res.json().catch(function(){ return null; });
 
-  async function toggleBlock(){
-    try{
-      const st = activeState || await fetchState();
-
-      if(!st){
-        toastMsg("Seleziona prima un utente.");
-        return;
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Errore aggiornamento utente.");
       }
 
-      const updated = await saveSettings({
-        is_blocked: !st.is_blocked
+      activeSessionId = sid;
+      activeState = data.session;
+
+      lastSessions = lastSessions.map(function(s){
+        return String(s.id) === String(sid) ? Object.assign({}, s, data.session) : s;
       });
 
-      toastMsg(updated.is_blocked ? "Utente bloccato." : "Utente sbloccato.");
+      paintControls();
+      paintChips();
+
+      setTimeout(function(){ fetchState(sid); }, 200);
+      setTimeout(fetchSessions, 500);
+
+      if(action === "uploads"){
+        toastMsg(data.session.uploads_enabled ? "Extra abilitati." : "Extra disabilitati.");
+      }else{
+        toastMsg(data.session.is_blocked ? "Utente bloccato." : "Utente sbloccato.");
+      }
+
+      return data.session;
     }catch(err){
-      toastMsg(err.message || "Errore blocco.");
+      toastMsg(err.message || "Errore aggiornamento utente.");
+      return null;
+    }finally{
+      setTimeout(function(){
+        if(extra) extra.disabled = false;
+        if(block) block.disabled = false;
+      }, 300);
     }
   }
 
   function bindStrip(){
     const strip = document.getElementById("followmeOwnerChatSessionStrip");
 
-    if(!strip || strip.dataset.fmMobileCompactControlsBound === "1") return;
+    if(!strip || strip.dataset.fmAtomicControlsBound === "1") return;
 
-    strip.dataset.fmMobileCompactControlsBound = "1";
+    strip.dataset.fmAtomicControlsBound = "1";
 
     strip.addEventListener("click", function(ev){
       const chip = ev.target && ev.target.closest
@@ -18327,7 +18295,7 @@ document.addEventListener("visibilitychange", function(){
     setTimeout(fetchSessions, 2200);
   }
 
-  window.fmFollowMeUserControlsMobileCompactState = function(){
+  window.fmFollowMeAtomicControlsState = function(){
     return { activeSessionId, activeState, lastSessions };
   };
 
