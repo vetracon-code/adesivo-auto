@@ -1475,6 +1475,341 @@
 })();
 </script>
 
+
+
+<script id="followme-public-live-controls-definitive-20260518">
+(function(){
+  if(window.__followMePublicLiveControlsDefinitive20260518) return;
+  window.__followMePublicLiveControlsDefinitive20260518 = true;
+
+  let lastUploads = null;
+  let lastBlocked = null;
+  let pollTimer = null;
+
+  function sid(){
+    try{
+      const p = new URLSearchParams(location.search || "");
+      return p.get("session") ||
+             p.get("chatSession") ||
+             window.followMeChatSessionId ||
+             window.FOLLOWME_CHAT_SESSION_ID ||
+             "";
+    }catch(e){
+      return window.followMeChatSessionId || window.FOLLOWME_CHAT_SESSION_ID || "";
+    }
+  }
+
+  function toastMsg(msg){
+    try{
+      if(typeof toast === "function") toast(msg);
+      else alert(msg);
+    }catch(e){ alert(msg); }
+  }
+
+  function inputEl(){
+    return document.getElementById("messageInput") ||
+           document.querySelector("textarea") ||
+           document.querySelector("input[type='text']");
+  }
+
+  function sendBtn(){
+    return document.getElementById("sendBtn") ||
+           document.querySelector("button[type='submit']") ||
+           document.querySelector(".send-btn");
+  }
+
+  function composerEl(){
+    return document.querySelector(".followme-public-composer") ||
+           document.querySelector(".composer") ||
+           document.querySelector("form") ||
+           (inputEl() ? inputEl().parentNode : null) ||
+           document.body;
+  }
+
+  function ensurePanel(){
+    let panel = document.getElementById("fmPublicExtraPanelDef20260518");
+    if(panel) return panel;
+
+    panel = document.createElement("div");
+    panel.id = "fmPublicExtraPanelDef20260518";
+    panel.className = "fm-public-extra-panel-def";
+    panel.innerHTML = `
+      <button type="button" id="fmPublicPhotoDef20260518">📷 Foto</button>
+      <button type="button" id="fmPublicFileDef20260518">📎 File</button>
+      <button type="button" id="fmPublicLocationDef20260518">📍 Posizione</button>
+      <input type="file" id="fmPublicPhotoInputDef20260518" accept="image/*" capture="environment" hidden>
+      <input type="file" id="fmPublicFileInputDef20260518" hidden>
+    `;
+
+    const input = inputEl();
+    const composer = composerEl();
+
+    if(input && input.parentNode){
+      input.parentNode.insertBefore(panel, input);
+    }else if(composer && composer.insertBefore){
+      composer.insertBefore(panel, composer.firstChild);
+    }else{
+      document.body.appendChild(panel);
+    }
+
+    bindPanel(panel);
+    return panel;
+  }
+
+  async function sendFile(file, kind){
+    const sessionId = sid();
+    if(!sessionId || !file) return;
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/attachment-raw", {
+      method:"POST",
+      headers:{
+        "Content-Type": file.type || "application/octet-stream",
+        "X-FollowMe-Sender": "visitor",
+        "X-FollowMe-Kind": kind || (file.type && file.type.indexOf("image/") === 0 ? "image" : "document"),
+        "X-FollowMe-Filename": encodeURIComponent(file.name || "allegato")
+      },
+      body: await file.arrayBuffer()
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      throw new Error((data && data.error) || "Errore invio allegato.");
+    }
+
+    toastMsg("Allegato inviato.");
+  }
+
+  function canUseExtra(){
+    if(document.body.classList.contains("followme-public-user-blocked")){
+      toastMsg("Sei stato bloccato dal sistema.");
+      return false;
+    }
+    if(!document.body.classList.contains("followme-public-uploads-enabled")){
+      toastMsg("Funzione extra non abilitata.");
+      return false;
+    }
+    return true;
+  }
+
+  function bindPanel(panel){
+    if(panel.dataset.boundDef === "1") return;
+    panel.dataset.boundDef = "1";
+
+    const photoBtn = panel.querySelector("#fmPublicPhotoDef20260518");
+    const fileBtn = panel.querySelector("#fmPublicFileDef20260518");
+    const locBtn = panel.querySelector("#fmPublicLocationDef20260518");
+    const photoInput = panel.querySelector("#fmPublicPhotoInputDef20260518");
+    const fileInput = panel.querySelector("#fmPublicFileInputDef20260518");
+
+    photoBtn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      if(canUseExtra() && photoInput) photoInput.click();
+    });
+
+    fileBtn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      if(canUseExtra() && fileInput) fileInput.click();
+    });
+
+    photoInput.addEventListener("change", async function(){
+      const f = photoInput.files && photoInput.files[0];
+      if(!f) return;
+      try{ await sendFile(f, "image"); }
+      catch(err){ toastMsg(err.message || "Errore foto."); }
+      finally{ photoInput.value = ""; }
+    });
+
+    fileInput.addEventListener("change", async function(){
+      const f = fileInput.files && fileInput.files[0];
+      if(!f) return;
+      try{ await sendFile(f, "document"); }
+      catch(err){ toastMsg(err.message || "Errore file."); }
+      finally{ fileInput.value = ""; }
+    });
+
+    locBtn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      if(!canUseExtra()) return;
+
+      if(!navigator.geolocation){
+        toastMsg("Geolocalizzazione non disponibile.");
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(async function(pos){
+        try{
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const url = "https://www.google.com/maps?q=" + encodeURIComponent(lat + "," + lng);
+
+          const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid()) + "/attachment", {
+            method:"POST",
+            headers:{ "Content-Type":"application/json" },
+            body:JSON.stringify({
+              sender:"visitor",
+              kind:"location",
+              url:url,
+              label:"Posizione condivisa",
+              mime:"text/uri-list",
+              filename:"posizione"
+            })
+          });
+
+          const data = await res.json().catch(()=>null);
+          if(!res.ok || !data || !data.success){
+            throw new Error((data && data.error) || "Errore invio posizione.");
+          }
+
+          toastMsg("Posizione inviata.");
+        }catch(err){
+          toastMsg(err.message || "Errore invio posizione.");
+        }
+      }, function(){
+        toastMsg("Posizione non autorizzata.");
+      }, { enableHighAccuracy:true, timeout:10000, maximumAge:0 });
+    });
+  }
+
+  function applyState(session){
+    if(!session) return;
+
+    const blocked = !!session.is_blocked;
+    const uploads = !!session.uploads_enabled;
+
+    document.body.classList.toggle("followme-public-user-blocked", blocked);
+    document.body.classList.toggle("followme-public-uploads-enabled", uploads);
+
+    const input = inputEl();
+    const send = sendBtn();
+
+    if(input){
+      input.disabled = blocked;
+      if(blocked){
+        input.dataset.oldPlaceholder = input.dataset.oldPlaceholder || input.placeholder || "";
+        input.placeholder = "Sei stato bloccato dal sistema.";
+      }else if(input.dataset.oldPlaceholder){
+        input.placeholder = input.dataset.oldPlaceholder;
+      }
+    }
+
+    if(send) send.disabled = blocked;
+
+    const notice = document.getElementById("followmePublicBlockedNotice");
+    if(notice) notice.textContent = blocked ? "Sei stato bloccato dal sistema." : "";
+
+    const panel = ensurePanel();
+    panel.style.display = uploads && !blocked ? "grid" : "none";
+
+    if(lastUploads !== null && lastUploads !== uploads){
+      toastMsg(uploads ? "Funzioni extra abilitate." : "Funzioni extra disabilitate.");
+    }
+
+    if(lastBlocked !== null && lastBlocked !== blocked){
+      toastMsg(blocked ? "Sei stato bloccato dal sistema." : "Utente sbloccato.");
+    }
+
+    lastUploads = uploads;
+    lastBlocked = blocked;
+  }
+
+  async function fetchState(){
+    const sessionId = sid();
+    if(!sessionId) return;
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/state?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    const data = await res.json().catch(()=>null);
+    if(!res.ok || !data || !data.success) return;
+
+    applyState(data.session);
+  }
+
+  function injectCss(){
+    if(document.getElementById("fmPublicExtraPanelDefCss20260518")) return;
+
+    const style = document.createElement("style");
+    style.id = "fmPublicExtraPanelDefCss20260518";
+    style.textContent = `
+      #fmPublicExtraPanelDef20260518{
+        display:none;
+        grid-template-columns:repeat(3,1fr);
+        gap:8px;
+        width:100%;
+        margin:0 0 8px 0;
+      }
+      #fmPublicExtraPanelDef20260518 button{
+        min-height:38px;
+        border-radius:999px;
+        border:1px solid rgba(0,0,0,.08);
+        background:#fff;
+        color:#202629;
+        font-size:.78rem;
+        font-weight:900;
+        box-shadow:0 1px 4px rgba(0,0,0,.08);
+      }
+      body.followme-public-uploads-enabled:not(.followme-public-user-blocked) #fmPublicExtraPanelDef20260518{
+        display:grid !important;
+      }
+      body.followme-public-user-blocked #fmPublicExtraPanelDef20260518{
+        display:none !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function patchSubmits(){
+    if(window.__fmPublicLiveDefSubmitGuard) return;
+    window.__fmPublicLiveDefSubmitGuard = true;
+
+    document.addEventListener("submit", function(ev){
+      if(document.body.classList.contains("followme-public-user-blocked")){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        toastMsg("Sei stato bloccato dal sistema.");
+      }
+    }, true);
+  }
+
+  function boot(){
+    injectCss();
+    ensurePanel();
+    patchSubmits();
+    fetchState();
+
+    if(!pollTimer){
+      pollTimer = setInterval(fetchState, 700);
+    }
+  }
+
+  window.fmPublicFetchUserState = fetchState;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 200);
+    setTimeout(fetchState, 800);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(fetchState, 200);
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible"){
+      setTimeout(fetchState, 200);
+    }
+  });
+})();
+</script>
+
 </body>
 </html>
 
@@ -1528,364 +1863,3 @@
 
 
 
-<script id="followme-public-live-extra-composer-20260518">
-(function(){
-  if(window.__followMePublicLiveExtraComposer20260518) return;
-  window.__followMePublicLiveExtraComposer20260518 = true;
-
-  let lastUploads = null;
-  let lastBlocked = null;
-  let polling = null;
-
-  function sessionId(){
-    try{
-      const q = new URLSearchParams(location.search || "");
-      return q.get("session") ||
-             q.get("chatSession") ||
-             window.followMeChatSessionId ||
-             window.FOLLOWME_CHAT_SESSION_ID ||
-             "";
-    }catch(e){
-      return window.followMeChatSessionId || window.FOLLOWME_CHAT_SESSION_ID || "";
-    }
-  }
-
-  function findComposer(){
-    return document.querySelector(".followme-public-composer") ||
-           document.querySelector(".composer") ||
-           document.querySelector("form") ||
-           document.body;
-  }
-
-  function findInput(){
-    return document.getElementById("messageInput") ||
-           document.querySelector("textarea") ||
-           document.querySelector("input[type='text']");
-  }
-
-  function findSend(){
-    return document.getElementById("sendBtn") ||
-           document.querySelector("button[type='submit']") ||
-           document.querySelector(".send-btn");
-  }
-
-  function ensureExtraPanel(){
-    let panel = document.getElementById("followmePublicLiveExtraPanel20260518");
-    if(panel) return panel;
-
-    panel = document.createElement("div");
-    panel.id = "followmePublicLiveExtraPanel20260518";
-    panel.className = "followme-public-live-extra-panel";
-    panel.innerHTML = `
-      <button type="button" id="followmePublicPhotoBtn20260518">📷 Foto</button>
-      <button type="button" id="followmePublicFileBtn20260518">📎 File</button>
-      <button type="button" id="followmePublicLocationBtn20260518">📍 Posizione</button>
-      <input type="file" id="followmePublicPhotoInput20260518" accept="image/*" capture="environment" hidden>
-      <input type="file" id="followmePublicFileInput20260518" hidden>
-    `;
-
-    const composer = findComposer();
-    const input = findInput();
-
-    if(input && input.parentNode){
-      input.parentNode.insertBefore(panel, input);
-    }else if(composer && composer.appendChild){
-      composer.insertBefore(panel, composer.firstChild);
-    }else{
-      document.body.appendChild(panel);
-    }
-
-    bindExtraPanel(panel);
-    return panel;
-  }
-
-  function toastMsg(msg){
-    try{
-      if(typeof toast === "function") toast(msg);
-      else alert(msg);
-    }catch(e){
-      alert(msg);
-    }
-  }
-
-  async function sendAttachmentFile(file, kind){
-    const sid = sessionId();
-    if(!sid || !file) return;
-
-    const body = await file.arrayBuffer();
-
-    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/attachment-raw", {
-      method:"POST",
-      headers:{
-        "Content-Type": file.type || "application/octet-stream",
-        "X-FollowMe-Sender": "visitor",
-        "X-FollowMe-Kind": kind || (file.type && file.type.indexOf("image/") === 0 ? "image" : "document"),
-        "X-FollowMe-Filename": encodeURIComponent(file.name || "allegato")
-      },
-      body: body
-    });
-
-    const data = await res.json().catch(()=>null);
-
-    if(!res.ok || !data || !data.success){
-      throw new Error((data && data.error) || "Errore invio allegato.");
-    }
-
-    if(typeof window.followMePublicLoadMessages === "function"){
-      setTimeout(window.followMePublicLoadMessages, 150);
-    }
-
-    toastMsg("Allegato inviato.");
-  }
-
-  function bindExtraPanel(panel){
-    if(panel.dataset.boundLiveExtra === "1") return;
-    panel.dataset.boundLiveExtra = "1";
-
-    const photoBtn = panel.querySelector("#followmePublicPhotoBtn20260518");
-    const fileBtn = panel.querySelector("#followmePublicFileBtn20260518");
-    const locBtn = panel.querySelector("#followmePublicLocationBtn20260518");
-    const photoInput = panel.querySelector("#followmePublicPhotoInput20260518");
-    const fileInput = panel.querySelector("#followmePublicFileInput20260518");
-
-    if(photoBtn){
-      photoBtn.addEventListener("click", function(ev){
-        ev.preventDefault();
-        if(document.body.classList.contains("followme-public-user-blocked")){
-          return toastMsg("Sei stato bloccato dal sistema.");
-        }
-        if(!document.body.classList.contains("followme-public-uploads-enabled")){
-          return toastMsg("Funzione extra non abilitata.");
-        }
-        if(photoInput) photoInput.click();
-      });
-    }
-
-    if(fileBtn){
-      fileBtn.addEventListener("click", function(ev){
-        ev.preventDefault();
-        if(document.body.classList.contains("followme-public-user-blocked")){
-          return toastMsg("Sei stato bloccato dal sistema.");
-        }
-        if(!document.body.classList.contains("followme-public-uploads-enabled")){
-          return toastMsg("Funzione extra non abilitata.");
-        }
-        if(fileInput) fileInput.click();
-      });
-    }
-
-    if(photoInput){
-      photoInput.addEventListener("change", async function(){
-        const file = photoInput.files && photoInput.files[0];
-        if(!file) return;
-        try{
-          await sendAttachmentFile(file, "image");
-        }catch(err){
-          toastMsg(err.message || "Errore invio foto.");
-        }finally{
-          photoInput.value = "";
-        }
-      });
-    }
-
-    if(fileInput){
-      fileInput.addEventListener("change", async function(){
-        const file = fileInput.files && fileInput.files[0];
-        if(!file) return;
-        try{
-          await sendAttachmentFile(file, "document");
-        }catch(err){
-          toastMsg(err.message || "Errore invio file.");
-        }finally{
-          fileInput.value = "";
-        }
-      });
-    }
-
-    if(locBtn){
-      locBtn.addEventListener("click", function(ev){
-        ev.preventDefault();
-
-        if(document.body.classList.contains("followme-public-user-blocked")){
-          return toastMsg("Sei stato bloccato dal sistema.");
-        }
-
-        if(!document.body.classList.contains("followme-public-uploads-enabled")){
-          return toastMsg("Funzione extra non abilitata.");
-        }
-
-        if(!navigator.geolocation){
-          return toastMsg("Geolocalizzazione non disponibile.");
-        }
-
-        navigator.geolocation.getCurrentPosition(async function(pos){
-          try{
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-            const url = "https://www.google.com/maps?q=" + encodeURIComponent(lat + "," + lng);
-            const sid = sessionId();
-
-            const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/attachment", {
-              method:"POST",
-              headers:{ "Content-Type":"application/json" },
-              body:JSON.stringify({
-                sender:"visitor",
-                kind:"location",
-                url:url,
-                label:"Posizione condivisa",
-                mime:"text/uri-list",
-                filename:"posizione"
-              })
-            });
-
-            const data = await res.json().catch(()=>null);
-            if(!res.ok || !data || !data.success){
-              throw new Error((data && data.error) || "Errore invio posizione.");
-            }
-
-            if(typeof window.followMePublicLoadMessages === "function"){
-              setTimeout(window.followMePublicLoadMessages, 150);
-            }
-
-            toastMsg("Posizione inviata.");
-          }catch(err){
-            toastMsg(err.message || "Errore invio posizione.");
-          }
-        }, function(){
-          toastMsg("Posizione non autorizzata.");
-        }, {
-          enableHighAccuracy:true,
-          timeout:10000,
-          maximumAge:0
-        });
-      });
-    }
-  }
-
-  function applyState(session){
-    if(!session) return;
-
-    const blocked = !!session.is_blocked;
-    const uploads = !!session.uploads_enabled;
-
-    document.body.classList.toggle("followme-public-user-blocked", blocked);
-    document.body.classList.toggle("followme-public-uploads-enabled", uploads);
-
-    const input = findInput();
-    const send = findSend();
-
-    if(input){
-      input.disabled = blocked;
-      if(blocked){
-        input.dataset.oldPlaceholder = input.dataset.oldPlaceholder || input.placeholder || "";
-        input.placeholder = "Sei stato bloccato dal sistema.";
-      }else if(input.dataset.oldPlaceholder){
-        input.placeholder = input.dataset.oldPlaceholder;
-      }
-    }
-
-    if(send) send.disabled = blocked;
-
-    const panel = ensureExtraPanel();
-    panel.style.display = uploads && !blocked ? "grid" : "none";
-
-    const notice = document.getElementById("followmePublicBlockedNotice");
-    if(notice && blocked){
-      notice.textContent = "Sei stato bloccato dal sistema.";
-    }
-
-    if(lastUploads !== null && lastUploads !== uploads){
-      toastMsg(uploads ? "Funzioni extra abilitate." : "Funzioni extra disabilitate.");
-    }
-
-    if(lastBlocked !== null && lastBlocked !== blocked){
-      toastMsg(blocked ? "Sei stato bloccato dal sistema." : "Utente sbloccato.");
-    }
-
-    lastUploads = uploads;
-    lastBlocked = blocked;
-  }
-
-  async function fetchState(){
-    const sid = sessionId();
-    if(!sid) return;
-
-    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/state?v=" + Date.now(), {
-      cache:"no-store"
-    });
-
-    const data = await res.json().catch(()=>null);
-    if(!res.ok || !data || !data.success) return;
-
-    applyState(data.session);
-  }
-
-  function injectCss(){
-    if(document.getElementById("followmePublicLiveExtraComposerCss20260518")) return;
-
-    const style = document.createElement("style");
-    style.id = "followmePublicLiveExtraComposerCss20260518";
-    style.textContent = `
-      .followme-public-live-extra-panel{
-        display:none;
-        grid-template-columns:repeat(3, 1fr);
-        gap:8px;
-        width:100%;
-        margin:0 0 8px 0;
-      }
-
-      .followme-public-live-extra-panel button{
-        min-height:38px;
-        border-radius:999px;
-        border:1px solid rgba(0,0,0,.08);
-        background:#ffffff;
-        color:#202629;
-        font-size:.78rem;
-        font-weight:900;
-        box-shadow:0 1px 4px rgba(0,0,0,.08);
-      }
-
-      body.followme-public-uploads-enabled:not(.followme-public-user-blocked) #followmePublicLiveExtraPanel20260518{
-        display:grid !important;
-      }
-
-      body.followme-public-user-blocked #followmePublicLiveExtraPanel20260518{
-        display:none !important;
-      }
-    `;
-
-    document.head.appendChild(style);
-  }
-
-  function boot(){
-    injectCss();
-    ensureExtraPanel();
-    fetchState();
-
-    if(!polling){
-      polling = setInterval(fetchState, 900);
-    }
-  }
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", boot);
-  }else{
-    boot();
-  }
-
-  window.addEventListener("load", function(){
-    setTimeout(boot, 200);
-    setTimeout(fetchState, 900);
-  });
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(fetchState, 250);
-  });
-
-  document.addEventListener("visibilitychange", function(){
-    if(document.visibilityState === "visible"){
-      setTimeout(fetchState, 200);
-    }
-  });
-})();
-</script>

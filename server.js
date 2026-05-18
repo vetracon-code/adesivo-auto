@@ -9978,7 +9978,7 @@ app.post('/api/followme/chat/session/:session_id/settings', express.json(), asyn
     }
 
     const existing = await pool.query(
-      `SELECT id, display_name, visitor_label, uploads_enabled, is_blocked
+      `SELECT id, project_id, display_name, visitor_label, uploads_enabled, is_blocked
        FROM followme_chat_sessions
        WHERE id = $1
        LIMIT 1`,
