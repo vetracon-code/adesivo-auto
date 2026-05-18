@@ -6141,6 +6141,97 @@
       }
     }
 
+
+    /* =====================================================
+       STRONG LOCK TAB: U1 + NOME SEMPRE VISIBILE
+       Usa span interno protetto, non testo libero del bottone
+       ===================================================== */
+
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip,
+    body.followme-desktop-chat-active #followmeOwnerChatSessionStrip{
+      gap:8px !important;
+      overflow-x:auto !important;
+      overflow-y:hidden !important;
+      white-space:nowrap !important;
+      scrollbar-width:none !important;
+    }
+
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip::-webkit-scrollbar,
+    body.followme-desktop-chat-active #followmeOwnerChatSessionStrip::-webkit-scrollbar{
+      display:none !important;
+    }
+
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip .followme-chat-session-chip,
+    body.followme-desktop-chat-active #followmeOwnerChatSessionStrip .followme-chat-session-chip{
+      position:relative !important;
+      display:inline-flex !important;
+      align-items:center !important;
+      justify-content:center !important;
+      height:28px !important;
+      min-height:28px !important;
+      max-height:28px !important;
+      width:42px !important;
+      min-width:42px !important;
+      max-width:42px !important;
+      flex:0 0 42px !important;
+      padding:0 !important;
+      overflow:hidden !important;
+      white-space:nowrap !important;
+      text-overflow:clip !important;
+      box-sizing:border-box !important;
+    }
+
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip .followme-chat-session-chip.strong-name-lock,
+    body.followme-desktop-chat-active #followmeOwnerChatSessionStrip .followme-chat-session-chip.strong-name-lock{
+      width:auto !important;
+      min-width:max-content !important;
+      max-width:none !important;
+      flex:0 0 auto !important;
+      padding:0 16px !important;
+      overflow:visible !important;
+      white-space:nowrap !important;
+      text-overflow:clip !important;
+    }
+
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip .followme-chat-session-chip .followme-tab-label-lock,
+    body.followme-desktop-chat-active #followmeOwnerChatSessionStrip .followme-chat-session-chip .followme-tab-label-lock{
+      display:inline-block !important;
+      width:auto !important;
+      min-width:0 !important;
+      max-width:none !important;
+      overflow:visible !important;
+      white-space:nowrap !important;
+      text-overflow:clip !important;
+      pointer-events:none !important;
+      font-size:11px !important;
+      line-height:1 !important;
+      font-weight:950 !important;
+      letter-spacing:-.01em !important;
+    }
+
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip .followme-chat-session-chip.strong-name-lock .followme-tab-label-lock,
+    body.followme-desktop-chat-active #followmeOwnerChatSessionStrip .followme-chat-session-chip.strong-name-lock .followme-tab-label-lock{
+      white-space:nowrap !important;
+    }
+
+    @media (max-width: 899px){
+      body.followme-chat-only-mode #followmeOwnerChatSessionStrip .followme-chat-session-chip.strong-name-lock{
+        padding-left:13px !important;
+        padding-right:13px !important;
+        min-width:max-content !important;
+        max-width:none !important;
+      }
+    }
+
+    @media (min-width: 900px){
+      body.followme-desktop-chat-active #followmeOwnerChatSessionStrip .followme-chat-session-chip.strong-name-lock{
+        padding-left:18px !important;
+        padding-right:18px !important;
+        min-width:max-content !important;
+        max-width:none !important;
+      }
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -16746,11 +16837,14 @@ document.addEventListener("visibilitychange", function(){
 <script id="followme-u-plus-name-tab-final-disabled-lock-u-plus-name">/* disabled: locked U + name controller active */</script>
 
 
-<script id="followme-lock-u-plus-name-final">
+<script id="followme-lock-u-plus-name-final-disabled-strong-tab-lock">/* disabled: strong U + full name lock active */</script>
+
+
+<script id="followme-strong-u-plus-name-lock-final">
 (function(){
-  const STORAGE_KEY = "followme_locked_chat_names_v1";
+  const STORAGE_KEY = "followme_strong_locked_chat_names_v2";
   let sessionsCache = [];
-  let observerTimer = null;
+  let enforcing = false;
 
   function code(){
     try{
@@ -16784,7 +16878,7 @@ document.addEventListener("visibilitychange", function(){
       .replace(/[<>"]/g, "")
       .replace(/\s+/g, " ")
       .trim()
-      .slice(0, 60);
+      .slice(0, 80);
   }
 
   function titleName(v){
@@ -16798,7 +16892,7 @@ document.addEventListener("visibilitychange", function(){
       .trim();
   }
 
-  function loadLockedNames(){
+  function loadNames(){
     try{
       return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") || {};
     }catch(e){
@@ -16806,15 +16900,15 @@ document.addEventListener("visibilitychange", function(){
     }
   }
 
-  function saveLockedName(sessionId, uLabel, name){
-    const map = loadLockedNames();
+  function saveNameLocal(sessionId, uLabel, name){
+    const map = loadNames();
     const sid = String(sessionId || "");
     if(!sid) return;
 
     map[sid] = {
-      uLabel: String(uLabel || "").trim(),
-      name: cleanName(name),
-      savedAt: Date.now()
+      uLabel:String(uLabel || "").trim(),
+      name:cleanName(name),
+      savedAt:Date.now()
     };
 
     try{
@@ -16822,19 +16916,14 @@ document.addEventListener("visibilitychange", function(){
     }catch(e){}
   }
 
-  function getLockedName(sessionId){
-    const map = loadLockedNames();
-    return map[String(sessionId || "")] || null;
-  }
-
   function baseULabel(session, index){
     return "U" + Number(session.display_index || index + 1);
   }
 
-  function finalLabel(uLabel, name){
-    const u = String(uLabel || "U?").trim();
-    const n = cleanName(name);
-    return n ? (u + " · " + n) : u;
+  function labelText(u, name){
+    const uu = String(u || "U?").trim();
+    const nn = cleanName(name);
+    return nn ? (uu + " · " + nn) : uu;
   }
 
   async function fetchSessions(){
@@ -16853,36 +16942,86 @@ document.addEventListener("visibilitychange", function(){
     });
   }
 
-  function hardApplyChip(chip, uLabel, name){
+  function getSessionForChip(chip, index){
+    const sid = String(chip.dataset.sessionId || "");
+    return sessionsCache.find(function(s){
+      return String(s.id) === sid;
+    }) || null;
+  }
+
+  function getNameForSession(sessionId, session){
+    const sid = String(sessionId || "");
+    const local = loadNames()[sid];
+    return cleanName((local && local.name) || (session && session.display_name) || "");
+  }
+
+  function getULabelForSession(sessionId, session, index, chip){
+    const sid = String(sessionId || "");
+    const local = loadNames()[sid];
+
+    return String(
+      (local && local.uLabel) ||
+      (session ? baseULabel(session, index) : "") ||
+      (chip && chip.dataset.uLabel) ||
+      ("U" + (index + 1))
+    ).trim();
+  }
+
+  function ensureInnerLabel(chip){
+    let span = chip.querySelector(":scope > .followme-tab-label-lock");
+
+    if(!span){
+      chip.innerHTML = "";
+      span = document.createElement("span");
+      span.className = "followme-tab-label-lock";
+      chip.appendChild(span);
+    }else{
+      // Elimina eventuali nodi testuali o altri residui scritti da script vecchi.
+      Array.from(chip.childNodes).forEach(function(node){
+        if(node !== span){
+          chip.removeChild(node);
+        }
+      });
+    }
+
+    return span;
+  }
+
+  function hardLockChip(chip, index){
     if(!chip) return;
 
-    const n = cleanName(name);
-    const label = finalLabel(uLabel, n);
+    const sid = String(chip.dataset.sessionId || "").trim();
+    const session = getSessionForChip(chip, index);
+    const u = getULabelForSession(sid, session, index, chip);
+    const name = getNameForSession(sid, session);
 
-    chip.dataset.uLabel = uLabel || chip.dataset.uLabel || "";
-    chip.dataset.userName = n;
+    const final = labelText(u, name);
+    const span = ensureInnerLabel(chip);
 
-    if(n){
+    chip.dataset.uLabel = u;
+    chip.dataset.userName = name;
+
+    if(name){
       chip.dataset.confirmedName = "1";
-      chip.dataset.lockedName = "1";
+      chip.dataset.strongLockedName = "1";
       chip.classList.add("has-name");
       chip.classList.add("locked-name");
+      chip.classList.add("strong-name-lock");
     }else{
       chip.dataset.confirmedName = "";
-      chip.dataset.lockedName = "";
+      chip.dataset.strongLockedName = "";
       chip.classList.remove("has-name");
       chip.classList.remove("locked-name");
+      chip.classList.remove("strong-name-lock");
     }
 
-    if(chip.textContent !== label){
-      chip.textContent = label;
+    if(span.textContent !== final){
+      span.textContent = final;
     }
 
-    chip.title = n
-      ? label + " — doppio click per modificare"
-      : label;
+    chip.title = name ? (final + " — doppio click per modificare") : final;
 
-    if(n){
+    if(name){
       chip.style.width = "auto";
       chip.style.minWidth = "max-content";
       chip.style.maxWidth = "none";
@@ -16897,84 +17036,69 @@ document.addEventListener("visibilitychange", function(){
       chip.style.minWidth = "42px";
       chip.style.maxWidth = "42px";
       chip.style.flexBasis = "42px";
+      chip.style.overflow = "hidden";
+      chip.style.paddingLeft = "0";
+      chip.style.paddingRight = "0";
+    }
+
+    if(!chip.dataset.strongEditBound){
+      chip.dataset.strongEditBound = "1";
+
+      chip.addEventListener("dblclick", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        openEditNameCard(sid, name, u);
+      }, true);
+
+      chip.addEventListener("click", function(ev){
+        // Mantiene il comportamento di cambio chat.
+        // Se altri handler già fanno navigazione, non forziamo qui.
+      }, true);
     }
   }
 
-  function hardApplyBySession(sessionId, uLabel, name){
-    const sid = String(sessionId || "");
-    if(!sid) return false;
-
-    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
-    if(!chip) return false;
-
-    hardApplyChip(chip, uLabel, name);
-    return true;
-  }
-
   function enforceAll(){
-    const strip = document.getElementById("followmeOwnerChatSessionStrip");
-    if(!strip) return;
+    if(enforcing) return;
+    enforcing = true;
 
-    const locked = loadLockedNames();
+    try{
+      const strip = document.getElementById("followmeOwnerChatSessionStrip");
+      if(!strip) return;
 
-    strip.querySelectorAll(".followme-chat-session-chip").forEach(function(chip, index){
-      const sid = String(chip.dataset.sessionId || "").trim();
+      const chips = Array.from(strip.querySelectorAll(".followme-chat-session-chip"));
 
-      let session = sessionsCache.find(function(s){
-        return String(s.id) === sid;
+      chips.forEach(function(chip, index){
+        hardLockChip(chip, index);
       });
-
-      const u =
-        (session ? baseULabel(session, sessionsCache.indexOf(session)) : "") ||
-        chip.dataset.uLabel ||
-        ("U" + (index + 1));
-
-      const lockedItem = locked[sid];
-      const dbName = session ? cleanName(session.display_name || "") : "";
-      const name = cleanName((lockedItem && lockedItem.name) || dbName || chip.dataset.userName || "");
-
-      if(name){
-        hardApplyChip(chip, (lockedItem && lockedItem.uLabel) || u, name);
-      }else{
-        hardApplyChip(chip, u, "");
-      }
-    });
+    }finally{
+      enforcing = false;
+    }
   }
 
-  function renderTabs(sessions){
+  function renderTabs(){
     const strip = document.getElementById("followmeOwnerChatSessionStrip");
     const dots = document.getElementById("followmeHorizontalChatDots");
     if(!strip) return;
 
     const current = currentSessionId();
-    const locked = loadLockedNames();
 
     strip.innerHTML = "";
 
-    sessions.forEach(function(s, idx){
+    sessionsCache.forEach(function(s, idx){
       const sid = String(s.id);
       const u = baseULabel(s, idx);
-      const lockedItem = locked[sid];
-      const name = cleanName((lockedItem && lockedItem.name) || s.display_name || "");
+      const name = getNameForSession(sid, s);
 
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className =
         "followme-chat-session-chip" +
         (String(s.id) === String(current) ? " active" : " waiting") +
-        (!s.owner_opened_at ? " new" : "") +
-        (name ? " has-name locked-name" : "");
+        (!s.owner_opened_at ? " new" : "");
 
       btn.dataset.sessionId = sid;
       btn.dataset.uLabel = u;
       btn.dataset.userName = name;
-      if(name){
-        btn.dataset.confirmedName = "1";
-        btn.dataset.lockedName = "1";
-      }
-
-      btn.textContent = finalLabel(u, name);
-      btn.title = name ? (finalLabel(u, name) + " — doppio click per modificare") : u;
 
       btn.addEventListener("click", function(ev){
         ev.preventDefault();
@@ -16983,19 +17107,13 @@ document.addEventListener("visibilitychange", function(){
           "&focus=chat";
       });
 
-      btn.addEventListener("dblclick", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        openEditNameCard(sid, name, u);
-      });
-
       strip.appendChild(btn);
-      hardApplyChip(btn, u, name);
+      hardLockChip(btn, idx);
     });
 
     if(dots){
       dots.innerHTML = "";
-      sessions.forEach(function(s){
+      sessionsCache.forEach(function(s){
         const d = document.createElement("span");
         d.className = "followme-horizontal-chat-dot" + (String(s.id) === String(current) ? " active" : "");
         dots.appendChild(d);
@@ -17006,18 +17124,18 @@ document.addEventListener("visibilitychange", function(){
   async function refreshTabs(){
     try{
       sessionsCache = await fetchSessions();
-      renderTabs(sessionsCache);
+      renderTabs();
       enforceAll();
     }catch(e){
-      console.warn("[FollowMe locked U+Name] refresh error", e);
+      console.warn("[FollowMe strong tab lock] refresh error", e);
+      enforceAll();
     }
   }
 
   async function resolveULabel(sessionId){
     const sid = String(sessionId || currentSessionId() || "");
-
-    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
-    if(chip && chip.dataset.uLabel) return chip.dataset.uLabel;
+    const local = loadNames()[sid];
+    if(local && local.uLabel) return local.uLabel;
 
     if(!sessionsCache.length){
       try{ sessionsCache = await fetchSessions(); }catch(e){}
@@ -17028,6 +17146,9 @@ document.addEventListener("visibilitychange", function(){
     });
 
     if(idx >= 0) return baseULabel(sessionsCache[idx], idx);
+
+    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
+    if(chip && chip.dataset.uLabel) return chip.dataset.uLabel;
 
     return "U?";
   }
@@ -17053,7 +17174,7 @@ document.addEventListener("visibilitychange", function(){
     }
 
     if(ctx){
-      ctx.innerHTML = '<div class="followme-edit-name-hint">Nel selettore resterà visibile: ' + (uLabel || "U?") + ' · Nome</div>';
+      ctx.innerHTML = '<div class="followme-edit-name-hint">Nel selettore resterà sempre visibile: ' + (uLabel || "U?") + ' · Nome</div>';
       ctx.style.display = "block";
     }
 
@@ -17109,24 +17230,31 @@ document.addEventListener("visibilitychange", function(){
       return false;
     }
 
-    saveLockedName(sid, u, clean);
-    hardApplyBySession(sid, u, clean);
+    saveNameLocal(sid, u, clean);
+
+    // Applica subito, senza aspettare refresh.
+    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
+    if(chip){
+      chip.dataset.uLabel = u;
+      chip.dataset.userName = clean;
+      hardLockChip(chip, Array.from(chip.parentNode.children).indexOf(chip));
+    }
 
     closeNameCard();
 
-    setTimeout(enforceAll, 50);
-    setTimeout(refreshTabs, 300);
-    setTimeout(enforceAll, 900);
+    setTimeout(enforceAll, 30);
+    setTimeout(refreshTabs, 250);
+    setTimeout(enforceAll, 700);
 
     return true;
   }
 
   function bindConfirmButton(){
     const btn = document.getElementById("followmeNameDetectConfirm");
-    if(!btn || btn.dataset.lockUPlusNameBound === "1") return;
+    if(!btn || btn.dataset.strongTabLockBound === "1") return;
 
     const fresh = btn.cloneNode(true);
-    fresh.dataset.lockUPlusNameBound = "1";
+    fresh.dataset.strongTabLockBound = "1";
     btn.parentNode.replaceChild(fresh, btn);
 
     fresh.addEventListener("click", async function(ev){
@@ -17149,53 +17277,31 @@ document.addEventListener("visibilitychange", function(){
 
   function bindCancelButton(){
     const btn = document.getElementById("followmeNameDetectCancel");
-    if(!btn || btn.dataset.lockUPlusNameBound === "1") return;
+    if(!btn || btn.dataset.strongTabLockBound === "1") return;
 
-    btn.dataset.lockUPlusNameBound = "1";
+    btn.dataset.strongTabLockBound = "1";
     btn.addEventListener("click", function(ev){
       ev.preventDefault();
       closeNameCard();
     });
   }
 
-  function bindDoubleClickExisting(){
-    document.querySelectorAll("#followmeOwnerChatSessionStrip .followme-chat-session-chip").forEach(function(chip){
-      if(chip.dataset.lockEditBound === "1") return;
-
-      chip.dataset.lockEditBound = "1";
-      chip.addEventListener("dblclick", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-
-        const sid = chip.dataset.sessionId || currentSessionId();
-        const u = chip.dataset.uLabel || "";
-        const name = cleanName(chip.dataset.userName || "");
-
-        openEditNameCard(sid, name, u);
-      });
-    });
-  }
-
   function installObserver(){
     const strip = document.getElementById("followmeOwnerChatSessionStrip");
-    if(!strip || strip.dataset.lockUPlusNameObserver === "1") return;
+    if(!strip || strip.dataset.strongTabLockObserver === "1") return;
 
-    strip.dataset.lockUPlusNameObserver = "1";
+    strip.dataset.strongTabLockObserver = "1";
 
     const observer = new MutationObserver(function(){
-      clearTimeout(observerTimer);
-      observerTimer = setTimeout(function(){
-        enforceAll();
-        bindDoubleClickExisting();
-      }, 30);
+      if(enforcing) return;
+      requestAnimationFrame(enforceAll);
     });
 
     observer.observe(strip, {
       childList:true,
       subtree:true,
       characterData:true,
-      attributes:true,
-      attributeFilter:["class","style","data-user-name","data-confirmed-name"]
+      attributes:true
     });
   }
 
@@ -17203,15 +17309,14 @@ document.addEventListener("visibilitychange", function(){
     bindConfirmButton();
     bindCancelButton();
     installObserver();
-    bindDoubleClickExisting();
     refreshTabs();
-    setTimeout(enforceAll, 100);
+    setTimeout(enforceAll, 80);
   }
 
-  window.followMeLockUPlusNameRefresh = refreshTabs;
-  window.followMeLockUPlusNameEnforce = enforceAll;
+  window.followMeStrongTabLockRefresh = refreshTabs;
+  window.followMeStrongTabLockEnforce = enforceAll;
   window.followMeOpenEditNameCard = openEditNameCard;
-  window.followMeApplyLockedUPlusName = hardApplyBySession;
+  window.followMeStrongTabSaveName = saveName;
 
   if(document.readyState === "loading"){
     document.addEventListener("DOMContentLoaded", boot);
@@ -17224,17 +17329,16 @@ document.addEventListener("visibilitychange", function(){
   });
 
   window.addEventListener("resize", function(){
-    setTimeout(enforceAll, 150);
+    setTimeout(enforceAll, 100);
   });
 
   setInterval(function(){
     bindConfirmButton();
     bindCancelButton();
-    bindDoubleClickExisting();
     enforceAll();
-  }, 350);
+  }, 120);
 
-  setInterval(refreshTabs, 4000);
+  setInterval(refreshTabs, 5000);
 })();
 </script>
 
