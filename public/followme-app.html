@@ -5669,230 +5669,14 @@
   <link rel="apple-touch-icon" href="/images/followme/icons/apple-touch-icon.png?v=followme-dynamic-qr-v5">
 
 
+
 <script>
-/* FORCE FINAL 2026-05-18:
-   - mai balloon/frame installazione su PC/desktop
-   - mai balloon/frame installazione nella pagina chat
-   - non tocca motore notifiche
+/* PC DONT ASK BUTTON REAL BALLOON - 2026-05-18
+   Aggiunge il pulsante al balloon reale:
+   #followmeInstallTopInvite e #followmeInstallSheetLite
 */
 (function(){
-  function isFollowMeChatPage(){
-    var p = String(location.pathname || "").toLowerCase();
-    var q = String(location.search || "").toLowerCase();
-    var h = String(location.hash || "").toLowerCase();
-    return p.includes("chat") || q.includes("chat") || h.includes("chat");
-  }
-
-  function isDesktopOrPc(){
-    var ua = navigator.userAgent || "";
-    var isMobileUA = /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua);
-    var coarse = false;
-    try { coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches; } catch(e) {}
-    var w = window.innerWidth || document.documentElement.clientWidth || 1200;
-    var h = window.innerHeight || document.documentElement.clientHeight || 900;
-
-    /*
-      Desktop = non mobile UA.
-      Anche tablet larghi senza UA mobile vengono trattati con prudenza:
-      se non è touch/coarse, è PC.
-    */
-    return !isMobileUA && !coarse && Math.max(w, h) >= 900;
-  }
-
-  function mustSuppressInstallUI(){
-    return isDesktopOrPc() || isFollowMeChatPage();
-  }
-
-  window.FOLLOWME_DISABLE_INSTALL_BALLOON = mustSuppressInstallUI();
-  window.APPME_SUPPRESS_INSTALL_FRAME = window.FOLLOWME_DISABLE_INSTALL_BALLOON;
-
-  if (window.FOLLOWME_DISABLE_INSTALL_BALLOON) {
-    window.addEventListener("beforeinstallprompt", function(e){
-      try { e.preventDefault(); } catch(err) {}
-      return false;
-    }, true);
-  }
-
-  function killInstallUi(){
-    if (!mustSuppressInstallUI()) return;
-
-    window.FOLLOWME_DISABLE_INSTALL_BALLOON = true;
-    window.APPME_SUPPRESS_INSTALL_FRAME = true;
-
-    var selectors = [
-      "#followmeInstallSheet",
-      "#followmeInstallBanner",
-      "#followmeInstallFrame",
-      "#followmeInstallTopBtn",
-      "#followmeSafeInstallFrame",
-      "#followmeSafeInstallBox",
-      "#followmeInstallAssistant",
-      "#installAssistantBalloon",
-      "#installAppSection",
-      "#androidInstallBox",
-      "#androidInstallBtn",
-      "#installActionResult",
-      ".followme-install-sheet",
-      ".followme-install-banner",
-      ".followme-install-frame",
-      ".followme-safe-install-frame",
-      ".install-assistant-balloon",
-      ".android-install-box",
-      ".pwa-install",
-      ".install-prompt",
-      ".install-frame",
-      "[data-install-frame]",
-      "[data-pwa-install]"
-    ];
-
-    selectors.forEach(function(sel){
-      document.querySelectorAll(sel).forEach(function(el){
-        el.style.setProperty("display", "none", "important");
-        el.style.setProperty("visibility", "hidden", "important");
-        el.style.setProperty("opacity", "0", "important");
-        el.style.setProperty("pointer-events", "none", "important");
-        el.setAttribute("aria-hidden", "true");
-      });
-    });
-
-    document.documentElement.classList.add("followme-no-install-ui");
-    if (document.body) document.body.classList.add("followme-no-install-ui");
-  }
-
-  document.addEventListener("DOMContentLoaded", killInstallUi, true);
-  window.addEventListener("load", killInstallUi, true);
-  window.addEventListener("resize", killInstallUi, true);
-  window.addEventListener("pageshow", killInstallUi, true);
-
-  /*
-    Serve perché nel file ci sono funzioni che riaprono il balloon dopo timeout,
-    refresh, cambio pagina o cambio stato utente.
-  */
-  setInterval(killInstallUi, 300);
-})();
-</script>
-
-<style>
-html.followme-no-install-ui #followmeInstallSheet,
-html.followme-no-install-ui #followmeInstallBanner,
-html.followme-no-install-ui #followmeInstallFrame,
-html.followme-no-install-ui #followmeInstallTopBtn,
-html.followme-no-install-ui #followmeSafeInstallFrame,
-html.followme-no-install-ui #followmeSafeInstallBox,
-html.followme-no-install-ui #followmeInstallAssistant,
-html.followme-no-install-ui #installAssistantBalloon,
-html.followme-no-install-ui #installAppSection,
-html.followme-no-install-ui #androidInstallBox,
-html.followme-no-install-ui #androidInstallBtn,
-html.followme-no-install-ui #installActionResult,
-html.followme-no-install-ui .followme-install-sheet,
-html.followme-no-install-ui .followme-install-banner,
-html.followme-no-install-ui .followme-install-frame,
-html.followme-no-install-ui .followme-safe-install-frame,
-html.followme-no-install-ui .install-assistant-balloon,
-html.followme-no-install-ui .android-install-box,
-html.followme-no-install-ui .pwa-install,
-html.followme-no-install-ui .install-prompt,
-html.followme-no-install-ui .install-frame,
-html.followme-no-install-ui [data-install-frame],
-html.followme-no-install-ui [data-pwa-install] {
-  display: none !important;
-  visibility: hidden !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
-</style>
-
-
-
-<script>
-/* DESKTOP NO INSTALL UI LIGHT - 2026-05-18
-   Su PC non mostra mai il frame salvataggio/installazione.
-   Versione leggera: niente MutationObserver, niente setInterval continuo.
-*/
-(function(){
-  function isDesktopPc(){
-    var ua = navigator.userAgent || "";
-    var mobileUA = /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua);
-    var coarse = false;
-    try { coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches; } catch(e) {}
-    return !mobileUA && !coarse;
-  }
-
-  if (!isDesktopPc()) return;
-
-  window.FOLLOWME_DISABLE_INSTALL_BALLOON = true;
-  window.APPME_SUPPRESS_INSTALL_FRAME = true;
-  window.deferredPrompt = null;
-
-  function hideDesktopInstallUi(){
-    document.documentElement.classList.add("desktop-no-install-ui-light");
-    if (document.body) document.body.classList.add("desktop-no-install-ui-light");
-
-    [
-      "followmeInstallTopBtn",
-      "followmeInstallSheet",
-      "followmeInstallBanner",
-      "followmeInstallFrame",
-      "followmeSafeInstallFrame",
-      "followmeSafeInstallBox",
-      "followmeInstallAssistant",
-      "installAssistantBalloon",
-      "installAppSection",
-      "androidInstallBox",
-      "androidInstallBtn",
-      "installActionResult"
-    ].forEach(function(id){
-      var el = document.getElementById(id);
-      if (el) {
-        el.style.display = "none";
-        el.style.visibility = "hidden";
-        el.setAttribute("aria-hidden", "true");
-      }
-    });
-  }
-
-  window.addEventListener("beforeinstallprompt", function(e){
-    try { e.preventDefault(); } catch(err) {}
-    window.deferredPrompt = null;
-    return false;
-  }, true);
-
-  document.addEventListener("DOMContentLoaded", hideDesktopInstallUi, true);
-  window.addEventListener("load", hideDesktopInstallUi, true);
-  window.addEventListener("pageshow", hideDesktopInstallUi, true);
-
-  // Solo pochi richiami iniziali, poi basta. Non appesantisce la chat.
-  setTimeout(hideDesktopInstallUi, 300);
-  setTimeout(hideDesktopInstallUi, 1000);
-  setTimeout(hideDesktopInstallUi, 2500);
-})();
-</script>
-
-<style>
-html.desktop-no-install-ui-light #followmeInstallTopBtn,
-html.desktop-no-install-ui-light #followmeInstallSheet,
-html.desktop-no-install-ui-light #followmeInstallBanner,
-html.desktop-no-install-ui-light #followmeInstallFrame,
-html.desktop-no-install-ui-light #followmeSafeInstallFrame,
-html.desktop-no-install-ui-light #followmeSafeInstallBox,
-html.desktop-no-install-ui-light #followmeInstallAssistant,
-html.desktop-no-install-ui-light #installAssistantBalloon,
-html.desktop-no-install-ui-light #installAppSection,
-html.desktop-no-install-ui-light #androidInstallBox,
-html.desktop-no-install-ui-light #androidInstallBtn,
-html.desktop-no-install-ui-light #installActionResult {
-  display: none !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-}
-</style>
-
-
-<script>
-/* PC: pulsante "Non richiedermelo più" sul balloon salvataggio */
-(function(){
-  var STORAGE_KEY = "followme_pc_install_prompt_dismissed";
+  var STORAGE_KEY = "followme_pc_install_prompt_dismissed_v2";
 
   function isPcDesktop(){
     var ua = navigator.userAgent || "";
@@ -5902,90 +5686,110 @@ html.desktop-no-install-ui-light #installActionResult {
     return !mobileUA && !coarse;
   }
 
-  function isDismissed(){
+  function dismissed(){
     try { return localStorage.getItem(STORAGE_KEY) === "1"; } catch(e) { return false; }
   }
 
-  function dismissForever(){
-    try { localStorage.setItem(STORAGE_KEY, "1"); } catch(e) {}
-    hideInstallBalloon();
-  }
+  function hidePrompt(){
+    document.body && document.body.classList.add("followme-pc-install-dismissed-v2");
 
-  function hideInstallBalloon(){
-    [
-      "installAssistantBalloon",
-      "followmeInstallFrame",
-      "followmeSafeInstallFrame",
-      "followmeInstallSheet",
-      "followmeInstallBanner",
-      "installAppSection"
-    ].forEach(function(id){
+    ["followmeInstallTopInvite", "followmeInstallSheetLite"].forEach(function(id){
       var el = document.getElementById(id);
       if(el){
-        el.style.display = "none";
-        el.style.visibility = "hidden";
+        el.classList.remove("show");
+        el.style.setProperty("display", "none", "important");
+        el.style.setProperty("visibility", "hidden", "important");
         el.setAttribute("aria-hidden", "true");
       }
     });
   }
 
-  function addDontAskButton(){
-    if (!isPcDesktop()) return;
+  function dismissForever(){
+    try { localStorage.setItem(STORAGE_KEY, "1"); } catch(e) {}
+    hidePrompt();
+  }
 
-    if (isDismissed()) {
-      hideInstallBalloon();
-      return;
-    }
-
-    var balloon =
-      document.getElementById("installAssistantBalloon") ||
-      document.getElementById("followmeInstallFrame") ||
-      document.getElementById("followmeSafeInstallFrame") ||
-      document.getElementById("followmeInstallSheet") ||
-      document.getElementById("followmeInstallBanner");
-
-    if (!balloon) return;
-    if (document.getElementById("pcDontAskInstallBtn")) return;
-
+  function makeButton(){
     var btn = document.createElement("button");
-    btn.id = "pcDontAskInstallBtn";
+    btn.id = "pcDontAskInstallBtnReal";
     btn.type = "button";
     btn.textContent = "Solo per PC: non richiedermelo più";
-    btn.style.cssText = [
-      "margin-top:10px",
-      "width:100%",
-      "border:1px solid rgba(255,255,255,.22)",
-      "background:rgba(255,255,255,.10)",
-      "color:inherit",
-      "border-radius:12px",
-      "padding:10px 12px",
-      "font-weight:700",
-      "cursor:pointer"
-    ].join(";");
-
     btn.addEventListener("click", function(e){
       e.preventDefault();
       e.stopPropagation();
       dismissForever();
     });
 
-    var footer =
-      document.getElementById("installAssistantActions") ||
-      document.getElementById("installAssistantBody") ||
-      balloon;
-
-    footer.appendChild(btn);
+    return btn;
   }
 
-  document.addEventListener("DOMContentLoaded", addDontAskButton);
-  window.addEventListener("load", addDontAskButton);
-  window.addEventListener("pageshow", addDontAskButton);
+  function addButton(){
+    if (!isPcDesktop()) return;
 
-  setTimeout(addDontAskButton, 500);
-  setTimeout(addDontAskButton, 1500);
-  setTimeout(addDontAskButton, 3000);
+    if (dismissed()) {
+      hidePrompt();
+      return;
+    }
+
+    var invite = document.getElementById("followmeInstallTopInvite");
+    var sheet = document.getElementById("followmeInstallSheetLite");
+
+    if (invite && !document.getElementById("pcDontAskInstallBtnReal")) {
+      invite.appendChild(makeButton());
+    }
+
+    if (sheet && !document.getElementById("pcDontAskInstallBtnRealSheet")) {
+      var sheetBtn = makeButton();
+      sheetBtn.id = "pcDontAskInstallBtnRealSheet";
+
+      var closeBtn = document.getElementById("followmeInstallSheetClose");
+      if (closeBtn && closeBtn.parentNode) {
+        closeBtn.parentNode.appendChild(sheetBtn);
+      } else {
+        sheet.appendChild(sheetBtn);
+      }
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", addButton);
+  window.addEventListener("load", addButton);
+  window.addEventListener("pageshow", addButton);
+
+  setTimeout(addButton, 300);
+  setTimeout(addButton, 900);
+  setTimeout(addButton, 1800);
+  setTimeout(addButton, 3500);
 })();
 </script>
+
+<style>
+#pcDontAskInstallBtnReal,
+#pcDontAskInstallBtnRealSheet {
+  margin-top: 10px !important;
+  width: 100% !important;
+  border: 1px solid rgba(255,255,255,.24) !important;
+  background: rgba(255,255,255,.10) !important;
+  color: inherit !important;
+  border-radius: 14px !important;
+  padding: 10px 12px !important;
+  font-size: .82rem !important;
+  font-weight: 800 !important;
+  line-height: 1.2 !important;
+  cursor: pointer !important;
+}
+
+#pcDontAskInstallBtnReal:hover,
+#pcDontAskInstallBtnRealSheet:hover {
+  background: rgba(255,255,255,.16) !important;
+}
+
+body.followme-pc-install-dismissed-v2 #followmeInstallTopInvite,
+body.followme-pc-install-dismissed-v2 #followmeInstallSheetLite {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+</style>
 
 </head>
 <body>
