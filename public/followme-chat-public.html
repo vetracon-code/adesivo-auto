@@ -1280,10 +1280,17 @@
 
 
 
-<script id="followme-public-session-id-bridge-final-20260518">
+
+
+<script id="followme-public-user-state-clean-final-20260518">
 (function(){
-  if(window.__followMePublicSessionIdBridgeFinal20260518) return;
-  window.__followMePublicSessionIdBridgeFinal20260518 = true;
+  if(window.__followMePublicUserStateCleanFinal20260518) return;
+  window.__followMePublicUserStateCleanFinal20260518 = true;
+
+  let pollTimer = null;
+  let lastAppliedKey = "";
+  let lastFetchAt = 0;
+  let inFlight = false;
 
   function cleanSid(v){
     const s = String(v || "").trim();
@@ -1325,7 +1332,7 @@
     return "";
   }
 
-  function extractSidFromData(data){
+  function extractSid(data){
     if(!data) return "";
 
     return cleanSid(
@@ -1337,122 +1344,6 @@
       (data.chat_session && data.chat_session.id) ||
       ""
     );
-  }
-
-  // Patch fetch: quando la pagina crea la sessione, salvo subito l'id.
-  if(!window.__followMePublicSessionIdFetchBridge){
-    window.__followMePublicSessionIdFetchBridge = true;
-
-    const previousFetch = window.fetch.bind(window);
-
-    window.fetch = async function(input, init){
-      const res = await previousFetch(input, init);
-
-      try{
-        const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
-
-        if(url && (
-          url.includes("/api/followme/chat/") ||
-          url.includes("/api/followme/chat/session/")
-        )){
-          const clone = res.clone();
-          const data = await clone.json().catch(()=>null);
-          const sid = extractSidFromData(data);
-
-          if(sid){
-            saveSid(sid);
-
-            if(typeof window.fmPublicForceFetchState20260518 === "function"){
-              setTimeout(window.fmPublicForceFetchState20260518, 80);
-              setTimeout(window.fmPublicForceFetchState20260518, 500);
-            }
-          }
-        }
-      }catch(e){}
-
-      return res;
-    };
-  }
-
-  // Sovrascrivo/espongo un getter robusto.
-  window.followMeGetPublicSessionIdFinal = getSid;
-
-  // Se lo script extra esiste già, gli diamo un bridge leggibile.
-  const sidNow = getSid();
-  if(sidNow && typeof window.fmPublicForceFetchState20260518 === "function"){
-    setTimeout(window.fmPublicForceFetchState20260518, 100);
-    setTimeout(window.fmPublicForceFetchState20260518, 600);
-  }
-
-  // Ultimo fallback: se la pagina è la demo FM-DEMO e c'è una sola sessione aperta,
-  // recupero automaticamente la sessione online.
-  async function recoverLatestSessionIfMissing(){
-    if(getSid()) return;
-
-    try{
-      const res = await fetch("/api/followme/FM-DEMO/chat/sessions?v=" + Date.now(), { cache:"no-store" });
-      const data = await res.json().catch(()=>null);
-
-      if(!res.ok || !data || !data.success) return;
-
-      const sessions = Array.isArray(data.sessions) ? data.sessions : [];
-      if(sessions.length === 1 && sessions[0] && sessions[0].id){
-        saveSid(sessions[0].id);
-
-        if(typeof window.fmPublicForceFetchState20260518 === "function"){
-          setTimeout(window.fmPublicForceFetchState20260518, 80);
-          setTimeout(window.fmPublicForceFetchState20260518, 500);
-        }
-      }
-    }catch(e){}
-  }
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", recoverLatestSessionIfMissing);
-  }else{
-    recoverLatestSessionIfMissing();
-  }
-
-  window.addEventListener("load", function(){
-    setTimeout(recoverLatestSessionIfMissing, 250);
-    setTimeout(recoverLatestSessionIfMissing, 1200);
-  });
-})();
-</script>
-
-<script id="followme-public-extra-bar-force-final-20260518">
-(function(){
-  if(window.__followMePublicExtraBarForceFinal20260518) return;
-  window.__followMePublicExtraBarForceFinal20260518 = true;
-
-  let lastUploads = null;
-  let lastBlocked = null;
-  let pollTimer = null;
-
-  function log(){
-    try{ console.log.apply(console, ["[FM PUBLIC EXTRA]"].concat([].slice.call(arguments))); }catch(e){}
-  }
-
-  function toastMsg(msg){
-    try{
-      if(typeof toast === "function") toast(msg);
-      else console.log(msg);
-    }catch(e){
-      console.log(msg);
-    }
-  }
-
-  function sessionId(){
-    try{
-      const q = new URLSearchParams(location.search || "");
-      return q.get("session") ||
-             q.get("chatSession") ||
-             window.followMeChatSessionId ||
-             window.FOLLOWME_CHAT_SESSION_ID ||
-             "";
-    }catch(e){
-      return window.followMeChatSessionId || window.FOLLOWME_CHAT_SESSION_ID || "";
-    }
   }
 
   function findInput(){
@@ -1479,12 +1370,12 @@
   }
 
   function injectCss(){
-    if(document.getElementById("followmePublicExtraBarForceCss20260518")) return;
+    if(document.getElementById("followmePublicUserStateCleanCss20260518")) return;
 
     const style = document.createElement("style");
-    style.id = "followmePublicExtraBarForceCss20260518";
+    style.id = "followmePublicUserStateCleanCss20260518";
     style.textContent = `
-      #fmPublicExtraBarForce20260518{
+      #fmPublicCleanExtraBar20260518{
         width:100% !important;
         box-sizing:border-box !important;
         display:none !important;
@@ -1497,7 +1388,7 @@
         z-index:50 !important;
       }
 
-      #fmPublicExtraBarForce20260518 button{
+      #fmPublicCleanExtraBar20260518 button{
         min-width:0 !important;
         width:100% !important;
         min-height:38px !important;
@@ -1515,29 +1406,15 @@
         cursor:pointer !important;
       }
 
-      body.fm-public-extra-enabled-live:not(.fm-public-blocked-live) #fmPublicExtraBarForce20260518{
+      body.fm-public-extra-enabled-clean:not(.fm-public-blocked-clean) #fmPublicCleanExtraBar20260518{
         display:grid !important;
       }
 
-      body.fm-public-blocked-live #fmPublicExtraBarForce20260518{
+      body.fm-public-blocked-clean #fmPublicCleanExtraBar20260518{
         display:none !important;
       }
 
-      body.fm-public-blocked-live textarea,
-      body.fm-public-blocked-live input[type="text"],
-      body.fm-public-blocked-live #messageInput{
-        opacity:.55 !important;
-        pointer-events:none !important;
-      }
-
-      body.fm-public-blocked-live button[type="submit"],
-      body.fm-public-blocked-live #sendBtn,
-      body.fm-public-blocked-live .send-btn{
-        opacity:.55 !important;
-        pointer-events:none !important;
-      }
-
-      #fmPublicBlockedInlineForce20260518{
+      #fmPublicCleanBlockedNotice20260518{
         display:none;
         width:100%;
         box-sizing:border-box;
@@ -1551,19 +1428,34 @@
         text-align:center;
       }
 
-      body.fm-public-blocked-live #fmPublicBlockedInlineForce20260518{
+      body.fm-public-blocked-clean #fmPublicCleanBlockedNotice20260518{
         display:block !important;
       }
+
+      body.fm-public-blocked-clean textarea,
+      body.fm-public-blocked-clean input[type="text"],
+      body.fm-public-blocked-clean #messageInput{
+        opacity:.55 !important;
+        pointer-events:none !important;
+      }
+
+      body.fm-public-blocked-clean button[type="submit"],
+      body.fm-public-blocked-clean #sendBtn,
+      body.fm-public-blocked-clean .send-btn{
+        opacity:.55 !important;
+        pointer-events:none !important;
+      }
     `;
+
     document.head.appendChild(style);
   }
 
   function ensureBlockedNotice(){
-    let notice = document.getElementById("fmPublicBlockedInlineForce20260518");
+    let notice = document.getElementById("fmPublicCleanBlockedNotice20260518");
     if(notice) return notice;
 
     notice = document.createElement("div");
-    notice.id = "fmPublicBlockedInlineForce20260518";
+    notice.id = "fmPublicCleanBlockedNotice20260518";
     notice.textContent = "Sei stato bloccato dal sistema.";
 
     const input = findInput();
@@ -1581,17 +1473,17 @@
   }
 
   function ensureExtraBar(){
-    let bar = document.getElementById("fmPublicExtraBarForce20260518");
+    let bar = document.getElementById("fmPublicCleanExtraBar20260518");
     if(bar) return bar;
 
     bar = document.createElement("div");
-    bar.id = "fmPublicExtraBarForce20260518";
+    bar.id = "fmPublicCleanExtraBar20260518";
     bar.innerHTML = `
-      <button type="button" id="fmPublicExtraPhotoForce20260518">📷 Foto</button>
-      <button type="button" id="fmPublicExtraFileForce20260518">📎 File</button>
-      <button type="button" id="fmPublicExtraLocationForce20260518">📍 Posizione</button>
-      <input type="file" id="fmPublicExtraPhotoInputForce20260518" accept="image/*" capture="environment" hidden>
-      <input type="file" id="fmPublicExtraFileInputForce20260518" hidden>
+      <button type="button" id="fmPublicCleanPhoto20260518">📷 Foto</button>
+      <button type="button" id="fmPublicCleanFile20260518">📎 File</button>
+      <button type="button" id="fmPublicCleanLocation20260518">📍 Posizione</button>
+      <input type="file" id="fmPublicCleanPhotoInput20260518" accept="image/*" capture="environment" hidden>
+      <input type="file" id="fmPublicCleanFileInput20260518" hidden>
     `;
 
     const input = findInput();
@@ -1610,29 +1502,18 @@
   }
 
   function canUseExtra(){
-    if(document.body.classList.contains("fm-public-blocked-live")){
-      toastMsg("Sei stato bloccato dal sistema.");
+    if(document.body.classList.contains("fm-public-blocked-clean")){
       return false;
     }
 
-    if(!document.body.classList.contains("fm-public-extra-enabled-live")){
-      toastMsg("Funzione extra non abilitata.");
-      return false;
-    }
-
-    return true;
+    return document.body.classList.contains("fm-public-extra-enabled-clean");
   }
 
   async function sendRawFile(file, kind){
-    const sid = sessionId();
+    const sid = getSid();
 
-    if(!sid){
-      throw new Error("Sessione chat mancante.");
-    }
-
-    if(!file){
-      throw new Error("File mancante.");
-    }
+    if(!sid) throw new Error("Sessione chat mancante.");
+    if(!file) throw new Error("File mancante.");
 
     const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/attachment-raw", {
       method:"POST",
@@ -1651,8 +1532,6 @@
       throw new Error((data && data.error) || "Errore invio allegato.");
     }
 
-    toastMsg("Allegato inviato.");
-
     try{
       if(typeof window.followMePublicLoadMessages === "function"){
         window.followMePublicLoadMessages();
@@ -1661,14 +1540,14 @@
   }
 
   function bindExtraBar(bar){
-    if(bar.dataset.boundForce === "1") return;
-    bar.dataset.boundForce = "1";
+    if(bar.dataset.boundClean === "1") return;
+    bar.dataset.boundClean = "1";
 
-    const photoBtn = bar.querySelector("#fmPublicExtraPhotoForce20260518");
-    const fileBtn = bar.querySelector("#fmPublicExtraFileForce20260518");
-    const locBtn = bar.querySelector("#fmPublicExtraLocationForce20260518");
-    const photoInput = bar.querySelector("#fmPublicExtraPhotoInputForce20260518");
-    const fileInput = bar.querySelector("#fmPublicExtraFileInputForce20260518");
+    const photoBtn = bar.querySelector("#fmPublicCleanPhoto20260518");
+    const fileBtn = bar.querySelector("#fmPublicCleanFile20260518");
+    const locBtn = bar.querySelector("#fmPublicCleanLocation20260518");
+    const photoInput = bar.querySelector("#fmPublicCleanPhotoInput20260518");
+    const fileInput = bar.querySelector("#fmPublicCleanFileInput20260518");
 
     photoBtn.addEventListener("click", function(ev){
       ev.preventDefault();
@@ -1724,7 +1603,7 @@
           const lat = pos.coords.latitude;
           const lng = pos.coords.longitude;
           const url = "https://www.google.com/maps?q=" + encodeURIComponent(lat + "," + lng);
-          const sid = sessionId();
+          const sid = getSid();
 
           const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/attachment", {
             method:"POST",
@@ -1744,8 +1623,6 @@
           if(!res.ok || !data || !data.success){
             throw new Error((data && data.error) || "Errore invio posizione.");
           }
-
-          toastMsg("Posizione inviata.");
 
           try{
             if(typeof window.followMePublicLoadMessages === "function"){
@@ -1770,11 +1647,18 @@
 
     const uploads = !!session.uploads_enabled;
     const blocked = !!session.is_blocked;
+    const key = String(session.id || "") + "|" + uploads + "|" + blocked + "|" + String(session.updated_at || "");
 
-    document.body.classList.toggle("fm-public-extra-enabled-live", uploads);
-    document.body.classList.toggle("fm-public-blocked-live", blocked);
+    // Se è lo stesso stato, non faccio nulla: evita ripetizioni e rallentamenti.
+    if(key === lastAppliedKey) return;
+    lastAppliedKey = key;
 
-    // Mantengo anche le classi vecchie, così eventuale CSS esistente resta compatibile.
+    if(session.id) saveSid(session.id);
+
+    document.body.classList.toggle("fm-public-extra-enabled-clean", uploads);
+    document.body.classList.toggle("fm-public-blocked-clean", blocked);
+
+    // Compatibilità con eventuale CSS/JS precedente
     document.body.classList.toggle("followme-public-uploads-enabled", uploads);
     document.body.classList.toggle("followme-public-user-blocked", blocked);
 
@@ -1798,48 +1682,101 @@
     ensureBlockedNotice();
     ensureExtraBar();
 
-    if(lastUploads !== null && lastUploads !== uploads){
-      toastMsg(uploads ? "Funzioni extra abilitate." : "Funzioni extra disabilitate.");
-    }
-
-    if(lastBlocked !== null && lastBlocked !== blocked){
-      toastMsg(blocked ? "Sei stato bloccato dal sistema." : "Utente sbloccato.");
-    }
-
     lastUploads = uploads;
     lastBlocked = blocked;
-
-    log("state", { uploads, blocked, session_id: session.id });
   }
 
-  async function fetchState(){
-    const sid = sessionId();
+  async function fetchState(force){
+    const now = Date.now();
 
-    if(!sid){
-      log("session id mancante");
-      return;
+    // Throttle: evita richieste continue se altri script chiamano questa funzione.
+    if(!force && now - lastFetchAt < 900) return;
+    if(inFlight) return;
+
+    lastFetchAt = now;
+    inFlight = true;
+
+    try{
+      let sid = getSid();
+
+      if(!sid){
+        await recoverLatestSessionIfMissing();
+        sid = getSid();
+      }
+
+      if(!sid) return;
+
+      const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/state?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data = await res.json().catch(()=>null);
+
+      if(!res.ok || !data || !data.success) return;
+
+      applyState(data.session);
+    }catch(e){
+      console.warn("[FM public clean state] fetch error", e);
+    }finally{
+      inFlight = false;
     }
+  }
 
-    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/state?v=" + Date.now(), {
-      cache:"no-store"
-    });
+  async function recoverLatestSessionIfMissing(){
+    if(getSid()) return;
 
-    const data = await res.json().catch(()=>null);
+    try{
+      const res = await fetch("/api/followme/FM-DEMO/chat/sessions?v=" + Date.now(), { cache:"no-store" });
+      const data = await res.json().catch(()=>null);
 
-    if(!res.ok || !data || !data.success){
-      log("state non valido", data);
-      return;
-    }
+      if(!res.ok || !data || !data.success) return;
 
-    applyState(data.session);
+      const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+
+      // Prendo l'ultima sessione aperta se esiste.
+      const open = sessions.filter(s => s && s.status === "open");
+      const chosen = open[0] || sessions[0];
+
+      if(chosen && chosen.id){
+        saveSid(chosen.id);
+      }
+    }catch(e){}
+  }
+
+  // Un solo fetch wrapper, leggerissimo: salva solo session_id dalla creazione sessione.
+  if(!window.__fmPublicCleanSingleFetchBridge20260518){
+    window.__fmPublicCleanSingleFetchBridge20260518 = true;
+
+    const previousFetch = window.fetch.bind(window);
+
+    window.fetch = async function(input, init){
+      const res = await previousFetch(input, init);
+
+      try{
+        const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+
+        if(url && url.includes("/api/followme/chat/") && !url.includes("/messages?")){
+          const clone = res.clone();
+          const data = await clone.json().catch(()=>null);
+          const sid = extractSid(data);
+
+          if(sid){
+            saveSid(sid);
+            setTimeout(function(){ fetchState(true); }, 120);
+          }
+        }
+      }catch(e){}
+
+      return res;
+    };
   }
 
   function patchSubmitGuard(){
-    if(window.__fmPublicExtraSubmitGuardFinal20260518) return;
-    window.__fmPublicExtraSubmitGuardFinal20260518 = true;
+    if(window.__fmPublicCleanSubmitGuard20260518) return;
+    window.__fmPublicCleanSubmitGuard20260518 = true;
 
     document.addEventListener("submit", function(ev){
-      if(document.body.classList.contains("fm-public-blocked-live")){
+      if(document.body.classList.contains("fm-public-blocked-clean")){
         ev.preventDefault();
         ev.stopPropagation();
         ev.stopImmediatePropagation();
@@ -1851,9 +1788,10 @@
       const btn = ev.target && ev.target.closest ? ev.target.closest("button") : null;
       if(!btn) return;
 
-      if(document.body.classList.contains("fm-public-blocked-live")){
+      if(document.body.classList.contains("fm-public-blocked-clean")){
         const txt = String(btn.textContent || "").toLowerCase();
         const isSend = btn.id === "sendBtn" || btn.type === "submit" || txt.includes("invia");
+
         if(isSend){
           ev.preventDefault();
           ev.stopPropagation();
@@ -1869,14 +1807,20 @@
     ensureBlockedNotice();
     ensureExtraBar();
     patchSubmitGuard();
-    fetchState();
+
+    fetchState(true);
 
     if(!pollTimer){
-      pollTimer = setInterval(fetchState, 700);
+      // Prima era troppo aggressivo: 700ms. Ora 2.5s, più leggero e senza duplicati.
+      pollTimer = setInterval(function(){
+        fetchState(false);
+      }, 2500);
     }
   }
 
-  window.fmPublicForceFetchState20260518 = fetchState;
+  window.fmPublicForceFetchState20260518 = function(){
+    return fetchState(true);
+  };
 
   if(document.readyState === "loading"){
     document.addEventListener("DOMContentLoaded", boot);
@@ -1885,19 +1829,17 @@
   }
 
   window.addEventListener("load", function(){
-    setTimeout(boot, 200);
-    setTimeout(fetchState, 600);
-    setTimeout(fetchState, 1400);
+    setTimeout(function(){ fetchState(true); }, 300);
+    setTimeout(function(){ fetchState(true); }, 1200);
   });
 
   window.addEventListener("pageshow", function(){
-    setTimeout(fetchState, 200);
-    setTimeout(fetchState, 900);
+    setTimeout(function(){ fetchState(true); }, 250);
   });
 
   document.addEventListener("visibilitychange", function(){
     if(document.visibilityState === "visible"){
-      setTimeout(fetchState, 200);
+      setTimeout(function(){ fetchState(true); }, 250);
     }
   });
 })();
