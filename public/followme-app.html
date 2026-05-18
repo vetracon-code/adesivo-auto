@@ -5663,6 +5663,26 @@
       border:1px solid rgba(255,255,255,.22) !important;
     }
 
+
+    /* Mobile: non mostrare mai la dicitura/pulsante "Solo per PC non richiedermelo più" */
+    @media (max-width: 899px){
+      .followme-pc-only-dont-ask,
+      .followme-desktop-dont-ask,
+      .followme-install-pc-dont-ask,
+      #followmePcDontAskInstallBtn,
+      #followmeDesktopDontAskInstallBtn,
+      [data-pc-only-dont-ask],
+      [data-desktop-dont-ask]{
+        display:none !important;
+        visibility:hidden !important;
+        opacity:0 !important;
+        pointer-events:none !important;
+        height:0 !important;
+        max-height:0 !important;
+        overflow:hidden !important;
+      }
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -16887,6 +16907,76 @@ document.addEventListener("visibilitychange", function(){
   });
 
   setInterval(boot, 1000);
+})();
+</script>
+
+
+<script id="followme-hide-pc-only-dont-ask-on-mobile-final">
+(function(){
+  function isMobileWidth(){
+    return window.matchMedia && window.matchMedia("(max-width: 899px)").matches;
+  }
+
+  function looksLikePcOnlyDontAsk(el){
+    if(!el) return false;
+
+    const txt = String(el.textContent || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+
+    return (
+      txt.includes("solo per pc") ||
+      txt.includes("non richiedermelo") ||
+      txt.includes("non richiederlo") ||
+      txt.includes("non chiedermelo") ||
+      txt.includes("non mostrare più")
+    );
+  }
+
+  function hideMobilePcOnlyText(){
+    if(!isMobileWidth()) return;
+
+    document.querySelectorAll("button, a, div, span, p").forEach(function(el){
+      if(!looksLikePcOnlyDontAsk(el)) return;
+
+      /*
+        Nascondo l'elemento più piccolo possibile, non l'intero balloon,
+        così non rompiamo la logica mobile di installazione.
+      */
+      const target =
+        el.closest(".followme-pc-only-dont-ask") ||
+        el.closest(".followme-desktop-dont-ask") ||
+        el.closest("[data-pc-only-dont-ask]") ||
+        el.closest("[data-desktop-dont-ask]") ||
+        el;
+
+      target.style.setProperty("display", "none", "important");
+      target.style.setProperty("visibility", "hidden", "important");
+      target.style.setProperty("opacity", "0", "important");
+      target.style.setProperty("pointer-events", "none", "important");
+      target.setAttribute("aria-hidden", "true");
+    });
+  }
+
+  window.followMeHidePcOnlyDontAskOnMobile = hideMobilePcOnlyText;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", hideMobilePcOnlyText);
+  }else{
+    hideMobilePcOnlyText();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(hideMobilePcOnlyText, 100);
+    setTimeout(hideMobilePcOnlyText, 500);
+  });
+
+  window.addEventListener("resize", function(){
+    setTimeout(hideMobilePcOnlyText, 100);
+  });
+
+  setInterval(hideMobilePcOnlyText, 1000);
 })();
 </script>
 
