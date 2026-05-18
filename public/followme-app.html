@@ -5485,6 +5485,65 @@
       pointer-events:auto !important;
     }
 
+
+    /* =====================================================
+       PC: disattiva completamente il balloon installazione/salvataggio.
+       Mobile non viene toccato.
+       ===================================================== */
+    @media (min-width:900px){
+      .followme-install-helper,
+      #followmeInstallHelper,
+      #followmeInstallPrompt,
+      .followme-pwa-install,
+      .followme-save-app-helper,
+      [data-install-helper],
+      [data-pwa-helper],
+      body [class*="install"][class*="helper"],
+      body [class*="pwa"][class*="install"]{
+        display:none !important;
+        visibility:hidden !important;
+        opacity:0 !important;
+        pointer-events:none !important;
+        z-index:-999999 !important;
+      }
+    }
+
+    /* In chat il balloon non deve mai intercettare click */
+    body.followme-chat-only-mode .followme-install-helper,
+    body.followme-chat-only-mode #followmeInstallHelper,
+    body.followme-chat-only-mode #followmeInstallPrompt,
+    body.followme-chat-only-mode .followme-pwa-install,
+    body.followme-chat-only-mode .followme-save-app-helper,
+    body.followme-chat-only-mode [data-install-helper],
+    body.followme-chat-only-mode [data-pwa-helper]{
+      display:none !important;
+      visibility:hidden !important;
+      opacity:0 !important;
+      pointer-events:none !important;
+      z-index:-999999 !important;
+    }
+
+    /* Il tab utente deve poter ricevere il click del menu */
+    #followmeOwnerChatSessionStrip .followme-chat-session-chip{
+      pointer-events:auto !important;
+      cursor:pointer !important;
+      user-select:none !important;
+      -webkit-user-select:none !important;
+    }
+
+    #followmeOwnerChatSessionStrip .followme-chat-session-chip[data-user-menu-ready="1"]{
+      cursor:context-menu !important;
+    }
+
+    .followme-user-manage-overlay{
+      z-index:1000500 !important;
+    }
+
+    .followme-user-manage-overlay.is-open{
+      display:flex !important;
+      pointer-events:auto !important;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -17072,6 +17131,388 @@ document.addEventListener("visibilitychange", function(){
     boot();
     installObserver();
   }, 500);
+})();
+</script>
+
+
+<script id="followme-final-disable-pc-install-and-user-menu">
+(function(){
+  let lastTap = { sid:"", time:0 };
+  let longPressTimer = null;
+
+  function isDesktop(){
+    return window.matchMedia && window.matchMedia("(min-width:900px)").matches;
+  }
+
+  function code(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function isChatContext(){
+    try{
+      const p = new URLSearchParams(location.search || "");
+      return (
+        p.has("chatSession") ||
+        p.get("focus") === "chat" ||
+        document.body.classList.contains("followme-chat-only-mode") ||
+        document.body.classList.contains("followme-desktop-chat-active") ||
+        !!document.getElementById("followmeOwnerChatMessages")
+      );
+    }catch(e){
+      return !!document.getElementById("followmeOwnerChatMessages");
+    }
+  }
+
+  function hideAndNeutralizeInstallBalloons(){
+    if(!isDesktop() && !isChatContext()) return;
+
+    document.body.classList.add("followme-hide-install-balloon-in-chat");
+    document.body.classList.add("followme-desktop-install-balloon-dismissed");
+
+    try{
+      localStorage.setItem("followme_desktop_install_balloon_seen_v1", "1");
+      localStorage.setItem("followme_desktop_install_balloon_seen_v2", "1");
+      localStorage.setItem("followme_install_instructions_dismissed_v1", "1");
+      localStorage.setItem("followme_install_instructions_later_v1", "1");
+    }catch(e){}
+
+    const selectors = [
+      ".followme-install-helper",
+      "#followmeInstallHelper",
+      "#followmeInstallPrompt",
+      ".followme-pwa-install",
+      ".followme-save-app-helper",
+      "[data-install-helper]",
+      "[data-pwa-helper]",
+      "[class*='install'][class*='helper']",
+      "[class*='pwa'][class*='install']"
+    ];
+
+    selectors.forEach(function(sel){
+      document.querySelectorAll(sel).forEach(function(el){
+        el.style.display = "none";
+        el.style.visibility = "hidden";
+        el.style.opacity = "0";
+        el.style.pointerEvents = "none";
+        el.style.zIndex = "-999999";
+        el.setAttribute("aria-hidden", "true");
+      });
+    });
+
+    // Fallback testuale: su PC rimuove anche eventuali box senza classe riconoscibile.
+    if(isDesktop() || isChatContext()){
+      document.querySelectorAll("div, section, aside, article").forEach(function(el){
+        const txt = String(el.textContent || "").toLowerCase();
+        if(
+          txt.includes("installa") ||
+          txt.includes("salva") && txt.includes("web app") ||
+          txt.includes("aggiungi") && txt.includes("schermata")
+        ){
+          const r = el.getBoundingClientRect();
+          if(r.width > 80 && r.height > 30 && r.height < 420){
+            el.style.display = "none";
+            el.style.visibility = "hidden";
+            el.style.pointerEvents = "none";
+            el.setAttribute("aria-hidden", "true");
+          }
+        }
+      });
+    }
+  }
+
+  async function fetchSessions(){
+    try{
+      const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), {
+        cache:"no-store"
+      });
+      const data = await res.json().catch(()=>null);
+      if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)) return [];
+      return data.sessions.slice().sort(function(a,b){
+        return Number(a.display_index || 0) - Number(b.display_index || 0);
+      });
+    }catch(e){
+      return [];
+    }
+  }
+
+  async function stateForChip(chip){
+    const sid = String(chip && chip.dataset.sessionId || "");
+    const sessions = await fetchSessions();
+    const idx = sessions.findIndex(function(s){ return String(s.id) === sid; });
+    const s = idx >= 0 ? sessions[idx] : null;
+
+    return {
+      sid,
+      uLabel: (s ? "U" + Number(s.display_index || idx + 1) : (chip.dataset.uLabel || "")),
+      name: (s && s.display_name) || chip.dataset.userName || "",
+      uploads_enabled: !!(s && s.uploads_enabled),
+      is_blocked: !!(s && s.is_blocked)
+    };
+  }
+
+  function ensureUserMenuExists(){
+    if(document.getElementById("followmeUserManageOverlay")) return;
+
+    const html = `
+      <div class="followme-user-manage-overlay" id="followmeUserManageOverlay" aria-hidden="true">
+        <div class="followme-user-manage-card" role="dialog" aria-modal="true">
+          <h3 class="followme-user-manage-title" id="followmeUserManageTitle">Gestione utente</h3>
+          <p class="followme-user-manage-subtitle" id="followmeUserManageSubtitle">Seleziona un’azione per questa chat.</p>
+          <div class="followme-user-manage-actions">
+            <button type="button" id="followmeUserManageEditName">Modifica nome</button>
+            <button type="button" id="followmeUserManageUploads">Abilita caricamenti completi</button>
+            <button type="button" id="followmeUserManageBlock" class="danger">Blocca utente</button>
+            <button type="button" id="followmeUserManageClose">Chiudi</button>
+          </div>
+          <div class="followme-user-manage-note">Click sul nome utente per gestire questa chat.</div>
+        </div>
+      </div>
+    `;
+    document.body.insertAdjacentHTML("beforeend", html);
+  }
+
+  function showMenuWithState(st){
+    ensureUserMenuExists();
+
+    const overlay = document.getElementById("followmeUserManageOverlay");
+    const title = document.getElementById("followmeUserManageTitle");
+    const subtitle = document.getElementById("followmeUserManageSubtitle");
+    const uploads = document.getElementById("followmeUserManageUploads");
+    const block = document.getElementById("followmeUserManageBlock");
+
+    const label = st.name ? (st.uLabel + " · " + st.name) : (st.uLabel || "Utente");
+
+    if(title) title.textContent = "Gestione utente";
+    if(subtitle) subtitle.textContent = label;
+
+    if(uploads){
+      uploads.textContent = st.uploads_enabled ? "Disabilita caricamenti completi" : "Abilita caricamenti completi";
+      uploads.className = st.uploads_enabled ? "warn" : "ok";
+      uploads.onclick = function(ev){
+        ev.preventDefault();
+        updateSettings(st.sid, { uploads_enabled: !st.uploads_enabled });
+      };
+    }
+
+    if(block){
+      block.textContent = st.is_blocked ? "Riabilita utente" : "Blocca utente";
+      block.className = st.is_blocked ? "ok" : "danger";
+      block.onclick = function(ev){
+        ev.preventDefault();
+        updateSettings(st.sid, { is_blocked: !st.is_blocked });
+      };
+    }
+
+    const edit = document.getElementById("followmeUserManageEditName");
+    if(edit){
+      edit.onclick = function(ev){
+        ev.preventDefault();
+        closeUserMenu();
+
+        if(typeof window.followMeOpenEditNameCard === "function"){
+          window.__followMePendingNameSessionId = st.sid;
+          window.__followMePendingNameULabel = st.uLabel;
+          window.followMeOpenEditNameCard(st.sid, st.name || "", st.uLabel);
+          return;
+        }
+
+        const newName = prompt("Nome utente", st.name || "");
+        if(newName) saveName(st.sid, newName, st.uLabel);
+      };
+    }
+
+    const close = document.getElementById("followmeUserManageClose");
+    if(close){
+      close.onclick = function(ev){
+        ev.preventDefault();
+        closeUserMenu();
+      };
+    }
+
+    if(overlay){
+      overlay.classList.add("is-open");
+      overlay.setAttribute("aria-hidden", "false");
+      overlay.onclick = function(ev){
+        if(ev.target === overlay) closeUserMenu();
+      };
+    }
+  }
+
+  function closeUserMenu(){
+    const overlay = document.getElementById("followmeUserManageOverlay");
+    if(overlay){
+      overlay.classList.remove("is-open");
+      overlay.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  async function updateSettings(sessionId, payload){
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/settings", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(payload)
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      alert("Errore aggiornamento utente: " + ((data && data.error) || ("HTTP " + res.status)));
+      return;
+    }
+
+    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + sessionId + '"]');
+    if(chip){
+      const st = await stateForChip(chip);
+      showMenuWithState(st);
+    }
+  }
+
+  async function saveName(sessionId, name, uLabel){
+    const clean = String(name || "").trim();
+    if(!clean) return;
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/name", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ display_name: clean })
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      alert("Errore salvataggio nome: " + ((data && data.error) || ("HTTP " + res.status)));
+      return;
+    }
+
+    if(typeof window.followMeFinalVisualTabEnforce === "function") window.followMeFinalVisualTabEnforce();
+  }
+
+  async function openMenuFromChip(chip){
+    hideAndNeutralizeInstallBalloons();
+
+    if(!chip) return;
+
+    const sid = String(chip.dataset.sessionId || "");
+    if(!sid){
+      alert("Non riesco a identificare questa chat.");
+      return;
+    }
+
+    const st = await stateForChip(chip);
+    showMenuWithState(st);
+  }
+
+  function bindChip(chip){
+    if(!chip || chip.dataset.finalUserMenuClickBound === "1") return;
+
+    chip.dataset.finalUserMenuClickBound = "1";
+    chip.dataset.userMenuReady = "1";
+
+    /*
+      Regola nuova:
+      - se clicchi sul tab attivo, apre gestione utente;
+      - se clicchi su un altro tab, mantiene il cambio chat.
+      Così evitiamo il doppio click che causava refresh.
+    */
+    chip.addEventListener("click", function(ev){
+      const isActive = chip.classList.contains("active");
+      const hasName = !!(chip.dataset.userName || chip.dataset.finalLabel);
+
+      if(isActive || hasName){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        openMenuFromChip(chip);
+      }
+    }, true);
+
+    chip.addEventListener("dblclick", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      openMenuFromChip(chip);
+    }, true);
+
+    chip.addEventListener("contextmenu", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      openMenuFromChip(chip);
+    }, true);
+
+    chip.addEventListener("touchstart", function(ev){
+      clearTimeout(longPressTimer);
+      longPressTimer = setTimeout(function(){
+        try{
+          ev.preventDefault();
+          ev.stopPropagation();
+        }catch(e){}
+        openMenuFromChip(chip);
+      }, 550);
+    }, { passive:false, capture:true });
+
+    chip.addEventListener("touchend", function(){
+      clearTimeout(longPressTimer);
+    }, true);
+
+    chip.addEventListener("touchmove", function(){
+      clearTimeout(longPressTimer);
+    }, true);
+  }
+
+  function bindChips(){
+    document.querySelectorAll("#followmeOwnerChatSessionStrip .followme-chat-session-chip").forEach(bindChip);
+  }
+
+  function boot(){
+    hideAndNeutralizeInstallBalloons();
+    ensureUserMenuExists();
+    bindChips();
+  }
+
+  window.followMeFinalOpenUserMenuFromChip = openMenuFromChip;
+  window.followMeFinalDisablePcInstallAndUserMenuBoot = boot;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 150);
+    setTimeout(boot, 600);
+  });
+
+  const observerTick = function(){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+    if(!strip || strip.dataset.finalUserMenuObserver === "1") return;
+
+    strip.dataset.finalUserMenuObserver = "1";
+    const obs = new MutationObserver(function(){
+      setTimeout(boot, 20);
+    });
+
+    obs.observe(strip, {
+      childList:true,
+      subtree:true,
+      characterData:true,
+      attributes:true
+    });
+  };
+
+  setInterval(function(){
+    boot();
+    observerTick();
+  }, 400);
 })();
 </script>
 
