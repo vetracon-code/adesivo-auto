@@ -5235,6 +5235,55 @@
       }
     }
 
+
+    /* =====================================================
+       Balloon installazione:
+       - mai dentro la chat
+       - su PC massimo una volta solo nella prima pagina
+       ===================================================== */
+
+    body.followme-chat-only-mode .followme-install-helper,
+    body.followme-chat-only-mode #followmeInstallHelper,
+    body.followme-chat-only-mode #followmeInstallPrompt,
+    body.followme-chat-only-mode .followme-pwa-install,
+    body.followme-chat-only-mode .followme-save-app-helper,
+    body.followme-chat-only-mode [data-install-helper],
+    body.followme-chat-only-mode [data-pwa-helper],
+    body.followme-desktop-chat-active .followme-install-helper,
+    body.followme-desktop-chat-active #followmeInstallHelper,
+    body.followme-desktop-chat-active #followmeInstallPrompt,
+    body.followme-desktop-chat-active .followme-pwa-install,
+    body.followme-desktop-chat-active .followme-save-app-helper,
+    body.followme-desktop-chat-active [data-install-helper],
+    body.followme-desktop-chat-active [data-pwa-helper],
+    body.followme-hide-install-balloon-in-chat .followme-install-helper,
+    body.followme-hide-install-balloon-in-chat #followmeInstallHelper,
+    body.followme-hide-install-balloon-in-chat #followmeInstallPrompt,
+    body.followme-hide-install-balloon-in-chat .followme-pwa-install,
+    body.followme-hide-install-balloon-in-chat .followme-save-app-helper,
+    body.followme-hide-install-balloon-in-chat [data-install-helper],
+    body.followme-hide-install-balloon-in-chat [data-pwa-helper]{
+      display:none !important;
+      visibility:hidden !important;
+      opacity:0 !important;
+      pointer-events:none !important;
+    }
+
+    @media (min-width:900px){
+      body.followme-desktop-install-balloon-dismissed .followme-install-helper,
+      body.followme-desktop-install-balloon-dismissed #followmeInstallHelper,
+      body.followme-desktop-install-balloon-dismissed #followmeInstallPrompt,
+      body.followme-desktop-install-balloon-dismissed .followme-pwa-install,
+      body.followme-desktop-install-balloon-dismissed .followme-save-app-helper,
+      body.followme-desktop-install-balloon-dismissed [data-install-helper],
+      body.followme-desktop-install-balloon-dismissed [data-pwa-helper]{
+        display:none !important;
+        visibility:hidden !important;
+        opacity:0 !important;
+        pointer-events:none !important;
+      }
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -15960,6 +16009,197 @@ document.addEventListener("visibilitychange", function(){
   });
 
   setInterval(boot, 1000);
+})();
+</script>
+
+
+<script id="followme-install-balloon-never-in-chat-final">
+(function(){
+  const DESKTOP_SEEN_KEY = "followme_desktop_install_balloon_seen_v2";
+
+  function isDesktop(){
+    return window.matchMedia && window.matchMedia("(min-width: 900px)").matches;
+  }
+
+  function params(){
+    try{
+      return new URLSearchParams(location.search || "");
+    }catch(e){
+      return new URLSearchParams("");
+    }
+  }
+
+  function isChatContext(){
+    const p = params();
+
+    return (
+      p.has("chatSession") ||
+      p.get("focus") === "chat" ||
+      document.body.classList.contains("followme-chat-only-mode") ||
+      document.body.classList.contains("followme-desktop-chat-active") ||
+      !!document.querySelector("#followmeOwnerChatMessages")
+    );
+  }
+
+  function installSelectors(){
+    return [
+      ".followme-install-helper",
+      "#followmeInstallHelper",
+      "#followmeInstallPrompt",
+      ".followme-pwa-install",
+      ".followme-save-app-helper",
+      "[data-install-helper]",
+      "[data-pwa-helper]"
+    ];
+  }
+
+  function installElements(){
+    const out = [];
+    installSelectors().forEach(function(sel){
+      document.querySelectorAll(sel).forEach(function(el){
+        if(!out.includes(el)) out.push(el);
+      });
+    });
+    return out;
+  }
+
+  function hideInstallElements(){
+    installElements().forEach(function(el){
+      el.style.display = "none";
+      el.style.visibility = "hidden";
+      el.style.opacity = "0";
+      el.style.pointerEvents = "none";
+      el.setAttribute("aria-hidden", "true");
+    });
+  }
+
+  function markDesktopSeen(){
+    if(!isDesktop()) return;
+
+    try{
+      localStorage.setItem(DESKTOP_SEEN_KEY, "1");
+    }catch(e){}
+
+    document.body.classList.add("followme-desktop-install-balloon-dismissed");
+  }
+
+  function desktopSeen(){
+    try{
+      return localStorage.getItem(DESKTOP_SEEN_KEY) === "1";
+    }catch(e){
+      return false;
+    }
+  }
+
+  function rememberIfShownOnDesktopFirstPage(){
+    if(!isDesktop()) return;
+    if(isChatContext()) return;
+    if(desktopSeen()) return;
+
+    const visible = installElements().some(function(el){
+      const r = el.getBoundingClientRect();
+      const st = window.getComputedStyle(el);
+      return r.width > 0 &&
+             r.height > 0 &&
+             st.display !== "none" &&
+             st.visibility !== "hidden" &&
+             st.opacity !== "0";
+    });
+
+    if(visible){
+      markDesktopSeen();
+    }
+  }
+
+  function bindDismissButtons(){
+    const words = [
+      "chiudi",
+      "ok",
+      "ho capito",
+      "lo farò dopo",
+      "lo faro dopo",
+      "più tardi",
+      "piu tardi",
+      "dopo",
+      "non ora"
+    ];
+
+    document.querySelectorAll("button, a").forEach(function(btn){
+      if(btn.dataset.installBalloonNeverChatBound === "1") return;
+
+      const txt = String(btn.textContent || "").trim().toLowerCase();
+      if(!txt) return;
+
+      const matched = words.some(function(w){ return txt.includes(w); });
+      if(!matched) return;
+
+      const insideInstall =
+        btn.closest(".followme-install-helper") ||
+        btn.closest("#followmeInstallHelper") ||
+        btn.closest("#followmeInstallPrompt") ||
+        btn.closest(".followme-pwa-install") ||
+        btn.closest(".followme-save-app-helper") ||
+        btn.closest("[data-install-helper]") ||
+        btn.closest("[data-pwa-helper]");
+
+      if(!insideInstall) return;
+
+      btn.dataset.installBalloonNeverChatBound = "1";
+
+      btn.addEventListener("click", function(){
+        if(isDesktop()){
+          markDesktopSeen();
+        }
+
+        if(isChatContext()){
+          document.body.classList.add("followme-hide-install-balloon-in-chat");
+        }
+
+        setTimeout(boot, 40);
+      }, true);
+    });
+  }
+
+  function boot(){
+    const inChat = isChatContext();
+
+    if(inChat){
+      document.body.classList.add("followme-hide-install-balloon-in-chat");
+      hideInstallElements();
+      return;
+    }
+
+    document.body.classList.remove("followme-hide-install-balloon-in-chat");
+
+    if(isDesktop() && desktopSeen()){
+      document.body.classList.add("followme-desktop-install-balloon-dismissed");
+      hideInstallElements();
+      return;
+    }
+
+    bindDismissButtons();
+    rememberIfShownOnDesktopFirstPage();
+  }
+
+  window.followMeInstallBalloonNeverInChatBoot = boot;
+  window.followMeInstallBalloonNeverInChatHide = hideInstallElements;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 100);
+    setTimeout(boot, 500);
+  });
+
+  window.addEventListener("resize", function(){
+    setTimeout(boot, 100);
+  });
+
+  setInterval(boot, 500);
 })();
 </script>
 
