@@ -10001,13 +10001,38 @@ app.post('/api/followme/chat/session/:session_id/settings', express.json(), asyn
            blocked_at = CASE WHEN $3 = TRUE THEN COALESCE(blocked_at, NOW()) ELSE NULL END,
            updated_at = NOW()
        WHERE id = $1
-       RETURNING id, display_name, visitor_label, uploads_enabled, is_blocked, blocked_at, updated_at`,
+       RETURNING id, project_id, display_name, visitor_label, uploads_enabled, is_blocked, blocked_at, updated_at`,
       [sessionId, uploadsEnabled, isBlocked]
     );
 
+    const updatedSession = updated.rows[0];
+
+    try {
+      const controlPayload = {
+        __followme_control_refresh: true,
+        type: 'user_settings_changed',
+        session_id: updatedSession.id,
+        uploads_enabled: updatedSession.uploads_enabled === true,
+        is_blocked: updatedSession.is_blocked === true,
+        message: updatedSession.is_blocked === true
+          ? 'Sei stato bloccato dal sistema.'
+          : 'Impostazioni aggiornate.',
+        created_at: new Date().toISOString()
+      };
+
+      await pool.query(
+        `INSERT INTO followme_chat_messages
+         (session_id, project_id, sender, message, created_at)
+         VALUES ($1,$2,'system',$3,NOW())`,
+        [updatedSession.id, updatedSession.project_id, JSON.stringify(controlPayload)]
+      );
+    } catch (controlErr) {
+      console.warn('followme settings control refresh message error:', controlErr.message || controlErr);
+    }
+
     return res.json({
       success:true,
-      session:updated.rows[0]
+      session:updatedSession
     });
   } catch (err) {
     console.error('followme chat session settings error:', err);

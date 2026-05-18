@@ -1524,3 +1524,95 @@
   };
 })();
 </script>
+
+
+<script id="followme-public-control-refresh-reload-20260518">
+(function(){
+  if(window.__followMePublicControlRefreshReload20260518) return;
+  window.__followMePublicControlRefreshReload20260518 = true;
+
+  function parseMaybeJson(value){
+    try{
+      if(typeof value !== "string") return value || null;
+      const t = value.trim();
+      if(!t || t[0] !== "{") return null;
+      return JSON.parse(t);
+    }catch(e){
+      return null;
+    }
+  }
+
+  function hasRefreshCommand(data){
+    try{
+      const list = Array.isArray(data && data.messages) ? data.messages : [];
+      return list.some(function(m){
+        const obj = parseMaybeJson(m && m.message);
+        return !!(obj && obj.__followme_control_refresh === true);
+      });
+    }catch(e){
+      return false;
+    }
+  }
+
+  function applyImmediateVisualBeforeReload(data){
+    try{
+      const list = Array.isArray(data && data.messages) ? data.messages : [];
+      const cmdMsg = list.map(m => parseMaybeJson(m && m.message)).filter(Boolean).find(o => o.__followme_control_refresh === true);
+      if(!cmdMsg) return;
+
+      if(cmdMsg.is_blocked === true){
+        document.body.classList.add("followme-public-user-blocked");
+        const input = document.getElementById("messageInput") ||
+                      document.querySelector("textarea") ||
+                      document.querySelector("input[type='text']");
+        if(input){
+          input.disabled = true;
+          input.placeholder = "Sei stato bloccato dal sistema.";
+        }
+        const notice = document.getElementById("followmePublicBlockedNotice");
+        if(notice) notice.textContent = "Sei stato bloccato dal sistema.";
+      }
+
+      document.body.classList.toggle("followme-public-uploads-enabled", !!cmdMsg.uploads_enabled);
+    }catch(e){}
+  }
+
+  const previousFetch = window.fetch.bind(window);
+
+  window.fetch = async function(input, init){
+    const res = await previousFetch(input, init);
+
+    try{
+      const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+      if(url && url.includes("/api/followme/chat/session/") && url.includes("/messages")){
+        const clone = res.clone();
+        const data = await clone.json().catch(()=>null);
+
+        if(data && hasRefreshCommand(data)){
+          applyImmediateVisualBeforeReload(data);
+
+          if(!sessionStorage.getItem("followme_control_refresh_reloading")){
+            sessionStorage.setItem("followme_control_refresh_reloading", String(Date.now()));
+            setTimeout(function(){
+              location.reload();
+            }, 250);
+          }
+        }
+      }
+    }catch(e){}
+
+    return res;
+  };
+
+  window.addEventListener("load", function(){
+    setTimeout(function(){
+      try{
+        const t = Number(sessionStorage.getItem("followme_control_refresh_reloading") || 0);
+        if(t && Date.now() - t > 1500){
+          sessionStorage.removeItem("followme_control_refresh_reloading");
+        }
+      }catch(e){}
+    }, 1800);
+  });
+})();
+</script>

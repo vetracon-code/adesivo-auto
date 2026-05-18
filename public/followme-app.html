@@ -17796,5 +17796,348 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-fixed-user-controls-20260518">
+(function(){
+  if(window.__followMeFixedUserControls20260518) return;
+  window.__followMeFixedUserControls20260518 = true;
+
+  let fixedSessionId = "";
+  let fixedState = null;
+
+  function toastMsg(msg){
+    try{
+      if(typeof toast === "function") toast(msg);
+      else alert(msg);
+    }catch(e){
+      alert(msg);
+    }
+  }
+
+  function cleanSessionId(value){
+    const s = String(value || "").trim();
+    return /^\d+$/.test(s) ? s : "";
+  }
+
+  function chipSessionId(chip){
+    if(!chip) return "";
+    return cleanSessionId(
+      chip.dataset.sessionId ||
+      chip.dataset.session ||
+      chip.dataset.id ||
+      chip.getAttribute("data-session-id") ||
+      chip.getAttribute("data-session") ||
+      chip.getAttribute("data-id") ||
+      ""
+    );
+  }
+
+  function getActiveSessionId(){
+    const active = document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active") ||
+                   document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip");
+    return chipSessionId(active);
+  }
+
+  async function fetchState(sessionId){
+    const sid = cleanSessionId(sessionId || fixedSessionId || getActiveSessionId());
+    if(!sid) return null;
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/state?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    const data = await res.json().catch(()=>null);
+    if(!res.ok || !data || !data.success) return null;
+
+    fixedSessionId = sid;
+    fixedState = data.session || null;
+    return fixedState;
+  }
+
+  async function updateSettings(payload){
+    const sid = cleanSessionId(fixedSessionId || getActiveSessionId());
+    if(!sid){
+      toastMsg("Seleziona prima un utente.");
+      return null;
+    }
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/settings", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(payload || {})
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      throw new Error((data && data.error) || "Errore aggiornamento utente.");
+    }
+
+    fixedSessionId = sid;
+    fixedState = data.session;
+
+    paint();
+    markChip(sid, fixedState);
+
+    if(typeof window.refreshFollowMeOwnerChatSessions === "function"){
+      setTimeout(window.refreshFollowMeOwnerChatSessions, 150);
+      setTimeout(paint, 550);
+    }
+
+    return fixedState;
+  }
+
+  function markChip(sid, state){
+    try{
+      document.querySelectorAll("#followmeOwnerChatSessionStrip .followme-chat-session-chip").forEach(function(chip){
+        if(chipSessionId(chip) !== String(sid)) return;
+
+        chip.classList.toggle("followme-user-blocked", !!state.is_blocked);
+        chip.classList.toggle("followme-user-extra-enabled", !!state.uploads_enabled);
+
+        if(state.is_blocked){
+          chip.style.background = "#ffe1df";
+          chip.style.color = "#b42318";
+          chip.style.borderColor = "rgba(180,35,24,.42)";
+        }else{
+          chip.style.background = "";
+          chip.style.color = "";
+          chip.style.borderColor = "";
+        }
+      });
+    }catch(e){}
+  }
+
+  function ensureControls(){
+    let box = document.getElementById("followmeFixedUserControls20260518");
+    if(box) return box;
+
+    box = document.createElement("div");
+    box.id = "followmeFixedUserControls20260518";
+    box.innerHTML = `
+      <div class="fm-fixed-user-controls-title">Gestione utente selezionato</div>
+      <div class="fm-fixed-user-controls-row">
+        <button type="button" id="fmFixedExtraBtn20260518">Abilita utente ad extra</button>
+        <button type="button" id="fmFixedBlockBtn20260518">Blocca</button>
+      </div>
+      <div class="fm-fixed-user-controls-note" id="fmFixedUserNote20260518">Seleziona U1/U2 per gestire i servizi.</div>
+    `;
+
+    const actions = document.querySelector(".followme-owner-chat-actions");
+    const top = document.querySelector(".followme-owner-chat-top");
+
+    if(actions && actions.parentNode){
+      actions.parentNode.insertBefore(box, actions.nextSibling);
+    }else if(top && top.parentNode){
+      top.parentNode.insertBefore(box, top.nextSibling);
+    }else{
+      document.body.appendChild(box);
+    }
+
+    const extra = box.querySelector("#fmFixedExtraBtn20260518");
+    const block = box.querySelector("#fmFixedBlockBtn20260518");
+
+    extra.addEventListener("click", async function(ev){
+      ev.preventDefault();
+      try{
+        const st = fixedState || await fetchState();
+        if(!st) return toastMsg("Seleziona prima un utente.");
+        const updated = await updateSettings({ uploads_enabled: !st.uploads_enabled });
+        toastMsg(updated.uploads_enabled ? "Extra abilitati. La pagina utente si aggiorna." : "Extra disabilitati. La pagina utente si aggiorna.");
+      }catch(err){
+        toastMsg(err.message || "Errore extra.");
+      }
+    });
+
+    block.addEventListener("click", async function(ev){
+      ev.preventDefault();
+      try{
+        const st = fixedState || await fetchState();
+        if(!st) return toastMsg("Seleziona prima un utente.");
+        const updated = await updateSettings({ is_blocked: !st.is_blocked });
+        toastMsg(updated.is_blocked ? "Utente bloccato. La pagina utente si aggiorna." : "Utente sbloccato. La pagina utente si aggiorna.");
+      }catch(err){
+        toastMsg(err.message || "Errore blocco.");
+      }
+    });
+
+    return box;
+  }
+
+  function paint(){
+    const box = ensureControls();
+    const extra = box.querySelector("#fmFixedExtraBtn20260518");
+    const block = box.querySelector("#fmFixedBlockBtn20260518");
+    const note = box.querySelector("#fmFixedUserNote20260518");
+
+    const st = fixedState;
+
+    if(!st){
+      extra.textContent = "Abilita utente ad extra";
+      block.textContent = "Blocca";
+      extra.className = "";
+      block.className = "danger";
+      note.textContent = "Seleziona U1/U2 per gestire i servizi.";
+      return;
+    }
+
+    const label = st.display_name || st.visitor_label || ("Utente " + (st.id || ""));
+    extra.textContent = st.uploads_enabled ? "Disabilita extra" : "Abilita utente ad extra";
+    extra.className = st.uploads_enabled ? "warn" : "ok";
+
+    block.textContent = st.is_blocked ? "Sblocca utente" : "Blocca";
+    block.className = st.is_blocked ? "danger active" : "danger";
+
+    note.textContent = st.is_blocked
+      ? label + " · BLOCCATO"
+      : (st.uploads_enabled ? label + " · extra abilitati" : label + " · standard");
+
+    note.style.color = st.is_blocked ? "#b42318" : "";
+  }
+
+  function bindSelection(){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+    if(!strip || strip.dataset.fixedUserControlsBound === "1") return;
+
+    strip.dataset.fixedUserControlsBound = "1";
+
+    strip.addEventListener("click", function(ev){
+      const chip = ev.target && ev.target.closest ? ev.target.closest(".followme-chat-session-chip") : null;
+      if(!chip) return;
+
+      const sid = chipSessionId(chip);
+      if(!sid) return;
+
+      fixedSessionId = sid;
+
+      setTimeout(async function(){
+        const st = await fetchState(sid).catch(()=>null);
+        if(st){
+          markChip(sid, st);
+          paint();
+        }
+      }, 120);
+    }, false);
+  }
+
+  function injectCss(){
+    if(document.getElementById("followmeFixedUserControlsCss20260518")) return;
+
+    const style = document.createElement("style");
+    style.id = "followmeFixedUserControlsCss20260518";
+    style.textContent = `
+      #followmeFixedUserControls20260518{
+        margin:8px 12px 10px;
+        padding:10px;
+        border-radius:18px;
+        background:rgba(255,255,255,.94);
+        border:1px solid rgba(0,0,0,.08);
+        box-shadow:0 8px 28px rgba(0,0,0,.10);
+      }
+
+      .fm-fixed-user-controls-title{
+        font-size:.72rem;
+        font-weight:950;
+        text-transform:uppercase;
+        letter-spacing:.06em;
+        color:#667085;
+        margin-bottom:8px;
+        text-align:center;
+      }
+
+      .fm-fixed-user-controls-row{
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:8px;
+      }
+
+      .fm-fixed-user-controls-row button{
+        min-height:38px;
+        border-radius:999px;
+        border:1px solid rgba(0,0,0,.08);
+        background:#fff;
+        color:#202629;
+        font-size:.78rem;
+        font-weight:950;
+        cursor:pointer;
+      }
+
+      .fm-fixed-user-controls-row button.ok{
+        background:#effaf4;
+        color:#0c7f45;
+      }
+
+      .fm-fixed-user-controls-row button.warn{
+        background:#fff7e8;
+        color:#9a5b00;
+      }
+
+      .fm-fixed-user-controls-row button.danger{
+        background:#fff1ef;
+        color:#a5241c;
+      }
+
+      .fm-fixed-user-controls-row button.danger.active{
+        background:#ffe1df;
+        color:#b42318;
+        border-color:rgba(180,35,24,.30);
+      }
+
+      .fm-fixed-user-controls-note{
+        margin-top:7px;
+        font-size:.72rem;
+        line-height:1.25;
+        color:#667085;
+        font-weight:800;
+        text-align:center;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function boot(){
+    injectCss();
+    ensureControls();
+    bindSelection();
+    paint();
+
+    setTimeout(bindSelection, 500);
+    setTimeout(bindSelection, 1600);
+
+    const sid = getActiveSessionId();
+    if(sid){
+      fetchState(sid).then(function(st){
+        if(st){
+          markChip(sid, st);
+          paint();
+        }
+      }).catch(()=>{});
+    }
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible"){
+      setTimeout(boot, 300);
+    }
+  });
+})();
+</script>
+
 </body>
 </html>
