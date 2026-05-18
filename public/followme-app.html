@@ -5668,6 +5668,141 @@
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
   <link rel="apple-touch-icon" href="/images/followme/icons/apple-touch-icon.png?v=followme-dynamic-qr-v5">
 
+
+<script>
+/* FORCE FINAL 2026-05-18:
+   - mai balloon/frame installazione su PC/desktop
+   - mai balloon/frame installazione nella pagina chat
+   - non tocca motore notifiche
+*/
+(function(){
+  function isFollowMeChatPage(){
+    var p = String(location.pathname || "").toLowerCase();
+    var q = String(location.search || "").toLowerCase();
+    var h = String(location.hash || "").toLowerCase();
+    return p.includes("chat") || q.includes("chat") || h.includes("chat");
+  }
+
+  function isDesktopOrPc(){
+    var ua = navigator.userAgent || "";
+    var isMobileUA = /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua);
+    var coarse = false;
+    try { coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches; } catch(e) {}
+    var w = window.innerWidth || document.documentElement.clientWidth || 1200;
+    var h = window.innerHeight || document.documentElement.clientHeight || 900;
+
+    /*
+      Desktop = non mobile UA.
+      Anche tablet larghi senza UA mobile vengono trattati con prudenza:
+      se non è touch/coarse, è PC.
+    */
+    return !isMobileUA && !coarse && Math.max(w, h) >= 900;
+  }
+
+  function mustSuppressInstallUI(){
+    return isDesktopOrPc() || isFollowMeChatPage();
+  }
+
+  window.FOLLOWME_DISABLE_INSTALL_BALLOON = mustSuppressInstallUI();
+  window.APPME_SUPPRESS_INSTALL_FRAME = window.FOLLOWME_DISABLE_INSTALL_BALLOON;
+
+  if (window.FOLLOWME_DISABLE_INSTALL_BALLOON) {
+    window.addEventListener("beforeinstallprompt", function(e){
+      try { e.preventDefault(); } catch(err) {}
+      return false;
+    }, true);
+  }
+
+  function killInstallUi(){
+    if (!mustSuppressInstallUI()) return;
+
+    window.FOLLOWME_DISABLE_INSTALL_BALLOON = true;
+    window.APPME_SUPPRESS_INSTALL_FRAME = true;
+
+    var selectors = [
+      "#followmeInstallSheet",
+      "#followmeInstallBanner",
+      "#followmeInstallFrame",
+      "#followmeInstallTopBtn",
+      "#followmeSafeInstallFrame",
+      "#followmeSafeInstallBox",
+      "#followmeInstallAssistant",
+      "#installAssistantBalloon",
+      "#installAppSection",
+      "#androidInstallBox",
+      "#androidInstallBtn",
+      "#installActionResult",
+      ".followme-install-sheet",
+      ".followme-install-banner",
+      ".followme-install-frame",
+      ".followme-safe-install-frame",
+      ".install-assistant-balloon",
+      ".android-install-box",
+      ".pwa-install",
+      ".install-prompt",
+      ".install-frame",
+      "[data-install-frame]",
+      "[data-pwa-install]"
+    ];
+
+    selectors.forEach(function(sel){
+      document.querySelectorAll(sel).forEach(function(el){
+        el.style.setProperty("display", "none", "important");
+        el.style.setProperty("visibility", "hidden", "important");
+        el.style.setProperty("opacity", "0", "important");
+        el.style.setProperty("pointer-events", "none", "important");
+        el.setAttribute("aria-hidden", "true");
+      });
+    });
+
+    document.documentElement.classList.add("followme-no-install-ui");
+    if (document.body) document.body.classList.add("followme-no-install-ui");
+  }
+
+  document.addEventListener("DOMContentLoaded", killInstallUi, true);
+  window.addEventListener("load", killInstallUi, true);
+  window.addEventListener("resize", killInstallUi, true);
+  window.addEventListener("pageshow", killInstallUi, true);
+
+  /*
+    Serve perché nel file ci sono funzioni che riaprono il balloon dopo timeout,
+    refresh, cambio pagina o cambio stato utente.
+  */
+  setInterval(killInstallUi, 300);
+})();
+</script>
+
+<style>
+html.followme-no-install-ui #followmeInstallSheet,
+html.followme-no-install-ui #followmeInstallBanner,
+html.followme-no-install-ui #followmeInstallFrame,
+html.followme-no-install-ui #followmeInstallTopBtn,
+html.followme-no-install-ui #followmeSafeInstallFrame,
+html.followme-no-install-ui #followmeSafeInstallBox,
+html.followme-no-install-ui #followmeInstallAssistant,
+html.followme-no-install-ui #installAssistantBalloon,
+html.followme-no-install-ui #installAppSection,
+html.followme-no-install-ui #androidInstallBox,
+html.followme-no-install-ui #androidInstallBtn,
+html.followme-no-install-ui #installActionResult,
+html.followme-no-install-ui .followme-install-sheet,
+html.followme-no-install-ui .followme-install-banner,
+html.followme-no-install-ui .followme-install-frame,
+html.followme-no-install-ui .followme-safe-install-frame,
+html.followme-no-install-ui .install-assistant-balloon,
+html.followme-no-install-ui .android-install-box,
+html.followme-no-install-ui .pwa-install,
+html.followme-no-install-ui .install-prompt,
+html.followme-no-install-ui .install-frame,
+html.followme-no-install-ui [data-install-frame],
+html.followme-no-install-ui [data-pwa-install] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+</style>
+
 </head>
 <body>
   <main class="app">
