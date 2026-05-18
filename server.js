@@ -9586,6 +9586,7 @@ app.post('/api/followme/chat/session/:session_id/attachment-raw', express.raw({
 }), async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
+    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
 
     const fs = require('fs');
     const path = require('path');
@@ -9610,7 +9611,7 @@ app.post('/api/followme/chat/session/:session_id/attachment-raw', express.raw({
     }
 
     const sessionRes = await pool.query(
-      `SELECT id, project_id
+      `SELECT id, project_id, uploads_enabled, is_blocked
        FROM followme_chat_sessions
        WHERE id = $1
        LIMIT 1`,
@@ -9626,6 +9627,22 @@ app.post('/api/followme/chat/session/:session_id/attachment-raw', express.raw({
     }
 
     const session = sessionRes.rows[0];
+
+    if (session.is_blocked === true) {
+      return res.status(403).json({
+        success:false,
+        blocked:true,
+        error:'Sei stato bloccato dal sistema.'
+      });
+    }
+
+    if (sender === 'visitor' && session.uploads_enabled !== true) {
+      return res.status(403).json({
+        success:false,
+        uploads_enabled:false,
+        error:'Caricamento extra non abilitato per questo utente.'
+      });
+    }
 
     let safeFilename = decodeURIComponent(filenameHeader || '')
       .replace(/[^\w.\-àèéìòùÀÈÉÌÒÙ ]+/g, '')
@@ -9697,6 +9714,7 @@ app.post('/api/followme/chat/session/:session_id/attachment-raw', express.raw({
 app.post('/api/followme/chat/session/:session_id/attachment', express.json({ limit: '50mb' }), async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
+    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
 
     const fs = require('fs');
     const path = require('path');
@@ -9719,7 +9737,7 @@ app.post('/api/followme/chat/session/:session_id/attachment', express.json({ lim
     }
 
     const sessionRes = await pool.query(
-      `SELECT id, project_id
+      `SELECT id, project_id, uploads_enabled, is_blocked
        FROM followme_chat_sessions
        WHERE id = $1
        LIMIT 1`,
@@ -9731,6 +9749,22 @@ app.post('/api/followme/chat/session/:session_id/attachment', express.json({ lim
     }
 
     const session = sessionRes.rows[0];
+
+    if (session.is_blocked === true) {
+      return res.status(403).json({
+        success:false,
+        blocked:true,
+        error:'Sei stato bloccato dal sistema.'
+      });
+    }
+
+    if (sender === 'visitor' && session.uploads_enabled !== true) {
+      return res.status(403).json({
+        success:false,
+        uploads_enabled:false,
+        error:'Caricamento extra non abilitato per questo utente.'
+      });
+    }
 
     let attachmentUrl = url || '';
     let safeFilename = filenameRaw
@@ -9820,6 +9854,7 @@ app.post('/api/followme/chat/session/:session_id/attachment', express.json({ lim
 app.post('/api/followme/chat/session/:session_id/message', express.json(), async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
+    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
 
     const sessionId = Number(req.params.session_id || 0);
     const sender = String(req.body?.sender || '').trim() === 'owner' ? 'owner' : 'visitor';
@@ -9830,12 +9865,20 @@ app.post('/api/followme/chat/session/:session_id/message', express.json(), async
     }
 
     const sessionRes = await pool.query(
-      `SELECT id, project_id FROM followme_chat_sessions WHERE id = $1 LIMIT 1`,
+      `SELECT id, project_id, is_blocked FROM followme_chat_sessions WHERE id = $1 LIMIT 1`,
       [sessionId]
     );
 
     if (!sessionRes.rows.length) {
       return res.status(404).json({ success:false, error:'Sessione non trovata.' });
+    }
+
+    if (sender === 'visitor' && sessionRes.rows[0].is_blocked === true) {
+      return res.status(403).json({
+        success:false,
+        blocked:true,
+        error:'Sei stato bloccato dal sistema.'
+      });
     }
 
     const projectId = sessionRes.rows[0].project_id;

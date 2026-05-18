@@ -17375,5 +17375,426 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-user-settings-hard-final-20260518">
+(function(){
+  if(window.__followMeUserSettingsHardFinal20260518) return;
+  window.__followMeUserSettingsHardFinal20260518 = true;
+
+  let selectedSessionId = "";
+  let selectedState = null;
+
+  function toastMsg(msg){
+    try{
+      if(typeof toast === "function") toast(msg);
+      else alert(msg);
+    }catch(e){
+      alert(msg);
+    }
+  }
+
+  function getCodeSafe(){
+    try{
+      if(typeof getCode === "function") return getCode();
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      const p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim().toUpperCase();
+    }catch(e){
+      return "";
+    }
+  }
+
+  function cleanSessionId(value){
+    const s = String(value || "").trim();
+    return /^\d+$/.test(s) ? s : "";
+  }
+
+  function sessionIdFromChip(chip){
+    if(!chip) return "";
+    return cleanSessionId(
+      chip.dataset.sessionId ||
+      chip.dataset.session ||
+      chip.dataset.id ||
+      chip.getAttribute("data-session-id") ||
+      chip.getAttribute("data-session") ||
+      chip.getAttribute("data-id") ||
+      ""
+    );
+  }
+
+  function activeChip(){
+    return document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active") ||
+           document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip");
+  }
+
+  function sessionIdFromUi(){
+    return selectedSessionId || sessionIdFromChip(activeChip());
+  }
+
+  async function fetchState(sessionId){
+    const sid = cleanSessionId(sessionId || sessionIdFromUi());
+    if(!sid) return null;
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/state?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    const data = await res.json().catch(()=>null);
+    if(!res.ok || !data || !data.success) return null;
+
+    return data.session || null;
+  }
+
+  async function saveSettings(sessionId, payload){
+    const sid = cleanSessionId(sessionId || sessionIdFromUi());
+    if(!sid){
+      toastMsg("Seleziona prima un utente.");
+      return null;
+    }
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/settings", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(payload || {})
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      throw new Error((data && data.error) || "Errore aggiornamento utente.");
+    }
+
+    selectedSessionId = sid;
+    selectedState = data.session;
+
+    updateChipVisual(sid, selectedState);
+    renderMenu(selectedState);
+
+    if(typeof window.refreshFollowMeOwnerChatSessions === "function"){
+      setTimeout(window.refreshFollowMeOwnerChatSessions, 150);
+      setTimeout(function(){
+        rebindChips();
+        updateChipVisual(sid, selectedState);
+      }, 500);
+    }
+
+    return selectedState;
+  }
+
+  function ensureMenu(){
+    let overlay = document.getElementById("followmeUserManageOverlayHardFinal");
+    if(overlay) return overlay;
+
+    overlay = document.createElement("div");
+    overlay.id = "followmeUserManageOverlayHardFinal";
+    overlay.className = "followme-user-manage-overlay";
+    overlay.innerHTML =
+      '<div class="followme-user-manage-card" role="dialog" aria-modal="true">' +
+        '<button type="button" class="followme-user-manage-close" id="followmeUserManageCloseHardFinal">×</button>' +
+        '<div class="followme-user-manage-title" id="followmeUserManageTitleHardFinal">Gestisci utente</div>' +
+        '<div class="followme-user-manage-subtitle" id="followmeUserManageSubtitleHardFinal">Seleziona un servizio da modificare.</div>' +
+        '<div class="followme-user-manage-actions">' +
+          '<button type="button" id="followmeUserExtraBtnHardFinal">Abilita utente ad extra</button>' +
+          '<button type="button" id="followmeUserBlockBtnHardFinal">Blocca</button>' +
+        '</div>' +
+        '<div class="followme-user-manage-note" id="followmeUserManageNoteHardFinal">Le modifiche vengono applicate subito.</div>' +
+      '</div>';
+
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener("click", function(ev){
+      if(ev.target === overlay) closeMenu();
+    });
+
+    const close = overlay.querySelector("#followmeUserManageCloseHardFinal");
+    if(close){
+      close.addEventListener("click", function(ev){
+        ev.preventDefault();
+        closeMenu();
+      });
+    }
+
+    const extra = overlay.querySelector("#followmeUserExtraBtnHardFinal");
+    if(extra){
+      extra.addEventListener("click", async function(ev){
+        ev.preventDefault();
+        try{
+          const current = selectedState || await fetchState(selectedSessionId);
+          if(!current) return toastMsg("Stato utente non disponibile.");
+          const updated = await saveSettings(selectedSessionId, {
+            uploads_enabled: !current.uploads_enabled
+          });
+          toastMsg(updated.uploads_enabled ? "Utente abilitato ad extra." : "Extra disabilitati per l’utente.");
+        }catch(err){
+          toastMsg(err.message || "Errore modifica extra.");
+        }
+      });
+    }
+
+    const block = overlay.querySelector("#followmeUserBlockBtnHardFinal");
+    if(block){
+      block.addEventListener("click", async function(ev){
+        ev.preventDefault();
+        try{
+          const current = selectedState || await fetchState(selectedSessionId);
+          if(!current) return toastMsg("Stato utente non disponibile.");
+          const updated = await saveSettings(selectedSessionId, {
+            is_blocked: !current.is_blocked
+          });
+          toastMsg(updated.is_blocked ? "Utente bloccato." : "Utente sbloccato.");
+        }catch(err){
+          toastMsg(err.message || "Errore blocco utente.");
+        }
+      });
+    }
+
+    return overlay;
+  }
+
+  function userLabelFromState(s){
+    const fallback = s && s.visitor_label ? s.visitor_label : "Utente";
+    const name = s && s.display_name ? s.display_name : "";
+    return name || fallback || "Utente";
+  }
+
+  function renderMenu(state){
+    const overlay = ensureMenu();
+    const s = state || selectedState || {};
+
+    const title = overlay.querySelector("#followmeUserManageTitleHardFinal");
+    const sub = overlay.querySelector("#followmeUserManageSubtitleHardFinal");
+    const extra = overlay.querySelector("#followmeUserExtraBtnHardFinal");
+    const block = overlay.querySelector("#followmeUserBlockBtnHardFinal");
+    const note = overlay.querySelector("#followmeUserManageNoteHardFinal");
+
+    const label = userLabelFromState(s);
+
+    if(title) title.textContent = "Gestisci " + label;
+    if(sub){
+      sub.textContent = s.is_blocked
+        ? "Utente bloccato: non può più scrivere né caricare contenuti."
+        : "Puoi abilitare extra o bloccare questo utente.";
+    }
+
+    if(extra){
+      extra.textContent = s.uploads_enabled ? "Disabilita extra" : "Abilita utente ad extra";
+      extra.className = s.uploads_enabled ? "warn" : "ok";
+    }
+
+    if(block){
+      block.textContent = s.is_blocked ? "Sblocca utente" : "Blocca";
+      block.className = s.is_blocked ? "danger" : "danger";
+      if(s.is_blocked){
+        block.style.background = "#ffe1df";
+        block.style.color = "#b42318";
+        block.style.borderColor = "rgba(180,35,24,.28)";
+      }else{
+        block.style.background = "#fff1ef";
+        block.style.color = "#a5241c";
+        block.style.borderColor = "rgba(165,36,28,.18)";
+      }
+    }
+
+    if(note){
+      note.textContent = s.is_blocked
+        ? "Stato: BLOCCATO"
+        : (s.uploads_enabled ? "Stato: extra abilitati" : "Stato: standard");
+      note.style.color = s.is_blocked ? "#b42318" : "#737b7d";
+    }
+  }
+
+  function openMenu(sessionId, state){
+    selectedSessionId = cleanSessionId(sessionId || selectedSessionId || sessionIdFromUi());
+    selectedState = state || selectedState;
+
+    const overlay = ensureMenu();
+    renderMenu(selectedState);
+
+    document.body.classList.add("followme-user-menu-active");
+    overlay.classList.add("is-open");
+    overlay.style.display = "flex";
+    overlay.setAttribute("aria-hidden", "false");
+  }
+
+  function closeMenu(){
+    const overlay = document.getElementById("followmeUserManageOverlayHardFinal");
+    document.body.classList.remove("followme-user-menu-active");
+    if(overlay){
+      overlay.classList.remove("is-open");
+      overlay.style.display = "none";
+      overlay.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  function updateChipVisual(sessionId, state){
+    const sid = cleanSessionId(sessionId);
+    if(!sid || !state) return;
+
+    document.querySelectorAll("#followmeOwnerChatSessionStrip .followme-chat-session-chip").forEach(function(chip){
+      if(sessionIdFromChip(chip) !== sid) return;
+
+      chip.classList.toggle("followme-user-blocked", !!state.is_blocked);
+      chip.classList.toggle("followme-user-extra-enabled", !!state.uploads_enabled);
+      chip.dataset.uploadsEnabled = state.uploads_enabled ? "1" : "0";
+      chip.dataset.isBlocked = state.is_blocked ? "1" : "0";
+
+      if(state.is_blocked){
+        chip.style.background = "#ffe1df";
+        chip.style.color = "#b42318";
+        chip.style.borderColor = "rgba(180,35,24,.42)";
+        chip.title = "Utente bloccato";
+      }else{
+        chip.style.background = "";
+        chip.style.color = "";
+        chip.style.borderColor = "";
+        chip.title = state.uploads_enabled ? "Extra abilitati" : "Gestisci utente";
+      }
+    });
+  }
+
+  async function handleChipClick(chip, ev){
+    const sid = sessionIdFromChip(chip);
+    if(!sid) return;
+
+    selectedSessionId = sid;
+
+    // Lascia lavorare anche il click originale che apre/seleziona la chat.
+    setTimeout(async function(){
+      try{
+        const state = await fetchState(sid);
+        if(state){
+          selectedState = state;
+          updateChipVisual(sid, state);
+          openMenu(sid, state);
+        }else{
+          openMenu(sid, null);
+        }
+      }catch(err){
+        console.warn("followme user menu fetch state error:", err);
+        openMenu(sid, null);
+      }
+    }, 80);
+  }
+
+  function rebindChips(){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+    if(!strip || strip.dataset.userHardFinalBound === "1") return;
+
+    strip.dataset.userHardFinalBound = "1";
+
+    strip.addEventListener("click", function(ev){
+      const chip = ev.target && ev.target.closest
+        ? ev.target.closest(".followme-chat-session-chip")
+        : null;
+
+      if(!chip) return;
+
+      chip.dataset.userMenuReady = "1";
+      handleChipClick(chip, ev);
+    }, false);
+  }
+
+  async function paintKnownStates(){
+    const chips = Array.from(document.querySelectorAll("#followmeOwnerChatSessionStrip .followme-chat-session-chip"));
+    for(const chip of chips){
+      const sid = sessionIdFromChip(chip);
+      if(!sid) continue;
+      try{
+        const state = await fetchState(sid);
+        if(state) updateChipVisual(sid, state);
+      }catch(e){}
+    }
+  }
+
+  function injectCss(){
+    if(document.getElementById("followmeUserSettingsHardFinalCss")) return;
+    const style = document.createElement("style");
+    style.id = "followmeUserSettingsHardFinalCss";
+    style.textContent = `
+      #followmeOwnerChatSessionStrip .followme-chat-session-chip.followme-user-blocked{
+        background:#ffe1df !important;
+        color:#b42318 !important;
+        border-color:rgba(180,35,24,.42) !important;
+      }
+
+      #followmeOwnerChatSessionStrip .followme-chat-session-chip.followme-user-extra-enabled:not(.followme-user-blocked){
+        box-shadow:0 0 0 2px rgba(12,127,69,.18) inset !important;
+      }
+
+      #followmeUserManageOverlayHardFinal{
+        position:fixed;
+        inset:0;
+        display:none;
+        align-items:flex-start;
+        justify-content:center;
+        padding:92px 18px 18px;
+        background:rgba(0,0,0,.18);
+        z-index:1000800;
+      }
+
+      #followmeUserManageOverlayHardFinal .followme-user-manage-card{
+        width:min(360px, calc(100vw - 36px));
+        border-radius:24px;
+        background:#ffffff;
+        padding:18px;
+        box-shadow:0 24px 80px rgba(0,0,0,.28);
+        position:relative;
+      }
+
+      #followmeUserManageOverlayHardFinal .followme-user-manage-close{
+        position:absolute;
+        right:12px;
+        top:10px;
+        width:34px;
+        height:34px;
+        border:0;
+        border-radius:999px;
+        background:#f1f3f4;
+        font-size:22px;
+        font-weight:900;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function boot(){
+    injectCss();
+    ensureMenu();
+    rebindChips();
+    setTimeout(rebindChips, 400);
+    setTimeout(rebindChips, 1200);
+    setTimeout(paintKnownStates, 600);
+    setTimeout(paintKnownStates, 2000);
+  }
+
+  window.followMeOpenUserManageMenuHardFinal = openMenu;
+  window.followMeRefreshUserChipStatesHardFinal = paintKnownStates;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 300);
+    setTimeout(paintKnownStates, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 300);
+    setTimeout(paintKnownStates, 900);
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible"){
+      setTimeout(paintKnownStates, 500);
+    }
+  });
+})();
+</script>
+
 </body>
 </html>

@@ -1272,7 +1272,7 @@
 
 
 <div class="followme-public-blocked-notice" id="followmePublicBlockedNotice">
-  La chat non è disponibile in questo momento. Puoi attendere o riprovare più tardi.
+  Sei stato bloccato dal sistema.
 </div>
 
 
@@ -1477,3 +1477,50 @@
 
 </body>
 </html>
+
+
+<script id="followme-public-blocked-fetch-hard-guard">
+(function(){
+  if(window.__followMePublicBlockedFetchHardGuard) return;
+  window.__followMePublicBlockedFetchHardGuard = true;
+
+  function applyBlocked(){
+    try{
+      document.body.classList.add("followme-public-user-blocked");
+      const notice = document.getElementById("followmePublicBlockedNotice");
+      if(notice) notice.textContent = "Sei stato bloccato dal sistema.";
+
+      const input = document.getElementById("messageInput") ||
+                    document.querySelector("textarea") ||
+                    document.querySelector("input[type='text']");
+      if(input){
+        input.disabled = true;
+        input.placeholder = "Sei stato bloccato dal sistema.";
+      }
+
+      const send = document.getElementById("sendBtn") ||
+                   document.querySelector("button[type='submit']") ||
+                   document.querySelector(".send-btn");
+      if(send) send.disabled = true;
+    }catch(e){}
+  }
+
+  const previousFetch = window.fetch.bind(window);
+  window.fetch = async function(input, init){
+    const res = await previousFetch(input, init);
+
+    try{
+      const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+      if(url && url.includes("/api/followme/chat/session/")){
+        const clone = res.clone();
+        const data = await clone.json().catch(()=>null);
+        if(data && (data.blocked === true || String(data.error || "").includes("bloccato"))){
+          applyBlocked();
+        }
+      }
+    }catch(e){}
+
+    return res;
+  };
+})();
+</script>
