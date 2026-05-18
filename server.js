@@ -9435,43 +9435,95 @@ app.get('/fm/chat/c/:chat_token', async (req, res) => {
 app.post('/api/followme/chat/:chat_token/session', express.json(), async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
+    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
 
-    const token = String(req.params.chat_token || '').trim().toUpperCase();
+    const chatToken = String(req.params.chat_token || '').trim();
 
     const projectRes = await pool.query(
-      `SELECT id, code, public_id, label, chat_mode_enabled
+      `SELECT id, code, public_id, chat_mode_enabled, chat_public_token
        FROM followme_projects
        WHERE chat_public_token = $1
        LIMIT 1`,
-      [token]
+      [chatToken]
     );
 
-    if (!projectRes.rows.length || projectRes.rows[0].chat_mode_enabled !== true) {
-      return res.status(404).json({ success:false, error:'Chat non disponibile.' });
+    if (!projectRes.rows.length) {
+      return res.status(404).json({ success:false, error:'Chat non trovata.' });
     }
 
     const project = projectRes.rows[0];
 
-    const sessionRes = await pool.query(
+    if (project.chat_mode_enabled !== true) {
+      return res.status(403).json({ success:false, error:'Chat non attiva.' });
+    }
+
+    // FIX STRUTTURALE:
+    // una sola sessione aperta per progetto/QR.
+    // Se l'utente reinquadra il QR, non crea U2/U3 inutili: riusa la chat open.
+    const existing = await pool.query(
+      `SELECT id, visitor_label, display_name, uploads_enabled, is_blocked, status, created_at, last_seen_at
+       FROM followme_chat_sessions
+       WHERE project_id = $1
+         AND status = 'open'
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1`,
+      [project.id]
+    );
+
+    if (existing.rows.length) {
+      const session = existing.rows[0];
+
+      await pool.query(
+        `UPDATE followme_chat_sessions
+         SET last_seen_at = NOW(),
+             updated_at = COALESCE(updated_at, NOW())
+         WHERE id = $1`,
+        [session.id]
+      );
+
+      return res.json({
+        success:true,
+        reused:true,
+        project_code:project.code,
+        public_id:project.public_id,
+        session_id:session.id,
+        session:{
+          id:session.id,
+          visitor_label:session.visitor_label,
+          display_name:session.display_name,
+          uploads_enabled:session.uploads_enabled,
+          is_blocked:session.is_blocked,
+          status:session.status,
+          created_at:session.created_at,
+          last_seen_at:new Date().toISOString()
+        }
+      });
+    }
+
+    const visitorLabel = 'Utente ' + Math.random().toString(36).slice(2, 6).toUpperCase();
+
+    const inserted = await pool.query(
       `INSERT INTO followme_chat_sessions
        (project_id, chat_public_token, visitor_label, status, created_at, last_seen_at)
        VALUES ($1,$2,$3,'open',NOW(),NOW())
-       RETURNING id, created_at`,
-      [project.id, token, 'Utente ' + Math.random().toString(36).slice(2, 6).toUpperCase()]
+       RETURNING id, visitor_label, display_name, uploads_enabled, is_blocked, status, created_at, last_seen_at`,
+      [project.id, chatToken, visitorLabel]
     );
 
-    const session = sessionRes.rows[0];
+    const session = inserted.rows[0];
 
-    await sendFollowMeNewChatPush(project, session.id);
+    sendFollowMeNewChatPush(project, session).catch(() => {});
 
     return res.json({
       success:true,
-      session_id:session.id,
+      reused:false,
       project_code:project.code,
-      created_at:session.created_at
+      public_id:project.public_id,
+      session_id:session.id,
+      session
     });
   } catch (err) {
-    console.error('followme chat create session error:', err);
+    console.error('followme chat create/reuse session error:', err);
     return res.status(500).json({ success:false, error:'Errore creazione chat.' });
   }
 });
