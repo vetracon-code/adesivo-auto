@@ -5803,6 +5803,206 @@ html.followme-no-install-ui [data-pwa-install] {
 }
 </style>
 
+
+<script>
+/* DESKTOP ABSOLUTE NO INSTALL UI - 2026-05-18
+   Su PC/desktop non deve mai apparire nessun invito a salvare/installare la Web App.
+   Su mobile non cambia nulla.
+*/
+(function(){
+  function isRealDesktop(){
+    var ua = navigator.userAgent || "";
+
+    var mobileUA = /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua);
+
+    var touchPoints = 0;
+    try {
+      touchPoints = navigator.maxTouchPoints || navigator.msMaxTouchPoints || 0;
+    } catch(e) {}
+
+    var coarse = false;
+    try {
+      coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+    } catch(e) {}
+
+    /*
+      Desktop reale:
+      - non ha user agent mobile
+      - non ha touch prevalente
+      Questo include Mac, Windows, Linux.
+    */
+    return !mobileUA && !coarse && touchPoints === 0;
+  }
+
+  function desktopKillInstallUI(){
+    if (!isRealDesktop()) return;
+
+    window.FOLLOWME_DISABLE_INSTALL_BALLOON = true;
+    window.APPME_SUPPRESS_INSTALL_FRAME = true;
+    window.deferredPrompt = null;
+
+    document.documentElement.classList.add("desktop-no-install-ui");
+    if (document.body) {
+      document.body.classList.add("desktop-no-install-ui");
+    }
+
+    var selectors = [
+      "#followmeInstallTopBtn",
+      "#followmeInstallSheet",
+      "#followmeInstallBanner",
+      "#followmeInstallFrame",
+      "#followmeSafeInstallFrame",
+      "#followmeSafeInstallBox",
+      "#followmeInstallAssistant",
+      "#installAssistantBalloon",
+      "#installAssistantPrimaryBtn",
+      "#installAssistantLaterBtn",
+      "#installAssistantBody",
+      "#installAssistantWarning",
+      "#installAppSection",
+      "#androidInstallBox",
+      "#androidInstallBtn",
+      "#installActionResult",
+      ".followme-install-sheet",
+      ".followme-install-banner",
+      ".followme-install-frame",
+      ".followme-safe-install-frame",
+      ".install-assistant-balloon",
+      ".install-assistant-primary",
+      ".install-assistant-secondary",
+      ".install-assistant-body",
+      ".install-assistant-warning",
+      ".android-install-box",
+      ".pwa-install",
+      ".install-prompt",
+      ".install-frame",
+      ".save-app-frame",
+      ".add-to-home-frame",
+      "[id*='Install']",
+      "[id*='install']",
+      "[class*='install']",
+      "[class*='Install']",
+      "[data-install-frame]",
+      "[data-pwa-install]"
+    ];
+
+    selectors.forEach(function(sel){
+      try {
+        document.querySelectorAll(sel).forEach(function(el){
+          el.style.setProperty("display", "none", "important");
+          el.style.setProperty("visibility", "hidden", "important");
+          el.style.setProperty("opacity", "0", "important");
+          el.style.setProperty("pointer-events", "none", "important");
+          el.style.setProperty("height", "0", "important");
+          el.style.setProperty("max-height", "0", "important");
+          el.style.setProperty("overflow", "hidden", "important");
+          el.setAttribute("aria-hidden", "true");
+        });
+      } catch(e) {}
+    });
+  }
+
+  if (isRealDesktop()) {
+    window.addEventListener("beforeinstallprompt", function(e){
+      try { e.preventDefault(); } catch(err) {}
+      window.deferredPrompt = null;
+      return false;
+    }, true);
+
+    /*
+      Intercetta anche click accidentali o funzioni che provano ad aprire il frame.
+    */
+    document.addEventListener("click", function(e){
+      var t = e.target;
+      if (!t) return;
+      var s = String((t.id || "") + " " + (t.className || "") + " " + (t.textContent || "")).toLowerCase();
+      if (
+        s.includes("installa") ||
+        s.includes("install") ||
+        s.includes("salva l") ||
+        s.includes("salva la web app") ||
+        s.includes("aggiungi alla schermata home")
+      ) {
+        desktopKillInstallUI();
+      }
+    }, true);
+
+    document.addEventListener("DOMContentLoaded", desktopKillInstallUI, true);
+    window.addEventListener("load", desktopKillInstallUI, true);
+    window.addEventListener("pageshow", desktopKillInstallUI, true);
+    window.addEventListener("resize", desktopKillInstallUI, true);
+
+    /*
+      Necessario perché il tuo file ricrea il balloon dopo timer/cambio stato/chat.
+    */
+    setInterval(desktopKillInstallUI, 150);
+
+    /*
+      Osserva il DOM: se il balloon viene ricreato, viene eliminato subito.
+    */
+    try {
+      var obs = new MutationObserver(function(){
+        desktopKillInstallUI();
+      });
+      document.addEventListener("DOMContentLoaded", function(){
+        if (document.body) {
+          obs.observe(document.body, { childList: true, subtree: true, attributes: true });
+          desktopKillInstallUI();
+        }
+      }, true);
+    } catch(e) {}
+  }
+})();
+</script>
+
+<style>
+html.desktop-no-install-ui #followmeInstallTopBtn,
+html.desktop-no-install-ui #followmeInstallSheet,
+html.desktop-no-install-ui #followmeInstallBanner,
+html.desktop-no-install-ui #followmeInstallFrame,
+html.desktop-no-install-ui #followmeSafeInstallFrame,
+html.desktop-no-install-ui #followmeSafeInstallBox,
+html.desktop-no-install-ui #followmeInstallAssistant,
+html.desktop-no-install-ui #installAssistantBalloon,
+html.desktop-no-install-ui #installAssistantPrimaryBtn,
+html.desktop-no-install-ui #installAssistantLaterBtn,
+html.desktop-no-install-ui #installAssistantBody,
+html.desktop-no-install-ui #installAssistantWarning,
+html.desktop-no-install-ui #installAppSection,
+html.desktop-no-install-ui #androidInstallBox,
+html.desktop-no-install-ui #androidInstallBtn,
+html.desktop-no-install-ui #installActionResult,
+html.desktop-no-install-ui .followme-install-sheet,
+html.desktop-no-install-ui .followme-install-banner,
+html.desktop-no-install-ui .followme-install-frame,
+html.desktop-no-install-ui .followme-safe-install-frame,
+html.desktop-no-install-ui .install-assistant-balloon,
+html.desktop-no-install-ui .install-assistant-primary,
+html.desktop-no-install-ui .install-assistant-secondary,
+html.desktop-no-install-ui .install-assistant-body,
+html.desktop-no-install-ui .install-assistant-warning,
+html.desktop-no-install-ui .android-install-box,
+html.desktop-no-install-ui .pwa-install,
+html.desktop-no-install-ui .install-prompt,
+html.desktop-no-install-ui .install-frame,
+html.desktop-no-install-ui .save-app-frame,
+html.desktop-no-install-ui .add-to-home-frame,
+html.desktop-no-install-ui [id*="Install"],
+html.desktop-no-install-ui [id*="install"],
+html.desktop-no-install-ui [class*="install"],
+html.desktop-no-install-ui [class*="Install"],
+html.desktop-no-install-ui [data-install-frame],
+html.desktop-no-install-ui [data-pwa-install] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  overflow: hidden !important;
+}
+</style>
+
 </head>
 <body>
   <main class="app">
