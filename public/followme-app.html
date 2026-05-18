@@ -18393,5 +18393,89 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-admin-upload-render-like-public-20260519">
+(function(){
+  if(window.__FollowMeAdminUploadRenderLikePublic20260519) return;
+  window.__FollowMeAdminUploadRenderLikePublic20260519 = true;
+
+  function esc(v){
+    return String(v == null ? "" : v)
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;");
+  }
+
+  function parseAttachmentMessage(message){
+    try{
+      const obj = typeof message === "string" ? JSON.parse(message) : message;
+      if(obj && obj.__followme_attachment) return obj;
+    }catch(e){}
+    return null;
+  }
+
+  function renderAttachment(a){
+    const url = a.url || "";
+    const name = a.label || a.filename || "Allegato";
+    const mime = a.mime || "";
+    const kind = a.kind || "";
+
+    if(kind === "image" || mime.indexOf("image/") === 0){
+      return '<a class="followme-attachment-card" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+        '<img class="followme-attachment-image" src="' + esc(url) + '" alt="' + esc(name) + '">' +
+        '<span class="followme-attachment-meta">' + esc(name) + (a.temporary ? ' · Allegato temporaneo' : '') + '</span>' +
+      '</a>';
+    }
+
+    if(kind === "audio" || mime.indexOf("audio/") === 0){
+      return '<div class="followme-attachment-audio">' +
+        '<span>🎙️</span><audio controls src="' + esc(url) + '"></audio>' +
+      '</div>';
+    }
+
+    if(kind === "location"){
+      return '<a class="followme-attachment-location" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+        '<span>📍</span><span><span class="followme-attachment-name">Posizione condivisa</span><span class="followme-attachment-meta">Apri mappa</span></span>' +
+      '</a>';
+    }
+
+    return '<a class="followme-attachment-file" href="' + esc(url) + '" target="_blank" rel="noopener" download>' +
+      '<span>📎</span><span><span class="followme-attachment-name">' + esc(name) + '</span><span class="followme-attachment-meta">Apri documento</span></span>' +
+    '</a>';
+  }
+
+  function renderAllAttachments(){
+    document.querySelectorAll(".followme-owner-chat-bubble, .message, .bubble, [data-message-id]").forEach(function(b){
+      if(b.dataset.fmAttachmentRendered === "1") return;
+
+      const txt = (b.textContent || "").trim();
+      const attachment = parseAttachmentMessage(txt);
+
+      if(!attachment) return;
+
+      b.dataset.fmAttachmentRendered = "1";
+      b.innerHTML = renderAttachment(attachment);
+    });
+  }
+
+  function boot(){
+    renderAllAttachments();
+    window.fmAdminRenderAllAttachments20260519 = renderAllAttachments;
+  }
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(renderAllAttachments, 250);
+    setTimeout(renderAllAttachments, 1000);
+  });
+
+  setInterval(renderAllAttachments, 1500);
+})();
+</script>
+
 </body>
 </html>

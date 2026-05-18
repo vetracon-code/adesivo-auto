@@ -2113,6 +2113,179 @@
 })();
 </script>
 
+
+
+<script id="followme-public-upload-render-like-admin-20260519">
+(function(){
+  if(window.__FollowMePublicUploadRenderLikeAdmin20260519) return;
+  window.__FollowMePublicUploadRenderLikeAdmin20260519 = true;
+
+  function esc(v){
+    return String(v == null ? "" : v)
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;");
+  }
+
+  function parseAttachmentMessage(message){
+    try{
+      const obj = typeof message === "string" ? JSON.parse(message) : message;
+      if(obj && obj.__followme_attachment) return obj;
+    }catch(e){}
+    return null;
+  }
+
+  function renderAttachment(a){
+    const url = a.url || "";
+    const name = a.label || a.filename || "Allegato";
+    const mime = a.mime || "";
+    const kind = a.kind || "";
+
+    if(kind === "image" || mime.indexOf("image/") === 0){
+      return '<a class="followme-attachment-card" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+        '<img class="followme-attachment-image" src="' + esc(url) + '" alt="' + esc(name) + '">' +
+        '<span class="followme-attachment-meta">' + esc(name) + (a.temporary ? ' · Allegato temporaneo' : '') + '</span>' +
+      '</a>';
+    }
+
+    if(kind === "audio" || mime.indexOf("audio/") === 0){
+      return '<div class="followme-attachment-audio">' +
+        '<span>🎙️</span><audio controls src="' + esc(url) + '"></audio>' +
+      '</div>';
+    }
+
+    if(kind === "location"){
+      return '<a class="followme-attachment-location" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+        '<span>📍</span><span><span class="followme-attachment-name">Posizione condivisa</span><span class="followme-attachment-meta">Apri mappa</span></span>' +
+      '</a>';
+    }
+
+    return '<a class="followme-attachment-file" href="' + esc(url) + '" target="_blank" rel="noopener" download>' +
+      '<span>📎</span><span><span class="followme-attachment-name">' + esc(name) + '</span><span class="followme-attachment-meta">Apri documento</span></span>' +
+    '</a>';
+  }
+
+  function findMessagesBox(){
+    return document.getElementById("messages") ||
+           document.getElementById("chatMessages") ||
+           document.getElementById("followmePublicMessages") ||
+           document.querySelector(".messages") ||
+           document.querySelector(".chat-messages") ||
+           document.querySelector(".followme-public-messages") ||
+           document.querySelector("main") ||
+           document.body;
+  }
+
+  function appendLocalAttachmentBubble(attachment, sender){
+    const box = findMessagesBox();
+    if(!box || !attachment) return;
+
+    const bubble = document.createElement("div");
+    bubble.className = "message bubble followme-public-bubble " + (sender === "owner" ? "owner" : "visitor");
+    bubble.dataset.fmAttachmentRendered = "1";
+    bubble.innerHTML = renderAttachment(attachment);
+
+    box.appendChild(bubble);
+
+    try{
+      box.scrollTop = box.scrollHeight;
+    }catch(e){}
+
+    setTimeout(renderAllAttachments, 80);
+    setTimeout(renderAllAttachments, 400);
+  }
+
+  function renderAllAttachments(){
+    document.querySelectorAll(".message, .bubble, .followme-public-bubble, .followme-owner-chat-bubble, [data-message-id]").forEach(function(b){
+      if(b.dataset.fmAttachmentRendered === "1") return;
+
+      const txt = (b.textContent || "").trim();
+      const a = parseAttachmentMessage(txt);
+
+      if(!a) return;
+
+      b.dataset.fmAttachmentRendered = "1";
+      b.innerHTML = renderAttachment(a);
+    });
+  }
+
+  async function callOriginalFetch(input, init){
+    return window.__fmOriginalFetchForPublicUpload20260519(input, init);
+  }
+
+  if(!window.__fmOriginalFetchForPublicUpload20260519){
+    window.__fmOriginalFetchForPublicUpload20260519 = window.fetch.bind(window);
+  }
+
+  if(!window.__fmPublicUploadRenderFetchPatched20260519){
+    window.__fmPublicUploadRenderFetchPatched20260519 = true;
+
+    window.fetch = async function(input, init){
+      const res = await callOriginalFetch(input, init);
+
+      try{
+        const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+
+        const isAttachment =
+          url &&
+          url.includes("/api/followme/chat/session/") &&
+          (url.includes("/attachment-raw") || url.includes("/attachment"));
+
+        if(isAttachment){
+          const clone = res.clone();
+          const data = await clone.json().catch(()=>null);
+
+          if(data && data.success){
+            const attachment =
+              data.attachment ||
+              (data.message && parseAttachmentMessage(data.message.message)) ||
+              null;
+
+            if(attachment){
+              appendLocalAttachmentBubble(attachment, "visitor");
+            }
+
+            setTimeout(renderAllAttachments, 80);
+            setTimeout(renderAllAttachments, 400);
+            setTimeout(renderAllAttachments, 1200);
+          }
+        }
+
+        if(url && url.includes("/api/followme/chat/session/") && url.includes("/messages")){
+          setTimeout(renderAllAttachments, 80);
+          setTimeout(renderAllAttachments, 400);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  function boot(){
+    renderAllAttachments();
+
+    // Rende disponibili funzioni globali anche agli script precedenti.
+    window.fmPublicAppendLocalAttachmentBubble20260519 = appendLocalAttachmentBubble;
+    window.fmPublicRenderAllAttachments20260519 = renderAllAttachments;
+  }
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(renderAllAttachments, 1000);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(renderAllAttachments, 250);
+  });
+
+  setInterval(renderAllAttachments, 1500);
+})();
+</script>
+
 </body>
 </html>
 
