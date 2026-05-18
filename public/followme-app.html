@@ -6232,6 +6232,114 @@
       }
     }
 
+
+    /* =====================================================
+       FIX DEFINITIVO VISIVO TAB:
+       qualunque testo venga scritto nel bottone viene nascosto;
+       l’etichetta stabile viene mostrata via ::before.
+       ===================================================== */
+
+    #followmeOwnerChatSessionStrip .followme-chat-session-chip{
+      position:relative !important;
+      font-size:0 !important;
+      color:transparent !important;
+      overflow:hidden !important;
+    }
+
+    #followmeOwnerChatSessionStrip .followme-chat-session-chip::before{
+      content:attr(data-final-label) !important;
+      display:inline-block !important;
+      color:inherit !important;
+      font-size:11px !important;
+      line-height:1 !important;
+      font-weight:950 !important;
+      white-space:nowrap !important;
+      pointer-events:none !important;
+    }
+
+    #followmeOwnerChatSessionStrip .followme-chat-session-chip.active::before{
+      color:#ffffff !important;
+    }
+
+    #followmeOwnerChatSessionStrip .followme-chat-session-chip:not(.active)::before{
+      color:#3a3f41 !important;
+    }
+
+    #followmeOwnerChatSessionStrip .followme-chat-session-chip.has-name,
+    #followmeOwnerChatSessionStrip .followme-chat-session-chip.locked-name,
+    #followmeOwnerChatSessionStrip .followme-chat-session-chip.strong-name-lock{
+      width:auto !important;
+      min-width:max-content !important;
+      max-width:none !important;
+      flex:0 0 auto !important;
+      padding-left:16px !important;
+      padding-right:16px !important;
+      overflow:visible !important;
+      white-space:nowrap !important;
+      text-overflow:clip !important;
+    }
+
+    #followmeOwnerChatSessionStrip .followme-chat-session-chip:not(.has-name):not(.locked-name):not(.strong-name-lock){
+      width:42px !important;
+      min-width:42px !important;
+      max-width:42px !important;
+      flex:0 0 42px !important;
+      padding-left:0 !important;
+      padding-right:0 !important;
+    }
+
+    @media (min-width:900px){
+      #followmeOwnerChatSessionStrip .followme-chat-session-chip.has-name,
+      #followmeOwnerChatSessionStrip .followme-chat-session-chip.locked-name,
+      #followmeOwnerChatSessionStrip .followme-chat-session-chip.strong-name-lock{
+        padding-left:18px !important;
+        padding-right:18px !important;
+      }
+    }
+
+    /* =====================================================
+       Desktop: elementi pagina principale non appiccicati ai bordi
+       ===================================================== */
+
+    @media (min-width:900px){
+      body:not(.followme-desktop-chat-active) main,
+      body:not(.followme-desktop-chat-active) .app,
+      body:not(.followme-desktop-chat-active) .wrap,
+      body:not(.followme-desktop-chat-active) .container{
+        box-sizing:border-box !important;
+        padding-left:max(28px, calc((100vw - 1180px) / 2)) !important;
+        padding-right:max(28px, calc((100vw - 1180px) / 2)) !important;
+      }
+
+      body:not(.followme-desktop-chat-active) .followme-chat,
+      body:not(.followme-desktop-chat-active) .followme-card,
+      body:not(.followme-desktop-chat-active) .followme-panel,
+      body:not(.followme-desktop-chat-active) .followme-owner-card,
+      body:not(.followme-desktop-chat-active) .followme-owner-chat-waiting,
+      body:not(.followme-desktop-chat-active) #followmeOwnerWaitingRoom{
+        margin-left:auto !important;
+        margin-right:max(40px, calc((100vw - 1180px) / 2 + 28px)) !important;
+      }
+
+      body:not(.followme-desktop-chat-active) .followme-bottom-actions,
+      body:not(.followme-desktop-chat-active) .followme-actions,
+      body:not(.followme-desktop-chat-active) .actions{
+        padding-right:max(28px, calc((100vw - 1180px) / 2)) !important;
+        box-sizing:border-box !important;
+      }
+
+      body.followme-desktop-chat-active .followme-owner-chat-topbar,
+      body.followme-desktop-chat-active #followmeOwnerChatTopbar{
+        padding-left:max(34px, calc((100vw - 1180px) / 2)) !important;
+        padding-right:max(34px, calc((100vw - 1180px) / 2)) !important;
+      }
+
+      body.followme-desktop-chat-active #followmeOwnerChatSessionStrip{
+        padding-left:max(34px, calc((100vw - 1180px) / 2)) !important;
+        padding-right:max(34px, calc((100vw - 1180px) / 2)) !important;
+      }
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -17339,6 +17447,275 @@ document.addEventListener("visibilitychange", function(){
   }, 120);
 
   setInterval(refreshTabs, 5000);
+})();
+</script>
+
+
+<script id="followme-final-visual-tab-label-lock">
+(function(){
+  const STORAGE_KEY = "followme_visual_locked_chat_names_v3";
+
+  function cleanName(v){
+    return String(v || "")
+      .replace(/[<>"]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80);
+  }
+
+  function code(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function currentSessionId(){
+    try{
+      return new URLSearchParams(location.search || "").get("chatSession") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function loadMap(){
+    try{
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") || {};
+    }catch(e){
+      return {};
+    }
+  }
+
+  function saveMapItem(sessionId, uLabel, name){
+    const sid = String(sessionId || "");
+    if(!sid) return;
+
+    const map = loadMap();
+    map[sid] = {
+      uLabel:String(uLabel || "").trim(),
+      name:cleanName(name),
+      savedAt:Date.now()
+    };
+
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+    }catch(e){}
+  }
+
+  function titleName(v){
+    return cleanName(v)
+      .split(" ")
+      .filter(Boolean)
+      .map(function(part){
+        return part.charAt(0).toLocaleUpperCase("it-IT") + part.slice(1);
+      })
+      .join(" ")
+      .trim();
+  }
+
+  async function fetchSessions(){
+    try{
+      const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data = await res.json().catch(()=>null);
+
+      if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)){
+        return [];
+      }
+
+      return data.sessions.slice().sort(function(a,b){
+        return Number(a.display_index || 0) - Number(b.display_index || 0);
+      });
+    }catch(e){
+      return [];
+    }
+  }
+
+  function baseULabel(session, index){
+    return "U" + Number(session.display_index || index + 1);
+  }
+
+  function setFinalLabel(chip, uLabel, name){
+    if(!chip) return;
+
+    const n = cleanName(name);
+    const u = String(uLabel || chip.dataset.uLabel || "U?").trim();
+    const label = n ? (u + " · " + n) : u;
+
+    chip.dataset.uLabel = u;
+    chip.dataset.userName = n;
+    chip.dataset.finalLabel = label;
+
+    if(n){
+      chip.dataset.confirmedName = "1";
+      chip.classList.add("has-name", "locked-name", "strong-name-lock");
+      chip.style.width = "auto";
+      chip.style.minWidth = "max-content";
+      chip.style.maxWidth = "none";
+      chip.style.flexBasis = "auto";
+      chip.style.overflow = "visible";
+    }else{
+      chip.dataset.confirmedName = "";
+      chip.classList.remove("has-name", "locked-name", "strong-name-lock");
+      chip.style.width = "42px";
+      chip.style.minWidth = "42px";
+      chip.style.maxWidth = "42px";
+      chip.style.flexBasis = "42px";
+    }
+
+    chip.title = n ? (label + " — doppio click per modificare") : label;
+  }
+
+  async function enforce(){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+    if(!strip) return;
+
+    const sessions = await fetchSessions();
+    const map = loadMap();
+
+    strip.querySelectorAll(".followme-chat-session-chip").forEach(function(chip, index){
+      const sid = String(chip.dataset.sessionId || "").trim();
+
+      const sessionIndex = sessions.findIndex(function(s){
+        return String(s.id) === sid;
+      });
+
+      const session = sessionIndex >= 0 ? sessions[sessionIndex] : null;
+      const u = session ? baseULabel(session, sessionIndex) : (chip.dataset.uLabel || ("U" + (index + 1)));
+
+      const local = map[sid];
+      const name = cleanName((local && local.name) || (session && session.display_name) || chip.dataset.userName || "");
+
+      setFinalLabel(chip, (local && local.uLabel) || u, name);
+
+      if(!chip.dataset.visualEditBound){
+        chip.dataset.visualEditBound = "1";
+        chip.addEventListener("dblclick", function(ev){
+          ev.preventDefault();
+          ev.stopPropagation();
+
+          if(typeof window.followMeOpenEditNameCard === "function"){
+            window.followMeOpenEditNameCard(sid, cleanName(chip.dataset.userName || ""), chip.dataset.uLabel || u);
+          }
+        }, true);
+      }
+    });
+  }
+
+  async function saveNameFromCard(){
+    const input = document.getElementById("followmeNameDetectInput");
+    const sid =
+      window.__followMePendingNameSessionId ||
+      currentSessionId();
+
+    let u =
+      window.__followMePendingNameULabel ||
+      "";
+
+    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + sid + '"]');
+    if(!u && chip) u = chip.dataset.uLabel || "";
+
+    const name = titleName(input ? input.value : "");
+
+    if(!sid){
+      alert("Non riesco a identificare la chat da aggiornare.");
+      return;
+    }
+
+    if(!name || name.length < 2){
+      alert("Nome non valido.");
+      return;
+    }
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/name", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ display_name:name })
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      alert("Errore salvataggio nome: " + ((data && data.error) || ("HTTP " + res.status)));
+      return;
+    }
+
+    saveMapItem(sid, u || "U?", name);
+
+    const card = document.getElementById("followmeNameDetectCard");
+    if(card){
+      card.classList.remove("is-open");
+      card.setAttribute("aria-hidden", "true");
+    }
+
+    await enforce();
+    setTimeout(enforce, 100);
+    setTimeout(enforce, 500);
+  }
+
+  function bindConfirm(){
+    const btn = document.getElementById("followmeNameDetectConfirm");
+    if(!btn || btn.dataset.visualTabConfirmBound === "1") return;
+
+    const fresh = btn.cloneNode(true);
+    fresh.dataset.visualTabConfirmBound = "1";
+    btn.parentNode.replaceChild(fresh, btn);
+
+    fresh.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      saveNameFromCard();
+    }, true);
+  }
+
+  function observe(){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+    if(!strip || strip.dataset.visualFinalObserver === "1") return;
+
+    strip.dataset.visualFinalObserver = "1";
+
+    const obs = new MutationObserver(function(){
+      requestAnimationFrame(enforce);
+    });
+
+    obs.observe(strip, {
+      childList:true,
+      subtree:true,
+      characterData:true,
+      attributes:true
+    });
+  }
+
+  function boot(){
+    bindConfirm();
+    observe();
+    enforce();
+  }
+
+  window.followMeFinalVisualTabEnforce = enforce;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 200);
+  });
+
+  setInterval(function(){
+    bindConfirm();
+    enforce();
+  }, 120);
 })();
 </script>
 
