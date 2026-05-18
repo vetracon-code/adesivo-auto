@@ -9961,6 +9961,70 @@ app.get('/api/followme/chat/session/:session_id/state', async (req, res) => {
 
 
 
+
+
+// followme-user-set-explicit-20260518
+app.post('/api/followme/chat/session/:session_id/set-user-control', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeChatSchema();
+    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
+
+    const sessionId = Number(req.params.session_id || 0);
+
+    if (!sessionId) {
+      return res.status(400).json({ success:false, error:'Sessione mancante.' });
+    }
+
+    const hasUploads = typeof req.body?.uploads_enabled === 'boolean';
+    const hasBlocked = typeof req.body?.is_blocked === 'boolean';
+
+    if (!hasUploads && !hasBlocked) {
+      return res.status(400).json({ success:false, error:'Nessuna impostazione valida.' });
+    }
+
+    const existing = await pool.query(
+      `SELECT id, project_id, display_name, visitor_label, uploads_enabled, is_blocked
+       FROM followme_chat_sessions
+       WHERE id = $1
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!existing.rows.length) {
+      return res.status(404).json({ success:false, error:'Sessione non trovata.' });
+    }
+
+    const current = existing.rows[0];
+
+    const nextUploads = hasUploads ? req.body.uploads_enabled : !!current.uploads_enabled;
+    const nextBlocked = hasBlocked ? req.body.is_blocked : !!current.is_blocked;
+
+    const updated = await pool.query(
+      `UPDATE followme_chat_sessions
+       SET uploads_enabled = $2,
+           is_blocked = $3,
+           blocked_at = CASE WHEN $3 = TRUE THEN COALESCE(blocked_at, NOW()) ELSE NULL END,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, project_id, display_name, visitor_label, uploads_enabled, is_blocked, blocked_at, updated_at`,
+      [sessionId, nextUploads, nextBlocked]
+    );
+
+    return res.json({
+      success:true,
+      mode:'explicit',
+      session:updated.rows[0]
+    });
+  } catch (err) {
+    console.error('followme explicit user control error:', err);
+    return res.status(500).json({
+      success:false,
+      error:err.message || 'Errore aggiornamento utente.'
+    });
+  }
+});
+
+
 // followme-user-toggle-atomic-20260518
 app.post('/api/followme/chat/session/:session_id/toggle-user-control', express.json(), async (req, res) => {
   try {
