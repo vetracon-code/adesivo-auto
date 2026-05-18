@@ -5772,6 +5772,88 @@ body.followme-pc-install-clean-dismissed #followmeInstallSheetLite{
 }
 </style>
 
+
+<style id="followme-safe-pc-dont-ask-style">
+#followmeSafePcDontAskBtn{
+  display:block !important;
+  visibility:visible !important;
+  opacity:1 !important;
+  width:100% !important;
+  margin-top:8px !important;
+}
+body.followme-safe-pc-dismissed #followmeSafeInstallOverlay{
+  display:none !important;
+  visibility:hidden !important;
+  pointer-events:none !important;
+}
+</style>
+
+
+<script>
+/* SAFE OVERLAY PC DONT ASK - 2026-05-18 */
+(function(){
+  var KEY = "followme_safe_overlay_pc_dont_ask";
+
+  function isPcDesktop(){
+    var ua = navigator.userAgent || "";
+    var mobile = /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua);
+    var coarse = false;
+    try { coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches; } catch(e) {}
+    return !mobile && !coarse;
+  }
+
+  function isDismissed(){
+    try { return localStorage.getItem(KEY) === "1"; } catch(e) { return false; }
+  }
+
+  function hideSafeOverlay(){
+    if (!isPcDesktop()) return;
+
+    if (document.body) {
+      document.body.classList.add("followme-safe-pc-dismissed");
+    }
+
+    var overlay = document.getElementById("followmeSafeInstallOverlay");
+    if (overlay) {
+      overlay.classList.remove("show");
+      overlay.style.setProperty("display", "none", "important");
+      overlay.style.setProperty("visibility", "hidden", "important");
+      overlay.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  function bindSafePcDontAsk(){
+    if (!isPcDesktop()) return;
+
+    if (isDismissed()) {
+      hideSafeOverlay();
+    }
+
+    var btn = document.getElementById("followmeSafePcDontAskBtn");
+    if (!btn || btn.dataset.boundSafePcDontAsk === "1") return;
+
+    btn.dataset.boundSafePcDontAsk = "1";
+    btn.addEventListener("click", function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      try { localStorage.setItem(KEY, "1"); } catch(err) {}
+      hideSafeOverlay();
+    });
+  }
+
+  window.followMeShouldSkipSafeInstallOverlayPc = function(){
+    return isPcDesktop() && isDismissed();
+  };
+
+  document.addEventListener("DOMContentLoaded", bindSafePcDontAsk, true);
+  window.addEventListener("load", bindSafePcDontAsk, true);
+  window.addEventListener("pageshow", bindSafePcDontAsk, true);
+
+  setTimeout(bindSafePcDontAsk, 300);
+  setTimeout(bindSafePcDontAsk, 1000);
+})();
+</script>
+
 </head>
 <body>
   <main class="app">
@@ -6041,6 +6123,7 @@ body.followme-pc-install-clean-dismissed #followmeInstallSheetLite{
       <div class="followme-safe-install-actions">
         <button class="followme-safe-install-mainbtn" type="button" id="followmeSafeInstallMainBtn">Come salvo l’App?</button>
         <button class="followme-safe-install-subbtn" type="button" id="followmeSafeInstallLaterBtn">Lo faccio tra poco</button>
+        <button class="followme-safe-install-subbtn followme-safe-pc-dont-ask-btn" type="button" id="followmeSafePcDontAskBtn">Solo per PC: non richiedermelo più</button>
       </div>
     </div>
   </div>
@@ -9613,6 +9696,7 @@ document.addEventListener("visibilitychange", function(){
   }
 
   function showSafeInstallOverlay(){
+    if (window.followMeShouldSkipSafeInstallOverlayPc && window.followMeShouldSkipSafeInstallOverlayPc()) return;
     var overlay = document.getElementById("followmeSafeInstallOverlay");
     if(!overlay) return;
 
