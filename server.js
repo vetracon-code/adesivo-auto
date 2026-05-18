@@ -10329,7 +10329,7 @@ app.get('/fm/u/:public_id', async (req, res) => {
     const q = await pool.query(
       `SELECT *
        FROM followme_projects
-       WHERE public_id = $1
+       WHERE (public_id = $1 OR code = $1)
          AND COALESCE(status,'active') = 'active'
        LIMIT 1`,
       [publicId]
