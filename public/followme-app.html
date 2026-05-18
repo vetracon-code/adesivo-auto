@@ -16601,5 +16601,184 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+<script id="followme-user-settings-buttons-fix-final">
+(function(){
+  let currentSessionId = "";
+  let currentUploads = false;
+  let currentBlocked = false;
+
+  function code(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  async function fetchSessions(){
+    const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)) {
+      return [];
+    }
+
+    return data.sessions;
+  }
+
+  async function getCurrentMenuSession(){
+    const overlay = document.getElementById("followmeUserManageOverlay");
+    if(!overlay || !overlay.classList.contains("is-open")) return null;
+
+    let sid = currentSessionId;
+
+    if(!sid){
+      const active = document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active");
+      sid = active ? active.dataset.sessionId : "";
+    }
+
+    if(!sid) return null;
+
+    const sessions = await fetchSessions();
+    return sessions.find(s => String(s.id) === String(sid)) || null;
+  }
+
+  function setButtonsState(session){
+    if(!session) return;
+
+    currentSessionId = String(session.id);
+    currentUploads = !!session.uploads_enabled;
+    currentBlocked = !!session.is_blocked;
+
+    const uploadsBtn = document.getElementById("followmeUserManageUploads");
+    const blockBtn = document.getElementById("followmeUserManageBlock");
+
+    if(uploadsBtn){
+      uploadsBtn.textContent = currentUploads
+        ? "Disabilita caricamenti completi"
+        : "Abilita caricamenti completi";
+      uploadsBtn.className = currentUploads ? "warn" : "ok";
+    }
+
+    if(blockBtn){
+      blockBtn.textContent = currentBlocked
+        ? "Riabilita utente"
+        : "Blocca utente";
+      blockBtn.className = currentBlocked ? "ok" : "danger";
+    }
+  }
+
+  async function updateSettings(payload){
+    let sid = currentSessionId;
+
+    if(!sid){
+      const active = document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active");
+      sid = active ? active.dataset.sessionId : "";
+    }
+
+    if(!sid){
+      alert("Non riesco a identificare l’utente selezionato.");
+      return;
+    }
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/settings", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(payload)
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      alert("Errore aggiornamento utente: " + ((data && data.error) || ("HTTP " + res.status)));
+      return;
+    }
+
+    setButtonsState(data.session);
+
+    if(typeof window.followMeCleanFinalRefreshTabs === "function"){
+      window.followMeCleanFinalRefreshTabs();
+    }
+
+    if(typeof window.followMeFinalVisualTabEnforce === "function"){
+      window.followMeFinalVisualTabEnforce();
+    }
+  }
+
+  function bindButtons(){
+    const uploadsBtn = document.getElementById("followmeUserManageUploads");
+    const blockBtn = document.getElementById("followmeUserManageBlock");
+    const overlay = document.getElementById("followmeUserManageOverlay");
+
+    if(uploadsBtn && uploadsBtn.dataset.settingsFixBound !== "1"){
+      const fresh = uploadsBtn.cloneNode(true);
+      fresh.dataset.settingsFixBound = "1";
+      uploadsBtn.parentNode.replaceChild(fresh, uploadsBtn);
+
+      fresh.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        updateSettings({ uploads_enabled: !currentUploads });
+      }, true);
+    }
+
+    const blockNow = document.getElementById("followmeUserManageBlock");
+    if(blockNow && blockNow.dataset.settingsFixBound !== "1"){
+      const fresh = blockNow.cloneNode(true);
+      fresh.dataset.settingsFixBound = "1";
+      blockNow.parentNode.replaceChild(fresh, blockNow);
+
+      fresh.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        updateSettings({ is_blocked: !currentBlocked });
+      }, true);
+    }
+
+    if(overlay && overlay.dataset.settingsFixObserver !== "1"){
+      overlay.dataset.settingsFixObserver = "1";
+
+      const obs = new MutationObserver(async function(){
+        if(overlay.classList.contains("is-open")){
+          const session = await getCurrentMenuSession().catch(()=>null);
+          if(session) setButtonsState(session);
+        }
+      });
+
+      obs.observe(overlay, { attributes:true, attributeFilter:["class"] });
+    }
+  }
+
+  function boot(){
+    bindButtons();
+  }
+
+  window.followMeUserSettingsButtonsFixBoot = boot;
+  window.followMeUserSettingsButtonsSetState = setButtonsState;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(boot, 1000);
+})();
+</script>
+
 </body>
 </html>

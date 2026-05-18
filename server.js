@@ -9872,6 +9872,10 @@ app.post('/api/followme/chat/session/:session_id/message', express.json(), async
 
 
 
+/* disabled duplicate broken followme session settings endpoint */
+
+
+
 app.post('/api/followme/chat/session/:session_id/settings', express.json(), async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
@@ -9883,20 +9887,15 @@ app.post('/api/followme/chat/session/:session_id/settings', express.json(), asyn
       return res.status(400).json({ success:false, error:'Sessione mancante.' });
     }
 
-    const allowed = {};
-    if (typeof req.body?.uploads_enabled === 'boolean') {
-      allowed.uploads_enabled = req.body.uploads_enabled;
-    }
-    if (typeof req.body?.is_blocked === 'boolean') {
-      allowed.is_blocked = req.body.is_blocked;
-    }
+    const hasUploads = typeof req.body?.uploads_enabled === 'boolean';
+    const hasBlocked = typeof req.body?.is_blocked === 'boolean';
 
-    if (!Object.keys(allowed).length) {
+    if (!hasUploads && !hasBlocked) {
       return res.status(400).json({ success:false, error:'Nessuna impostazione valida.' });
     }
 
     const existing = await pool.query(
-      `SELECT id, uploads_enabled, is_blocked
+      `SELECT id, display_name, visitor_label, uploads_enabled, is_blocked
        FROM followme_chat_sessions
        WHERE id = $1
        LIMIT 1`,
@@ -9909,13 +9908,8 @@ app.post('/api/followme/chat/session/:session_id/settings', express.json(), asyn
 
     const current = existing.rows[0];
 
-    const uploadsEnabled = Object.prototype.hasOwnProperty.call(allowed, 'uploads_enabled')
-      ? allowed.uploads_enabled
-      : current.uploads_enabled;
-
-    const isBlocked = Object.prototype.hasOwnProperty.call(allowed, 'is_blocked')
-      ? allowed.is_blocked
-      : current.is_blocked;
+    const uploadsEnabled = hasUploads ? req.body.uploads_enabled : !!current.uploads_enabled;
+    const isBlocked = hasBlocked ? req.body.is_blocked : !!current.is_blocked;
 
     const updated = await pool.query(
       `UPDATE followme_chat_sessions
@@ -9924,7 +9918,7 @@ app.post('/api/followme/chat/session/:session_id/settings', express.json(), asyn
            blocked_at = CASE WHEN $3 = TRUE THEN COALESCE(blocked_at, NOW()) ELSE NULL END,
            updated_at = NOW()
        WHERE id = $1
-       RETURNING id, display_name, visitor_label, uploads_enabled, is_blocked, blocked_at`,
+       RETURNING id, display_name, visitor_label, uploads_enabled, is_blocked, blocked_at, updated_at`,
       [sessionId, uploadsEnabled, isBlocked]
     );
 
@@ -9932,9 +9926,13 @@ app.post('/api/followme/chat/session/:session_id/settings', express.json(), asyn
       success:true,
       session:updated.rows[0]
     });
+
   } catch (err) {
     console.error('followme chat session settings error:', err);
-    return res.status(500).json({ success:false, error:'Errore aggiornamento impostazioni utente.' });
+    return res.status(500).json({
+      success:false,
+      error:err.message || 'Errore aggiornamento impostazioni utente.'
+    });
   }
 });
 
@@ -10047,6 +10045,8 @@ app.get('/api/followme/:code/chat/sessions', async (req, res) => {
          s.display_index,
          s.visitor_label,
          s.display_name,
+             uploads_enabled,
+             is_blocked,
          s.status,
          s.created_at,
          s.last_seen_at,
