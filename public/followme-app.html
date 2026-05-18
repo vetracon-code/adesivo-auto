@@ -5438,6 +5438,53 @@
       text-align:center;
     }
 
+
+    /* Blocco assoluto balloon installazione dentro la chat */
+    body.followme-chat-only-mode .followme-install-helper,
+    body.followme-chat-only-mode #followmeInstallHelper,
+    body.followme-chat-only-mode #followmeInstallPrompt,
+    body.followme-chat-only-mode .followme-pwa-install,
+    body.followme-chat-only-mode .followme-save-app-helper,
+    body.followme-chat-only-mode [data-install-helper],
+    body.followme-chat-only-mode [data-pwa-helper],
+    body.followme-desktop-chat-active .followme-install-helper,
+    body.followme-desktop-chat-active #followmeInstallHelper,
+    body.followme-desktop-chat-active #followmeInstallPrompt,
+    body.followme-desktop-chat-active .followme-pwa-install,
+    body.followme-desktop-chat-active .followme-save-app-helper,
+    body.followme-desktop-chat-active [data-install-helper],
+    body.followme-desktop-chat-active [data-pwa-helper],
+    body.followme-user-menu-active .followme-install-helper,
+    body.followme-user-menu-active #followmeInstallHelper,
+    body.followme-user-menu-active #followmeInstallPrompt,
+    body.followme-user-menu-active .followme-pwa-install,
+    body.followme-user-menu-active .followme-save-app-helper,
+    body.followme-user-menu-active [data-install-helper],
+    body.followme-user-menu-active [data-pwa-helper]{
+      display:none !important;
+      visibility:hidden !important;
+      opacity:0 !important;
+      pointer-events:none !important;
+      z-index:-1 !important;
+    }
+
+    #followmeOwnerChatSessionStrip .followme-chat-session-chip{
+      pointer-events:auto !important;
+      cursor:pointer !important;
+      user-select:none !important;
+      -webkit-user-select:none !important;
+      -webkit-touch-callout:none !important;
+    }
+
+    .followme-user-manage-overlay{
+      z-index:1000099 !important;
+    }
+
+    .followme-user-manage-overlay.is-open{
+      display:flex !important;
+      pointer-events:auto !important;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -16775,6 +16822,256 @@ document.addEventListener("visibilitychange", function(){
   });
 
   setInterval(boot, 800);
+})();
+</script>
+
+
+<script id="followme-user-menu-priority-final">
+(function(){
+  let pressTimer = null;
+
+  function isChatContext(){
+    try{
+      const p = new URLSearchParams(location.search || "");
+      return (
+        p.has("chatSession") ||
+        p.get("focus") === "chat" ||
+        document.body.classList.contains("followme-chat-only-mode") ||
+        document.body.classList.contains("followme-desktop-chat-active") ||
+        !!document.getElementById("followmeOwnerChatMessages")
+      );
+    }catch(e){
+      return !!document.getElementById("followmeOwnerChatMessages");
+    }
+  }
+
+  function hideInstallBalloons(){
+    if(!isChatContext()) return;
+
+    document.body.classList.add("followme-hide-install-balloon-in-chat");
+
+    [
+      ".followme-install-helper",
+      "#followmeInstallHelper",
+      "#followmeInstallPrompt",
+      ".followme-pwa-install",
+      ".followme-save-app-helper",
+      "[data-install-helper]",
+      "[data-pwa-helper]"
+    ].forEach(function(sel){
+      document.querySelectorAll(sel).forEach(function(el){
+        el.style.display = "none";
+        el.style.visibility = "hidden";
+        el.style.opacity = "0";
+        el.style.pointerEvents = "none";
+        el.setAttribute("aria-hidden", "true");
+      });
+    });
+  }
+
+  function esc(v){
+    return String(v || "").replace(/[&<>"']/g, function(c){
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);
+    });
+  }
+
+  function chipLabel(chip){
+    if(!chip) return "";
+
+    return (
+      chip.dataset.finalLabel ||
+      chip.dataset.uLabel ||
+      chip.textContent ||
+      "Utente"
+    ).trim();
+  }
+
+  function openUserMenuFromChip(chip){
+    if(!chip) return;
+
+    hideInstallBalloons();
+
+    const sid = chip.dataset.sessionId || "";
+    const u = chip.dataset.uLabel || "";
+    const name = chip.dataset.userName || "";
+
+    if(!sid){
+      alert("Non riesco a identificare questa chat.");
+      return;
+    }
+
+    document.body.classList.add("followme-user-menu-active");
+
+    if(typeof window.followMeOpenUserManagementMenu === "function"){
+      window.followMeOpenUserManagementMenu(sid, name, u);
+      setTimeout(hideInstallBalloons, 50);
+      return;
+    }
+
+    // Fallback se lo script del menu non è agganciato.
+    const overlay = document.getElementById("followmeUserManageOverlay");
+    const title = document.getElementById("followmeUserManageTitle");
+    const subtitle = document.getElementById("followmeUserManageSubtitle");
+
+    if(title) title.textContent = "Gestione utente";
+    if(subtitle) subtitle.textContent = chipLabel(chip);
+
+    if(overlay){
+      overlay.classList.add("is-open");
+      overlay.setAttribute("aria-hidden", "false");
+      setTimeout(hideInstallBalloons, 50);
+    }else{
+      alert("Menu gestione utente non trovato.");
+    }
+  }
+
+  function bindChip(chip){
+    if(!chip || chip.dataset.userMenuPriorityBound === "1") return;
+
+    chip.dataset.userMenuPriorityBound = "1";
+    chip.title = (chip.title || chipLabel(chip)) + " — doppio click o pressione lunga per gestire";
+
+    // Doppio click desktop / mouse.
+    chip.addEventListener("dblclick", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      openUserMenuFromChip(chip);
+    }, true);
+
+    // Pressione lunga mobile.
+    chip.addEventListener("touchstart", function(ev){
+      clearTimeout(pressTimer);
+      pressTimer = setTimeout(function(){
+        try{
+          ev.preventDefault();
+          ev.stopPropagation();
+        }catch(e){}
+        openUserMenuFromChip(chip);
+      }, 650);
+    }, { passive:false, capture:true });
+
+    chip.addEventListener("touchend", function(){
+      clearTimeout(pressTimer);
+    }, true);
+
+    chip.addEventListener("touchmove", function(){
+      clearTimeout(pressTimer);
+    }, true);
+
+    // Tasto destro / menu contestuale su PC.
+    chip.addEventListener("contextmenu", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      openUserMenuFromChip(chip);
+    }, true);
+  }
+
+  function bindAllChips(){
+    document.querySelectorAll("#followmeOwnerChatSessionStrip .followme-chat-session-chip").forEach(bindChip);
+  }
+
+  function patchInstallTriggersInsideChat(){
+    if(!isChatContext()) return;
+
+    document.querySelectorAll("button, a, div[role='button']").forEach(function(el){
+      if(el.dataset.noInstallInChatBound === "1") return;
+
+      const txt = String(el.textContent || "").trim().toLowerCase();
+
+      const looksInstall =
+        txt.includes("installa") ||
+        txt.includes("salva") ||
+        txt.includes("aggiungi alla schermata") ||
+        txt.includes("web app");
+
+      if(!looksInstall) return;
+
+      const inChat =
+        el.closest("#followmeOwnerChatScreen") ||
+        el.closest("#followmeOwnerChatMessages") ||
+        el.closest("#followmeOwnerChatSessionStrip");
+
+      if(!inChat) return;
+
+      el.dataset.noInstallInChatBound = "1";
+      el.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        hideInstallBalloons();
+      }, true);
+    });
+  }
+
+  function bindCloseUserMenu(){
+    const overlay = document.getElementById("followmeUserManageOverlay");
+    const close = document.getElementById("followmeUserManageClose");
+
+    if(close && close.dataset.userMenuPriorityCloseBound !== "1"){
+      close.dataset.userMenuPriorityCloseBound = "1";
+      close.addEventListener("click", function(){
+        document.body.classList.remove("followme-user-menu-active");
+      }, true);
+    }
+
+    if(overlay && overlay.dataset.userMenuPriorityOverlayBound !== "1"){
+      overlay.dataset.userMenuPriorityOverlayBound = "1";
+      overlay.addEventListener("click", function(ev){
+        if(ev.target === overlay){
+          document.body.classList.remove("followme-user-menu-active");
+        }
+      }, true);
+    }
+  }
+
+  function boot(){
+    hideInstallBalloons();
+    bindAllChips();
+    bindCloseUserMenu();
+    patchInstallTriggersInsideChat();
+  }
+
+  window.followMeOpenUserMenuFromChip = openUserMenuFromChip;
+  window.followMeUserMenuPriorityBoot = boot;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 200);
+  });
+
+  const stripObserverTarget = function(){
+    return document.getElementById("followmeOwnerChatSessionStrip");
+  };
+
+  function installObserver(){
+    const strip = stripObserverTarget();
+    if(!strip || strip.dataset.userMenuPriorityObserver === "1") return;
+
+    strip.dataset.userMenuPriorityObserver = "1";
+
+    const obs = new MutationObserver(function(){
+      setTimeout(boot, 30);
+    });
+
+    obs.observe(strip, {
+      childList:true,
+      subtree:true,
+      attributes:true,
+      characterData:true
+    });
+  }
+
+  setInterval(function(){
+    boot();
+    installObserver();
+  }, 500);
 })();
 </script>
 
