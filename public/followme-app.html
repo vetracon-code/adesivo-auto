@@ -6049,6 +6049,47 @@
       }
     }
 
+
+    /* Tab utenti: mostra U1 + nome confermato, senza scorrimento/alternanza */
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip,
+    body.followme-desktop-chat-active #followmeOwnerChatSessionStrip{
+      gap:8px !important;
+    }
+
+    body.followme-chat-only-mode #followmeOwnerChatSessionStrip .followme-chat-session-chip.has-name,
+    body.followme-desktop-chat-active #followmeOwnerChatSessionStrip .followme-chat-session-chip.has-name{
+      width:auto !important;
+      min-width:110px !important;
+      max-width:none !important;
+      flex:0 0 auto !important;
+      padding:0 16px !important;
+      text-transform:none !important;
+      overflow:visible !important;
+      text-overflow:clip !important;
+      white-space:nowrap !important;
+      letter-spacing:-.01em !important;
+    }
+
+    @media (max-width: 899px){
+      body.followme-chat-only-mode #followmeOwnerChatSessionStrip .followme-chat-session-chip.has-name{
+        min-width:96px !important;
+        max-width:none !important;
+        padding:0 13px !important;
+      }
+    }
+
+    @media (min-width: 900px){
+      body.followme-desktop-chat-active #followmeOwnerChatSessionStrip{
+        overflow-x:auto !important;
+      }
+
+      body.followme-desktop-chat-active #followmeOwnerChatSessionStrip .followme-chat-session-chip.has-name{
+        min-width:120px !important;
+        max-width:none !important;
+        padding:0 18px !important;
+      }
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -16335,430 +16376,7 @@ document.addEventListener("visibilitychange", function(){
 <script id="followme-tab-name-edit-final-disabled-full-name-final">/* disabled: replaced by full-name stable controller */</script>
 
 
-<script id="followme-full-name-stable-final">
-(function(){
-  let lastSessions = [];
-  let lastSignature = "";
-  let pendingSessionId = "";
-  let pendingULabel = "";
-
-  function code(){
-    try{
-      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
-      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
-      if(typeof getCode === "function"){
-        const c = getCode();
-        if(c) return String(c).trim().toUpperCase();
-      }
-    }catch(e){}
-    return "FM-DEMO";
-  }
-
-  function currentSessionId(){
-    try{
-      return new URLSearchParams(location.search || "").get("chatSession") || "";
-    }catch(e){
-      return "";
-    }
-  }
-
-  function cssEscape(v){
-    try{
-      if(window.CSS && CSS.escape) return CSS.escape(String(v));
-    }catch(e){}
-    return String(v).replace(/"/g, '\\"');
-  }
-
-  function cleanName(v){
-    return String(v || "")
-      .replace(/[<>"]/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 40);
-  }
-
-  function titleName(v){
-    return cleanName(v)
-      .split(" ")
-      .filter(Boolean)
-      .map(function(part){
-        return part.charAt(0).toLocaleUpperCase("it-IT") + part.slice(1);
-      })
-      .join(" ")
-      .trim();
-  }
-
-  function visibleName(v){
-    /*
-      Richiesta: nome sempre leggibile per intero.
-      Uso ellissi solo se veramente lunghissimo, lasciando comunque molto più spazio.
-    */
-    const n = cleanName(v);
-    if(!n) return "";
-    if(n.length <= 24) return n;
-    return n.slice(0, 23) + "…";
-  }
-
-  function baseULabel(session, index){
-    return "U" + Number(session.display_index || index + 1);
-  }
-
-  async function fetchSessions(){
-    const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), {
-      cache:"no-store"
-    });
-
-    const data = await res.json().catch(()=>null);
-
-    if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)){
-      return [];
-    }
-
-    return data.sessions.slice().sort(function(a,b){
-      return Number(a.display_index || 0) - Number(b.display_index || 0);
-    });
-  }
-
-  function applyNameToChip(sessionId, name, uLabel){
-    const sid = String(sessionId || "").trim();
-    const n = cleanName(name);
-    if(!sid || !n) return false;
-
-    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
-    if(!chip) return false;
-
-    chip.dataset.userName = n;
-    chip.dataset.confirmedName = "1";
-    chip.dataset.uLabel = uLabel || chip.dataset.uLabel || "";
-
-    chip.classList.add("has-name");
-    chip.textContent = visibleName(n);
-    chip.title = (chip.dataset.uLabel ? chip.dataset.uLabel + " · " : "") + n + " — doppio click per modificare";
-
-    chip.style.width = "auto";
-    chip.style.minWidth = window.matchMedia("(min-width: 900px)").matches ? "80px" : "68px";
-    chip.style.maxWidth = window.matchMedia("(min-width: 900px)").matches ? "260px" : "168px";
-    chip.style.flexBasis = "auto";
-
-    return true;
-  }
-
-  function renderTabs(sessions){
-    const strip = document.getElementById("followmeOwnerChatSessionStrip");
-    const dots = document.getElementById("followmeHorizontalChatDots");
-    if(!strip) return;
-
-    const current = currentSessionId();
-
-    const signature = sessions.map(function(s, idx){
-      return [
-        s.id,
-        s.display_index || idx + 1,
-        cleanName(s.display_name || ""),
-        s.owner_opened_at || "",
-        String(s.id) === String(current) ? "active" : ""
-      ].join(":");
-    }).join("|");
-
-    lastSessions = sessions;
-
-    if(signature === lastSignature){
-      enforceTabs(sessions);
-      return;
-    }
-
-    lastSignature = signature;
-    strip.innerHTML = "";
-
-    sessions.forEach(function(s, idx){
-      const name = cleanName(s.display_name || "");
-      const u = baseULabel(s, idx);
-
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className =
-        "followme-chat-session-chip" +
-        (String(s.id) === String(current) ? " active" : " waiting") +
-        (!s.owner_opened_at ? " new" : "") +
-        (name ? " has-name" : "");
-
-      btn.dataset.sessionId = String(s.id);
-      btn.dataset.uLabel = u;
-      btn.dataset.userName = name;
-      if(name) btn.dataset.confirmedName = "1";
-
-      btn.textContent = name ? visibleName(name) : u;
-      btn.title = name ? (u + " · " + name + " — doppio click per modificare") : u;
-
-      btn.addEventListener("click", function(ev){
-        ev.preventDefault();
-        window.location.href = "/fm/app/" + encodeURIComponent(code()) +
-          "?chatSession=" + encodeURIComponent(s.id) +
-          "&focus=chat";
-      });
-
-      btn.addEventListener("dblclick", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        openEditNameCard(String(s.id), cleanName(btn.dataset.userName || name), u);
-      });
-
-      strip.appendChild(btn);
-    });
-
-    if(dots){
-      dots.innerHTML = "";
-      sessions.forEach(function(s){
-        const d = document.createElement("span");
-        d.className = "followme-horizontal-chat-dot" + (String(s.id) === String(current) ? " active" : "");
-        dots.appendChild(d);
-      });
-    }
-  }
-
-  function enforceTabs(sessions){
-    sessions.forEach(function(s, idx){
-      const sid = String(s.id);
-      const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
-      if(!chip) return;
-
-      const u = baseULabel(s, idx);
-      const name = cleanName(s.display_name || chip.dataset.userName || "");
-
-      chip.dataset.uLabel = u;
-
-      if(name){
-        chip.dataset.userName = name;
-        chip.dataset.confirmedName = "1";
-        chip.classList.add("has-name");
-
-        const wanted = visibleName(name);
-        if(chip.textContent !== wanted){
-          chip.textContent = wanted;
-        }
-
-        chip.title = u + " · " + name + " — doppio click per modificare";
-        chip.style.width = "auto";
-        chip.style.minWidth = window.matchMedia("(min-width: 900px)").matches ? "80px" : "68px";
-        chip.style.maxWidth = window.matchMedia("(min-width: 900px)").matches ? "260px" : "168px";
-        chip.style.flexBasis = "auto";
-      }else{
-        chip.dataset.userName = "";
-        chip.dataset.confirmedName = "";
-        chip.classList.remove("has-name");
-
-        if(chip.textContent !== u){
-          chip.textContent = u;
-        }
-
-        chip.title = u;
-        chip.style.width = "42px";
-        chip.style.minWidth = "42px";
-        chip.style.maxWidth = "42px";
-        chip.style.flexBasis = "42px";
-      }
-
-      if(!chip.dataset.fullNameEditBound){
-        chip.dataset.fullNameEditBound = "1";
-        chip.addEventListener("dblclick", function(ev){
-          ev.preventDefault();
-          ev.stopPropagation();
-          openEditNameCard(sid, cleanName(chip.dataset.userName || ""), chip.dataset.uLabel || u);
-        });
-      }
-    });
-  }
-
-  async function refreshTabs(){
-    try{
-      const sessions = await fetchSessions();
-      renderTabs(sessions);
-      enforceTabs(sessions);
-    }catch(e){
-      console.warn("[FollowMe full name] refresh error", e);
-    }
-  }
-
-  async function resolveULabel(sessionId){
-    const sid = String(sessionId || currentSessionId() || "");
-    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
-
-    if(chip && chip.dataset.uLabel) return chip.dataset.uLabel;
-
-    const sessions = lastSessions.length ? lastSessions : await fetchSessions();
-    const idx = sessions.findIndex(s => String(s.id) === sid);
-    if(idx >= 0) return baseULabel(sessions[idx], idx);
-
-    return "U?";
-  }
-
-  function openEditNameCard(sessionId, currentName, uLabel){
-    pendingSessionId = String(sessionId || currentSessionId() || "");
-    pendingULabel = uLabel || "";
-
-    const card = document.getElementById("followmeNameDetectCard");
-    const input = document.getElementById("followmeNameDetectInput");
-    const text = document.getElementById("followmeNameDetectText");
-    const ctx = document.getElementById("followmeNameDetectContext");
-
-    if(input){
-      input.value = currentName || "";
-      input.placeholder = "Scrivi o modifica il nome";
-    }
-
-    if(text){
-      text.textContent = currentName
-        ? "Modifica il nome associato a " + (pendingULabel || "questa chat") + "."
-        : "Confermi il nome da associare a " + (pendingULabel || "questa chat") + "?";
-    }
-
-    if(ctx){
-      ctx.innerHTML = '<div class="followme-edit-name-hint">Il nome confermato sostituirà definitivamente ' + (pendingULabel || "U?") + ' nel selettore in alto.</div>';
-      ctx.style.display = "block";
-    }
-
-    if(card){
-      card.classList.add("is-open");
-      card.setAttribute("aria-hidden", "false");
-    }
-
-    setTimeout(function(){
-      try{
-        input && input.focus();
-        input && input.select();
-      }catch(e){}
-    }, 80);
-  }
-
-  function closeNameCard(){
-    const card = document.getElementById("followmeNameDetectCard");
-    if(card){
-      card.classList.remove("is-open");
-      card.setAttribute("aria-hidden", "true");
-    }
-
-    pendingSessionId = "";
-    pendingULabel = "";
-  }
-
-  async function saveName(sessionId, name, uLabel){
-    const clean = titleName(name);
-
-    if(!sessionId){
-      alert("Non riesco a identificare la chat da aggiornare.");
-      return false;
-    }
-
-    if(!clean || clean.length < 2){
-      alert("Nome non valido.");
-      return false;
-    }
-
-    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/name", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ display_name:clean })
-    });
-
-    const data = await res.json().catch(()=>null);
-
-    if(!res.ok || !data || !data.success){
-      alert("Errore salvataggio nome: " + ((data && data.error) || ("HTTP " + res.status)));
-      return false;
-    }
-
-    const savedId = String((data.session && data.session.id) || sessionId);
-    applyNameToChip(savedId, clean, uLabel);
-
-    closeNameCard();
-
-    setTimeout(refreshTabs, 250);
-    setTimeout(refreshTabs, 900);
-
-    return true;
-  }
-
-  function bindConfirmButton(){
-    const btn = document.getElementById("followmeNameDetectConfirm");
-    if(!btn || btn.dataset.fullNameFinalBound === "1") return;
-
-    const fresh = btn.cloneNode(true);
-    fresh.dataset.fullNameFinalBound = "1";
-    btn.parentNode.replaceChild(fresh, btn);
-
-    fresh.addEventListener("click", async function(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
-      ev.stopImmediatePropagation();
-
-      const input = document.getElementById("followmeNameDetectInput");
-      const sid = pendingSessionId || currentSessionId();
-      const u = pendingULabel || await resolveULabel(sid);
-
-      saveName(sid, input ? input.value : "", u);
-    }, true);
-  }
-
-  function bindCancelButton(){
-    const btn = document.getElementById("followmeNameDetectCancel");
-    if(!btn || btn.dataset.fullNameFinalBound === "1") return;
-
-    btn.dataset.fullNameFinalBound = "1";
-    btn.addEventListener("click", function(ev){
-      ev.preventDefault();
-      closeNameCard();
-    });
-  }
-
-  function hijackNameCardOpeners(){
-    const card = document.getElementById("followmeNameDetectCard");
-    if(!card || card.dataset.fullNameObserverBound === "1") return;
-
-    card.dataset.fullNameObserverBound = "1";
-
-    const obs = new MutationObserver(async function(){
-      if(card.classList.contains("is-open")){
-        pendingSessionId = pendingSessionId || currentSessionId();
-        pendingULabel = pendingULabel || await resolveULabel(pendingSessionId);
-      }
-    });
-
-    obs.observe(card, { attributes:true, attributeFilter:["class"] });
-  }
-
-  function boot(){
-    bindConfirmButton();
-    bindCancelButton();
-    hijackNameCardOpeners();
-    refreshTabs();
-  }
-
-  window.followMeFullNameRefresh = refreshTabs;
-  window.followMeOpenEditNameCard = openEditNameCard;
-  window.followMeApplyFullNameToChip = applyNameToChip;
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", boot);
-  }else{
-    boot();
-  }
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 250);
-  });
-
-  window.addEventListener("resize", function(){
-    setTimeout(refreshTabs, 150);
-  });
-
-  setInterval(function(){
-    bindConfirmButton();
-    bindCancelButton();
-  }, 1000);
-
-  setInterval(refreshTabs, 2500);
-})();
-</script>
+<script id="followme-full-name-stable-final-disabled-u-plus-name">/* disabled: replaced by U plus full name tab controller */</script>
 
 
 
@@ -17070,6 +16688,426 @@ document.addEventListener("visibilitychange", function(){
     bindCancelMemory();
     scanLatestMessage();
   }, 1500);
+})();
+</script>
+
+
+<script id="followme-u-plus-name-tab-final">
+(function(){
+  let lastSessions = [];
+  let lastSignature = "";
+  let pendingSessionId = "";
+  let pendingULabel = "";
+
+  function code(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function currentSessionId(){
+    try{
+      return new URLSearchParams(location.search || "").get("chatSession") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function cssEscape(v){
+    try{
+      if(window.CSS && CSS.escape) return CSS.escape(String(v));
+    }catch(e){}
+    return String(v).replace(/"/g, '\\"');
+  }
+
+  function cleanName(v){
+    return String(v || "")
+      .replace(/[<>"]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 40);
+  }
+
+  function titleName(v){
+    return cleanName(v)
+      .split(" ")
+      .filter(Boolean)
+      .map(function(part){
+        return part.charAt(0).toLocaleUpperCase("it-IT") + part.slice(1);
+      })
+      .join(" ")
+      .trim();
+  }
+
+  function baseULabel(session, index){
+    return "U" + Number(session.display_index || index + 1);
+  }
+
+  function visibleLabel(u, name){
+    const n = cleanName(name);
+    return n ? (u + " · " + n) : u;
+  }
+
+  async function fetchSessions(){
+    const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)){
+      return [];
+    }
+
+    return data.sessions.slice().sort(function(a,b){
+      return Number(a.display_index || 0) - Number(b.display_index || 0);
+    });
+  }
+
+  function applyLabelToChip(sessionId, uLabel, name){
+    const sid = String(sessionId || "").trim();
+    if(!sid) return false;
+
+    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
+    if(!chip) return false;
+
+    const n = cleanName(name);
+    const u = uLabel || chip.dataset.uLabel || "U?";
+
+    chip.dataset.uLabel = u;
+    chip.dataset.userName = n;
+
+    if(n){
+      chip.dataset.confirmedName = "1";
+      chip.classList.add("has-name");
+    }else{
+      chip.dataset.confirmedName = "";
+      chip.classList.remove("has-name");
+    }
+
+    chip.textContent = visibleLabel(u, n);
+    chip.title = n ? (u + " · " + n + " — doppio click per modificare") : u;
+
+    if(n){
+      chip.style.width = "auto";
+      chip.style.minWidth = window.matchMedia("(min-width: 900px)").matches ? "120px" : "96px";
+      chip.style.maxWidth = "none";
+      chip.style.flexBasis = "auto";
+      chip.style.overflow = "visible";
+      chip.style.whiteSpace = "nowrap";
+    }else{
+      chip.style.width = "42px";
+      chip.style.minWidth = "42px";
+      chip.style.maxWidth = "42px";
+      chip.style.flexBasis = "42px";
+    }
+
+    return true;
+  }
+
+  function renderTabs(sessions){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+    const dots = document.getElementById("followmeHorizontalChatDots");
+    if(!strip) return;
+
+    const current = currentSessionId();
+
+    const signature = sessions.map(function(s, idx){
+      return [
+        s.id,
+        s.display_index || idx + 1,
+        cleanName(s.display_name || ""),
+        s.owner_opened_at || "",
+        String(s.id) === String(current) ? "active" : ""
+      ].join(":");
+    }).join("|");
+
+    lastSessions = sessions;
+
+    if(signature === lastSignature){
+      enforceTabs(sessions);
+      return;
+    }
+
+    lastSignature = signature;
+    strip.innerHTML = "";
+
+    sessions.forEach(function(s, idx){
+      const name = cleanName(s.display_name || "");
+      const u = baseULabel(s, idx);
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className =
+        "followme-chat-session-chip" +
+        (String(s.id) === String(current) ? " active" : " waiting") +
+        (!s.owner_opened_at ? " new" : "") +
+        (name ? " has-name" : "");
+
+      btn.dataset.sessionId = String(s.id);
+      btn.dataset.uLabel = u;
+      btn.dataset.userName = name;
+      if(name) btn.dataset.confirmedName = "1";
+
+      btn.textContent = visibleLabel(u, name);
+      btn.title = name ? (u + " · " + name + " — doppio click per modificare") : u;
+
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        window.location.href = "/fm/app/" + encodeURIComponent(code()) +
+          "?chatSession=" + encodeURIComponent(s.id) +
+          "&focus=chat";
+      });
+
+      btn.addEventListener("dblclick", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        openEditNameCard(String(s.id), name, u);
+      });
+
+      strip.appendChild(btn);
+      applyLabelToChip(String(s.id), u, name);
+    });
+
+    if(dots){
+      dots.innerHTML = "";
+      sessions.forEach(function(s){
+        const d = document.createElement("span");
+        d.className = "followme-horizontal-chat-dot" + (String(s.id) === String(current) ? " active" : "");
+        dots.appendChild(d);
+      });
+    }
+  }
+
+  function enforceTabs(sessions){
+    sessions.forEach(function(s, idx){
+      const sid = String(s.id);
+      const u = baseULabel(s, idx);
+      const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
+      if(!chip) return;
+
+      const name = cleanName(s.display_name || chip.dataset.userName || "");
+      applyLabelToChip(sid, u, name);
+
+      if(!chip.dataset.uPlusNameEditBound){
+        chip.dataset.uPlusNameEditBound = "1";
+        chip.addEventListener("dblclick", function(ev){
+          ev.preventDefault();
+          ev.stopPropagation();
+          openEditNameCard(sid, cleanName(chip.dataset.userName || ""), chip.dataset.uLabel || u);
+        });
+      }
+    });
+  }
+
+  async function refreshTabs(){
+    try{
+      const sessions = await fetchSessions();
+      renderTabs(sessions);
+      enforceTabs(sessions);
+    }catch(e){
+      console.warn("[FollowMe U+Name] refresh error", e);
+    }
+  }
+
+  async function resolveULabel(sessionId){
+    const sid = String(sessionId || currentSessionId() || "");
+    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
+
+    if(chip && chip.dataset.uLabel) return chip.dataset.uLabel;
+
+    const sessions = lastSessions.length ? lastSessions : await fetchSessions();
+    const idx = sessions.findIndex(s => String(s.id) === sid);
+    if(idx >= 0) return baseULabel(sessions[idx], idx);
+
+    return "U?";
+  }
+
+  function openEditNameCard(sessionId, currentName, uLabel){
+    pendingSessionId = String(sessionId || currentSessionId() || "");
+    pendingULabel = uLabel || "";
+
+    const card = document.getElementById("followmeNameDetectCard");
+    const input = document.getElementById("followmeNameDetectInput");
+    const text = document.getElementById("followmeNameDetectText");
+    const ctx = document.getElementById("followmeNameDetectContext");
+
+    if(input){
+      input.value = currentName || "";
+      input.placeholder = "Scrivi o modifica il nome";
+    }
+
+    if(text){
+      text.textContent = currentName
+        ? "Modifica il nome associato a " + (pendingULabel || "questa chat") + "."
+        : "Confermi il nome da associare a " + (pendingULabel || "questa chat") + "?";
+    }
+
+    if(ctx){
+      ctx.innerHTML = '<div class="followme-edit-name-hint">Nel selettore verrà mostrato: ' + (pendingULabel || "U?") + ' · Nome</div>';
+      ctx.style.display = "block";
+    }
+
+    if(card){
+      card.classList.add("is-open");
+      card.setAttribute("aria-hidden", "false");
+    }
+
+    setTimeout(function(){
+      try{
+        input && input.focus();
+        input && input.select();
+      }catch(e){}
+    }, 80);
+  }
+
+  function closeNameCard(){
+    const card = document.getElementById("followmeNameDetectCard");
+    if(card){
+      card.classList.remove("is-open");
+      card.setAttribute("aria-hidden", "true");
+    }
+
+    pendingSessionId = "";
+    pendingULabel = "";
+  }
+
+  async function saveName(sessionId, name, uLabel){
+    const clean = titleName(name);
+
+    if(!sessionId){
+      alert("Non riesco a identificare la chat da aggiornare.");
+      return false;
+    }
+
+    if(!clean || clean.length < 2){
+      alert("Nome non valido.");
+      return false;
+    }
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/name", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ display_name:clean })
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      alert("Errore salvataggio nome: " + ((data && data.error) || ("HTTP " + res.status)));
+      return false;
+    }
+
+    const savedId = String((data.session && data.session.id) || sessionId);
+    applyLabelToChip(savedId, uLabel, clean);
+
+    closeNameCard();
+
+    setTimeout(refreshTabs, 250);
+    setTimeout(refreshTabs, 900);
+
+    return true;
+  }
+
+  function bindConfirmButton(){
+    const btn = document.getElementById("followmeNameDetectConfirm");
+    if(!btn || btn.dataset.uPlusNameFinalBound === "1") return;
+
+    const fresh = btn.cloneNode(true);
+    fresh.dataset.uPlusNameFinalBound = "1";
+    btn.parentNode.replaceChild(fresh, btn);
+
+    fresh.addEventListener("click", async function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+
+      const input = document.getElementById("followmeNameDetectInput");
+      const sid =
+        pendingSessionId ||
+        window.__followMePendingNameSessionId ||
+        currentSessionId();
+
+      const u =
+        pendingULabel ||
+        window.__followMePendingNameULabel ||
+        await resolveULabel(sid);
+
+      saveName(sid, input ? input.value : "", u);
+    }, true);
+  }
+
+  function bindCancelButton(){
+    const btn = document.getElementById("followmeNameDetectCancel");
+    if(!btn || btn.dataset.uPlusNameFinalBound === "1") return;
+
+    btn.dataset.uPlusNameFinalBound = "1";
+    btn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      closeNameCard();
+    });
+  }
+
+  function hijackNameCardOpeners(){
+    const card = document.getElementById("followmeNameDetectCard");
+    if(!card || card.dataset.uPlusNameObserverBound === "1") return;
+
+    card.dataset.uPlusNameObserverBound = "1";
+
+    const obs = new MutationObserver(async function(){
+      if(card.classList.contains("is-open")){
+        pendingSessionId =
+          pendingSessionId ||
+          window.__followMePendingNameSessionId ||
+          currentSessionId();
+
+        pendingULabel =
+          pendingULabel ||
+          window.__followMePendingNameULabel ||
+          await resolveULabel(pendingSessionId);
+      }
+    });
+
+    obs.observe(card, { attributes:true, attributeFilter:["class"] });
+  }
+
+  function boot(){
+    bindConfirmButton();
+    bindCancelButton();
+    hijackNameCardOpeners();
+    refreshTabs();
+  }
+
+  window.followMeUPlusNameRefresh = refreshTabs;
+  window.followMeOpenEditNameCard = openEditNameCard;
+  window.followMeApplyUPlusName = applyLabelToChip;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  window.addEventListener("resize", function(){
+    setTimeout(refreshTabs, 150);
+  });
+
+  setInterval(function(){
+    bindConfirmButton();
+    bindCancelButton();
+  }, 1000);
+
+  setInterval(refreshTabs, 2500);
 })();
 </script>
 
