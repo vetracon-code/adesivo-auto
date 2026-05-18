@@ -15352,9 +15352,6 @@ document.addEventListener("visibilitychange", function(){
 <script id="followme-name-recognition-u-label-final-disabled">/* disabled: replaced by active-session-safe version */</script>
 
 
-<script id="followme-name-recognition-active-session-final-disabled-advanced-name">/* disabled: replaced by advanced name recognition */</script>
-
-
 <script id="followme-reset-choice-sync-final">
 (function(){
   function code(){
@@ -16746,211 +16743,6 @@ document.addEventListener("visibilitychange", function(){
 </script>
 
 
-<script id="followme-user-settings-stable-final">
-(function(){
-  let activeSessionId = "";
-  let activeUploads = false;
-  let activeBlocked = false;
-
-  function code(){
-    try{
-      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
-      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
-      if(typeof getCode === "function"){
-        const c = getCode();
-        if(c) return String(c).trim().toUpperCase();
-      }
-    }catch(e){}
-    return "FM-DEMO";
-  }
-
-  async function fetchSessions(){
-    const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), {
-      cache:"no-store"
-    });
-
-    const data = await res.json().catch(()=>null);
-
-    if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)){
-      return [];
-    }
-
-    return data.sessions;
-  }
-
-  function getActiveSessionIdFromUi(){
-    const overlay = document.getElementById("followmeUserManageOverlay");
-
-    if(overlay && overlay.dataset.sessionId){
-      return overlay.dataset.sessionId;
-    }
-
-    const active = document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active");
-    if(active && active.dataset.sessionId){
-      return active.dataset.sessionId;
-    }
-
-    try{
-      return new URLSearchParams(location.search || "").get("chatSession") || "";
-    }catch(e){
-      return "";
-    }
-  }
-
-  async function loadSession(sessionId){
-    const sid = String(sessionId || getActiveSessionIdFromUi() || "");
-    if(!sid) return null;
-
-    const sessions = await fetchSessions();
-    return sessions.find(function(s){
-      return String(s.id) === sid;
-    }) || null;
-  }
-
-  function applyButtons(session){
-    if(!session) return;
-
-    activeSessionId = String(session.id);
-    activeUploads = !!session.uploads_enabled;
-    activeBlocked = !!session.is_blocked;
-
-    const overlay = document.getElementById("followmeUserManageOverlay");
-    if(overlay){
-      overlay.dataset.sessionId = activeSessionId;
-    }
-
-    const uploadsBtn = document.getElementById("followmeUserManageUploads");
-    const blockBtn = document.getElementById("followmeUserManageBlock");
-
-    if(uploadsBtn){
-      uploadsBtn.textContent = activeUploads
-        ? "Disabilita caricamenti completi"
-        : "Abilita caricamenti completi";
-
-      uploadsBtn.className = activeUploads ? "warn" : "ok";
-    }
-
-    if(blockBtn){
-      blockBtn.textContent = activeBlocked
-        ? "Riabilita utente"
-        : "Blocca utente";
-
-      blockBtn.className = activeBlocked ? "ok" : "danger";
-    }
-  }
-
-  async function updateSettings(payload){
-    const sid = activeSessionId || getActiveSessionIdFromUi();
-
-    if(!sid){
-      alert("Non riesco a identificare l’utente selezionato.");
-      return;
-    }
-
-    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/settings", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify(payload)
-    });
-
-    const data = await res.json().catch(()=>null);
-
-    if(!res.ok || !data || !data.success){
-      alert("Errore aggiornamento utente: " + ((data && data.error) || ("HTTP " + res.status)));
-      return;
-    }
-
-    applyButtons(data.session);
-
-    if(typeof window.followMeUserManagementMenuBoot === "function"){
-      window.followMeUserManagementMenuBoot();
-    }
-
-    if(typeof window.followMeCleanFinalRefreshTabs === "function"){
-      window.followMeCleanFinalRefreshTabs();
-    }
-
-    alert(
-      payload.hasOwnProperty("uploads_enabled")
-        ? (data.session.uploads_enabled ? "Caricamenti completi abilitati." : "Caricamenti completi disabilitati.")
-        : (data.session.is_blocked ? "Utente bloccato." : "Utente riabilitato.")
-    );
-  }
-
-  function bindButtons(){
-    const uploadsBtn = document.getElementById("followmeUserManageUploads");
-    const blockBtn = document.getElementById("followmeUserManageBlock");
-    const overlay = document.getElementById("followmeUserManageOverlay");
-
-    if(uploadsBtn && uploadsBtn.dataset.userSettingsStableBound !== "1"){
-      const fresh = uploadsBtn.cloneNode(true);
-      fresh.dataset.userSettingsStableBound = "1";
-      uploadsBtn.parentNode.replaceChild(fresh, uploadsBtn);
-
-      fresh.addEventListener("click", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        ev.stopImmediatePropagation();
-        updateSettings({ uploads_enabled: !activeUploads });
-      }, true);
-    }
-
-    const blockNow = document.getElementById("followmeUserManageBlock");
-    if(blockNow && blockNow.dataset.userSettingsStableBound !== "1"){
-      const fresh = blockNow.cloneNode(true);
-      fresh.dataset.userSettingsStableBound = "1";
-      blockNow.parentNode.replaceChild(fresh, blockNow);
-
-      fresh.addEventListener("click", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        ev.stopImmediatePropagation();
-        updateSettings({ is_blocked: !activeBlocked });
-      }, true);
-    }
-
-    if(overlay && overlay.dataset.userSettingsStableObserver !== "1"){
-      overlay.dataset.userSettingsStableObserver = "1";
-
-      const obs = new MutationObserver(async function(){
-        if(overlay.classList.contains("is-open")){
-          const session = await loadSession(overlay.dataset.sessionId || getActiveSessionIdFromUi()).catch(()=>null);
-          if(session) applyButtons(session);
-        }
-      });
-
-      obs.observe(overlay, { attributes:true, attributeFilter:["class","data-session-id"] });
-    }
-  }
-
-  async function boot(){
-    bindButtons();
-
-    const overlay = document.getElementById("followmeUserManageOverlay");
-    if(overlay && overlay.classList.contains("is-open")){
-      const session = await loadSession(overlay.dataset.sessionId || getActiveSessionIdFromUi()).catch(()=>null);
-      if(session) applyButtons(session);
-    }
-  }
-
-  window.followMeUserSettingsStableBoot = boot;
-  window.followMeUserSettingsStableApply = applyButtons;
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", boot);
-  }else{
-    boot();
-  }
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 250);
-  });
-
-  setInterval(boot, 1000);
-})();
-</script>
-
-
 <script id="followme-hide-pc-only-dont-ask-on-mobile-final">
 (function(){
   function isMobileWidth(){
@@ -17719,541 +17511,17 @@ document.addEventListener("visibilitychange", function(){
 
 
 
-<script id="followme-user-controls-explicit-final-20260518">
-(function(){
-  if(window.__followMeUserControlsExplicitFinal20260518) return;
-  window.__followMeUserControlsExplicitFinal20260518 = true;
 
+
+<script id="followme-admin-user-controls-clean-20260519">
+(function(){
+  if(window.__followMeAdminUserControlsClean20260519) return;
+  window.__followMeAdminUserControlsClean20260519 = true;
+
+  let sessions = [];
   let activeSessionId = "";
-  let activeState = null;
-  let lastSessions = [];
+  let activeSession = null;
   let busy = false;
-
-  function toastMsg(msg){
-    try{
-      if(typeof toast === "function") toast(msg);
-      else alert(msg);
-    }catch(e){
-      alert(msg);
-    }
-  }
-
-  function code(){
-    try{
-      if(typeof getCode === "function") return getCode();
-      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
-      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
-      const q = new URLSearchParams(location.search || "");
-      return String(q.get("code") || "").trim().toUpperCase();
-    }catch(e){
-      return "";
-    }
-  }
-
-  function cleanSid(v){
-    const s = String(v || "").trim();
-    return /^\d+$/.test(s) ? s : "";
-  }
-
-  function chipSid(chip){
-    if(!chip) return "";
-    return cleanSid(
-      chip.dataset.sessionId ||
-      chip.dataset.session ||
-      chip.dataset.id ||
-      chip.getAttribute("data-session-id") ||
-      chip.getAttribute("data-session") ||
-      chip.getAttribute("data-id") ||
-      ""
-    );
-  }
-
-  function activeChip(){
-    return document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active") ||
-           document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip");
-  }
-
-  function getActiveSid(){
-    return cleanSid(activeSessionId) || chipSid(activeChip());
-  }
-
-  function isMobile(){
-    return window.matchMedia && window.matchMedia("(max-width:640px)").matches;
-  }
-
-  function labelFor(s){
-    if(!s) return "Utente";
-    return s.display_name || s.visitor_label || ("U" + (s.display_index || s.id || ""));
-  }
-
-  function findTopActionsContainer(){
-    return document.querySelector(".followme-owner-chat-actions") ||
-           document.querySelector(".followme-chat-waiting-actions") ||
-           document.getElementById("followmeOwnerChatActions") ||
-           null;
-  }
-
-  function findSafeInsertTarget(){
-    const actions = findTopActionsContainer();
-    if(actions && actions.parentNode) return { parent: actions.parentNode, after: actions };
-
-    const top = document.querySelector(".followme-owner-chat-top") ||
-                document.querySelector(".followme-chat-waiting-top");
-
-    if(top && top.parentNode) return { parent: top.parentNode, after: top };
-
-    const screen = document.getElementById("followmeOwnerChatScreen") ||
-                   document.getElementById("followmeOwnerChatWaitingScreen");
-
-    if(screen) return { parent: screen, after: screen.firstElementChild };
-
-    return { parent: document.body, after: null };
-  }
-
-  function injectCss(){
-    if(document.getElementById("followmeUserControlsExplicitCss20260518")) return;
-
-    const style = document.createElement("style");
-    style.id = "followmeUserControlsExplicitCss20260518";
-    style.textContent = `
-      #fmLiveUserControls20260518{
-        width:auto;
-        max-width:100%;
-        margin:8px 12px 10px;
-        padding:10px;
-        box-sizing:border-box;
-        border-radius:18px;
-        background:rgba(255,255,255,.96);
-        border:1px solid rgba(0,0,0,.08);
-        box-shadow:0 8px 28px rgba(0,0,0,.10);
-        position:relative;
-        z-index:50;
-        flex:0 0 auto;
-        overflow:hidden;
-      }
-
-      #fmLiveUserControls20260518 .fm-head{
-        display:flex;
-        align-items:center;
-        justify-content:space-between;
-        gap:8px;
-        min-width:0;
-        margin-bottom:8px;
-      }
-
-      #fmLiveUserControls20260518 .fm-title{
-        font-size:.68rem;
-        font-weight:950;
-        text-transform:uppercase;
-        letter-spacing:.055em;
-        color:#667085;
-        white-space:nowrap;
-        overflow:hidden;
-        text-overflow:ellipsis;
-      }
-
-      #fmLiveUserControls20260518 .fm-status-pill{
-        flex:0 0 auto;
-        max-width:48%;
-        min-height:24px;
-        padding:0 9px;
-        border-radius:999px;
-        display:inline-flex;
-        align-items:center;
-        justify-content:center;
-        font-size:.64rem;
-        line-height:1;
-        font-weight:950;
-        background:#f2f4f7;
-        color:#475467;
-        white-space:nowrap;
-        overflow:hidden;
-        text-overflow:ellipsis;
-      }
-
-      #fmLiveUserControls20260518 .fm-status-pill.ok{background:#effaf4;color:#0c7f45;}
-      #fmLiveUserControls20260518 .fm-status-pill.warn{background:#fff7e8;color:#9a5b00;}
-      #fmLiveUserControls20260518 .fm-status-pill.danger{background:#ffe1df;color:#b42318;}
-
-      #fmLiveUserControls20260518 .fm-row{
-        display:grid;
-        grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-        gap:8px;
-        width:100%;
-        min-width:0;
-      }
-
-      #fmLiveUserControls20260518 button{
-        min-width:0;
-        width:100%;
-        max-width:100%;
-        min-height:38px;
-        border-radius:999px;
-        border:1px solid rgba(0,0,0,.08);
-        background:#fff;
-        color:#202629;
-        font-size:.76rem;
-        line-height:1.05;
-        font-weight:950;
-        cursor:pointer;
-        padding:0 8px;
-        white-space:nowrap;
-        overflow:hidden;
-        text-overflow:ellipsis;
-        box-sizing:border-box;
-      }
-
-      #fmLiveUserControls20260518 button:disabled{opacity:.55;cursor:wait;}
-      #fmLiveUserControls20260518 button.ok{background:#effaf4;color:#0c7f45;}
-      #fmLiveUserControls20260518 button.warn{background:#fff7e8;color:#9a5b00;}
-      #fmLiveUserControls20260518 button.danger{background:#fff1ef;color:#a5241c;}
-      #fmLiveUserControls20260518 button.blocked{background:#ffe1df;color:#b42318;border-color:rgba(180,35,24,.35);}
-
-      #followmeOwnerChatSessionStrip .followme-chat-session-chip.fm-blocked{
-        background:#ffe1df !important;
-        color:#b42318 !important;
-        border-color:rgba(180,35,24,.42) !important;
-      }
-
-      #followmeOwnerChatSessionStrip .followme-chat-session-chip.fm-extra:not(.fm-blocked){
-        box-shadow:0 0 0 2px rgba(12,127,69,.20) inset !important;
-      }
-
-      @media (max-width:640px){
-        body.followme-chat-only-mode #followmeOwnerChatScreen,
-        body.followme-chat-waiting-mode #followmeOwnerChatWaitingScreen{
-          display:flex !important;
-          flex-direction:column !important;
-          overflow:hidden !important;
-          max-width:100vw !important;
-        }
-
-        #fmLiveUserControls20260518{
-          width:calc(100% - 20px) !important;
-          max-width:calc(100% - 20px) !important;
-          margin:6px 10px 8px !important;
-          padding:8px !important;
-          border-radius:15px !important;
-        }
-
-        #fmLiveUserControls20260518 .fm-title{font-size:.62rem;letter-spacing:.045em;}
-        #fmLiveUserControls20260518 .fm-status-pill{max-width:46%;min-height:22px;padding:0 7px;font-size:.58rem;}
-        #fmLiveUserControls20260518 .fm-row{gap:6px;}
-        #fmLiveUserControls20260518 button{min-height:34px !important;font-size:.68rem !important;padding:0 6px !important;}
-        body.followme-chat-only-mode #followmeOwnerChatMessages{flex:1 1 auto !important;min-height:0 !important;}
-      }
-
-      @media (max-width:380px){
-        #fmLiveUserControls20260518{width:calc(100% - 16px) !important;max-width:calc(100% - 16px) !important;margin-left:8px !important;margin-right:8px !important;padding:7px !important;}
-        #fmLiveUserControls20260518 button{font-size:.64rem !important;min-height:32px !important;padding:0 5px !important;}
-        #fmLiveUserControls20260518 .fm-title{font-size:.58rem;}
-        #fmLiveUserControls20260518 .fm-status-pill{font-size:.54rem;padding:0 6px;}
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  function ensureControls(){
-    let box = document.getElementById("fmLiveUserControls20260518");
-
-    if(!box){
-      box = document.createElement("div");
-      box.id = "fmLiveUserControls20260518";
-      box.innerHTML = `
-        <div class="fm-head">
-          <div class="fm-title">Gestione utente</div>
-          <div class="fm-status-pill" id="fmLiveStatusPill20260518">Nessun utente</div>
-        </div>
-        <div class="fm-row">
-          <button type="button" id="fmLiveExtraBtn20260518">Extra ON</button>
-          <button type="button" id="fmLiveBlockBtn20260518">Blocca</button>
-        </div>
-      `;
-    }
-
-    const target = findSafeInsertTarget();
-
-    if(target.parent){
-      if(target.after && target.after.nextSibling !== box){
-        target.parent.insertBefore(box, target.after.nextSibling);
-      }else if(!target.after && box.parentNode !== target.parent){
-        target.parent.insertBefore(box, target.parent.firstChild);
-      }
-    }
-
-    const extra = document.getElementById("fmLiveExtraBtn20260518");
-    const block = document.getElementById("fmLiveBlockBtn20260518");
-
-    if(extra && extra.dataset.boundExplicit !== "1"){
-      extra.dataset.boundExplicit = "1";
-      extra.addEventListener("click", async function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-
-        const st = await fetchState(getActiveSid(), true);
-        if(!st) return toastMsg("Seleziona prima un utente.");
-
-        await setExplicit({ uploads_enabled: !st.uploads_enabled });
-      });
-    }
-
-    if(block && block.dataset.boundExplicit !== "1"){
-      block.dataset.boundExplicit = "1";
-      block.addEventListener("click", async function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-
-        const st = await fetchState(getActiveSid(), true);
-        if(!st) return toastMsg("Seleziona prima un utente.");
-
-        await setExplicit({ is_blocked: !st.is_blocked });
-      });
-    }
-
-    return box;
-  }
-
-  function paintControls(){
-    const box = ensureControls();
-    const extra = box.querySelector("#fmLiveExtraBtn20260518");
-    const block = box.querySelector("#fmLiveBlockBtn20260518");
-    const pill = box.querySelector("#fmLiveStatusPill20260518");
-
-    const st = activeState;
-
-    if(!st){
-      extra.textContent = isMobile() ? "Extra ON" : "Abilita extra";
-      extra.className = "ok";
-      block.textContent = "Blocca";
-      block.className = "danger";
-      if(pill){
-        pill.textContent = "Nessun utente";
-        pill.className = "fm-status-pill";
-      }
-      return;
-    }
-
-    const extraEnabled = !!st.uploads_enabled;
-    const blocked = !!st.is_blocked;
-
-    extra.textContent = extraEnabled
-      ? (isMobile() ? "Extra OFF" : "Disabilita extra")
-      : (isMobile() ? "Extra ON" : "Abilita extra");
-
-    extra.className = extraEnabled ? "warn" : "ok";
-
-    block.textContent = blocked ? "Sblocca" : "Blocca";
-    block.className = blocked ? "blocked" : "danger";
-
-    if(pill){
-      pill.textContent = blocked ? "BLOCCATO" : (extraEnabled ? "EXTRA" : labelFor(st));
-      pill.className = "fm-status-pill " + (blocked ? "danger" : (extraEnabled ? "warn" : "ok"));
-    }
-  }
-
-  function paintChips(){
-    const map = {};
-    lastSessions.forEach(function(s){ map[String(s.id)] = s; });
-
-    document.querySelectorAll("#followmeOwnerChatSessionStrip .followme-chat-session-chip").forEach(function(chip){
-      const sid = chipSid(chip);
-      const st = map[sid];
-      if(!sid || !st) return;
-
-      chip.classList.toggle("fm-blocked", !!st.is_blocked);
-      chip.classList.toggle("fm-extra", !!st.uploads_enabled);
-      chip.dataset.sessionId = sid;
-      chip.dataset.uploadsEnabled = st.uploads_enabled ? "1" : "0";
-      chip.dataset.isBlocked = st.is_blocked ? "1" : "0";
-    });
-  }
-
-  async function fetchSessions(){
-    const c = code();
-    if(!c) return [];
-
-    const res = await fetch("/api/followme/" + encodeURIComponent(c) + "/chat/sessions?v=" + Date.now(), {
-      cache:"no-store"
-    });
-
-    const data = await res.json().catch(function(){ return null; });
-    if(!res.ok || !data || !data.success) return [];
-
-    lastSessions = Array.isArray(data.sessions) ? data.sessions : [];
-
-    if(!activeSessionId){
-      activeSessionId = chipSid(activeChip()) || (lastSessions[0] ? String(lastSessions[0].id) : "");
-    }
-
-    const current = lastSessions.find(function(s){ return String(s.id) === String(activeSessionId); });
-    if(current) activeState = current;
-
-    paintChips();
-    paintControls();
-
-    return lastSessions;
-  }
-
-  async function fetchState(sid, force){
-    sid = cleanSid(sid || getActiveSid());
-    if(!sid) return null;
-
-    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/state?v=" + Date.now(), {
-      cache:"no-store"
-    });
-
-    const data = await res.json().catch(function(){ return null; });
-    if(!res.ok || !data || !data.success) return null;
-
-    activeSessionId = sid;
-    activeState = data.session;
-
-    lastSessions = lastSessions.map(function(s){
-      return String(s.id) === String(sid) ? Object.assign({}, s, data.session) : s;
-    });
-
-    paintControls();
-    paintChips();
-
-    return activeState;
-  }
-
-  async function setExplicit(payload){
-    const sid = cleanSid(activeSessionId || getActiveSid());
-
-    if(!sid){
-      toastMsg("Seleziona prima un utente.");
-      return null;
-    }
-
-    if(busy) return null;
-    busy = true;
-
-    const extra = document.getElementById("fmLiveExtraBtn20260518");
-    const block = document.getElementById("fmLiveBlockBtn20260518");
-    if(extra) extra.disabled = true;
-    if(block) block.disabled = true;
-
-    try{
-      const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/set-user-control", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify(payload || {})
-      });
-
-      const data = await res.json().catch(function(){ return null; });
-
-      if(!res.ok || !data || !data.success){
-        throw new Error((data && data.error) || "Errore aggiornamento utente.");
-      }
-
-      activeSessionId = sid;
-      activeState = data.session;
-
-      lastSessions = lastSessions.map(function(s){
-        return String(s.id) === String(sid) ? Object.assign({}, s, data.session) : s;
-      });
-
-      paintControls();
-      paintChips();
-
-      setTimeout(function(){ fetchState(sid, true); }, 200);
-      setTimeout(fetchSessions, 600);
-
-      if(Object.prototype.hasOwnProperty.call(payload, "uploads_enabled")){
-        toastMsg(data.session.uploads_enabled ? "Extra abilitati." : "Extra disabilitati.");
-      }
-
-      if(Object.prototype.hasOwnProperty.call(payload, "is_blocked")){
-        toastMsg(data.session.is_blocked ? "Utente bloccato." : "Utente sbloccato.");
-      }
-
-      return data.session;
-    }catch(err){
-      toastMsg(err.message || "Errore aggiornamento utente.");
-      return null;
-    }finally{
-      busy = false;
-      setTimeout(function(){
-        if(extra) extra.disabled = false;
-        if(block) block.disabled = false;
-      }, 250);
-    }
-  }
-
-  function bindStrip(){
-    const strip = document.getElementById("followmeOwnerChatSessionStrip");
-    if(!strip || strip.dataset.fmExplicitControlsBound === "1") return;
-
-    strip.dataset.fmExplicitControlsBound = "1";
-
-    strip.addEventListener("click", function(ev){
-      const chip = ev.target && ev.target.closest ? ev.target.closest(".followme-chat-session-chip") : null;
-      if(!chip) return;
-
-      const sid = chipSid(chip);
-      if(!sid) return;
-
-      activeSessionId = sid;
-
-      const cached = lastSessions.find(function(s){ return String(s.id) === sid; });
-      if(cached){
-        activeState = cached;
-        paintControls();
-      }
-
-      setTimeout(function(){ fetchState(sid, true); }, 120);
-    }, true);
-  }
-
-  function boot(){
-    injectCss();
-    ensureControls();
-    bindStrip();
-    fetchSessions();
-
-    setTimeout(ensureControls, 300);
-    setTimeout(bindStrip, 500);
-    setTimeout(fetchSessions, 900);
-    setTimeout(fetchSessions, 2200);
-  }
-
-  window.fmFollowMeExplicitControlsState = function(){
-    return { activeSessionId, activeState, lastSessions };
-  };
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", boot);
-  }else{
-    boot();
-  }
-
-  window.addEventListener("resize", function(){ setTimeout(paintControls, 120); });
-  window.addEventListener("load", function(){ setTimeout(boot, 250); setTimeout(fetchSessions, 1200); });
-  window.addEventListener("pageshow", function(){ setTimeout(boot, 250); setTimeout(fetchSessions, 800); });
-  document.addEventListener("visibilitychange", function(){
-    if(document.visibilityState === "visible") setTimeout(fetchSessions, 300);
-  });
-
-  setInterval(function(){
-    if(document.body.classList.contains("followme-chat-only-mode") ||
-       document.body.classList.contains("followme-chat-waiting-mode")){
-      ensureControls();
-      fetchSessions();
-    }
-  }, 3500);
-})();
-</script>
-
-
-
-<script id="followme-admin-active-session-hard-fix-20260518">
-(function(){
-  if(window.__followMeAdminActiveSessionHardFix20260518) return;
-  window.__followMeAdminActiveSessionHardFix20260518 = true;
-
-  let currentSessions = [];
-  let currentSessionId = "";
 
   function toastMsg(msg){
     try{
@@ -18281,67 +17549,292 @@ document.addEventListener("visibilitychange", function(){
     return /^\d+$/.test(s) ? s : "";
   }
 
-  function activeChipSid(){
-    const chip =
-      document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active") ||
-      document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip");
+  function selectedChip(){
+    return document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active") ||
+           document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip");
+  }
 
+  function chipSid(chip){
     if(!chip) return "";
-
     return cleanSid(
       chip.dataset.sessionId ||
-      chip.dataset.session ||
       chip.dataset.id ||
+      chip.dataset.session ||
       chip.getAttribute("data-session-id") ||
-      chip.getAttribute("data-session") ||
       chip.getAttribute("data-id") ||
+      chip.getAttribute("data-session") ||
       ""
     );
   }
 
-  async function fetchSessions(){
+  function labelFor(s){
+    if(!s) return "Utente";
+    return s.display_name || s.visitor_label || ("U" + (s.display_index || s.id || ""));
+  }
+
+  function insertAfterTopActions(){
+    const actions = document.querySelector(".followme-owner-chat-actions") ||
+                    document.querySelector(".followme-chat-waiting-actions") ||
+                    document.getElementById("followmeOwnerChatActions");
+
+    if(actions && actions.parentNode) return { parent:actions.parentNode, after:actions };
+
+    const top = document.querySelector(".followme-owner-chat-top") ||
+                document.querySelector(".followme-chat-waiting-top");
+
+    if(top && top.parentNode) return { parent:top.parentNode, after:top };
+
+    const screen = document.getElementById("followmeOwnerChatScreen") ||
+                   document.getElementById("followmeOwnerChatWaitingScreen");
+
+    if(screen) return { parent:screen, after:screen.firstElementChild };
+
+    return { parent:document.body, after:null };
+  }
+
+  function injectCss(){
+    if(document.getElementById("followmeAdminUserControlsCleanCss20260519")) return;
+
+    const style = document.createElement("style");
+    style.id = "followmeAdminUserControlsCleanCss20260519";
+    style.textContent = `
+      #fmAdminUserControlsClean20260519{
+        width:auto;
+        max-width:100%;
+        box-sizing:border-box;
+        margin:8px 12px 10px;
+        padding:10px;
+        border-radius:18px;
+        background:rgba(255,255,255,.96);
+        border:1px solid rgba(0,0,0,.08);
+        box-shadow:0 8px 28px rgba(0,0,0,.10);
+        overflow:hidden;
+        position:relative;
+        z-index:80;
+      }
+
+      #fmAdminUserControlsClean20260519 .fm-head{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:8px;
+        margin-bottom:8px;
+        min-width:0;
+      }
+
+      #fmAdminUserControlsClean20260519 .fm-title{
+        min-width:0;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        white-space:nowrap;
+        font-size:.68rem;
+        font-weight:950;
+        text-transform:uppercase;
+        letter-spacing:.055em;
+        color:#667085;
+      }
+
+      #fmAdminUserControlsClean20260519 .fm-pill{
+        flex:0 0 auto;
+        max-width:52%;
+        min-height:24px;
+        padding:0 9px;
+        border-radius:999px;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        font-size:.64rem;
+        line-height:1;
+        font-weight:950;
+        background:#f2f4f7;
+        color:#475467;
+        white-space:nowrap;
+        overflow:hidden;
+        text-overflow:ellipsis;
+      }
+
+      #fmAdminUserControlsClean20260519 .fm-pill.ok{background:#effaf4;color:#0c7f45;}
+      #fmAdminUserControlsClean20260519 .fm-pill.warn{background:#fff7e8;color:#9a5b00;}
+      #fmAdminUserControlsClean20260519 .fm-pill.danger{background:#ffe1df;color:#b42318;}
+
+      #fmAdminUserControlsClean20260519 .fm-actions{
+        display:grid;
+        grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+        gap:8px;
+        width:100%;
+        min-width:0;
+      }
+
+      #fmAdminUserControlsClean20260519 button{
+        width:100%;
+        min-width:0;
+        max-width:100%;
+        min-height:38px;
+        border-radius:999px;
+        border:1px solid rgba(0,0,0,.08);
+        background:#fff;
+        color:#202629;
+        font-size:.76rem;
+        line-height:1.05;
+        font-weight:950;
+        cursor:pointer;
+        padding:0 8px;
+        white-space:nowrap;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        box-sizing:border-box;
+      }
+
+      #fmAdminUserControlsClean20260519 button:disabled{opacity:.55;cursor:wait;}
+      #fmAdminUserControlsClean20260519 button.ok{background:#effaf4;color:#0c7f45;}
+      #fmAdminUserControlsClean20260519 button.warn{background:#fff7e8;color:#9a5b00;}
+      #fmAdminUserControlsClean20260519 button.danger{background:#fff1ef;color:#a5241c;}
+      #fmAdminUserControlsClean20260519 button.blocked{background:#ffe1df;color:#b42318;border-color:rgba(180,35,24,.35);}
+
+      #followmeOwnerChatSessionStrip .followme-chat-session-chip.fm-clean-blocked{
+        background:#ffe1df !important;
+        color:#b42318 !important;
+        border-color:rgba(180,35,24,.42) !important;
+      }
+
+      #followmeOwnerChatSessionStrip .followme-chat-session-chip.fm-clean-extra:not(.fm-clean-blocked){
+        box-shadow:0 0 0 2px rgba(12,127,69,.20) inset !important;
+      }
+
+      @media(max-width:640px){
+        #fmAdminUserControlsClean20260519{
+          width:calc(100% - 20px) !important;
+          max-width:calc(100% - 20px) !important;
+          margin:6px 10px 8px !important;
+          padding:8px !important;
+          border-radius:15px !important;
+        }
+
+        #fmAdminUserControlsClean20260519 .fm-title{font-size:.62rem;}
+        #fmAdminUserControlsClean20260519 .fm-pill{max-width:50%;font-size:.58rem;min-height:22px;padding:0 7px;}
+        #fmAdminUserControlsClean20260519 .fm-actions{gap:6px;}
+        #fmAdminUserControlsClean20260519 button{min-height:34px !important;font-size:.68rem !important;padding:0 6px !important;}
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function ensureBox(){
+    let box = document.getElementById("fmAdminUserControlsClean20260519");
+
+    if(!box){
+      box = document.createElement("div");
+      box.id = "fmAdminUserControlsClean20260519";
+      box.innerHTML = `
+        <div class="fm-head">
+          <div class="fm-title">Gestione utente</div>
+          <div class="fm-pill" id="fmAdminUserStatusClean20260519">Nessun utente</div>
+        </div>
+        <div class="fm-actions">
+          <button type="button" id="fmAdminExtraClean20260519" class="ok">Extra ON</button>
+          <button type="button" id="fmAdminBlockClean20260519" class="danger">Blocca</button>
+        </div>
+      `;
+    }
+
+    const target = insertAfterTopActions();
+
+    if(target.parent){
+      if(target.after && target.after.nextSibling !== box){
+        target.parent.insertBefore(box, target.after.nextSibling);
+      }else if(!target.after && box.parentNode !== target.parent){
+        target.parent.insertBefore(box, target.parent.firstChild);
+      }
+    }
+
+    bindButtons();
+    return box;
+  }
+
+  function paint(){
+    ensureBox();
+
+    const extra = document.getElementById("fmAdminExtraClean20260519");
+    const block = document.getElementById("fmAdminBlockClean20260519");
+    const pill = document.getElementById("fmAdminUserStatusClean20260519");
+
+    const s = activeSession;
+
+    if(!s){
+      if(extra){ extra.textContent = "Extra ON"; extra.className = "ok"; }
+      if(block){ block.textContent = "Blocca"; block.className = "danger"; }
+      if(pill){ pill.textContent = "Nessun utente"; pill.className = "fm-pill"; }
+      return;
+    }
+
+    if(extra){
+      extra.textContent = s.uploads_enabled ? "Extra OFF" : "Extra ON";
+      extra.className = s.uploads_enabled ? "warn" : "ok";
+    }
+
+    if(block){
+      block.textContent = s.is_blocked ? "Sblocca" : "Blocca";
+      block.className = s.is_blocked ? "blocked" : "danger";
+    }
+
+    if(pill){
+      pill.textContent = s.is_blocked ? "BLOCCATO" : (s.uploads_enabled ? "EXTRA" : labelFor(s));
+      pill.className = "fm-pill " + (s.is_blocked ? "danger" : (s.uploads_enabled ? "warn" : "ok"));
+    }
+  }
+
+  function paintChips(){
+    const map = {};
+    sessions.forEach(s => map[String(s.id)] = s);
+
+    document.querySelectorAll("#followmeOwnerChatSessionStrip .followme-chat-session-chip").forEach((chip, i) => {
+      let row = map[chipSid(chip)] || sessions[i];
+
+      if(row && row.id){
+        chip.dataset.sessionId = String(row.id);
+        chip.dataset.id = String(row.id);
+        chip.classList.toggle("fm-clean-blocked", !!row.is_blocked);
+        chip.classList.toggle("fm-clean-extra", !!row.uploads_enabled);
+      }
+    });
+  }
+
+  async function loadSessions(){
     const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), {
       cache:"no-store"
     });
 
     const data = await res.json().catch(()=>null);
-    if(!res.ok || !data || !data.success) return [];
 
-    currentSessions = Array.isArray(data.sessions) ? data.sessions : [];
-
-    // Aggancia gli id reali alle chip visibili
-    const chips = Array.from(document.querySelectorAll("#followmeOwnerChatSessionStrip .followme-chat-session-chip"));
-    chips.forEach(function(chip, i){
-      const row = currentSessions[i];
-      if(row && row.id){
-        chip.dataset.sessionId = String(row.id);
-        chip.dataset.id = String(row.id);
-        chip.classList.toggle("fm-blocked", !!row.is_blocked);
-        chip.classList.toggle("fm-extra", !!row.uploads_enabled);
-      }
-    });
-
-    const active = activeChipSid();
-    const existsActive = currentSessions.some(s => String(s.id) === String(active));
-
-    if(existsActive){
-      currentSessionId = active;
-    }else if(currentSessions.length){
-      currentSessionId = String(currentSessions[0].id);
-    }else{
-      currentSessionId = "";
+    if(!res.ok || !data || !data.success){
+      sessions = [];
+      activeSession = null;
+      activeSessionId = "";
+      paint();
+      return [];
     }
 
-    return currentSessions;
+    sessions = Array.isArray(data.sessions) ? data.sessions : [];
+
+    const selected = cleanSid(chipSid(selectedChip()));
+    const validSelected = sessions.find(s => String(s.id) === String(selected));
+    const validCurrent = sessions.find(s => String(s.id) === String(activeSessionId));
+
+    activeSession = validSelected || validCurrent || sessions[0] || null;
+    activeSessionId = activeSession && activeSession.id ? String(activeSession.id) : "";
+
+    paintChips();
+    paint();
+
+    return sessions;
   }
 
-  async function getLiveSession(){
-    await fetchSessions();
-
-    let sid = cleanSid(activeChipSid()) || cleanSid(currentSessionId);
-
-    if(!sid && currentSessions[0]) sid = String(currentSessions[0].id);
-
+  async function loadState(sid){
+    sid = cleanSid(sid || activeSessionId || chipSid(selectedChip()));
+    if(!sid){
+      await loadSessions();
+      sid = activeSessionId;
+    }
     if(!sid) return null;
 
     const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/state?v=" + Date.now(), {
@@ -18351,110 +17844,107 @@ document.addEventListener("visibilitychange", function(){
     const data = await res.json().catch(()=>null);
 
     if(!res.ok || !data || !data.success){
-      // Se la sessione è sparita, ricarico lista e prendo la prima open attuale.
-      await fetchSessions();
-      sid = currentSessions[0] ? String(currentSessions[0].id) : "";
-
-      if(!sid) return null;
-
-      const res2 = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/state?v=" + Date.now(), {
-        cache:"no-store"
-      });
-
-      const data2 = await res2.json().catch(()=>null);
-      if(!res2.ok || !data2 || !data2.success) return null;
-
-      currentSessionId = sid;
-      return data2.session;
+      await loadSessions();
+      return activeSession;
     }
 
-    currentSessionId = sid;
-    return data.session;
+    activeSession = data.session;
+    activeSessionId = String(data.session.id);
+
+    sessions = sessions.map(s => String(s.id) === activeSessionId ? Object.assign({}, s, data.session) : s);
+
+    paintChips();
+    paint();
+
+    return activeSession;
   }
 
   async function setControl(payload){
-    const session = await getLiveSession();
+    if(busy) return;
+    busy = true;
 
-    if(!session || !session.id){
-      toastMsg("Nessuna sessione utente attiva.");
-      return null;
-    }
+    const extra = document.getElementById("fmAdminExtraClean20260519");
+    const block = document.getElementById("fmAdminBlockClean20260519");
 
-    const sid = String(session.id);
-
-    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/set-user-control", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify(payload)
-    });
-
-    const data = await res.json().catch(()=>null);
-
-    if(!res.ok || !data || !data.success){
-      toastMsg((data && data.error) || "Errore aggiornamento utente.");
-      return null;
-    }
-
-    await fetchSessions();
-
-    if(Object.prototype.hasOwnProperty.call(payload, "uploads_enabled")){
-      toastMsg(data.session.uploads_enabled ? "Extra abilitati." : "Extra disabilitati.");
-    }
-
-    if(Object.prototype.hasOwnProperty.call(payload, "is_blocked")){
-      toastMsg(data.session.is_blocked ? "Utente bloccato." : "Utente sbloccato.");
-    }
+    if(extra) extra.disabled = true;
+    if(block) block.disabled = true;
 
     try{
-      const extra = document.getElementById("fmLiveExtraBtn20260518");
-      const block = document.getElementById("fmLiveBlockBtn20260518");
-      const pill = document.getElementById("fmLiveStatusPill20260518");
+      const live = await loadState();
 
-      if(extra){
-        extra.textContent = data.session.uploads_enabled ? "Extra OFF" : "Extra ON";
-        extra.className = data.session.uploads_enabled ? "warn" : "ok";
+      if(!live || !live.id){
+        toastMsg("Nessuna sessione utente attiva.");
+        return;
       }
 
-      if(block){
-        block.textContent = data.session.is_blocked ? "Sblocca" : "Blocca";
-        block.className = data.session.is_blocked ? "blocked" : "danger";
+      const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(live.id) + "/set-user-control-clean", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify(payload)
+      });
+
+      const data = await res.json().catch(()=>null);
+
+      if(!res.ok || !data || !data.success){
+        toastMsg((data && data.error) || "Errore aggiornamento utente.");
+        return;
       }
 
-      if(pill){
-        pill.textContent = data.session.is_blocked ? "BLOCCATO" : (data.session.uploads_enabled ? "EXTRA" : (data.session.display_name || data.session.visitor_label || "UTENTE"));
-        pill.className = "fm-status-pill " + (data.session.is_blocked ? "danger" : (data.session.uploads_enabled ? "warn" : "ok"));
-      }
-    }catch(e){}
+      activeSession = data.session;
+      activeSessionId = String(data.session.id);
 
-    return data.session;
+      sessions = sessions.map(s => String(s.id) === activeSessionId ? Object.assign({}, s, data.session) : s);
+
+      paintChips();
+      paint();
+
+      setTimeout(loadSessions, 250);
+      setTimeout(() => loadState(activeSessionId), 700);
+
+      if(Object.prototype.hasOwnProperty.call(payload, "uploads_enabled")){
+        toastMsg(data.session.uploads_enabled ? "Extra abilitati." : "Extra disabilitati.");
+      }
+
+      if(Object.prototype.hasOwnProperty.call(payload, "is_blocked")){
+        toastMsg(data.session.is_blocked ? "Utente bloccato." : "Utente sbloccato.");
+      }
+    }catch(e){
+      toastMsg(e.message || "Errore aggiornamento utente.");
+    }finally{
+      busy = false;
+      setTimeout(() => {
+        if(extra) extra.disabled = false;
+        if(block) block.disabled = false;
+      }, 250);
+    }
   }
 
-  function bindHardButtons(){
-    const extra = document.getElementById("fmLiveExtraBtn20260518");
-    const block = document.getElementById("fmLiveBlockBtn20260518");
+  function bindButtons(){
+    const extra = document.getElementById("fmAdminExtraClean20260519");
+    const block = document.getElementById("fmAdminBlockClean20260519");
 
-    if(extra && extra.dataset.hardFixBound !== "1"){
-      extra.dataset.hardFixBound = "1";
-      extra.addEventListener("click", async function(ev){
+    if(extra && extra.dataset.cleanBound !== "1"){
+      extra.dataset.cleanBound = "1";
+      extra.addEventListener("click", async ev => {
         ev.preventDefault();
         ev.stopPropagation();
         ev.stopImmediatePropagation();
 
-        const live = await getLiveSession();
+        const live = await loadState();
         if(!live) return toastMsg("Nessuna sessione utente attiva.");
 
         await setControl({ uploads_enabled: !live.uploads_enabled });
       }, true);
     }
 
-    if(block && block.dataset.hardFixBound !== "1"){
-      block.dataset.hardFixBound = "1";
-      block.addEventListener("click", async function(ev){
+    if(block && block.dataset.cleanBound !== "1"){
+      block.dataset.cleanBound = "1";
+      block.addEventListener("click", async ev => {
         ev.preventDefault();
         ev.stopPropagation();
         ev.stopImmediatePropagation();
 
-        const live = await getLiveSession();
+        const live = await loadState();
         if(!live) return toastMsg("Nessuna sessione utente attiva.");
 
         await setControl({ is_blocked: !live.is_blocked });
@@ -18464,53 +17954,54 @@ document.addEventListener("visibilitychange", function(){
 
   function bindChips(){
     const strip = document.getElementById("followmeOwnerChatSessionStrip");
-    if(!strip || strip.dataset.hardSessionFixBound === "1") return;
+    if(!strip || strip.dataset.cleanUserControlBound === "1") return;
 
-    strip.dataset.hardSessionFixBound = "1";
+    strip.dataset.cleanUserControlBound = "1";
 
-    strip.addEventListener("click", function(ev){
+    strip.addEventListener("click", ev => {
       const chip = ev.target && ev.target.closest ? ev.target.closest(".followme-chat-session-chip") : null;
       if(!chip) return;
 
-      const sid = cleanSid(chip.dataset.sessionId || chip.dataset.id || chip.getAttribute("data-session-id") || "");
-      if(sid) currentSessionId = sid;
-
-      setTimeout(fetchSessions, 80);
+      const sid = chipSid(chip);
+      if(sid){
+        activeSessionId = sid;
+        setTimeout(() => loadState(sid), 80);
+      }
     }, true);
   }
 
   function boot(){
-    bindHardButtons();
+    injectCss();
+    ensureBox();
     bindChips();
-    fetchSessions();
+    loadSessions();
 
-    setTimeout(bindHardButtons, 300);
-    setTimeout(bindChips, 400);
-    setTimeout(fetchSessions, 800);
-    setTimeout(fetchSessions, 1800);
+    setTimeout(ensureBox, 300);
+    setTimeout(bindChips, 500);
+    setTimeout(loadSessions, 900);
+    setTimeout(loadSessions, 2200);
   }
 
-  window.fmHardFollowMeCurrentSession = function(){
-    return { currentSessionId, currentSessions };
-  };
+  window.fmCleanUserControlState = () => ({ activeSessionId, activeSession, sessions });
 
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", boot);
-  }else{
-    boot();
-  }
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
 
-  window.addEventListener("load", function(){
-    setTimeout(boot, 300);
-    setTimeout(fetchSessions, 1200);
+  window.addEventListener("load", () => {
+    setTimeout(boot, 250);
+    setTimeout(loadSessions, 1200);
   });
 
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 300);
-    setTimeout(fetchSessions, 900);
+  window.addEventListener("pageshow", () => {
+    setTimeout(boot, 250);
+    setTimeout(loadSessions, 800);
   });
 
-  setInterval(fetchSessions, 3500);
+  document.addEventListener("visibilitychange", () => {
+    if(document.visibilityState === "visible") setTimeout(loadSessions, 300);
+  });
+
+  setInterval(loadSessions, 3500);
 })();
 </script>
 

@@ -9975,6 +9975,75 @@ app.post('/api/followme/chat/session/:session_id/message', express.json(), async
 
 
 
+
+
+// followme-user-set-explicit-clean-20260519
+app.post('/api/followme/chat/session/:session_id/set-user-control-clean', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeChatSchema();
+    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
+
+    const sessionId = Number(req.params.session_id || 0);
+
+    if (!sessionId) {
+      return res.status(400).json({ success:false, error:'Sessione mancante.' });
+    }
+
+    const hasUploads = typeof req.body?.uploads_enabled === 'boolean';
+    const hasBlocked = typeof req.body?.is_blocked === 'boolean';
+
+    if (!hasUploads && !hasBlocked) {
+      return res.status(400).json({ success:false, error:'Nessuna impostazione valida.' });
+    }
+
+    const currentRes = await pool.query(
+      `SELECT id, uploads_enabled, is_blocked
+       FROM followme_chat_sessions
+       WHERE id = $1 AND status = 'open'
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!currentRes.rows.length) {
+      return res.status(404).json({ success:false, error:'Sessione non trovata o chiusa.' });
+    }
+
+    const current = currentRes.rows[0];
+
+    const nextUploads = hasUploads ? req.body.uploads_enabled : !!current.uploads_enabled;
+    const nextBlocked = hasBlocked ? req.body.is_blocked : !!current.is_blocked;
+
+    const updated = await pool.query(
+      `UPDATE followme_chat_sessions
+       SET uploads_enabled = $2,
+           is_blocked = $3,
+           blocked_at = CASE WHEN $3 = TRUE THEN COALESCE(blocked_at, NOW()) ELSE NULL END,
+           updated_at = NOW(),
+           last_seen_at = COALESCE(last_seen_at, NOW())
+       WHERE id = $1
+         AND status = 'open'
+       RETURNING id, project_id, visitor_label, display_name, uploads_enabled, is_blocked, blocked_at, status, updated_at, last_seen_at`,
+      [sessionId, nextUploads, nextBlocked]
+    );
+
+    if (!updated.rows.length) {
+      return res.status(404).json({ success:false, error:'Sessione non aggiornata.' });
+    }
+
+    return res.json({
+      success:true,
+      session:updated.rows[0]
+    });
+  } catch (err) {
+    console.error('followme clean explicit user control error:', err);
+    return res.status(500).json({
+      success:false,
+      error:err.message || 'Errore aggiornamento utente.'
+    });
+  }
+});
+
+
 app.get('/api/followme/chat/session/:session_id/state', async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
