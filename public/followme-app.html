@@ -16760,5 +16760,315 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+<script id="followme-name-detection-restore-final">
+(function(){
+  let lastDetectedKey = "";
+  const ignored = new Set();
+
+  const blacklist = new Set([
+    "ciao","salve","buongiorno","buonasera","buonanotte","ok","okay","si","sì","no",
+    "grazie","prego","quanto","costa","prezzo","dove","come","quando","perché",
+    "followme","qr","chat","info","informazioni","aspetto","raccontami","proprietario",
+    "hello","hi","thanks","thank","price","cost","where","how","yes","not",
+    "bonjour","merci","hola","gracias","prova","test","utente"
+  ]);
+
+  function currentSessionId(){
+    try{
+      return new URLSearchParams(location.search || "").get("chatSession") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function cssEscape(v){
+    try{
+      if(window.CSS && CSS.escape) return CSS.escape(String(v));
+    }catch(e){}
+    return String(v).replace(/"/g, '\\"');
+  }
+
+  function cleanName(raw){
+    let v = String(raw || "")
+      .replace(/[0-9@#€$%^*_+=()[\]{}|\\:;"“”.,!?/<>]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    v = v.replace(/^(mi|io|sono|chiamo|piacere|ciao|salve|hello|hi|bonjour|hola)\s+/i, "").trim();
+    v = v.replace(/\s+(piacere|grazie|thanks|merci|gracias)$/i, "").trim();
+
+    const parts = v.split(" ").filter(Boolean).slice(0, 2);
+    v = parts.join(" ").trim();
+
+    if(v.length > 40) v = v.slice(0, 40).trim();
+
+    return v;
+  }
+
+  function titleName(name){
+    return cleanName(name)
+      .split(" ")
+      .filter(Boolean)
+      .map(function(part){
+        return part.charAt(0).toLocaleUpperCase("it-IT") + part.slice(1);
+      })
+      .join(" ")
+      .trim();
+  }
+
+  function looksLikeName(name){
+    const n = cleanName(name);
+    if(!n || n.length < 2) return false;
+
+    const lower = n.toLowerCase();
+    if(blacklist.has(lower)) return false;
+
+    const parts = lower.split(/\s+/);
+    if(parts.length > 2) return false;
+    if(parts.some(p => blacklist.has(p))) return false;
+    if(!/[\p{L}]/u.test(n)) return false;
+
+    return true;
+  }
+
+  function extractNameFromText(text){
+    const original = String(text || "").trim();
+    if(!original) return "";
+
+    const normalized = original
+      .replace(/[’]/g, "'")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const patterns = [
+      // Italiano: "ciao sono Marco", "mi chiamo Marco", "sono Sofia"
+      /\b(?:ciao|salve|buongiorno|buonasera)?\s*,?\s*(?:io\s+)?(?:sono|mi chiamo|io sono|il mio nome è|il mio nome e')\s+([\p{L}][\p{L}' -]{1,35})/iu,
+
+      // "Piacere Marco", "Piacere, sono Marco", "Piacere mi chiamo Sofia"
+      /\b(?:piacere)\s*,?\s*(?:sono|mi chiamo)?\s*([\p{L}][\p{L}' -]{1,35})/iu,
+
+      // "Marco, piacere"
+      /\b([\p{L}][\p{L}'-]{1,24})\s*,?\s*piacere\b/iu,
+
+      // Inglese
+      /\b(?:i am|i'm|im|my name is|this is)\s+([\p{L}][\p{L}' -]{1,35})/iu,
+
+      // Francese / Spagnolo / Portoghese base
+      /\b(?:je suis|moi c'est|mon nom est|me llamo|soy|mi nombre es|sou|me chamo)\s+([\p{L}][\p{L}' -]{1,35})/iu,
+
+      // Solo nome in messaggio breve: "Marco", "Sofia", "John"
+      /^([\p{L}][\p{L}'-]{1,24})(?:\s+[\p{L}][\p{L}'-]{1,24})?$/iu
+    ];
+
+    for(const re of patterns){
+      const m = normalized.match(re);
+      if(m && m[1]){
+        const candidate = titleName(m[1]);
+        if(looksLikeName(candidate)){
+          return candidate;
+        }
+      }
+    }
+
+    // Fallback specifico su "piacere"
+    if(/\bpiacere\b/i.test(normalized)){
+      const words = normalized.match(/[\p{L}][\p{L}'-]{1,24}/gu) || [];
+      const candidates = words
+        .map(titleName)
+        .filter(looksLikeName)
+        .filter(w => !["Piacere", "Ciao", "Salve"].includes(w));
+
+      if(candidates.length) return candidates[0];
+    }
+
+    return "";
+  }
+
+  function currentChatAlreadyNamed(){
+    const sid = currentSessionId();
+    if(!sid) return false;
+
+    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
+
+    if(chip && String(chip.dataset.userName || "").trim()){
+      return true;
+    }
+
+    if(chip && chip.classList.contains("has-name")){
+      return true;
+    }
+
+    return false;
+  }
+
+  function getCurrentULabel(){
+    const sid = currentSessionId();
+    if(!sid) return "U?";
+
+    const chip = document.querySelector('#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + cssEscape(sid) + '"]');
+
+    if(chip && chip.dataset.uLabel){
+      return chip.dataset.uLabel;
+    }
+
+    if(chip){
+      const raw = String(chip.textContent || "");
+      const m = raw.match(/U\d+/i);
+      if(m) return m[0].toUpperCase();
+    }
+
+    return "U?";
+  }
+
+  function getLatestVisitorBubble(){
+    const box = document.getElementById("followmeOwnerChatMessages");
+    if(!box) return null;
+
+    const bubbles = Array.from(
+      box.querySelectorAll(".followme-owner-chat-bubble:not(.owner):not(.system)")
+    );
+
+    return bubbles.length ? bubbles[bubbles.length - 1] : null;
+  }
+
+  function openNameProposal(name, context){
+    const sid = currentSessionId();
+    if(!sid || !name) return;
+
+    if(currentChatAlreadyNamed()) return;
+
+    const ignoreKey = sid + ":" + name.toLowerCase();
+    if(ignored.has(ignoreKey)) return;
+
+    const u = getCurrentULabel();
+
+    // Variabili lette dal controller di salvataggio full-name.
+    window.__followMePendingNameSessionId = sid;
+    window.__followMePendingNameULabel = u;
+
+    const card = document.getElementById("followmeNameDetectCard");
+    const input = document.getElementById("followmeNameDetectInput");
+    const text = document.getElementById("followmeNameDetectText");
+    const ctx = document.getElementById("followmeNameDetectContext");
+
+    if(input){
+      input.value = name;
+      input.placeholder = "Conferma o correggi il nome";
+    }
+
+    if(text){
+      text.textContent = "Ho riconosciuto “" + name + "”. Vuoi associarlo a " + u + "?";
+    }
+
+    if(ctx){
+      ctx.innerHTML = '<div class="followme-edit-name-hint">Messaggio: “' + String(context || "").replace(/[<>&]/g, "") + '”</div>';
+      ctx.style.display = "block";
+    }
+
+    if(card){
+      card.classList.add("is-open");
+      card.setAttribute("aria-hidden","false");
+    }
+
+    setTimeout(function(){
+      try{
+        input && input.focus();
+        input && input.select();
+      }catch(e){}
+    }, 100);
+  }
+
+  function scanLatestMessage(){
+    const sid = currentSessionId();
+    if(!sid) return;
+
+    if(currentChatAlreadyNamed()) return;
+
+    const bubble = getLatestVisitorBubble();
+    if(!bubble) return;
+
+    const text = String(bubble.textContent || "").trim();
+    if(!text) return;
+
+    const key = sid + ":" + text;
+    if(key === lastDetectedKey) return;
+    lastDetectedKey = key;
+
+    const name = extractNameFromText(text);
+    if(!name) return;
+
+    openNameProposal(name, text);
+  }
+
+  function bindDoubleClickManual(){
+    const box = document.getElementById("followmeOwnerChatMessages");
+    if(!box || box.dataset.nameDetectionRestoreDblBound === "1") return;
+
+    box.dataset.nameDetectionRestoreDblBound = "1";
+
+    box.addEventListener("dblclick", function(ev){
+      const bubble = ev.target && ev.target.closest
+        ? ev.target.closest(".followme-owner-chat-bubble")
+        : null;
+
+      if(!bubble) return;
+      if(bubble.classList.contains("owner") || bubble.classList.contains("system")) return;
+
+      if(currentChatAlreadyNamed()) return;
+
+      const text = String(bubble.textContent || "").trim();
+      const name = extractNameFromText(text);
+
+      // Se non lo capisce, apre comunque la finestra con campo vuoto modificabile.
+      openNameProposal(name || "", text);
+    });
+  }
+
+  function bindCancelMemory(){
+    const cancel = document.getElementById("followmeNameDetectCancel");
+    if(!cancel || cancel.dataset.nameDetectionCancelMemory === "1") return;
+
+    cancel.dataset.nameDetectionCancelMemory = "1";
+
+    cancel.addEventListener("click", function(){
+      const sid = currentSessionId();
+      const input = document.getElementById("followmeNameDetectInput");
+      const name = titleName(input ? input.value : "");
+
+      if(sid && name){
+        ignored.add(sid + ":" + name.toLowerCase());
+      }
+    }, true);
+  }
+
+  function boot(){
+    bindDoubleClickManual();
+    bindCancelMemory();
+    scanLatestMessage();
+  }
+
+  window.followMeExtractNameFromText = extractNameFromText;
+  window.followMeScanNameNow = scanLatestMessage;
+  window.followMeOpenNameProposal = openNameProposal;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(function(){
+    bindDoubleClickManual();
+    bindCancelMemory();
+    scanLatestMessage();
+  }, 1500);
+})();
+</script>
+
 </body>
 </html>
