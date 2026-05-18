@@ -1288,15 +1288,27 @@
 
 
 
-<script id="followme-public-plus-attachments-clean-20260519">
-(function(){
-  if(window.__FollowMePublicPlusAttachmentsClean20260519) return;
-  window.__FollowMePublicPlusAttachmentsClean20260519 = true;
 
-  let lastKey = "";
-  let inFlight = false;
-  let lastFetchAt = 0;
-  let pollTimer = null;
+
+<script id="followme-public-inline-plus-real-attachments-20260519">
+(function(){
+  if(window.__FollowMePublicInlinePlusRealAttachments20260519) return;
+  window.__FollowMePublicInlinePlusRealAttachments20260519 = true;
+
+  let lastStateKey = "";
+  let stateBusy = false;
+  let lastStateAt = 0;
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let recording = false;
+
+  function esc(v){
+    return String(v == null ? "" : v)
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;");
+  }
 
   function cleanSid(v){
     const s = String(v || "").trim();
@@ -1306,13 +1318,18 @@
   function saveSid(v){
     const sid = cleanSid(v);
     if(!sid) return "";
-
     try{ window.followMeChatSessionId = sid; }catch(e){}
     try{ window.FOLLOWME_CHAT_SESSION_ID = sid; }catch(e){}
     try{ sessionStorage.setItem("followme_chat_session_id", sid); }catch(e){}
     try{ localStorage.setItem("followme_chat_session_id", sid); }catch(e){}
-
     return sid;
+  }
+
+  function clearSid(){
+    try{ window.followMeChatSessionId = ""; }catch(e){}
+    try{ window.FOLLOWME_CHAT_SESSION_ID = ""; }catch(e){}
+    try{ sessionStorage.removeItem("followme_chat_session_id"); }catch(e){}
+    try{ localStorage.removeItem("followme_chat_session_id"); }catch(e){}
   }
 
   function getSid(){
@@ -1323,7 +1340,6 @@
     }catch(e){}
 
     const arr = [window.followMeChatSessionId, window.FOLLOWME_CHAT_SESSION_ID];
-
     try{ arr.push(sessionStorage.getItem("followme_chat_session_id")); }catch(e){}
     try{ arr.push(localStorage.getItem("followme_chat_session_id")); }catch(e){}
 
@@ -1333,13 +1349,6 @@
     }
 
     return "";
-  }
-
-  function clearSid(){
-    try{ window.followMeChatSessionId = ""; }catch(e){}
-    try{ window.FOLLOWME_CHAT_SESSION_ID = ""; }catch(e){}
-    try{ sessionStorage.removeItem("followme_chat_session_id"); }catch(e){}
-    try{ localStorage.removeItem("followme_chat_session_id"); }catch(e){}
   }
 
   function extractSid(data){
@@ -1369,21 +1378,11 @@
 
   function findComposer(){
     const input = findInput();
-
     return document.querySelector(".followme-public-composer") ||
            document.querySelector(".composer") ||
-           document.querySelector("form") ||
            (input ? input.closest("form") : null) ||
            (input ? input.parentElement : null) ||
            document.body;
-  }
-
-  function esc(v){
-    return String(v == null ? "" : v)
-      .replace(/&/g,"&amp;")
-      .replace(/</g,"&lt;")
-      .replace(/>/g,"&gt;")
-      .replace(/"/g,"&quot;");
   }
 
   function parseAttachmentMessage(message){
@@ -1392,448 +1391,6 @@
       if(obj && obj.__followme_attachment) return obj;
     }catch(e){}
     return null;
-  }
-
-  function injectCss(){
-    if(document.getElementById("followmePublicPlusAttachmentsCss20260519")) return;
-
-    const style = document.createElement("style");
-    style.id = "followmePublicPlusAttachmentsCss20260519";
-    style.textContent = `
-      body:not(.fm-public-extra-plus-on) #fmPublicPlusBtn20260519,
-      body.fm-public-clean-blocked #fmPublicPlusBtn20260519{
-        display:none !important;
-      }
-
-      #fmPublicPlusBtn20260519{
-        width:38px !important;
-        height:38px !important;
-        min-width:38px !important;
-        border-radius:999px !important;
-        border:1px solid rgba(0,0,0,.10) !important;
-        background:#ffffff !important;
-        color:#202629 !important;
-        display:inline-flex !important;
-        align-items:center !important;
-        justify-content:center !important;
-        font-size:1.32rem !important;
-        line-height:1 !important;
-        font-weight:900 !important;
-        box-shadow:0 1px 5px rgba(0,0,0,.10) !important;
-        padding:0 !important;
-        cursor:pointer !important;
-        flex:0 0 38px !important;
-        order:-10 !important;
-        pointer-events:auto !important;
-        touch-action:manipulation !important;
-      }
-
-      #fmPublicAttachPanel20260519{
-        display:none;
-        position:absolute;
-        left:10px;
-        right:10px;
-        bottom:58px;
-        z-index:9999;
-        background:#ffffff;
-        color:#202629;
-        border-radius:22px;
-        border:1px solid rgba(0,0,0,.10);
-        box-shadow:0 18px 60px rgba(0,0,0,.24);
-        padding:10px;
-        box-sizing:border-box;
-        grid-template-columns:repeat(2,minmax(0,1fr));
-        gap:8px;
-      }
-
-      body.fm-public-extra-plus-on #fmPublicAttachPanel20260519.is-open{
-        display:grid !important;
-      }
-
-      body.fm-public-clean-blocked #fmPublicAttachPanel20260519{
-        display:none !important;
-      }
-
-      #fmPublicAttachPanel20260519 button{
-        min-height:42px;
-        border-radius:16px;
-        border:1px solid rgba(0,0,0,.08);
-        background:#f6f7f8;
-        color:#202629;
-        font-size:.86rem;
-        font-weight:900;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        gap:7px;
-        cursor:pointer;
-      }
-
-      #fmPublicBlockedCleanNotice20260519{
-        display:none;
-        width:100%;
-        box-sizing:border-box;
-        margin:0 0 8px 0;
-        padding:10px 12px;
-        border-radius:14px;
-        background:#ffe1df;
-        color:#b42318;
-        font-size:.86rem;
-        font-weight:900;
-        text-align:center;
-      }
-
-      body.fm-public-clean-blocked #fmPublicBlockedCleanNotice20260519{
-        display:block !important;
-      }
-
-      body.fm-public-clean-blocked textarea,
-      body.fm-public-clean-blocked input[type="text"],
-      body.fm-public-clean-blocked #messageInput{
-        opacity:.55 !important;
-        pointer-events:none !important;
-      }
-
-      body.fm-public-clean-blocked button[type="submit"],
-      body.fm-public-clean-blocked #sendBtn,
-      body.fm-public-clean-blocked .send-btn{
-        opacity:.55 !important;
-        pointer-events:none !important;
-      }
-
-      .followme-attachment-card{
-        display:block;
-        max-width:260px;
-        border-radius:16px;
-        overflow:hidden;
-        background:rgba(0,0,0,.08);
-        text-decoration:none;
-        color:inherit;
-      }
-
-      .followme-attachment-image{
-        display:block;
-        width:100%;
-        max-width:260px;
-        max-height:260px;
-        object-fit:cover;
-        border-radius:16px;
-      }
-
-      .followme-attachment-file,
-      .followme-attachment-location,
-      .followme-attachment-audio{
-        display:flex;
-        align-items:center;
-        gap:10px;
-        padding:10px 12px;
-        border-radius:16px;
-        background:rgba(255,255,255,.16);
-        color:inherit;
-        text-decoration:none;
-        font-weight:800;
-      }
-
-      .followme-attachment-audio audio{
-        width:190px;
-        max-width:100%;
-      }
-
-      .followme-attachment-name{
-        display:block;
-        font-size:.86rem;
-        font-weight:900;
-      }
-
-      .followme-attachment-meta{
-        display:block;
-        font-size:.72rem;
-        opacity:.72;
-        margin-top:2px;
-      }
-
-      @media(max-width:420px){
-        #fmPublicPlusBtn20260519{
-          width:36px !important;
-          height:36px !important;
-          min-width:36px !important;
-          flex-basis:36px !important;
-          font-size:1.22rem !important;
-        }
-
-        #fmPublicAttachPanel20260519{
-          bottom:54px;
-          border-radius:18px;
-        }
-
-        #fmPublicAttachPanel20260519 button{
-          min-height:40px;
-          font-size:.8rem;
-        }
-      }
-    `;
-
-    document.head.appendChild(style);
-  }
-
-  function ensureBlockedNotice(){
-    let notice = document.getElementById("fmPublicBlockedCleanNotice20260519");
-    if(notice) return notice;
-
-    notice = document.createElement("div");
-    notice.id = "fmPublicBlockedCleanNotice20260519";
-    notice.textContent = "Sei stato bloccato dal sistema.";
-
-    const input = findInput();
-    const composer = findComposer();
-
-    if(input && input.parentNode) input.parentNode.insertBefore(notice, input);
-    else if(composer && composer.insertBefore) composer.insertBefore(notice, composer.firstChild);
-    else document.body.appendChild(notice);
-
-    return notice;
-  }
-
-  function ensurePlusAndPanel(){
-    const input = findInput();
-    const composer = findComposer();
-
-    if(!composer) return;
-
-    try{
-      if(getComputedStyle(composer).position === "static"){
-        composer.style.position = "relative";
-      }
-    }catch(e){
-      composer.style.position = "relative";
-    }
-
-    let plus = document.getElementById("fmPublicPlusBtn20260519");
-    if(!plus){
-      plus = document.createElement("button");
-      plus.type = "button";
-      plus.id = "fmPublicPlusBtn20260519";
-      plus.setAttribute("aria-label", "Aggiungi");
-      plus.textContent = "+";
-
-      if(input && input.parentNode){
-        input.parentNode.insertBefore(plus, input);
-      }else{
-        composer.insertBefore(plus, composer.firstChild);
-      }
-    }
-
-    let panel = document.getElementById("fmPublicAttachPanel20260519");
-    if(!panel){
-      panel = document.createElement("div");
-      panel.id = "fmPublicAttachPanel20260519";
-      panel.innerHTML = `
-        <button type="button" id="fmPublicPhotoBtn20260519">📷 Foto</button>
-        <button type="button" id="fmPublicFileBtn20260519">📎 Documento</button>
-        <button type="button" id="fmPublicLocationBtn20260519">📍 Posizione</button>
-        <button type="button" id="fmPublicAudioBtn20260519">🎙️ Audio</button>
-        <input type="file" id="fmPublicPhotoInput20260519" accept="image/*" capture="environment" hidden>
-        <input type="file" id="fmPublicFileInput20260519" hidden>
-      `;
-
-      composer.appendChild(panel);
-    }
-
-    bindPlusPanel();
-  }
-
-  function canUseExtra(){
-    return document.body.classList.contains("fm-public-extra-plus-on") &&
-           !document.body.classList.contains("fm-public-clean-blocked");
-  }
-
-  function togglePanel(force){
-    const panel = document.getElementById("fmPublicAttachPanel20260519");
-    if(!panel) return;
-
-    if(!canUseExtra()){
-      panel.classList.remove("is-open");
-      return;
-    }
-
-    const open = typeof force === "boolean" ? force : !panel.classList.contains("is-open");
-    panel.classList.toggle("is-open", open);
-  }
-
-  async function sendRawFile(file, kind){
-    const sid = getSid();
-    if(!sid) throw new Error("Sessione chat mancante.");
-    if(!file) throw new Error("File mancante.");
-
-    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/attachment-raw", {
-      method:"POST",
-      headers:{
-        "Content-Type": file.type || "application/octet-stream",
-        "X-FollowMe-Sender": "visitor",
-        "X-FollowMe-Kind": kind || (file.type && file.type.indexOf("image/") === 0 ? "image" : "document"),
-        "X-FollowMe-Filename": encodeURIComponent(file.name || "allegato")
-      },
-      body: await file.arrayBuffer()
-    });
-
-    const data = await res.json().catch(()=>null);
-
-    if(!res.ok || !data || !data.success){
-      throw new Error((data && data.error) || "Errore invio allegato.");
-    }
-
-    togglePanel(false);
-    forceLoadMessages();
-  }
-
-  function forceLoadMessages(){
-    try{
-      if(typeof window.followMePublicLoadMessages === "function") window.followMePublicLoadMessages();
-    }catch(e){}
-
-    try{
-      if(typeof window.loadMessages === "function") window.loadMessages();
-    }catch(e){}
-  }
-
-  function bindPlusPanel(){
-    const plus = document.getElementById("fmPublicPlusBtn20260519");
-    const photoBtn = document.getElementById("fmPublicPhotoBtn20260519");
-    const fileBtn = document.getElementById("fmPublicFileBtn20260519");
-    const locBtn = document.getElementById("fmPublicLocationBtn20260519");
-    const audioBtn = document.getElementById("fmPublicAudioBtn20260519");
-    const photoInput = document.getElementById("fmPublicPhotoInput20260519");
-    const fileInput = document.getElementById("fmPublicFileInput20260519");
-
-    if(plus && plus.dataset.boundPlus !== "1"){
-      plus.dataset.boundPlus = "1";
-      plus.addEventListener("click", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        togglePanel();
-      }, true);
-    }
-
-    if(photoBtn && photoBtn.dataset.boundPlus !== "1"){
-      photoBtn.dataset.boundPlus = "1";
-      photoBtn.addEventListener("click", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        if(canUseExtra() && photoInput) photoInput.click();
-      }, true);
-    }
-
-    if(fileBtn && fileBtn.dataset.boundPlus !== "1"){
-      fileBtn.dataset.boundPlus = "1";
-      fileBtn.addEventListener("click", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        if(canUseExtra() && fileInput) fileInput.click();
-      }, true);
-    }
-
-    if(photoInput && photoInput.dataset.boundPlus !== "1"){
-      photoInput.dataset.boundPlus = "1";
-      photoInput.addEventListener("change", async function(){
-        const file = photoInput.files && photoInput.files[0];
-        if(!file) return;
-
-        try{
-          await sendRawFile(file, "image");
-        }catch(e){
-          alert(e.message || "Errore invio foto.");
-        }finally{
-          photoInput.value = "";
-        }
-      });
-    }
-
-    if(fileInput && fileInput.dataset.boundPlus !== "1"){
-      fileInput.dataset.boundPlus = "1";
-      fileInput.addEventListener("change", async function(){
-        const file = fileInput.files && fileInput.files[0];
-        if(!file) return;
-
-        try{
-          await sendRawFile(file, "document");
-        }catch(e){
-          alert(e.message || "Errore invio documento.");
-        }finally{
-          fileInput.value = "";
-        }
-      });
-    }
-
-    if(locBtn && locBtn.dataset.boundPlus !== "1"){
-      locBtn.dataset.boundPlus = "1";
-      locBtn.addEventListener("click", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-
-        if(!canUseExtra()) return;
-
-        if(!navigator.geolocation){
-          alert("Geolocalizzazione non disponibile.");
-          return;
-        }
-
-        navigator.geolocation.getCurrentPosition(async function(pos){
-          try{
-            const sid = getSid();
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-            const url = "https://www.google.com/maps?q=" + encodeURIComponent(lat + "," + lng);
-
-            const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/attachment", {
-              method:"POST",
-              headers:{ "Content-Type":"application/json" },
-              body:JSON.stringify({
-                sender:"visitor",
-                kind:"location",
-                url:url,
-                label:"Posizione condivisa",
-                mime:"text/uri-list",
-                filename:"posizione"
-              })
-            });
-
-            const data = await res.json().catch(()=>null);
-            if(!res.ok || !data || !data.success){
-              throw new Error((data && data.error) || "Errore invio posizione.");
-            }
-
-            togglePanel(false);
-            forceLoadMessages();
-          }catch(e){
-            alert(e.message || "Errore invio posizione.");
-          }
-        }, function(){
-          alert("Posizione non autorizzata.");
-        }, {
-          enableHighAccuracy:true,
-          timeout:10000,
-          maximumAge:0
-        });
-      }, true);
-    }
-
-    if(audioBtn && audioBtn.dataset.boundPlus !== "1"){
-      audioBtn.dataset.boundPlus = "1";
-      audioBtn.addEventListener("click", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        alert("Invio audio in preparazione. Foto, documenti e posizione sono già attivi.");
-      }, true);
-    }
-
-    document.addEventListener("click", function(ev){
-      const panel = document.getElementById("fmPublicAttachPanel20260519");
-      const plus = document.getElementById("fmPublicPlusBtn20260519");
-      if(!panel || !panel.classList.contains("is-open")) return;
-
-      if(panel.contains(ev.target) || (plus && plus.contains(ev.target))) return;
-      panel.classList.remove("is-open");
-    }, true);
   }
 
   function renderAttachment(a){
@@ -1864,6 +1421,512 @@
     return '<a class="followme-attachment-file" href="' + esc(url) + '" target="_blank" rel="noopener" download>' +
       '<span>📎</span><span><span class="followme-attachment-name">' + esc(name) + '</span><span class="followme-attachment-meta">Apri documento</span></span>' +
     '</a>';
+  }
+
+  function injectCss(){
+    if(document.getElementById("followmePublicInlinePlusRealCss20260519")) return;
+
+    const style = document.createElement("style");
+    style.id = "followmePublicInlinePlusRealCss20260519";
+    style.textContent = `
+      body:not(.fm-public-extra-inline-on) #fmPublicInlinePlusBtn20260519,
+      body.fm-public-clean-blocked #fmPublicInlinePlusBtn20260519{
+        display:none !important;
+      }
+
+      body.fm-public-extra-inline-on .fm-public-composer-inline-plus-ready{
+        display:flex !important;
+        align-items:center !important;
+        gap:8px !important;
+        flex-wrap:nowrap !important;
+      }
+
+      #fmPublicInlinePlusBtn20260519{
+        width:38px !important;
+        height:38px !important;
+        min-width:38px !important;
+        flex:0 0 38px !important;
+        border-radius:999px !important;
+        border:1px solid rgba(0,0,0,.10) !important;
+        background:#ffffff !important;
+        color:#202629 !important;
+        display:inline-flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        font-size:1.35rem !important;
+        line-height:1 !important;
+        font-weight:950 !important;
+        box-shadow:0 1px 5px rgba(0,0,0,.10) !important;
+        padding:0 !important;
+        margin:0 !important;
+        cursor:pointer !important;
+        order:-10 !important;
+        pointer-events:auto !important;
+        touch-action:manipulation !important;
+      }
+
+      .fm-public-composer-inline-plus-ready textarea,
+      .fm-public-composer-inline-plus-ready input[type="text"],
+      .fm-public-composer-inline-plus-ready #messageInput{
+        flex:1 1 auto !important;
+        min-width:0 !important;
+        width:auto !important;
+      }
+
+      .fm-public-composer-inline-plus-ready button[type="submit"],
+      .fm-public-composer-inline-plus-ready #sendBtn,
+      .fm-public-composer-inline-plus-ready .send-btn{
+        flex:0 0 auto !important;
+      }
+
+      #fmPublicAttachMenu20260519{
+        display:none;
+        position:absolute;
+        left:10px;
+        right:10px;
+        bottom:58px;
+        z-index:99999;
+        background:#ffffff;
+        color:#202629;
+        border-radius:22px;
+        border:1px solid rgba(0,0,0,.10);
+        box-shadow:0 18px 60px rgba(0,0,0,.26);
+        padding:10px;
+        box-sizing:border-box;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:8px;
+      }
+
+      body.fm-public-extra-inline-on #fmPublicAttachMenu20260519.is-open{
+        display:grid !important;
+      }
+
+      body.fm-public-clean-blocked #fmPublicAttachMenu20260519{
+        display:none !important;
+      }
+
+      #fmPublicAttachMenu20260519 button{
+        min-height:42px;
+        border-radius:16px;
+        border:1px solid rgba(0,0,0,.08);
+        background:#f6f7f8;
+        color:#202629;
+        font-size:.86rem;
+        font-weight:900;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        gap:7px;
+        cursor:pointer;
+      }
+
+      #fmPublicBlockedNotice20260519{
+        display:none;
+        width:100%;
+        box-sizing:border-box;
+        margin:0 0 8px 0;
+        padding:10px 12px;
+        border-radius:14px;
+        background:#ffe1df;
+        color:#b42318;
+        font-size:.86rem;
+        font-weight:900;
+        text-align:center;
+      }
+
+      body.fm-public-clean-blocked #fmPublicBlockedNotice20260519{
+        display:block !important;
+      }
+
+      body.fm-public-clean-blocked textarea,
+      body.fm-public-clean-blocked input[type="text"],
+      body.fm-public-clean-blocked #messageInput{
+        opacity:.55 !important;
+        pointer-events:none !important;
+      }
+
+      body.fm-public-clean-blocked button[type="submit"],
+      body.fm-public-clean-blocked #sendBtn,
+      body.fm-public-clean-blocked .send-btn{
+        opacity:.55 !important;
+        pointer-events:none !important;
+      }
+
+      .followme-attachment-card{
+        display:block;
+        max-width:280px;
+        border-radius:16px;
+        overflow:hidden;
+        background:rgba(0,0,0,.08);
+        text-decoration:none;
+        color:inherit;
+      }
+
+      .followme-attachment-image{
+        display:block;
+        width:100%;
+        max-width:280px;
+        max-height:280px;
+        object-fit:cover;
+        border-radius:16px;
+      }
+
+      .followme-attachment-file,
+      .followme-attachment-location,
+      .followme-attachment-audio{
+        display:flex;
+        align-items:center;
+        gap:10px;
+        padding:10px 12px;
+        border-radius:16px;
+        background:rgba(255,255,255,.16);
+        color:inherit;
+        text-decoration:none;
+        font-weight:800;
+      }
+
+      .followme-attachment-audio audio{
+        width:200px;
+        max-width:100%;
+      }
+
+      .followme-attachment-name{
+        display:block;
+        font-size:.86rem;
+        font-weight:900;
+      }
+
+      .followme-attachment-meta{
+        display:block;
+        font-size:.72rem;
+        opacity:.72;
+        margin-top:2px;
+      }
+
+      @media(max-width:420px){
+        #fmPublicInlinePlusBtn20260519{
+          width:36px !important;
+          height:36px !important;
+          min-width:36px !important;
+          flex-basis:36px !important;
+          font-size:1.22rem !important;
+        }
+
+        #fmPublicAttachMenu20260519{
+          bottom:54px;
+          border-radius:18px;
+        }
+
+        #fmPublicAttachMenu20260519 button{
+          min-height:40px;
+          font-size:.8rem;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function ensureBlockedNotice(){
+    let notice = document.getElementById("fmPublicBlockedNotice20260519");
+    if(notice) return notice;
+
+    notice = document.createElement("div");
+    notice.id = "fmPublicBlockedNotice20260519";
+    notice.textContent = "Sei stato bloccato dal sistema.";
+
+    const composer = findComposer();
+    if(composer && composer.parentNode){
+      composer.parentNode.insertBefore(notice, composer);
+    }else{
+      document.body.appendChild(notice);
+    }
+
+    return notice;
+  }
+
+  function ensureInlinePlus(){
+    const composer = findComposer();
+    const input = findInput();
+
+    if(!composer || !input) return;
+
+    composer.classList.add("fm-public-composer-inline-plus-ready");
+
+    try{
+      if(getComputedStyle(composer).position === "static"){
+        composer.style.position = "relative";
+      }
+    }catch(e){
+      composer.style.position = "relative";
+    }
+
+    let plus = document.getElementById("fmPublicInlinePlusBtn20260519");
+    if(!plus){
+      plus = document.createElement("button");
+      plus.type = "button";
+      plus.id = "fmPublicInlinePlusBtn20260519";
+      plus.setAttribute("aria-label", "Aggiungi");
+      plus.textContent = "+";
+      input.parentNode.insertBefore(plus, input);
+    }else if(plus.nextSibling !== input){
+      input.parentNode.insertBefore(plus, input);
+    }
+
+    let menu = document.getElementById("fmPublicAttachMenu20260519");
+    if(!menu){
+      menu = document.createElement("div");
+      menu.id = "fmPublicAttachMenu20260519";
+      menu.innerHTML = `
+        <button type="button" id="fmPublicPhotoBtn20260519">📷 Foto</button>
+        <button type="button" id="fmPublicFileBtn20260519">📎 Documento</button>
+        <button type="button" id="fmPublicLocationBtn20260519">📍 Posizione</button>
+        <button type="button" id="fmPublicAudioBtn20260519">🎙️ Audio</button>
+        <input type="file" id="fmPublicPhotoInput20260519" accept="image/*" capture="environment" hidden>
+        <input type="file" id="fmPublicFileInput20260519" hidden>
+      `;
+      composer.appendChild(menu);
+    }
+
+    bindMenu();
+  }
+
+  function canUseExtra(){
+    return document.body.classList.contains("fm-public-extra-inline-on") &&
+           !document.body.classList.contains("fm-public-clean-blocked");
+  }
+
+  function toggleMenu(force){
+    const menu = document.getElementById("fmPublicAttachMenu20260519");
+    if(!menu) return;
+
+    if(!canUseExtra()){
+      menu.classList.remove("is-open");
+      return;
+    }
+
+    const open = typeof force === "boolean" ? force : !menu.classList.contains("is-open");
+    menu.classList.toggle("is-open", open);
+  }
+
+  async function uploadBlob(blob, filename, kind, mime){
+    const sid = getSid();
+    if(!sid) throw new Error("Sessione chat mancante.");
+    if(!blob) throw new Error("File mancante.");
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/attachment-raw", {
+      method:"POST",
+      headers:{
+        "Content-Type": mime || blob.type || "application/octet-stream",
+        "X-FollowMe-Sender": "visitor",
+        "X-FollowMe-Kind": kind || "document",
+        "X-FollowMe-Filename": encodeURIComponent(filename || "allegato")
+      },
+      body: await blob.arrayBuffer()
+    });
+
+    const data = await res.json().catch(()=>null);
+    if(!res.ok || !data || !data.success){
+      throw new Error((data && data.error) || "Errore invio allegato.");
+    }
+
+    toggleMenu(false);
+    forceLoadMessages();
+  }
+
+  async function uploadFile(file, kind){
+    if(!file) return;
+    await uploadBlob(file, file.name || "allegato", kind || (file.type && file.type.indexOf("image/") === 0 ? "image" : "document"), file.type);
+  }
+
+  function forceLoadMessages(){
+    try{ if(typeof window.followMePublicLoadMessages === "function") window.followMePublicLoadMessages(); }catch(e){}
+    try{ if(typeof window.loadMessages === "function") window.loadMessages(); }catch(e){}
+    setTimeout(renderAttachmentsInBubbles, 80);
+    setTimeout(renderAttachmentsInBubbles, 400);
+  }
+
+  async function sendLocation(){
+    if(!navigator.geolocation){
+      alert("Geolocalizzazione non disponibile.");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(async function(pos){
+      try{
+        const sid = getSid();
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const url = "https://www.google.com/maps?q=" + encodeURIComponent(lat + "," + lng);
+
+        const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/attachment", {
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body:JSON.stringify({
+            sender:"visitor",
+            kind:"location",
+            url:url,
+            label:"Posizione condivisa",
+            mime:"text/uri-list",
+            filename:"posizione"
+          })
+        });
+
+        const data = await res.json().catch(()=>null);
+        if(!res.ok || !data || !data.success){
+          throw new Error((data && data.error) || "Errore invio posizione.");
+        }
+
+        toggleMenu(false);
+        forceLoadMessages();
+      }catch(e){
+        alert(e.message || "Errore invio posizione.");
+      }
+    }, function(){
+      alert("Posizione non autorizzata.");
+    }, {
+      enableHighAccuracy:true,
+      timeout:10000,
+      maximumAge:0
+    });
+  }
+
+  async function toggleAudioRecording(){
+    try{
+      if(recording && mediaRecorder){
+        mediaRecorder.stop();
+        return;
+      }
+
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        alert("Registrazione audio non supportata su questo dispositivo.");
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+      audioChunks = [];
+
+      mediaRecorder = new MediaRecorder(stream);
+      recording = true;
+
+      const audioBtn = document.getElementById("fmPublicAudioBtn20260519");
+      if(audioBtn) audioBtn.textContent = "⏹️ Stop audio";
+
+      mediaRecorder.ondataavailable = function(ev){
+        if(ev.data && ev.data.size > 0) audioChunks.push(ev.data);
+      };
+
+      mediaRecorder.onstop = async function(){
+        recording = false;
+
+        try{
+          stream.getTracks().forEach(t => t.stop());
+        }catch(e){}
+
+        const audioBtn = document.getElementById("fmPublicAudioBtn20260519");
+        if(audioBtn) audioBtn.textContent = "🎙️ Audio";
+
+        try{
+          const mime = audioChunks[0] ? audioChunks[0].type || "audio/webm" : "audio/webm";
+          const blob = new Blob(audioChunks, { type:mime });
+          await uploadBlob(blob, "audio_" + Date.now() + ".webm", "audio", mime);
+        }catch(e){
+          alert(e.message || "Errore invio audio.");
+        }
+      };
+
+      mediaRecorder.start();
+    }catch(e){
+      recording = false;
+      alert(e.message || "Errore registrazione audio.");
+    }
+  }
+
+  function bindMenu(){
+    const plus = document.getElementById("fmPublicInlinePlusBtn20260519");
+    const photoBtn = document.getElementById("fmPublicPhotoBtn20260519");
+    const fileBtn = document.getElementById("fmPublicFileBtn20260519");
+    const locBtn = document.getElementById("fmPublicLocationBtn20260519");
+    const audioBtn = document.getElementById("fmPublicAudioBtn20260519");
+    const photoInput = document.getElementById("fmPublicPhotoInput20260519");
+    const fileInput = document.getElementById("fmPublicFileInput20260519");
+
+    if(plus && plus.dataset.boundInlinePlus !== "1"){
+      plus.dataset.boundInlinePlus = "1";
+      plus.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        toggleMenu();
+      }, true);
+    }
+
+    if(photoBtn && photoBtn.dataset.boundInlinePlus !== "1"){
+      photoBtn.dataset.boundInlinePlus = "1";
+      photoBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        if(canUseExtra() && photoInput) photoInput.click();
+      }, true);
+    }
+
+    if(fileBtn && fileBtn.dataset.boundInlinePlus !== "1"){
+      fileBtn.dataset.boundInlinePlus = "1";
+      fileBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        if(canUseExtra() && fileInput) fileInput.click();
+      }, true);
+    }
+
+    if(locBtn && locBtn.dataset.boundInlinePlus !== "1"){
+      locBtn.dataset.boundInlinePlus = "1";
+      locBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        if(canUseExtra()) sendLocation();
+      }, true);
+    }
+
+    if(audioBtn && audioBtn.dataset.boundInlinePlus !== "1"){
+      audioBtn.dataset.boundInlinePlus = "1";
+      audioBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        if(canUseExtra()) toggleAudioRecording();
+      }, true);
+    }
+
+    if(photoInput && photoInput.dataset.boundInlinePlus !== "1"){
+      photoInput.dataset.boundInlinePlus = "1";
+      photoInput.addEventListener("change", async function(){
+        const file = photoInput.files && photoInput.files[0];
+        if(!file) return;
+        try{ await uploadFile(file, "image"); }
+        catch(e){ alert(e.message || "Errore invio foto."); }
+        finally{ photoInput.value = ""; }
+      });
+    }
+
+    if(fileInput && fileInput.dataset.boundInlinePlus !== "1"){
+      fileInput.dataset.boundInlinePlus = "1";
+      fileInput.addEventListener("change", async function(){
+        const file = fileInput.files && fileInput.files[0];
+        if(!file) return;
+        try{ await uploadFile(file, "document"); }
+        catch(e){ alert(e.message || "Errore invio documento."); }
+        finally{ fileInput.value = ""; }
+      });
+    }
+
+    if(!document.body.dataset.fmInlinePlusCloseBound){
+      document.body.dataset.fmInlinePlusCloseBound = "1";
+      document.addEventListener("click", function(ev){
+        const menu = document.getElementById("fmPublicAttachMenu20260519");
+        const plus = document.getElementById("fmPublicInlinePlusBtn20260519");
+        if(!menu || !menu.classList.contains("is-open")) return;
+        if(menu.contains(ev.target) || (plus && plus.contains(ev.target))) return;
+        menu.classList.remove("is-open");
+      }, true);
+    }
   }
 
   function renderAttachmentsInBubbles(){
@@ -1905,12 +1968,11 @@
     const blocked = !!session.is_blocked;
     const key = String(sid) + "|" + uploads + "|" + blocked + "|" + String(session.updated_at || "");
 
-    if(key !== lastKey){
-      lastKey = key;
+    if(key !== lastStateKey){
+      lastStateKey = key;
 
-      document.body.classList.toggle("fm-public-extra-plus-on", uploads);
+      document.body.classList.toggle("fm-public-extra-inline-on", uploads);
       document.body.classList.toggle("fm-public-clean-blocked", blocked);
-
       document.body.classList.toggle("followme-public-uploads-enabled", uploads);
       document.body.classList.toggle("followme-public-user-blocked", blocked);
 
@@ -1929,21 +1991,21 @@
 
       if(send) send.disabled = blocked;
 
-      if(!uploads) togglePanel(false);
+      if(!uploads) toggleMenu(false);
     }
 
     ensureBlockedNotice();
-    ensurePlusAndPanel();
+    ensureInlinePlus();
     renderAttachmentsInBubbles();
   }
 
   async function fetchState(force){
     const now = Date.now();
-    if(!force && now - lastFetchAt < 1200) return;
-    if(inFlight) return;
+    if(!force && now - lastStateAt < 1200) return;
+    if(stateBusy) return;
 
-    lastFetchAt = now;
-    inFlight = true;
+    lastStateAt = now;
+    stateBusy = true;
 
     try{
       let sid = getSid();
@@ -1974,14 +2036,14 @@
 
       applyState(data.session);
     }catch(e){
-      console.warn("[FM public plus] state error", e);
+      console.warn("[FM public inline plus] state error", e);
     }finally{
-      inFlight = false;
+      stateBusy = false;
     }
   }
 
-  if(!window.__fmPublicPlusFetchBridge20260519){
-    window.__fmPublicPlusFetchBridge20260519 = true;
+  if(!window.__fmPublicInlinePlusFetchBridge20260519){
+    window.__fmPublicInlinePlusFetchBridge20260519 = true;
     const oldFetch = window.fetch.bind(window);
 
     window.fetch = async function(input, init){
@@ -2014,20 +2076,16 @@
   function boot(){
     injectCss();
     ensureBlockedNotice();
-    ensurePlusAndPanel();
+    ensureInlinePlus();
     fetchState(true);
     renderAttachmentsInBubbles();
 
-    if(!pollTimer){
-      pollTimer = setInterval(function(){
-        fetchState(false);
-        renderAttachmentsInBubbles();
-      }, 2500);
-    }
+    setTimeout(ensureInlinePlus, 300);
+    setTimeout(renderAttachmentsInBubbles, 700);
   }
 
   window.fmPublicForceFetchState20260518 = function(){ return fetchState(true); };
-  window.fmPublicPlusAttachmentState20260519 = function(){ return { sid:getSid(), lastKey:lastKey }; };
+  window.fmPublicInlinePlusState20260519 = function(){ return { sid:getSid(), lastStateKey:lastStateKey }; };
 
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
@@ -2038,14 +2096,20 @@
   });
 
   window.addEventListener("pageshow", function(){
-    setTimeout(function(){ fetchState(true); renderAttachmentsInBubbles(); }, 250);
+    setTimeout(function(){ fetchState(true); ensureInlinePlus(); renderAttachmentsInBubbles(); }, 250);
   });
 
   document.addEventListener("visibilitychange", function(){
     if(document.visibilityState === "visible"){
-      setTimeout(function(){ fetchState(true); renderAttachmentsInBubbles(); }, 250);
+      setTimeout(function(){ fetchState(true); ensureInlinePlus(); renderAttachmentsInBubbles(); }, 250);
     }
   });
+
+  setInterval(function(){
+    fetchState(false);
+    ensureInlinePlus();
+    renderAttachmentsInBubbles();
+  }, 2500);
 })();
 </script>
 
