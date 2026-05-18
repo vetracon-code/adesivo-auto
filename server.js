@@ -9876,6 +9876,46 @@ app.post('/api/followme/chat/session/:session_id/message', express.json(), async
 
 
 
+/* disabled duplicate followme settings endpoint */
+
+
+
+app.get('/api/followme/chat/session/:session_id/state', async (req, res) => {
+  try {
+    await ensureFollowMeChatSchema();
+    await ensureFollowMeChatUserManagementColumns();
+
+    const sessionId = Number(req.params.session_id || 0);
+
+    if (!sessionId) {
+      return res.status(400).json({ success:false, error:'Sessione mancante.' });
+    }
+
+    const result = await pool.query(
+      `SELECT id, display_name, visitor_label, uploads_enabled, is_blocked, blocked_at, updated_at
+       FROM followme_chat_sessions
+       WHERE id = $1
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success:false, error:'Sessione non trovata.' });
+    }
+
+    return res.json({
+      success:true,
+      session:result.rows[0]
+    });
+  } catch (err) {
+    console.error('followme chat session state error:', err);
+    return res.status(500).json({
+      success:false,
+      error:err.message || 'Errore lettura stato utente.'
+    });
+  }
+});
+
 app.post('/api/followme/chat/session/:session_id/settings', express.json(), async (req, res) => {
   try {
     await ensureFollowMeChatSchema();

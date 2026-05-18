@@ -510,6 +510,49 @@
       display:block;
     }
 
+
+    /* FollowMe public: utente bloccato */
+    .followme-public-blocked-system-message{
+      display:none;
+      margin:12px auto;
+      max-width:88%;
+      padding:12px 14px;
+      border-radius:15px;
+      background:#fff1ef;
+      color:#9b241c;
+      border:1px solid rgba(155,36,28,.18);
+      box-shadow:0 1px 3px rgba(0,0,0,.08);
+      font-size:.9rem;
+      line-height:1.35;
+      font-weight:850;
+      text-align:center;
+    }
+
+    body.followme-public-user-blocked .followme-public-blocked-system-message{
+      display:block;
+    }
+
+    body.followme-public-user-blocked textarea,
+    body.followme-public-user-blocked input[type="text"],
+    body.followme-public-user-blocked button[type="submit"],
+    body.followme-public-user-blocked #sendBtn,
+    body.followme-public-user-blocked .send-btn{
+      opacity:.45 !important;
+      pointer-events:none !important;
+    }
+
+    body:not(.followme-public-uploads-enabled) .followme-public-upload-btn,
+    body:not(.followme-public-uploads-enabled) .followme-public-attach-btn,
+    body:not(.followme-public-uploads-enabled) .followme-admin-wa-plus,
+    body:not(.followme-public-uploads-enabled) button[aria-label*="alleg"],
+    body:not(.followme-public-uploads-enabled) button[aria-label*="Alleg"],
+    body:not(.followme-public-uploads-enabled) button[aria-label*="upload"],
+    body:not(.followme-public-uploads-enabled) input[type="file"]{
+      display:none !important;
+      visibility:hidden !important;
+      pointer-events:none !important;
+    }
+
 </style>
 </head>
 <body class="followme-wa-chat">
@@ -531,7 +574,12 @@
         <button id="sendBtn">Invia</button>
       </div>
     </footer>
-  </main>
+  
+<div class="followme-public-blocked-system-message" id="followmePublicBlockedSystemMessage">
+  Sei stato bloccato dal sistema.
+</div>
+
+</main>
 
 <script>
 (function(){
@@ -1292,6 +1340,138 @@
   }
 
   window.followMePublicApplySessionState = applyState;
+})();
+</script>
+
+
+<script id="followme-public-user-state-stable-final">
+(function(){
+  let lastBlocked = null;
+  let lastUploads = null;
+
+  function sessionId(){
+    try{
+      const p = new URLSearchParams(location.search || "");
+      return p.get("session") ||
+             p.get("chatSession") ||
+             window.followMeChatSessionId ||
+             window.FOLLOWME_CHAT_SESSION_ID ||
+             "";
+    }catch(e){
+      return window.followMeChatSessionId || window.FOLLOWME_CHAT_SESSION_ID || "";
+    }
+  }
+
+  function findInput(){
+    return document.getElementById("messageInput") ||
+           document.querySelector("textarea") ||
+           document.querySelector("input[type='text']");
+  }
+
+  function findSend(){
+    return document.getElementById("sendBtn") ||
+           document.querySelector("button[type='submit']") ||
+           document.querySelector(".send-btn");
+  }
+
+  function setComposerBlocked(blocked){
+    const input = findInput();
+    const send = findSend();
+
+    if(input){
+      input.disabled = !!blocked;
+      if(blocked){
+        input.dataset.oldPlaceholder = input.dataset.oldPlaceholder || input.placeholder || "";
+        input.placeholder = "Sei stato bloccato dal sistema.";
+      }else if(input.dataset.oldPlaceholder){
+        input.placeholder = input.dataset.oldPlaceholder;
+      }
+    }
+
+    if(send){
+      send.disabled = !!blocked;
+    }
+  }
+
+  function applyState(session){
+    if(!session) return;
+
+    const blocked = !!session.is_blocked;
+    const uploads = !!session.uploads_enabled;
+
+    document.body.classList.toggle("followme-public-user-blocked", blocked);
+    document.body.classList.toggle("followme-public-uploads-enabled", uploads);
+
+    setComposerBlocked(blocked);
+
+    lastBlocked = blocked;
+    lastUploads = uploads;
+  }
+
+  async function fetchState(){
+    const sid = sessionId();
+    if(!sid) return;
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/state?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success) return;
+
+    applyState(data.session);
+  }
+
+  function patchMessageSubmit(){
+    if(window.__followMePublicStateSubmitPatched) return;
+    window.__followMePublicStateSubmitPatched = true;
+
+    document.addEventListener("submit", function(ev){
+      if(document.body.classList.contains("followme-public-user-blocked")){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        alert("Sei stato bloccato dal sistema.");
+      }
+    }, true);
+
+    document.addEventListener("click", function(ev){
+      const btn = ev.target && ev.target.closest ? ev.target.closest("button") : null;
+      if(!btn) return;
+
+      if(document.body.classList.contains("followme-public-user-blocked")){
+        const txt = String(btn.textContent || "").toLowerCase();
+        const isSend = btn.type === "submit" || txt.includes("invia") || btn.id === "sendBtn";
+        if(isSend){
+          ev.preventDefault();
+          ev.stopPropagation();
+          ev.stopImmediatePropagation();
+          alert("Sei stato bloccato dal sistema.");
+        }
+      }
+    }, true);
+  }
+
+  function boot(){
+    patchMessageSubmit();
+    fetchState();
+  }
+
+  window.followMePublicUserStateRefresh = fetchState;
+  window.followMePublicUserStateApply = applyState;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(fetchState, 1500);
 })();
 </script>
 
