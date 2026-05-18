@@ -9486,9 +9486,22 @@ async function ensureFollowMeChatDisplayNameColumn() {
   }
 }
 
+
+async function ensureFollowMeChatUserManagementColumns() {
+  try {
+    await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS uploads_enabled BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS blocked_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`);
+  } catch (err) {
+    console.warn('ensureFollowMeChatUserManagementColumns error:', err.message || err);
+  }
+}
+
 app.get('/api/followme/chat/session/:session_id/messages', async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
+    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
 
     const sessionId = Number(req.params.session_id || 0);
     const after = Number(req.query.after || 0);
@@ -9858,6 +9871,74 @@ app.post('/api/followme/chat/session/:session_id/message', express.json(), async
 
 
 
+
+app.post('/api/followme/chat/session/:session_id/settings', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeChatSchema();
+    await ensureFollowMeChatUserManagementColumns();
+
+    const sessionId = Number(req.params.session_id || 0);
+
+    if (!sessionId) {
+      return res.status(400).json({ success:false, error:'Sessione mancante.' });
+    }
+
+    const allowed = {};
+    if (typeof req.body?.uploads_enabled === 'boolean') {
+      allowed.uploads_enabled = req.body.uploads_enabled;
+    }
+    if (typeof req.body?.is_blocked === 'boolean') {
+      allowed.is_blocked = req.body.is_blocked;
+    }
+
+    if (!Object.keys(allowed).length) {
+      return res.status(400).json({ success:false, error:'Nessuna impostazione valida.' });
+    }
+
+    const existing = await pool.query(
+      `SELECT id, uploads_enabled, is_blocked
+       FROM followme_chat_sessions
+       WHERE id = $1
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!existing.rows.length) {
+      return res.status(404).json({ success:false, error:'Sessione non trovata.' });
+    }
+
+    const current = existing.rows[0];
+
+    const uploadsEnabled = Object.prototype.hasOwnProperty.call(allowed, 'uploads_enabled')
+      ? allowed.uploads_enabled
+      : current.uploads_enabled;
+
+    const isBlocked = Object.prototype.hasOwnProperty.call(allowed, 'is_blocked')
+      ? allowed.is_blocked
+      : current.is_blocked;
+
+    const updated = await pool.query(
+      `UPDATE followme_chat_sessions
+       SET uploads_enabled = $2,
+           is_blocked = $3,
+           blocked_at = CASE WHEN $3 = TRUE THEN COALESCE(blocked_at, NOW()) ELSE NULL END,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, display_name, visitor_label, uploads_enabled, is_blocked, blocked_at`,
+      [sessionId, uploadsEnabled, isBlocked]
+    );
+
+    return res.json({
+      success:true,
+      session:updated.rows[0]
+    });
+  } catch (err) {
+    console.error('followme chat session settings error:', err);
+    return res.status(500).json({ success:false, error:'Errore aggiornamento impostazioni utente.' });
+  }
+});
+
+
 app.post('/api/followme/chat/session/:session_id/name', express.json(), async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
@@ -9934,6 +10015,7 @@ app.post('/api/followme/chat/session/:session_id/name', express.json(), async (r
 app.get('/api/followme/:code/chat/sessions', async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
+    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
 
     const code = normalizeFollowMeCode(req.params.code);
 

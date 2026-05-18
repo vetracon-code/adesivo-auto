@@ -5351,6 +5351,93 @@
       display:none !important;
     }
 
+
+    /* Menu gestione utente FollowMe */
+    .followme-user-manage-overlay{
+      display:none;
+      position:fixed;
+      inset:0;
+      z-index:1000040;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+      background:rgba(28,22,17,.36);
+      backdrop-filter:blur(7px);
+      -webkit-backdrop-filter:blur(7px);
+    }
+
+    .followme-user-manage-overlay.is-open{
+      display:flex;
+    }
+
+    .followme-user-manage-card{
+      width:min(390px, 92vw);
+      border-radius:26px;
+      padding:18px;
+      background:linear-gradient(145deg,#fffaf2,#eadfce);
+      border:1px solid rgba(80,58,35,.18);
+      box-shadow:0 24px 72px rgba(58,38,20,.34);
+      color:#263033;
+    }
+
+    .followme-user-manage-title{
+      margin:0 0 4px;
+      color:#1f2527;
+      font-size:1.05rem;
+      line-height:1.2;
+      font-weight:950;
+      letter-spacing:-.03em;
+    }
+
+    .followme-user-manage-subtitle{
+      margin:0 0 14px;
+      color:#687173;
+      font-size:.82rem;
+      line-height:1.35;
+      font-weight:750;
+    }
+
+    .followme-user-manage-actions{
+      display:grid;
+      gap:8px;
+    }
+
+    .followme-user-manage-actions button{
+      min-height:42px;
+      border-radius:999px;
+      border:1px solid rgba(0,0,0,.08);
+      background:#ffffff;
+      color:#202629;
+      font-size:.86rem;
+      font-weight:950;
+      box-shadow:0 1px 3px rgba(0,0,0,.07);
+      cursor:pointer;
+    }
+
+    .followme-user-manage-actions button.warn{
+      color:#9a5b00;
+      background:#fff7e8;
+    }
+
+    .followme-user-manage-actions button.danger{
+      color:#a5241c;
+      background:#fff1ef;
+    }
+
+    .followme-user-manage-actions button.ok{
+      color:#0c7f45;
+      background:#effaf4;
+    }
+
+    .followme-user-manage-note{
+      margin-top:10px;
+      color:#737b7d;
+      font-size:.72rem;
+      line-height:1.3;
+      font-weight:700;
+      text-align:center;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -16439,6 +16526,255 @@ document.addEventListener("visibilitychange", function(){
   });
 
   setInterval(boot, 1200);
+})();
+</script>
+
+
+<div class="followme-user-manage-overlay" id="followmeUserManageOverlay" aria-hidden="true">
+  <div class="followme-user-manage-card" role="dialog" aria-modal="true">
+    <h3 class="followme-user-manage-title" id="followmeUserManageTitle">Gestione utente</h3>
+    <p class="followme-user-manage-subtitle" id="followmeUserManageSubtitle">Seleziona un’azione per questa chat.</p>
+    <div class="followme-user-manage-actions">
+      <button type="button" id="followmeUserManageEditName">Modifica nome</button>
+      <button type="button" id="followmeUserManageUploads">Abilita caricamenti completi</button>
+      <button type="button" id="followmeUserManageBlock" class="danger">Blocca utente</button>
+      <button type="button" id="followmeUserManageClose">Chiudi</button>
+    </div>
+    <div class="followme-user-manage-note">Doppio click sul nome utente per riaprire questo menu.</div>
+  </div>
+</div>
+
+
+<script id="followme-user-management-menu-final">
+(function(){
+  let currentSessionId = "";
+  let currentULabel = "";
+  let currentName = "";
+  let currentUploadsEnabled = false;
+  let currentBlocked = false;
+
+  function code(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function esc(v){
+    return String(v || "").replace(/[&<>"']/g, function(c){
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);
+    });
+  }
+
+  async function fetchSessions(){
+    const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), {
+      cache:"no-store"
+    });
+    const data = await res.json().catch(()=>null);
+    if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)) return [];
+    return data.sessions.slice().sort(function(a,b){
+      return Number(a.display_index || 0) - Number(b.display_index || 0);
+    });
+  }
+
+  async function getSessionState(sessionId){
+    const sessions = await fetchSessions();
+    const idx = sessions.findIndex(function(s){ return String(s.id) === String(sessionId); });
+    const s = idx >= 0 ? sessions[idx] : null;
+
+    if(!s) return null;
+
+    return {
+      id:String(s.id),
+      uLabel:"U" + Number(s.display_index || idx + 1),
+      name:String(s.display_name || ""),
+      uploads_enabled:!!s.uploads_enabled,
+      is_blocked:!!s.is_blocked
+    };
+  }
+
+  function updateMenuText(){
+    const title = document.getElementById("followmeUserManageTitle");
+    const subtitle = document.getElementById("followmeUserManageSubtitle");
+    const uploads = document.getElementById("followmeUserManageUploads");
+    const block = document.getElementById("followmeUserManageBlock");
+
+    const label = currentName ? (currentULabel + " · " + currentName) : currentULabel;
+
+    if(title) title.textContent = "Gestione utente";
+    if(subtitle) subtitle.textContent = label || "Chat selezionata";
+
+    if(uploads){
+      uploads.textContent = currentUploadsEnabled
+        ? "Disabilita caricamenti completi"
+        : "Abilita caricamenti completi";
+
+      uploads.className = currentUploadsEnabled ? "warn" : "ok";
+    }
+
+    if(block){
+      block.textContent = currentBlocked ? "Riabilita utente" : "Blocca utente";
+      block.className = currentBlocked ? "ok" : "danger";
+    }
+  }
+
+  async function openMenu(sessionId, fallbackName, fallbackULabel){
+    currentSessionId = String(sessionId || "");
+    if(!currentSessionId) return;
+
+    const state = await getSessionState(currentSessionId).catch(()=>null);
+
+    currentULabel = (state && state.uLabel) || fallbackULabel || "U?";
+    currentName = (state && state.name) || fallbackName || "";
+    currentUploadsEnabled = !!(state && state.uploads_enabled);
+    currentBlocked = !!(state && state.is_blocked);
+
+    updateMenuText();
+
+    const overlay = document.getElementById("followmeUserManageOverlay");
+    if(overlay){
+      overlay.classList.add("is-open");
+      overlay.setAttribute("aria-hidden","false");
+    }
+  }
+
+  function closeMenu(){
+    const overlay = document.getElementById("followmeUserManageOverlay");
+    if(overlay){
+      overlay.classList.remove("is-open");
+      overlay.setAttribute("aria-hidden","true");
+    }
+  }
+
+  async function updateSettings(payload){
+    if(!currentSessionId) return;
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(currentSessionId) + "/settings", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(payload)
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      alert("Errore aggiornamento utente: " + ((data && data.error) || ("HTTP " + res.status)));
+      return;
+    }
+
+    currentUploadsEnabled = !!data.session.uploads_enabled;
+    currentBlocked = !!data.session.is_blocked;
+    currentName = data.session.display_name || currentName;
+
+    updateMenuText();
+
+    if(typeof window.followMeLockUPlusNameRefresh === "function") window.followMeLockUPlusNameRefresh();
+    if(typeof window.followMeStrongTabLockRefresh === "function") window.followMeStrongTabLockRefresh();
+    if(typeof window.followMeFinalVisualTabEnforce === "function") window.followMeFinalVisualTabEnforce();
+  }
+
+  function editName(){
+    closeMenu();
+
+    if(typeof window.followMeOpenEditNameCard === "function"){
+      window.followMeOpenEditNameCard(currentSessionId, currentName, currentULabel);
+      return;
+    }
+
+    alert("Funzione modifica nome non trovata.");
+  }
+
+  function bindMenuButtons(){
+    const edit = document.getElementById("followmeUserManageEditName");
+    const uploads = document.getElementById("followmeUserManageUploads");
+    const block = document.getElementById("followmeUserManageBlock");
+    const close = document.getElementById("followmeUserManageClose");
+    const overlay = document.getElementById("followmeUserManageOverlay");
+
+    if(edit && edit.dataset.umBound !== "1"){
+      edit.dataset.umBound = "1";
+      edit.addEventListener("click", function(ev){
+        ev.preventDefault();
+        editName();
+      });
+    }
+
+    if(uploads && uploads.dataset.umBound !== "1"){
+      uploads.dataset.umBound = "1";
+      uploads.addEventListener("click", function(ev){
+        ev.preventDefault();
+        updateSettings({ uploads_enabled: !currentUploadsEnabled });
+      });
+    }
+
+    if(block && block.dataset.umBound !== "1"){
+      block.dataset.umBound = "1";
+      block.addEventListener("click", function(ev){
+        ev.preventDefault();
+        updateSettings({ is_blocked: !currentBlocked });
+      });
+    }
+
+    if(close && close.dataset.umBound !== "1"){
+      close.dataset.umBound = "1";
+      close.addEventListener("click", function(ev){
+        ev.preventDefault();
+        closeMenu();
+      });
+    }
+
+    if(overlay && overlay.dataset.umBound !== "1"){
+      overlay.dataset.umBound = "1";
+      overlay.addEventListener("click", function(ev){
+        if(ev.target === overlay) closeMenu();
+      });
+    }
+  }
+
+  function bindTabDoubleClick(){
+    document.querySelectorAll("#followmeOwnerChatSessionStrip .followme-chat-session-chip").forEach(function(chip){
+      if(chip.dataset.userManagementMenuBound === "1") return;
+
+      chip.dataset.userManagementMenuBound = "1";
+
+      chip.addEventListener("dblclick", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+
+        const sid = chip.dataset.sessionId || "";
+        const name = chip.dataset.userName || "";
+        const u = chip.dataset.uLabel || "";
+
+        openMenu(sid, name, u);
+      }, true);
+    });
+  }
+
+  function boot(){
+    bindMenuButtons();
+    bindTabDoubleClick();
+  }
+
+  window.followMeOpenUserManagementMenu = openMenu;
+  window.followMeUserManagementMenuBoot = boot;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(boot, 800);
 })();
 </script>
 

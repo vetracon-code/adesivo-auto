@@ -481,6 +481,35 @@
       pointer-events:none;
     }
 
+
+    /* Stato utente bloccato */
+    body.followme-public-user-blocked .composer,
+    body.followme-public-user-blocked form,
+    body.followme-public-user-blocked .followme-public-composer{
+      opacity:.55 !important;
+      pointer-events:none !important;
+    }
+
+    .followme-public-blocked-notice{
+      display:none;
+      margin:10px auto;
+      max-width:88%;
+      padding:10px 12px;
+      border-radius:14px;
+      background:rgba(255,255,255,.88);
+      color:#3a3f41;
+      border:1px solid rgba(0,0,0,.08);
+      box-shadow:0 1px 2px rgba(0,0,0,.08);
+      font-size:.86rem;
+      line-height:1.35;
+      font-weight:750;
+      text-align:center;
+    }
+
+    body.followme-public-user-blocked .followme-public-blocked-notice{
+      display:block;
+    }
+
 </style>
 </head>
 <body class="followme-wa-chat">
@@ -1190,6 +1219,79 @@
   }
 
   window.followMePublicCloseBecauseAdminReset = closeBecauseAdminReset;
+})();
+</script>
+
+
+<div class="followme-public-blocked-notice" id="followmePublicBlockedNotice">
+  La chat non è disponibile in questo momento. Puoi attendere o riprovare più tardi.
+</div>
+
+
+<script id="followme-public-session-state-final">
+(function(){
+  function sessionId(){
+    try{
+      return new URLSearchParams(location.search || "").get("session") ||
+             new URLSearchParams(location.search || "").get("chatSession") ||
+             window.followMeChatSessionId ||
+             "";
+    }catch(e){
+      return window.followMeChatSessionId || "";
+    }
+  }
+
+  function applyState(data){
+    if(!data) return;
+
+    const s = data.session || data.chat_session || data;
+
+    if(typeof s.is_blocked === "boolean"){
+      document.body.classList.toggle("followme-public-user-blocked", s.is_blocked);
+
+      const input =
+        document.getElementById("messageInput") ||
+        document.querySelector("textarea") ||
+        document.querySelector("input[type='text']");
+
+      const send =
+        document.getElementById("sendBtn") ||
+        document.querySelector("button[type='submit']");
+
+      if(input){
+        input.disabled = !!s.is_blocked;
+        if(s.is_blocked) input.placeholder = "Chat non disponibile";
+      }
+
+      if(send) send.disabled = !!s.is_blocked;
+    }
+
+    document.body.classList.toggle("followme-public-uploads-enabled", !!s.uploads_enabled);
+  }
+
+  if(!window.__followMePublicSessionStateFetchPatched){
+    window.__followMePublicSessionStateFetchPatched = true;
+
+    const originalFetch = window.fetch.bind(window);
+
+    window.fetch = async function(input, init){
+      const res = await originalFetch(input, init);
+
+      try{
+        const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+
+        if(url && url.includes("/api/followme/chat/session/") && url.includes("/messages")){
+          const clone = res.clone();
+          const data = await clone.json().catch(()=>null);
+          if(data) applyState(data);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  window.followMePublicApplySessionState = applyState;
 })();
 </script>
 
