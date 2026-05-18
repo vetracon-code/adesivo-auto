@@ -5663,6 +5663,27 @@
       border:1px solid rgba(255,255,255,.22) !important;
     }
 
+
+    /* =====================================================
+       PC GLOBAL: blocco balloon salvataggio/installazione Web App
+       Mobile invariato
+       ===================================================== */
+    @media (min-width:900px){
+      body.followme-pc-install-balloon-disabled .followme-install-helper,
+      body.followme-pc-install-balloon-disabled #followmeInstallHelper,
+      body.followme-pc-install-balloon-disabled #followmeInstallPrompt,
+      body.followme-pc-install-balloon-disabled .followme-pwa-install,
+      body.followme-pc-install-balloon-disabled .followme-save-app-helper,
+      body.followme-pc-install-balloon-disabled [data-install-helper],
+      body.followme-pc-install-balloon-disabled [data-pwa-helper]{
+        display:none !important;
+        visibility:hidden !important;
+        opacity:0 !important;
+        pointer-events:none !important;
+        z-index:-999999 !important;
+      }
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -16777,6 +16798,173 @@ document.addEventListener("visibilitychange", function(){
   });
 
   setInterval(boot, 1000);
+})();
+</script>
+
+
+<script id="followme-pc-install-balloon-global-disable-final">
+(function(){
+  const KEYS = [
+    "followme_desktop_install_balloon_seen_v1",
+    "followme_desktop_install_balloon_seen_v2",
+    "followme_install_instructions_dismissed_v1",
+    "followme_install_instructions_later_v1",
+    "followme_pwa_install_dismissed",
+    "followme_install_prompt_dismissed",
+    "followme_save_app_prompt_dismissed"
+  ];
+
+  function isDesktop(){
+    return window.matchMedia && window.matchMedia("(min-width:900px)").matches;
+  }
+
+  function isFollowMeApp(){
+    return location.pathname.includes("/fm/app/");
+  }
+
+  function rememberDismissed(){
+    try{
+      KEYS.forEach(function(k){
+        localStorage.setItem(k, "1");
+      });
+    }catch(e){}
+  }
+
+  function hideKnownBalloonElements(){
+    if(!isDesktop() || !isFollowMeApp()) return;
+
+    document.body.classList.add("followme-pc-install-balloon-disabled");
+    document.body.classList.add("followme-desktop-install-balloon-dismissed");
+    document.body.classList.add("followme-hide-install-balloon-in-chat");
+
+    rememberDismissed();
+
+    const selectors = [
+      ".followme-install-helper",
+      "#followmeInstallHelper",
+      "#followmeInstallPrompt",
+      ".followme-pwa-install",
+      ".followme-save-app-helper",
+      "[data-install-helper]",
+      "[data-pwa-helper]"
+    ];
+
+    selectors.forEach(function(sel){
+      document.querySelectorAll(sel).forEach(function(el){
+        el.style.setProperty("display", "none", "important");
+        el.style.setProperty("visibility", "hidden", "important");
+        el.style.setProperty("opacity", "0", "important");
+        el.style.setProperty("pointer-events", "none", "important");
+        el.style.setProperty("z-index", "-999999", "important");
+        el.setAttribute("aria-hidden", "true");
+      });
+    });
+  }
+
+  function patchInstallerButtons(){
+    if(!isDesktop() || !isFollowMeApp()) return;
+
+    document.querySelectorAll("button, a, div[role='button']").forEach(function(el){
+      if(el.dataset.pcInstallBalloonDisabledBound === "1") return;
+
+      const txt = String(el.textContent || "").toLowerCase().replace(/\s+/g, " ").trim();
+
+      const isInstallTrigger =
+        txt.includes("installa") ||
+        txt.includes("salva") ||
+        txt.includes("come salvo") ||
+        txt.includes("web app") ||
+        txt.includes("aggiungi alla schermata") ||
+        txt.includes("schermata home");
+
+      if(!isInstallTrigger) return;
+
+      el.dataset.pcInstallBalloonDisabledBound = "1";
+      el.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        hideKnownBalloonElements();
+        return false;
+      }, true);
+    });
+  }
+
+  function patchKnownOpeners(){
+    if(!isDesktop() || !isFollowMeApp()) return;
+
+    const names = [
+      "showInstallPrompt",
+      "openInstallPrompt",
+      "showPwaInstallPrompt",
+      "openPwaInstallPrompt",
+      "showFollowMeInstallPrompt",
+      "followMeShowInstallPrompt",
+      "followMeOpenInstallPrompt",
+      "followMeShowInstallHelper",
+      "followMeOpenInstallHelper"
+    ];
+
+    names.forEach(function(name){
+      try{
+        if(typeof window[name] === "function" && !window[name].__pcInstallDisabled){
+          const original = window[name];
+
+          const replacement = function(){
+            if(isDesktop() && isFollowMeApp()){
+              hideKnownBalloonElements();
+              return false;
+            }
+
+            return original.apply(this, arguments);
+          };
+
+          replacement.__pcInstallDisabled = true;
+          window[name] = replacement;
+        }
+      }catch(e){}
+    });
+  }
+
+  function boot(){
+    if(!isDesktop() || !isFollowMeApp()) return;
+
+    hideKnownBalloonElements();
+    patchInstallerButtons();
+    patchKnownOpeners();
+  }
+
+  window.followMeDisablePcInstallBalloonGlobal = boot;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 80);
+    setTimeout(boot, 350);
+    setTimeout(boot, 900);
+  });
+
+  window.addEventListener("resize", function(){
+    setTimeout(boot, 120);
+  });
+
+  const observer = new MutationObserver(function(){
+    if(!isDesktop() || !isFollowMeApp()) return;
+    boot();
+  });
+
+  try{
+    observer.observe(document.documentElement, {
+      childList:true,
+      subtree:true
+    });
+  }catch(e){}
+
+  setInterval(boot, 700);
 })();
 </script>
 
