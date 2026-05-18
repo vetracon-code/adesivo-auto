@@ -1278,6 +1278,148 @@
 
 
 
+
+
+<script id="followme-public-session-id-bridge-final-20260518">
+(function(){
+  if(window.__followMePublicSessionIdBridgeFinal20260518) return;
+  window.__followMePublicSessionIdBridgeFinal20260518 = true;
+
+  function cleanSid(v){
+    const s = String(v || "").trim();
+    return /^\d+$/.test(s) ? s : "";
+  }
+
+  function saveSid(v){
+    const sid = cleanSid(v);
+    if(!sid) return "";
+
+    try{ window.followMeChatSessionId = sid; }catch(e){}
+    try{ window.FOLLOWME_CHAT_SESSION_ID = sid; }catch(e){}
+    try{ sessionStorage.setItem("followme_chat_session_id", sid); }catch(e){}
+    try{ localStorage.setItem("followme_chat_session_id", sid); }catch(e){}
+
+    return sid;
+  }
+
+  function getSid(){
+    try{
+      const q = new URLSearchParams(location.search || "");
+      const fromUrl = cleanSid(q.get("session") || q.get("chatSession"));
+      if(fromUrl) return saveSid(fromUrl);
+    }catch(e){}
+
+    const candidates = [
+      window.followMeChatSessionId,
+      window.FOLLOWME_CHAT_SESSION_ID
+    ];
+
+    try{ candidates.push(sessionStorage.getItem("followme_chat_session_id")); }catch(e){}
+    try{ candidates.push(localStorage.getItem("followme_chat_session_id")); }catch(e){}
+
+    for(const c of candidates){
+      const sid = cleanSid(c);
+      if(sid) return saveSid(sid);
+    }
+
+    return "";
+  }
+
+  function extractSidFromData(data){
+    if(!data) return "";
+
+    return cleanSid(
+      data.session_id ||
+      data.sessionId ||
+      data.chat_session_id ||
+      data.chatSessionId ||
+      (data.session && data.session.id) ||
+      (data.chat_session && data.chat_session.id) ||
+      ""
+    );
+  }
+
+  // Patch fetch: quando la pagina crea la sessione, salvo subito l'id.
+  if(!window.__followMePublicSessionIdFetchBridge){
+    window.__followMePublicSessionIdFetchBridge = true;
+
+    const previousFetch = window.fetch.bind(window);
+
+    window.fetch = async function(input, init){
+      const res = await previousFetch(input, init);
+
+      try{
+        const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+
+        if(url && (
+          url.includes("/api/followme/chat/") ||
+          url.includes("/api/followme/chat/session/")
+        )){
+          const clone = res.clone();
+          const data = await clone.json().catch(()=>null);
+          const sid = extractSidFromData(data);
+
+          if(sid){
+            saveSid(sid);
+
+            if(typeof window.fmPublicForceFetchState20260518 === "function"){
+              setTimeout(window.fmPublicForceFetchState20260518, 80);
+              setTimeout(window.fmPublicForceFetchState20260518, 500);
+            }
+          }
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  // Sovrascrivo/espongo un getter robusto.
+  window.followMeGetPublicSessionIdFinal = getSid;
+
+  // Se lo script extra esiste già, gli diamo un bridge leggibile.
+  const sidNow = getSid();
+  if(sidNow && typeof window.fmPublicForceFetchState20260518 === "function"){
+    setTimeout(window.fmPublicForceFetchState20260518, 100);
+    setTimeout(window.fmPublicForceFetchState20260518, 600);
+  }
+
+  // Ultimo fallback: se la pagina è la demo FM-DEMO e c'è una sola sessione aperta,
+  // recupero automaticamente la sessione online.
+  async function recoverLatestSessionIfMissing(){
+    if(getSid()) return;
+
+    try{
+      const res = await fetch("/api/followme/FM-DEMO/chat/sessions?v=" + Date.now(), { cache:"no-store" });
+      const data = await res.json().catch(()=>null);
+
+      if(!res.ok || !data || !data.success) return;
+
+      const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+      if(sessions.length === 1 && sessions[0] && sessions[0].id){
+        saveSid(sessions[0].id);
+
+        if(typeof window.fmPublicForceFetchState20260518 === "function"){
+          setTimeout(window.fmPublicForceFetchState20260518, 80);
+          setTimeout(window.fmPublicForceFetchState20260518, 500);
+        }
+      }
+    }catch(e){}
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", recoverLatestSessionIfMissing);
+  }else{
+    recoverLatestSessionIfMissing();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(recoverLatestSessionIfMissing, 250);
+    setTimeout(recoverLatestSessionIfMissing, 1200);
+  });
+})();
+</script>
+
 <script id="followme-public-extra-bar-force-final-20260518">
 (function(){
   if(window.__followMePublicExtraBarForceFinal20260518) return;
