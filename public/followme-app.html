@@ -5791,6 +5791,104 @@ body.followme-pc-install-dismissed-v2 #followmeInstallSheetLite {
 }
 </style>
 
+
+<style>
+.pc-dont-ask-install-btn {
+  margin-top: 10px !important;
+  width: 100% !important;
+  border: 1px solid rgba(255,255,255,.25) !important;
+  background: rgba(255,255,255,.10) !important;
+  color: inherit !important;
+  border-radius: 14px !important;
+  padding: 10px 12px !important;
+  font-size: .82rem !important;
+  font-weight: 800 !important;
+  line-height: 1.2 !important;
+  cursor: pointer !important;
+}
+.pc-dont-ask-install-btn:hover {
+  background: rgba(255,255,255,.18) !important;
+}
+body.followme-pc-install-dismissed-physical #followmeInstallTopInvite,
+body.followme-pc-install-dismissed-physical #followmeInstallSheetLite {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+</style>
+
+
+<script>
+/* PC DONT ASK PHYSICAL REAL IDS - 2026-05-18 */
+(function(){
+  var KEY = "followme_pc_install_prompt_dismissed_physical_real";
+
+  function isPc(){
+    var ua = navigator.userAgent || "";
+    var mobile = /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua);
+    var coarse = false;
+    try { coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches; } catch(e) {}
+    return !mobile && !coarse;
+  }
+
+  function isDismissed(){
+    try { return localStorage.getItem(KEY) === "1"; } catch(e) { return false; }
+  }
+
+  function hideInstallPrompt(){
+    if (!isPc()) return;
+
+    if (document.body) {
+      document.body.classList.add("followme-pc-install-dismissed-physical");
+    }
+
+    var invite = document.getElementById("followmeInstallTopInvite");
+    var sheet = document.getElementById("followmeInstallSheetLite");
+
+    [invite, sheet].forEach(function(el){
+      if (!el) return;
+      el.classList.remove("show");
+      el.style.setProperty("display", "none", "important");
+      el.style.setProperty("visibility", "hidden", "important");
+      el.setAttribute("aria-hidden", "true");
+    });
+  }
+
+  function bindPcDontAsk(){
+    if (!isPc()) return;
+
+    if (isDismissed()) {
+      hideInstallPrompt();
+    }
+
+    ["pcDontAskInstallPhysicalBtn", "pcDontAskInstallPhysicalSheetBtn"].forEach(function(id){
+      var btn = document.getElementById(id);
+      if (!btn || btn.dataset.boundPcDontAsk === "1") return;
+
+      btn.dataset.boundPcDontAsk = "1";
+      btn.addEventListener("click", function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        try { localStorage.setItem(KEY, "1"); } catch(err) {}
+        hideInstallPrompt();
+      });
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", bindPcDontAsk, true);
+  window.addEventListener("load", bindPcDontAsk, true);
+  window.addEventListener("pageshow", bindPcDontAsk, true);
+
+  setTimeout(bindPcDontAsk, 300);
+  setTimeout(bindPcDontAsk, 1000);
+  setTimeout(bindPcDontAsk, 2500);
+
+  window.followMePcInstallPromptDismissed = function(){
+    return isPc() && isDismissed();
+  };
+})();
+</script>
+
 </head>
 <body>
   <main class="app">
@@ -5982,6 +6080,7 @@ body.followme-pc-install-dismissed-v2 #followmeInstallSheetLite {
       <span>Prima salvi l’App, poi attivi le notifiche.</span>
     </div>
     <button type="button" id="followmeInstallTopBtn">Salva l’App</button>
+    <button type="button" id="pcDontAskInstallPhysicalBtn" class="pc-dont-ask-install-btn">Solo per PC: non richiedermelo più</button>
   </div>
 
   <div class="followme-install-sheet-lite" id="followmeInstallSheetLite" aria-hidden="true">
@@ -6016,6 +6115,7 @@ body.followme-pc-install-dismissed-v2 #followmeInstallSheetLite {
       <div class="followme-install-sheet-actions">
         <button class="followme-install-sheet-ok" type="button" id="followmeInstallSheetOk">Ho capito</button>
         <button class="followme-install-sheet-close" type="button" id="followmeInstallSheetClose">Chiudi</button>
+        <button type="button" id="pcDontAskInstallPhysicalSheetBtn" class="pc-dont-ask-install-btn">Solo per PC: non richiedermelo più</button>
       </div>
     </div>
   </div>
@@ -9445,6 +9545,7 @@ document.addEventListener("visibilitychange", function(){
   }
 
   function showInstallInviteIfNeeded(){
+    if (window.followMePcInstallPromptDismissed && window.followMePcInstallPromptDismissed()) return;
     var invite = document.getElementById("followmeInstallTopInvite");
     if(!invite) return;
 
@@ -9456,6 +9557,7 @@ document.addEventListener("visibilitychange", function(){
   }
 
   function openInstallSheet(){
+    if (window.followMePcInstallPromptDismissed && window.followMePcInstallPromptDismissed()) return;
     var sheet = document.getElementById("followmeInstallSheetLite");
     if(sheet){
       sheet.classList.add("show");
