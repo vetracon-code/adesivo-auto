@@ -1840,6 +1840,134 @@
 })();
 </script>
 
+
+
+<script id="followme-public-stale-session-recovery-20260518">
+(function(){
+  if(window.__followMePublicStaleSessionRecovery20260518) return;
+  window.__followMePublicStaleSessionRecovery20260518 = true;
+
+  function cleanSid(v){
+    const s = String(v || "").trim();
+    return /^\d+$/.test(s) ? s : "";
+  }
+
+  function clearStoredSid(){
+    try{ window.followMeChatSessionId = ""; }catch(e){}
+    try{ window.FOLLOWME_CHAT_SESSION_ID = ""; }catch(e){}
+    try{ sessionStorage.removeItem("followme_chat_session_id"); }catch(e){}
+    try{ localStorage.removeItem("followme_chat_session_id"); }catch(e){}
+  }
+
+  function saveSid(v){
+    const sid = cleanSid(v);
+    if(!sid) return "";
+
+    try{ window.followMeChatSessionId = sid; }catch(e){}
+    try{ window.FOLLOWME_CHAT_SESSION_ID = sid; }catch(e){}
+    try{ sessionStorage.setItem("followme_chat_session_id", sid); }catch(e){}
+    try{ localStorage.setItem("followme_chat_session_id", sid); }catch(e){}
+
+    return sid;
+  }
+
+  function getSid(){
+    try{
+      const q = new URLSearchParams(location.search || "");
+      const fromUrl = cleanSid(q.get("session") || q.get("chatSession"));
+      if(fromUrl) return saveSid(fromUrl);
+    }catch(e){}
+
+    const candidates = [window.followMeChatSessionId, window.FOLLOWME_CHAT_SESSION_ID];
+
+    try{ candidates.push(sessionStorage.getItem("followme_chat_session_id")); }catch(e){}
+    try{ candidates.push(localStorage.getItem("followme_chat_session_id")); }catch(e){}
+
+    for(const c of candidates){
+      const sid = cleanSid(c);
+      if(sid) return saveSid(sid);
+    }
+
+    return "";
+  }
+
+  async function recoverOpenSession(){
+    try{
+      const res = await fetch("/api/followme/FM-DEMO/chat/sessions?v=" + Date.now(), { cache:"no-store" });
+      const data = await res.json().catch(()=>null);
+
+      if(!res.ok || !data || !data.success) return "";
+
+      const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+      const open = sessions.filter(s => s && s.status === "open");
+      const chosen = open[0] || sessions[0];
+
+      if(chosen && chosen.id){
+        return saveSid(chosen.id);
+      }
+    }catch(e){}
+
+    return "";
+  }
+
+  async function verifySid(){
+    let sid = getSid();
+
+    if(!sid){
+      sid = await recoverOpenSession();
+    }
+
+    if(!sid) return;
+
+    try{
+      const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/state?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data = await res.json().catch(()=>null);
+
+      if(res.status === 404 || !data || data.success === false){
+        clearStoredSid();
+        const fresh = await recoverOpenSession();
+
+        if(fresh && typeof window.fmPublicForceFetchState20260518 === "function"){
+          setTimeout(window.fmPublicForceFetchState20260518, 80);
+          setTimeout(window.fmPublicForceFetchState20260518, 500);
+        }
+        return;
+      }
+
+      if(data && data.session && data.session.id){
+        saveSid(data.session.id);
+      }
+
+      if(typeof window.fmPublicForceFetchState20260518 === "function"){
+        setTimeout(window.fmPublicForceFetchState20260518, 80);
+      }
+    }catch(e){}
+  }
+
+  window.fmRecoverFollowMePublicSession = verifySid;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", verifySid);
+  }else{
+    verifySid();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(verifySid, 250);
+    setTimeout(verifySid, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(verifySid, 250);
+  });
+
+  setInterval(verifySid, 4000);
+})();
+</script>
+
 </body>
 </html>
 

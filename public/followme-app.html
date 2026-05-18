@@ -18245,5 +18245,274 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-admin-active-session-hard-fix-20260518">
+(function(){
+  if(window.__followMeAdminActiveSessionHardFix20260518) return;
+  window.__followMeAdminActiveSessionHardFix20260518 = true;
+
+  let currentSessions = [];
+  let currentSessionId = "";
+
+  function toastMsg(msg){
+    try{
+      if(typeof toast === "function") toast(msg);
+      else alert(msg);
+    }catch(e){
+      alert(msg);
+    }
+  }
+
+  function code(){
+    try{
+      if(typeof getCode === "function") return getCode();
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+      const q = new URLSearchParams(location.search || "");
+      return String(q.get("code") || "FM-DEMO").trim().toUpperCase();
+    }catch(e){
+      return "FM-DEMO";
+    }
+  }
+
+  function cleanSid(v){
+    const s = String(v || "").trim();
+    return /^\d+$/.test(s) ? s : "";
+  }
+
+  function activeChipSid(){
+    const chip =
+      document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active") ||
+      document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip");
+
+    if(!chip) return "";
+
+    return cleanSid(
+      chip.dataset.sessionId ||
+      chip.dataset.session ||
+      chip.dataset.id ||
+      chip.getAttribute("data-session-id") ||
+      chip.getAttribute("data-session") ||
+      chip.getAttribute("data-id") ||
+      ""
+    );
+  }
+
+  async function fetchSessions(){
+    const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    const data = await res.json().catch(()=>null);
+    if(!res.ok || !data || !data.success) return [];
+
+    currentSessions = Array.isArray(data.sessions) ? data.sessions : [];
+
+    // Aggancia gli id reali alle chip visibili
+    const chips = Array.from(document.querySelectorAll("#followmeOwnerChatSessionStrip .followme-chat-session-chip"));
+    chips.forEach(function(chip, i){
+      const row = currentSessions[i];
+      if(row && row.id){
+        chip.dataset.sessionId = String(row.id);
+        chip.dataset.id = String(row.id);
+        chip.classList.toggle("fm-blocked", !!row.is_blocked);
+        chip.classList.toggle("fm-extra", !!row.uploads_enabled);
+      }
+    });
+
+    const active = activeChipSid();
+    const existsActive = currentSessions.some(s => String(s.id) === String(active));
+
+    if(existsActive){
+      currentSessionId = active;
+    }else if(currentSessions.length){
+      currentSessionId = String(currentSessions[0].id);
+    }else{
+      currentSessionId = "";
+    }
+
+    return currentSessions;
+  }
+
+  async function getLiveSession(){
+    await fetchSessions();
+
+    let sid = cleanSid(activeChipSid()) || cleanSid(currentSessionId);
+
+    if(!sid && currentSessions[0]) sid = String(currentSessions[0].id);
+
+    if(!sid) return null;
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/state?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      // Se la sessione è sparita, ricarico lista e prendo la prima open attuale.
+      await fetchSessions();
+      sid = currentSessions[0] ? String(currentSessions[0].id) : "";
+
+      if(!sid) return null;
+
+      const res2 = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/state?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data2 = await res2.json().catch(()=>null);
+      if(!res2.ok || !data2 || !data2.success) return null;
+
+      currentSessionId = sid;
+      return data2.session;
+    }
+
+    currentSessionId = sid;
+    return data.session;
+  }
+
+  async function setControl(payload){
+    const session = await getLiveSession();
+
+    if(!session || !session.id){
+      toastMsg("Nessuna sessione utente attiva.");
+      return null;
+    }
+
+    const sid = String(session.id);
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/set-user-control", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(payload)
+    });
+
+    const data = await res.json().catch(()=>null);
+
+    if(!res.ok || !data || !data.success){
+      toastMsg((data && data.error) || "Errore aggiornamento utente.");
+      return null;
+    }
+
+    await fetchSessions();
+
+    if(Object.prototype.hasOwnProperty.call(payload, "uploads_enabled")){
+      toastMsg(data.session.uploads_enabled ? "Extra abilitati." : "Extra disabilitati.");
+    }
+
+    if(Object.prototype.hasOwnProperty.call(payload, "is_blocked")){
+      toastMsg(data.session.is_blocked ? "Utente bloccato." : "Utente sbloccato.");
+    }
+
+    try{
+      const extra = document.getElementById("fmLiveExtraBtn20260518");
+      const block = document.getElementById("fmLiveBlockBtn20260518");
+      const pill = document.getElementById("fmLiveStatusPill20260518");
+
+      if(extra){
+        extra.textContent = data.session.uploads_enabled ? "Extra OFF" : "Extra ON";
+        extra.className = data.session.uploads_enabled ? "warn" : "ok";
+      }
+
+      if(block){
+        block.textContent = data.session.is_blocked ? "Sblocca" : "Blocca";
+        block.className = data.session.is_blocked ? "blocked" : "danger";
+      }
+
+      if(pill){
+        pill.textContent = data.session.is_blocked ? "BLOCCATO" : (data.session.uploads_enabled ? "EXTRA" : (data.session.display_name || data.session.visitor_label || "UTENTE"));
+        pill.className = "fm-status-pill " + (data.session.is_blocked ? "danger" : (data.session.uploads_enabled ? "warn" : "ok"));
+      }
+    }catch(e){}
+
+    return data.session;
+  }
+
+  function bindHardButtons(){
+    const extra = document.getElementById("fmLiveExtraBtn20260518");
+    const block = document.getElementById("fmLiveBlockBtn20260518");
+
+    if(extra && extra.dataset.hardFixBound !== "1"){
+      extra.dataset.hardFixBound = "1";
+      extra.addEventListener("click", async function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+
+        const live = await getLiveSession();
+        if(!live) return toastMsg("Nessuna sessione utente attiva.");
+
+        await setControl({ uploads_enabled: !live.uploads_enabled });
+      }, true);
+    }
+
+    if(block && block.dataset.hardFixBound !== "1"){
+      block.dataset.hardFixBound = "1";
+      block.addEventListener("click", async function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+
+        const live = await getLiveSession();
+        if(!live) return toastMsg("Nessuna sessione utente attiva.");
+
+        await setControl({ is_blocked: !live.is_blocked });
+      }, true);
+    }
+  }
+
+  function bindChips(){
+    const strip = document.getElementById("followmeOwnerChatSessionStrip");
+    if(!strip || strip.dataset.hardSessionFixBound === "1") return;
+
+    strip.dataset.hardSessionFixBound = "1";
+
+    strip.addEventListener("click", function(ev){
+      const chip = ev.target && ev.target.closest ? ev.target.closest(".followme-chat-session-chip") : null;
+      if(!chip) return;
+
+      const sid = cleanSid(chip.dataset.sessionId || chip.dataset.id || chip.getAttribute("data-session-id") || "");
+      if(sid) currentSessionId = sid;
+
+      setTimeout(fetchSessions, 80);
+    }, true);
+  }
+
+  function boot(){
+    bindHardButtons();
+    bindChips();
+    fetchSessions();
+
+    setTimeout(bindHardButtons, 300);
+    setTimeout(bindChips, 400);
+    setTimeout(fetchSessions, 800);
+    setTimeout(fetchSessions, 1800);
+  }
+
+  window.fmHardFollowMeCurrentSession = function(){
+    return { currentSessionId, currentSessions };
+  };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 300);
+    setTimeout(fetchSessions, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 300);
+    setTimeout(fetchSessions, 900);
+  });
+
+  setInterval(fetchSessions, 3500);
+})();
+</script>
+
 </body>
 </html>
