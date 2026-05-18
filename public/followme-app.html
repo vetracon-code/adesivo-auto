@@ -17001,5 +17001,306 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+<style id="followme-desktop-entry-colors-install-fix-final">
+@media (min-width: 900px){
+
+  /* Ripristino: la pagina principale NON deve essere schiarita dalla modalità desktop */
+  body:not(.followme-desktop-chat-active):not(.followme-chat-only-mode){
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    height:auto !important;
+    min-height:100vh !important;
+  }
+
+  body:not(.followme-desktop-chat-active):not(.followme-chat-only-mode) main,
+  body:not(.followme-desktop-chat-active):not(.followme-chat-only-mode) .app,
+  body:not(.followme-desktop-chat-active):not(.followme-chat-only-mode) .wrap,
+  body:not(.followme-desktop-chat-active):not(.followme-chat-only-mode) .container,
+  body:not(.followme-desktop-chat-active):not(.followme-chat-only-mode) section,
+  body:not(.followme-desktop-chat-active):not(.followme-chat-only-mode) article{
+    height:auto !important;
+    min-height:initial !important;
+    max-height:none !important;
+    width:auto !important;
+    min-width:0 !important;
+    max-width:initial !important;
+    overflow:visible !important;
+  }
+
+  /* La modalità desktop full page deve valere solo nella chat attiva */
+  body.followme-desktop-chat-active{
+    width:100vw !important;
+    height:100vh !important;
+    overflow:hidden !important;
+    background:#efe7db !important;
+  }
+
+  body.followme-desktop-chat-active #followmeOwnerChatScreen::before{
+    content:"FollowMe QR";
+    position:fixed !important;
+    left:24px !important;
+    top:20px !important;
+    z-index:1000001 !important;
+    color:#2f3437 !important;
+    font-size:13px !important;
+    line-height:1 !important;
+    font-weight:950 !important;
+    letter-spacing:.06em !important;
+    text-transform:none !important;
+    white-space:nowrap !important;
+    width:auto !important;
+    height:auto !important;
+    transform:none !important;
+    opacity:.78 !important;
+    pointer-events:none !important;
+  }
+
+  body.followme-desktop-chat-active .followme-owner-chat-topbar,
+  body.followme-desktop-chat-active #followmeOwnerChatTopbar{
+    padding-left:145px !important;
+  }
+
+  /* Se il logo testuale dà fastidio in alcune larghezze, lo nascondiamo sotto 1050px */
+  @media (max-width: 1050px){
+    body.followme-desktop-chat-active #followmeOwnerChatScreen::before{
+      display:none !important;
+    }
+
+    body.followme-desktop-chat-active .followme-owner-chat-topbar,
+    body.followme-desktop-chat-active #followmeOwnerChatTopbar{
+      padding-left:24px !important;
+    }
+  }
+
+  /* Il prompt installazione non deve sovrapporsi alla chat desktop */
+  body.followme-desktop-chat-active .followme-install-helper,
+  body.followme-desktop-chat-active #followmeInstallHelper,
+  body.followme-desktop-chat-active #followmeInstallPrompt,
+  body.followme-desktop-chat-active .followme-pwa-install,
+  body.followme-desktop-chat-active .followme-save-app-helper{
+    display:none !important;
+  }
+}
+</style>
+
+
+<script id="followme-desktop-entry-install-fix-final">
+(function(){
+  const INSTALL_DISMISS_KEY = "followme_install_instructions_dismissed_v1";
+  const INSTALL_REMIND_LATER_KEY = "followme_install_instructions_later_v1";
+
+  function isDesktop(){
+    return window.matchMedia && window.matchMedia("(min-width: 900px)").matches;
+  }
+
+  function code(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+
+      if(typeof getCode === "function"){
+        const c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+
+    return "FM-DEMO";
+  }
+
+  function params(){
+    try{
+      return new URLSearchParams(location.search || "");
+    }catch(e){
+      return new URLSearchParams("");
+    }
+  }
+
+  function hasChatSession(){
+    return params().has("chatSession");
+  }
+
+  function hasWaitingFlag(){
+    const p = params();
+    return p.has("chatWaiting") || p.get("focus") === "chat-waiting";
+  }
+
+  function applyDesktopClass(){
+    const active = isDesktop() && hasChatSession() && !!document.getElementById("followmeOwnerChatScreen");
+
+    document.body.classList.toggle("followme-desktop-chat-active", active);
+
+    if(active){
+      document.body.classList.add("followme-chat-only-mode");
+    }
+  }
+
+  async function fetchSessions(){
+    try{
+      const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data = await res.json().catch(()=>null);
+
+      if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)){
+        return [];
+      }
+
+      return data.sessions.slice().sort(function(a,b){
+        const ad = new Date(a.last_seen_at || a.created_at || 0).getTime();
+        const bd = new Date(b.last_seen_at || b.created_at || 0).getTime();
+        return bd - ad;
+      });
+    }catch(e){
+      return [];
+    }
+  }
+
+  async function autoOpenLatestDesktopChat(){
+    if(!isDesktop()) return;
+    if(hasChatSession()) return;
+    if(hasWaitingFlag()) return;
+
+    /*
+      Se entro dal solito link /fm/app/FMDEMO da PC e ci sono chat attive,
+      apro automaticamente la più recente in modalità desktop.
+      Così non serve il link manuale con ?chatSession=...
+    */
+    const sessions = await fetchSessions();
+
+    if(!sessions.length) return;
+
+    const latest = sessions[0];
+
+    if(!latest || !latest.id) return;
+
+    const url =
+      "/fm/app/" + encodeURIComponent(code()) +
+      "?chatSession=" + encodeURIComponent(latest.id) +
+      "&focus=chat&desktop=1";
+
+    window.location.replace(url);
+  }
+
+  function hideInstallInstructionsIfDismissed(){
+    let dismissed = false;
+
+    try{
+      dismissed =
+        localStorage.getItem(INSTALL_DISMISS_KEY) === "1" ||
+        localStorage.getItem(INSTALL_REMIND_LATER_KEY) === "1";
+    }catch(e){}
+
+    if(!dismissed) return;
+
+    const selectors = [
+      ".followme-install-helper",
+      "#followmeInstallHelper",
+      "#followmeInstallPrompt",
+      ".followme-pwa-install",
+      ".followme-save-app-helper",
+      "[data-install-helper]",
+      "[data-pwa-helper]"
+    ];
+
+    selectors.forEach(function(sel){
+      document.querySelectorAll(sel).forEach(function(el){
+        el.style.display = "none";
+        el.setAttribute("aria-hidden", "true");
+      });
+    });
+  }
+
+  function bindInstallDismissButtons(){
+    const possibleTexts = [
+      "chiudi",
+      "lo farò dopo",
+      "lo faro dopo",
+      "più tardi",
+      "piu tardi",
+      "dopo",
+      "non ora"
+    ];
+
+    document.querySelectorAll("button, a").forEach(function(btn){
+      if(btn.dataset.installDismissMemoryBound === "1") return;
+
+      const text = String(btn.textContent || "").trim().toLowerCase();
+
+      if(!possibleTexts.some(function(t){ return text.includes(t); })){
+        return;
+      }
+
+      const nearInstall =
+        btn.closest(".followme-install-helper") ||
+        btn.closest("#followmeInstallHelper") ||
+        btn.closest("#followmeInstallPrompt") ||
+        btn.closest(".followme-pwa-install") ||
+        btn.closest(".followme-save-app-helper") ||
+        btn.closest("[data-install-helper]") ||
+        btn.closest("[data-pwa-helper]");
+
+      if(!nearInstall) return;
+
+      btn.dataset.installDismissMemoryBound = "1";
+
+      btn.addEventListener("click", function(){
+        try{
+          if(text.includes("dopo") || text.includes("tardi") || text.includes("non ora")){
+            localStorage.setItem(INSTALL_REMIND_LATER_KEY, "1");
+          }else{
+            localStorage.setItem(INSTALL_DISMISS_KEY, "1");
+          }
+        }catch(e){}
+
+        setTimeout(hideInstallInstructionsIfDismissed, 80);
+      }, true);
+    });
+  }
+
+  function patchInstallPromptCloseFunctions(){
+    /*
+      Se vecchi script mostrano il prompt via JS, questa guardia lo richiude
+      quando l’utente ha già scelto Chiudi / Lo farò dopo.
+    */
+    hideInstallInstructionsIfDismissed();
+    bindInstallDismissButtons();
+  }
+
+  function boot(){
+    applyDesktopClass();
+    patchInstallPromptCloseFunctions();
+
+    setTimeout(applyDesktopClass, 150);
+    setTimeout(autoOpenLatestDesktopChat, 250);
+    setTimeout(patchInstallPromptCloseFunctions, 500);
+  }
+
+  window.followMeApplyDesktopChatClass = applyDesktopClass;
+  window.followMeDesktopAutoOpenLatestChat = autoOpenLatestDesktopChat;
+  window.followMeHideInstallInstructionsIfDismissed = hideInstallInstructionsIfDismissed;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  window.addEventListener("resize", function(){
+    applyDesktopClass();
+  });
+
+  setInterval(function(){
+    applyDesktopClass();
+    patchInstallPromptCloseFunctions();
+  }, 1000);
+})();
+</script>
+
 </body>
 </html>
