@@ -5284,6 +5284,43 @@
       }
     }
 
+
+    /* Pulsante principale Modalità CHAT */
+    .followme-main-chat-mode-btn{
+      width:100% !important;
+      min-height:48px !important;
+      margin-top:10px !important;
+      border-radius:18px !important;
+      border:1px solid rgba(37,211,102,.24) !important;
+      background:linear-gradient(135deg,#25d366,#128c7e) !important;
+      color:#ffffff !important;
+      font-weight:950 !important;
+      font-size:.96rem !important;
+      letter-spacing:-.02em !important;
+      display:flex !important;
+      align-items:center !important;
+      justify-content:center !important;
+      gap:8px !important;
+      box-shadow:0 10px 24px rgba(18,140,126,.20) !important;
+      cursor:pointer !important;
+      -webkit-tap-highlight-color:transparent !important;
+    }
+
+    .followme-main-chat-mode-btn:active{
+      transform:translateY(1px) !important;
+      filter:brightness(.96) !important;
+    }
+
+    .followme-main-chat-mode-btn .icon{
+      font-size:1.08rem !important;
+      line-height:1 !important;
+    }
+
+    /* Nasconde il vecchio comando Attiva chat nel menu Opzioni */
+    .followme-hide-old-chat-option{
+      display:none !important;
+    }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -16200,6 +16237,138 @@ document.addEventListener("visibilitychange", function(){
   });
 
   setInterval(boot, 500);
+})();
+</script>
+
+
+<script id="followme-main-modalita-chat-button-final">
+(function(){
+  function findImportQrButton(){
+    const candidates = Array.from(document.querySelectorAll("button, a, div[role='button']"));
+
+    return candidates.find(function(el){
+      const txt = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+      return txt.includes("importa") && txt.includes("scansione") && txt.includes("qr");
+    });
+  }
+
+  function findOldActivateChatButton(){
+    const candidates = Array.from(document.querySelectorAll("button, a, div[role='button']"));
+
+    return candidates.find(function(el){
+      const txt = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+      return txt === "attiva chat" || txt.includes("attiva chat");
+    });
+  }
+
+  function triggerChatMode(){
+    const old = findOldActivateChatButton();
+
+    if(old){
+      old.click();
+      return;
+    }
+
+    if(typeof window.followMeActivateChatMode === "function"){
+      window.followMeActivateChatMode();
+      return;
+    }
+
+    if(typeof window.followMeOpenOwnerChat === "function"){
+      window.followMeOpenOwnerChat();
+      return;
+    }
+
+    if(typeof window.openFollowMeChat === "function"){
+      window.openFollowMeChat();
+      return;
+    }
+
+    alert("Funzione chat non trovata. Verifica che il comando Attiva chat sia ancora presente nel codice.");
+  }
+
+  function createButton(){
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "followmeMainModalitaChatBtn";
+    btn.className = "followme-main-chat-mode-btn";
+    btn.innerHTML = '<span class="icon">💬</span><span>Modalità CHAT</span>';
+
+    btn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      triggerChatMode();
+    });
+
+    return btn;
+  }
+
+  function insertMainButton(){
+    if(document.getElementById("followmeMainModalitaChatBtn")) return;
+
+    const importBtn = findImportQrButton();
+    if(!importBtn) return;
+
+    const btn = createButton();
+
+    const parent = importBtn.parentElement;
+    if(!parent) return;
+
+    /*
+      Inserisce subito sotto Importa con Scansione QR.
+      Se il bottone è dentro un wrapper, lo mette dopo il wrapper.
+    */
+    const wrapper =
+      importBtn.closest(".followme-action-row") ||
+      importBtn.closest(".followme-option-row") ||
+      importBtn.closest(".followme-card-action") ||
+      importBtn.closest("li") ||
+      importBtn;
+
+    if(wrapper.parentElement){
+      wrapper.parentElement.insertBefore(btn, wrapper.nextSibling);
+    }else{
+      parent.insertBefore(btn, importBtn.nextSibling);
+    }
+  }
+
+  function hideOldActivateChatInOptions(){
+    const old = findOldActivateChatButton();
+    if(!old) return;
+
+    /*
+      Non lo elimino dal DOM, perché il nuovo pulsante lo usa come funzione.
+      Lo nascondo soltanto.
+    */
+    const row =
+      old.closest(".followme-option-row") ||
+      old.closest(".followme-action-row") ||
+      old.closest(".followme-menu-item") ||
+      old.closest("li") ||
+      old;
+
+    row.classList.add("followme-hide-old-chat-option");
+    row.setAttribute("aria-hidden","true");
+  }
+
+  function boot(){
+    insertMainButton();
+    hideOldActivateChatInOptions();
+  }
+
+  window.followMeInsertMainModalitaChatButton = boot;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(boot, 1200);
 })();
 </script>
 
