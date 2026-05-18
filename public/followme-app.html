@@ -17774,19 +17774,12 @@ document.addEventListener("visibilitychange", function(){
 
 
 
-<script id="followme-reload-data-under-more-options-20260518">
-(function(){
-  if(window.__followMeReloadDataUnderMoreOptions20260518) return;
-  window.__followMeReloadDataUnderMoreOptions20260518 = true;
 
-  function toastMsg(msg){
-    try{
-      if(typeof toast === "function") toast(msg);
-      else alert(msg);
-    }catch(e){
-      alert(msg);
-    }
-  }
+
+<script id="followme-reload-data-under-more-options-clean-20260518">
+(function(){
+  if(window.__followMeReloadDataUnderMoreOptionsClean20260518) return;
+  window.__followMeReloadDataUnderMoreOptionsClean20260518 = true;
 
   function isChatMode(){
     return document.body.classList.contains("followme-chat-only-mode") ||
@@ -17807,7 +17800,6 @@ document.addEventListener("visibilitychange", function(){
   function findMoreOptionsAnchor(){
     const candidates = Array.from(document.querySelectorAll("button, a, div, section"));
 
-    // Cerca il pulsante/frame "Altre opzioni"
     let el = candidates.find(function(x){
       const t = normalizeText(x);
       return t === "altre opzioni" || t.includes("altre opzioni");
@@ -17815,8 +17807,8 @@ document.addEventListener("visibilitychange", function(){
 
     if(!el) return null;
 
-    // Risale a un contenitore sensato, non troppo grande.
     let box = el;
+
     for(let i = 0; i < 5; i++){
       if(!box.parentElement) break;
 
@@ -17840,16 +17832,7 @@ document.addEventListener("visibilitychange", function(){
     return box || el;
   }
 
-  async function runReloadData(){
-    const btn = document.getElementById("followmeReloadDataBtn20260518");
-
-    if(btn){
-      btn.disabled = true;
-      btn.textContent = "Ricarico...";
-    }
-
-    toastMsg("Ricarico i dati...");
-
+  async function runKnownFunctions(){
     const calls = [
       "renderPremiumHistoryFromApi",
       "renderPremiumHistory",
@@ -17859,42 +17842,73 @@ document.addEventListener("visibilitychange", function(){
       "fmPublicFetchUserState"
     ];
 
-    async function runKnownFunctions(){
-      for(const name of calls){
-        try{
-          if(typeof window[name] === "function"){
-            await window[name]();
-          }
-        }catch(e){
-          console.warn("Errore refresh dati:", name, e);
-        }
-      }
-
+    for(const name of calls){
       try{
-        if(typeof updateSimpleDestinationPreview === "function" && window.__followMeActiveUrl){
-          updateSimpleDestinationPreview(window.__followMeActiveUrl);
+        if(typeof window[name] === "function"){
+          await window[name]();
         }
-      }catch(e){}
+      }catch(e){
+        console.warn("Errore refresh dati:", name, e);
+      }
     }
 
-    await runKnownFunctions();
-    setTimeout(runKnownFunctions, 700);
-    setTimeout(runKnownFunctions, 1800);
+    try{
+      if(typeof updateSimpleDestinationPreview === "function" && window.__followMeActiveUrl){
+        updateSimpleDestinationPreview(window.__followMeActiveUrl);
+      }
+    }catch(e){}
+  }
+
+  async function runReloadData(){
+    const btn = document.getElementById("followmeReloadDataBtn20260518");
+    const steps = [
+      document.getElementById("followmeReloadStep1"),
+      document.getElementById("followmeReloadStep2"),
+      document.getElementById("followmeReloadStep3")
+    ].filter(Boolean);
+
+    if(btn) btn.disabled = true;
+
+    steps.forEach(function(step){
+      step.classList.remove("active", "done");
+    });
+
+    async function doStep(index, delay){
+      setTimeout(async function(){
+        const step = steps[index];
+        if(step) step.classList.add("active");
+
+        await runKnownFunctions();
+
+        setTimeout(function(){
+          if(step){
+            step.classList.remove("active");
+            step.classList.add("done");
+          }
+        }, 260);
+      }, delay);
+    }
+
+    await doStep(0, 0);
+    await doStep(1, 700);
+    await doStep(2, 1600);
 
     setTimeout(function(){
-      if(btn){
-        btn.disabled = false;
-        btn.textContent = "Ricarica dati";
-      }
-      toastMsg("Dati aggiornati.");
+      if(btn) btn.disabled = false;
+
+      setTimeout(function(){
+        steps.forEach(function(step){
+          step.classList.remove("active", "done");
+        });
+      }, 900);
     }, 2200);
   }
 
   function injectCss(){
-    if(document.getElementById("followmeReloadDataUnderMoreOptionsCss20260518")) return;
+    if(document.getElementById("followmeReloadDataCleanCss20260518")) return;
 
     const style = document.createElement("style");
-    style.id = "followmeReloadDataUnderMoreOptionsCss20260518";
+    style.id = "followmeReloadDataCleanCss20260518";
     style.textContent = `
       #followmeReloadDataBox20260518{
         width:100%;
@@ -17907,11 +17921,11 @@ document.addEventListener("visibilitychange", function(){
         width:100%;
         box-sizing:border-box;
         border-radius:22px;
-        border:1px solid rgba(255,255,255,.16);
-        background:rgba(255,255,255,.08);
+        border:1px solid rgba(255,255,255,.14);
+        background:rgba(255,255,255,.07);
         backdrop-filter:blur(14px);
         -webkit-backdrop-filter:blur(14px);
-        box-shadow:0 14px 34px rgba(0,0,0,.18);
+        box-shadow:0 14px 34px rgba(0,0,0,.16);
         padding:12px;
         display:flex;
         align-items:center;
@@ -17919,39 +17933,68 @@ document.addEventListener("visibilitychange", function(){
         gap:12px;
       }
 
-      #followmeReloadDataText20260518{
-        display:flex;
-        flex-direction:column;
-        gap:2px;
-        min-width:0;
-      }
-
-      #followmeReloadDataText20260518 strong{
-        font-size:.86rem;
-        line-height:1.12;
+      #followmeReloadDataTitle20260518{
+        font-size:.9rem;
+        line-height:1.1;
         color:inherit;
         font-weight:950;
+        white-space:nowrap;
       }
 
-      #followmeReloadDataText20260518 span{
+      #followmeReloadDataRight20260518{
+        display:flex;
+        align-items:center;
+        gap:10px;
+      }
+
+      #followmeReloadSteps20260518{
+        display:flex;
+        align-items:center;
+        gap:5px;
+      }
+
+      #followmeReloadSteps20260518 span{
+        width:24px;
+        height:24px;
+        border-radius:999px;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
         font-size:.72rem;
-        line-height:1.18;
-        color:rgba(255,255,255,.68);
-        font-weight:750;
+        font-weight:950;
+        color:rgba(255,255,255,.72);
+        background:rgba(255,255,255,.10);
+        border:1px solid rgba(255,255,255,.12);
+        transition:all .18s ease;
+      }
+
+      #followmeReloadSteps20260518 span.active{
+        color:#202629;
+        background:#ffffff;
+        transform:scale(1.08);
+      }
+
+      #followmeReloadSteps20260518 span.done{
+        color:#ffffff;
+        background:rgba(37,211,102,.78);
+        border-color:rgba(37,211,102,.88);
       }
 
       #followmeReloadDataBtn20260518{
-        flex:0 0 auto;
-        min-height:38px;
-        padding:0 14px;
+        width:34px;
+        height:34px;
         border-radius:999px;
         border:1px solid rgba(255,255,255,.18);
         background:#ffffff;
         color:#202629;
-        font-size:.78rem;
+        font-size:1rem;
         font-weight:950;
         box-shadow:0 8px 22px rgba(0,0,0,.14);
         cursor:pointer;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        padding:0;
       }
 
       #followmeReloadDataBtn20260518:disabled{
@@ -17970,18 +18013,20 @@ document.addEventListener("visibilitychange", function(){
           padding:11px;
         }
 
-        #followmeReloadDataText20260518 strong{
-          font-size:.82rem;
+        #followmeReloadDataTitle20260518{
+          font-size:.86rem;
         }
 
-        #followmeReloadDataText20260518 span{
+        #followmeReloadSteps20260518 span{
+          width:23px;
+          height:23px;
           font-size:.68rem;
         }
 
         #followmeReloadDataBtn20260518{
-          min-height:36px;
-          padding:0 12px;
-          font-size:.74rem;
+          width:32px;
+          height:32px;
+          font-size:.95rem;
         }
       }
     `;
@@ -18000,11 +18045,15 @@ document.addEventListener("visibilitychange", function(){
       box.id = "followmeReloadDataBox20260518";
       box.innerHTML = `
         <div id="followmeReloadDataFrame20260518">
-          <div id="followmeReloadDataText20260518">
-            <strong>Ricarica dati</strong>
-            <span>Aggiorna subito stato, destinazione e notifiche.</span>
+          <strong id="followmeReloadDataTitle20260518">Ricarica dati</strong>
+          <div id="followmeReloadDataRight20260518">
+            <div id="followmeReloadSteps20260518" aria-label="Stato aggiornamento">
+              <span id="followmeReloadStep1">1</span>
+              <span id="followmeReloadStep2">2</span>
+              <span id="followmeReloadStep3">3</span>
+            </div>
+            <button type="button" id="followmeReloadDataBtn20260518" aria-label="Ricarica dati">↻</button>
           </div>
-          <button type="button" id="followmeReloadDataBtn20260518">Ricarica dati</button>
         </div>
       `;
     }
@@ -18016,7 +18065,6 @@ document.addEventListener("visibilitychange", function(){
         anchor.parentNode.insertBefore(box, anchor.nextSibling);
       }
     }else{
-      // Fallback: fondo pagina, ma solo se non trova "Altre opzioni".
       document.body.appendChild(box);
     }
 
@@ -18025,6 +18073,7 @@ document.addEventListener("visibilitychange", function(){
       btn.dataset.reloadBound = "1";
       btn.addEventListener("click", function(ev){
         ev.preventDefault();
+        ev.stopPropagation();
         runReloadData();
       });
     }
