@@ -3058,15 +3058,24 @@
 
 
 
-<script id="followme-public-audio-multiple-send-fix-20260519">
-(function(){
-  if(window.__FollowMePublicAudioMultipleSendFix20260519) return;
-  window.__FollowMePublicAudioMultipleSendFix20260519 = true;
 
-  let activeUpload = false;
-  let activeUploadStartedAt = 0;
-  let lastAcceptedUploadKey = "";
-  let lastAcceptedUploadAt = 0;
+
+<script id="followme-public-audio-success-only-final-20260519">
+(function(){
+  if(window.__FollowMePublicAudioSuccessOnlyFinal20260519) return;
+  window.__FollowMePublicAudioSuccessOnlyFinal20260519 = true;
+
+  let uploadBusy = false;
+  let lastClickAt = 0;
+
+  function findSendAudio(){
+    return document.getElementById("fmPublicAudioSend20260519");
+  }
+
+  function setStatus(msg){
+    const el = document.getElementById("fmPublicAudioStatus20260519");
+    if(el) el.textContent = msg;
+  }
 
   function isAudioAttachmentUrl(url){
     return url &&
@@ -3091,7 +3100,6 @@
   function isAudioUpload(init){
     try{
       const h = init && init.headers ? init.headers : {};
-
       const kind = headerValue(h, "X-FollowMe-Kind");
       const contentType = headerValue(h, "Content-Type");
 
@@ -3102,177 +3110,171 @@
     }
   }
 
-  async function bodyKey(body){
+  function parseAttachmentMessage(message){
     try{
-      if(!body) return "";
-
-      let buffer = null;
-
-      if(body instanceof ArrayBuffer){
-        buffer = body;
-      }else if(body && typeof body.arrayBuffer === "function"){
-        buffer = await body.arrayBuffer();
-      }
-
-      if(!buffer) return "";
-
-      const bytes = new Uint8Array(buffer);
-      const size = bytes.length;
-
-      let head = "";
-      const max = Math.min(size, 24);
-
-      for(let i = 0; i < max; i++){
-        head += bytes[i].toString(16).padStart(2, "0");
-      }
-
-      return size + ":" + head;
-    }catch(e){
-      return String(Date.now());
-    }
+      const obj = typeof message === "string" ? JSON.parse(message) : message;
+      if(obj && obj.__followme_attachment) return obj;
+    }catch(e){}
+    return null;
   }
 
-  function hardResetBusyIfStale(){
-    if(activeUpload && Date.now() - activeUploadStartedAt > 15000){
-      activeUpload = false;
-      activeUploadStartedAt = 0;
-    }
+  function attachmentKey(a){
+    if(!a) return "";
+    return [
+      a.url || "",
+      a.filename || "",
+      a.label || "",
+      a.mime || "",
+      a.kind || "",
+      a.created_at || ""
+    ].join("|");
   }
 
-  if(!window.__fmAudioMultipleOriginalFetch20260519){
-    window.__fmAudioMultipleOriginalFetch20260519 = window.fetch.bind(window);
+  function removeLocalGhostAudio(){
+    /*
+      Elimina solo eventuali audio locali non legati a messaggio server.
+      Lascia intatti i messaggi con data-message-id o già caricati dal server.
+    */
+    document.querySelectorAll(".followme-public-bubble, .message, .bubble").forEach(function(el){
+      const html = el.innerHTML || "";
+      const txt = el.textContent || "";
+
+      const isAudio =
+        html.includes("<audio") ||
+        html.includes("followme-attachment-audio") ||
+        txt.includes('"kind":"audio"') ||
+        txt.includes('"kind": "audio"');
+
+      if(!isAudio) return;
+
+      const hasServerId =
+        el.hasAttribute("data-message-id") ||
+        el.dataset.messageId ||
+        el.dataset.serverMessageId;
+
+      const isLocal =
+        !hasServerId &&
+        (
+          el.classList.contains("followme-public-bubble") ||
+          el.dataset.fmLocalAttachment === "1" ||
+          el.dataset.fmAttachmentRendered === "1"
+        );
+
+      if(isLocal){
+        el.remove();
+      }
+    });
+  }
+
+  function renderAll(){
+    try{
+      if(typeof window.fmPublicRenderAllAttachments20260519 === "function"){
+        window.fmPublicRenderAllAttachments20260519();
+      }
+    }catch(e){}
+
+    try{
+      if(typeof window.followMePublicLoadMessages === "function"){
+        window.followMePublicLoadMessages();
+      }
+    }catch(e){}
+
+    try{
+      if(typeof window.loadMessages === "function"){
+        window.loadMessages();
+      }
+    }catch(e){}
+  }
+
+  /*
+    La cosa importante:
+    intercettiamo SOLO la risposta audio.
+    Se success:true, lasciamo che sia il reload messaggi a mostrarlo.
+    Se errore, rimuoviamo qualsiasi bolla locale.
+  */
+  if(!window.__fmAudioSuccessOnlyOriginalFetch20260519){
+    window.__fmAudioSuccessOnlyOriginalFetch20260519 = window.fetch.bind(window);
   }
 
   window.fetch = async function(input, init){
     const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
 
     if(isAudioAttachmentUrl(url) && isAudioUpload(init)){
-      hardResetBusyIfStale();
+      if(uploadBusy){
+        return new Response(JSON.stringify({
+          success:false,
+          error:"Invio audio già in corso."
+        }), {
+          status:409,
+          headers:{ "Content-Type":"application/json" }
+        });
+      }
 
-      const key = await bodyKey(init && init.body);
+      uploadBusy = true;
+      setStatus("Invio audio…");
+
+      try{
+        const res = await window.__fmAudioSuccessOnlyOriginalFetch20260519(input, init);
+        const clone = res.clone();
+        const data = await clone.json().catch(function(){ return null; });
+
+        if(!res.ok || !data || !data.success){
+          removeLocalGhostAudio();
+          setStatus((data && data.error) || "Errore invio audio.");
+          return res;
+        }
+
+        /*
+          NON aggiungiamo più una bolla locale audio.
+          Ricarichiamo dal server, così l'audio esiste una sola volta
+          e se il server fallisce non resta lato utente.
+        */
+        removeLocalGhostAudio();
+
+        setTimeout(renderAll, 100);
+        setTimeout(renderAll, 500);
+        setTimeout(renderAll, 1200);
+
+        setStatus("Audio inviato.");
+        return res;
+
+      }catch(err){
+        removeLocalGhostAudio();
+        setStatus(err.message || "Errore invio audio.");
+        throw err;
+      }finally{
+        setTimeout(function(){
+          uploadBusy = false;
+        }, 900);
+      }
+    }
+
+    return window.__fmAudioSuccessOnlyOriginalFetch20260519(input, init);
+  };
+
+  function patchButton(){
+    const send = findSendAudio();
+    if(!send || send.dataset.audioSuccessOnlyBound === "1") return;
+
+    send.dataset.audioSuccessOnlyBound = "1";
+
+    send.addEventListener("click", function(ev){
       const now = Date.now();
 
       /*
-        Blocca solo il doppio click ravvicinato dello stesso identico blob.
-        Non blocca una nuova registrazione successiva.
+        Blocca doppio tap immediato ma non blocca registrazioni successive.
       */
-      if(activeUpload){
-        return new Response(JSON.stringify({
-          success:false,
-          duplicate_blocked:true,
-          error:"Invio audio già in corso. Attendi il completamento."
-        }), {
-          status:409,
-          headers:{ "Content-Type":"application/json" }
-        });
+      if(uploadBusy || now - lastClickAt < 900){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        return false;
       }
 
-      if(key && key === lastAcceptedUploadKey && now - lastAcceptedUploadAt < 2500){
-        return new Response(JSON.stringify({
-          success:false,
-          duplicate_blocked:true,
-          error:"Doppio invio audio evitato."
-        }), {
-          status:409,
-          headers:{ "Content-Type":"application/json" }
-        });
-      }
-
-      activeUpload = true;
-      activeUploadStartedAt = now;
-
-      try{
-        const res = await window.__fmAudioMultipleOriginalFetch20260519(input, init);
-
-        /*
-          Memorizzo il blob solo se la richiesta è realmente partita.
-          Il blocco dura pochissimo: serve solo a evitare il doppio tap.
-        */
-        lastAcceptedUploadKey = key;
-        lastAcceptedUploadAt = Date.now();
-
-        return res;
-      }finally{
-        setTimeout(function(){
-          activeUpload = false;
-          activeUploadStartedAt = 0;
-        }, 700);
-      }
-    }
-
-    return window.__fmAudioMultipleOriginalFetch20260519(input, init);
-  };
-
-  /*
-    Correzione UI: ogni volta che l'utente preme Registra, la nuova registrazione
-    deve poter essere inviata, quindi il bottone Invia audio non deve restare bloccato.
-  */
-  function patchAudioButtons(){
-    const start = document.getElementById("fmPublicAudioStart20260519");
-    const send = document.getElementById("fmPublicAudioSend20260519");
-    const stop = document.getElementById("fmPublicAudioStop20260519");
-
-    if(start && start.dataset.multiAudioResetBound !== "1"){
-      start.dataset.multiAudioResetBound = "1";
-      start.addEventListener("click", function(){
-        activeUpload = false;
-        activeUploadStartedAt = 0;
-
-        /*
-          Non azzero lastAcceptedUploadKey qui: se per errore parte lo stesso blob
-          in 2 secondi, viene comunque bloccato.
-        */
-        setTimeout(function(){
-          const sendNow = document.getElementById("fmPublicAudioSend20260519");
-          if(sendNow && !sendNow.dataset.forceSending){
-            sendNow.disabled = true;
-          }
-        }, 50);
-      }, true);
-    }
-
-    if(stop && stop.dataset.multiAudioStopBound !== "1"){
-      stop.dataset.multiAudioStopBound = "1";
-      stop.addEventListener("click", function(){
-        setTimeout(function(){
-          const sendNow = document.getElementById("fmPublicAudioSend20260519");
-          if(sendNow){
-            sendNow.dataset.forceSending = "";
-          }
-        }, 300);
-      }, true);
-    }
-
-    if(send && send.dataset.multiAudioSendBound !== "1"){
-      send.dataset.multiAudioSendBound = "1";
-
-      send.addEventListener("click", function(ev){
-        hardResetBusyIfStale();
-
-        if(activeUpload){
-          ev.preventDefault();
-          ev.stopPropagation();
-          ev.stopImmediatePropagation();
-          return false;
-        }
-
-        send.dataset.forceSending = "1";
-
-        /*
-          Disabilito solo per evitare doppio tap immediato.
-          La funzione audio originale poi gestisce stato ready/sending.
-        */
-        setTimeout(function(){
-          send.dataset.forceSending = "";
-        }, 1200);
-      }, true);
-    }
+      lastClickAt = now;
+    }, true);
   }
 
-  /*
-    Deduplica DOM leggera: se per qualunque motivo due bolle audio uguali vengono
-    disegnate, ne lascia una sola. Non cancella audio diversi.
-  */
   function dedupeAudioDom(){
     const seen = new Set();
 
@@ -3310,20 +3312,16 @@
   }
 
   function boot(){
-    patchAudioButtons();
+    patchButton();
     dedupeAudioDom();
-
-    setTimeout(patchAudioButtons, 250);
-    setTimeout(dedupeAudioDom, 500);
+    setTimeout(patchButton, 300);
+    setTimeout(dedupeAudioDom, 600);
   }
 
-  window.fmAudioMultipleSendFixState20260519 = function(){
+  window.fmAudioSuccessOnlyState20260519 = function(){
     return {
-      activeUpload,
-      activeUploadStartedAt,
-      lastAcceptedUploadKey,
-      lastAcceptedUploadAt,
-      secondsSinceLastAccepted:lastAcceptedUploadAt ? Math.round((Date.now() - lastAcceptedUploadAt) / 1000) : null
+      uploadBusy,
+      lastClickAt
     };
   };
 
@@ -3336,22 +3334,19 @@
   });
 
   window.addEventListener("pageshow", function(){
-    activeUpload = false;
-    activeUploadStartedAt = 0;
+    uploadBusy = false;
     setTimeout(boot, 250);
   });
 
   document.addEventListener("visibilitychange", function(){
     if(document.visibilityState === "visible"){
-      activeUpload = false;
-      activeUploadStartedAt = 0;
+      uploadBusy = false;
       setTimeout(boot, 250);
     }
   });
 
   setInterval(function(){
-    hardResetBusyIfStale();
-    patchAudioButtons();
+    patchButton();
     dedupeAudioDom();
   }, 1000);
 })();
