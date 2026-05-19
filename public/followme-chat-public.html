@@ -4378,10 +4378,12 @@
 
 
 
-<script id="followme-public-remove-waiting-label-always-20260519">
+
+
+<script id="followme-public-remove-only-small-waiting-label-20260519">
 (function(){
-  if(window.__FollowMePublicRemoveWaitingLabelAlways20260519) return;
-  window.__FollowMePublicRemoveWaitingLabelAlways20260519 = true;
+  if(window.__FollowMePublicRemoveOnlySmallWaitingLabel20260519) return;
+  window.__FollowMePublicRemoveOnlySmallWaitingLabel20260519 = true;
 
   function norm(txt){
     return String(txt || "")
@@ -4390,37 +4392,71 @@
       .toLowerCase();
   }
 
-  function isWaitingLabel(el){
+  function isWaitingText(el){
     const t = norm(el.textContent || "");
 
     return t === "connesso - in attesa del proprietario" ||
            t === "connesso- in attesa del proprietario" ||
-           t === "connesso -in attesa del proprietario" ||
-           t.includes("connesso - in attesa del proprietario") ||
-           t.includes("connesso- in attesa del proprietario");
+           t === "connesso -in attesa del proprietario";
   }
 
-  function removeWaitingLabels(){
-    Array.from(document.querySelectorAll("div,span,p,small,strong")).forEach(function(el){
-      if(!isWaitingLabel(el)) return;
+  function isBoldOrMainStatus(el){
+    try{
+      const cs = window.getComputedStyle(el);
+      const weight = parseInt(cs.fontWeight || "400", 10);
+
+      if(weight >= 700) return true;
+
+      if(el.tagName && ["STRONG","B"].includes(el.tagName.toUpperCase())) return true;
+
+      if(el.closest && el.closest("strong,b")) return true;
 
       /*
-        Non tocchiamo eventuali contenitori grandi: nascondiamo solo
-        l'elemento testuale che contiene quella riga.
+        Protegge le label finali che vogliamo tenere.
       */
-      const textLen = String(el.textContent || "").trim().length;
-      const childCount = el.children ? el.children.length : 0;
+      if(el.id === "followmePublicSingleRealOwnerStatus20260519") return true;
+      if(el.id === "followmePublicSingleStatusLabel20260519") return true;
 
-      if(textLen <= 80 && childCount <= 2){
-        el.style.display = "none";
-        el.setAttribute("aria-hidden", "true");
-        el.dataset.followmeWaitingLabelRemoved = "1";
+      if(el.classList && (
+        el.classList.contains("followme-public-chat-subtitle") ||
+        el.classList.contains("followme-public-status-main") ||
+        el.classList.contains("status-main")
+      )){
+        return true;
       }
+
+      return false;
+    }catch(e){
+      return false;
+    }
+  }
+
+  function removeOnlySmallDuplicate(){
+    const matches = Array.from(document.querySelectorAll("div,span,p,small"))
+      .filter(function(el){
+        if(!isWaitingText(el)) return false;
+
+        /*
+          La scritta in grassetto deve restare.
+          Nascondiamo solo quella piccola/non-bold duplicata.
+        */
+        if(isBoldOrMainStatus(el)) return false;
+
+        const textLen = String(el.textContent || "").trim().length;
+        const childCount = el.children ? el.children.length : 0;
+
+        return textLen <= 60 && childCount === 0;
+      });
+
+    matches.forEach(function(el){
+      el.style.display = "none";
+      el.setAttribute("aria-hidden", "true");
+      el.dataset.followmeSmallWaitingRemoved = "1";
     });
   }
 
-  if(!window.__fmRemoveWaitingLabelFetchPatch20260519){
-    window.__fmRemoveWaitingLabelFetchPatch20260519 = true;
+  if(!window.__fmRemoveOnlySmallWaitingFetchPatch20260519){
+    window.__fmRemoveOnlySmallWaitingFetchPatch20260519 = true;
 
     const oldFetch = window.fetch.bind(window);
 
@@ -4431,9 +4467,9 @@
         const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
 
         if(url && url.includes("/api/followme/chat/session/")){
-          setTimeout(removeWaitingLabels, 40);
-          setTimeout(removeWaitingLabels, 250);
-          setTimeout(removeWaitingLabels, 900);
+          setTimeout(removeOnlySmallDuplicate, 40);
+          setTimeout(removeOnlySmallDuplicate, 250);
+          setTimeout(removeOnlySmallDuplicate, 900);
         }
       }catch(e){}
 
@@ -4442,13 +4478,13 @@
   }
 
   function boot(){
-    removeWaitingLabels();
-    setTimeout(removeWaitingLabels, 200);
-    setTimeout(removeWaitingLabels, 800);
-    setTimeout(removeWaitingLabels, 1800);
+    removeOnlySmallDuplicate();
+    setTimeout(removeOnlySmallDuplicate, 200);
+    setTimeout(removeOnlySmallDuplicate, 800);
+    setTimeout(removeOnlySmallDuplicate, 1800);
   }
 
-  window.fmPublicRemoveWaitingLabelAlways20260519 = boot;
+  window.fmPublicRemoveOnlySmallWaitingLabel20260519 = boot;
 
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
@@ -4462,7 +4498,7 @@
     setTimeout(boot, 250);
   });
 
-  setInterval(removeWaitingLabels, 700);
+  setInterval(removeOnlySmallDuplicate, 700);
 })();
 </script>
 
