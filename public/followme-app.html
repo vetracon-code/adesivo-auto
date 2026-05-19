@@ -20664,40 +20664,46 @@ document.addEventListener("visibilitychange", function(){
 
 
 
-<script id="followme-admin-fixed-alias-no-blink-final-20260519">
+
+
+<script id="followme-admin-stable-alias-names-final-20260519">
 (function(){
-  if(window.__FollowMeAdminFixedAliasNoBlinkFinal20260519) return;
-  window.__FollowMeAdminFixedAliasNoBlinkFinal20260519 = true;
+  if(window.__FollowMeAdminStableAliasNamesFinal20260519) return;
+  window.__FollowMeAdminStableAliasNamesFinal20260519 = true;
 
   /*
-    BARRA FISSA NO-BLINK:
-    - chip tecnici originali: nascosti ma presenti nel DOM;
-    - barra visibile: solo nomi semplici;
-    - nessun ridisegno continuo;
-    - aggiorna solo quando cambia la firma reale delle sessioni.
+    BARRA NOMI STABILI:
+    - NON legge continuamente il testo variabile dei chip per cambiare label.
+    - Ogni session_id riceve un alias stabile: Utente 1, Utente 2, Utente 3...
+    - Se arriva un vero nome utente, sostituisce l'alias con SOLO quel nome.
+    - Se i chip spariscono per un refresh momentaneo, la barra NON viene svuotata.
+    - I chip tecnici restano nascosti ma vivi.
   */
 
-  let lastSignature = "";
-  let lastActiveSignature = "";
-  let scheduled = false;
+  const aliasBySid = new Map();
+  const realNameBySid = new Map();
+  const chipBySid = new Map();
+  let nextAliasNumber = 1;
+  let lastRenderedSignature = "";
+  let lastActiveSid = "";
 
   function norm(v){
     return String(v || "").replace(/\s+/g, " ").trim();
   }
 
-  function short(v){
+  function shorten(v){
     const s = norm(v);
     if(s.length <= 14) return s;
     return s.slice(0, 13).trimEnd() + "…";
   }
 
   function ensureStyle(){
-    if(document.getElementById("followmeAdminFixedAliasNoBlinkStyle20260519")) return;
+    if(document.getElementById("followmeAdminStableAliasNamesStyle20260519")) return;
 
     const style = document.createElement("style");
-    style.id = "followmeAdminFixedAliasNoBlinkStyle20260519";
+    style.id = "followmeAdminStableAliasNamesStyle20260519";
     style.textContent = `
-      #followmeFixedAliasWrap20260519{
+      #followmeStableAliasWrap20260519{
         width:100%;
         box-sizing:border-box;
         margin:8px 0 12px;
@@ -20709,7 +20715,7 @@ document.addEventListener("visibilitychange", function(){
         contain:layout paint;
       }
 
-      #followmeFixedAliasBar20260519{
+      #followmeStableAliasBar20260519{
         display:flex;
         flex-wrap:nowrap;
         gap:8px;
@@ -20721,7 +20727,7 @@ document.addEventListener("visibilitychange", function(){
         scroll-behavior:auto;
       }
 
-      #followmeFixedAliasBar20260519 button{
+      #followmeStableAliasBar20260519 button{
         flex:0 0 124px;
         width:124px;
         min-width:124px;
@@ -20742,16 +20748,12 @@ document.addEventListener("visibilitychange", function(){
         transition:background-color .12s ease, color .12s ease, border-color .12s ease;
       }
 
-      #followmeFixedAliasBar20260519 button.active{
+      #followmeStableAliasBar20260519 button.active{
         background:#111827;
         color:#ffffff;
         border-color:#111827;
       }
 
-      /*
-        I chip originali restano vivi per la logica interna,
-        ma non devono più disturbare visivamente.
-      */
       #followmeOwnerChatSessionStrip,
       .followme-owner-chat-session-strip,
       .followme-chat-session-strip,
@@ -20768,7 +20770,6 @@ document.addEventListener("visibilitychange", function(){
         pointer-events:none !important;
       }
     `;
-
     document.head.appendChild(style);
   }
 
@@ -20799,23 +20800,27 @@ document.addEventListener("visibilitychange", function(){
            chip.dataset.active === "true";
   }
 
-  function extractLabel(chip, index){
-    const ds = chip.dataset || {};
+  function looksLikeTechnicalOrAlias(text){
+    const t = norm(text);
 
-    let text = norm(
-      ds.displayName ||
-      ds.name ||
-      ds.userName ||
-      chip.getAttribute("data-display-name") ||
-      chip.getAttribute("data-name") ||
-      ""
-    );
+    if(!t) return true;
 
-    if(!text){
-      text = norm(chip.textContent || "");
-    }
+    /*
+      Sono tecnici/variabili: NON devono diventare label.
+    */
+    if(/^U\d+\b/i.test(t)) return true;                 // U1, U2, U1 pino
+    if(/^Utente\s+\d+$/i.test(t)) return true;          // Utente 1
+    if(/^Utente\s+[A-Z0-9]{3,}$/i.test(t)) return true; // Utente 3C4W
+    if(/^chat\b/i.test(t)) return true;
+    if(/^sessione\b/i.test(t)) return true;
 
-    text = text
+    return false;
+  }
+
+  function cleanPossibleName(text){
+    let t = norm(text);
+
+    t = t
       .replace(/\bExtra\b/gi, "")
       .replace(/\bBloccato\b/gi, "")
       .replace(/\bSblocca\b/gi, "")
@@ -20827,11 +20832,46 @@ document.addEventListener("visibilitychange", function(){
       .replace(/\s+/g, " ")
       .trim();
 
-    if(!text || /^Utente\s+[A-Z0-9]{3,}$/i.test(text) || /^chat\b/i.test(text)){
-      text = "Utente " + index;
+    /*
+      Se arriva "U1 pino", non devo mostrare U1 pino.
+      Provo a togliere il prefisso U1 solo se resta qualcosa.
+    */
+    t = t.replace(/^U\d+\s+/i, "").trim();
+
+    return t;
+  }
+
+  function extractRealName(chip){
+    if(!chip) return "";
+
+    const ds = chip.dataset || {};
+
+    const explicit = norm(
+      ds.displayName ||
+      ds.name ||
+      ds.userName ||
+      chip.getAttribute("data-display-name") ||
+      chip.getAttribute("data-name") ||
+      ""
+    );
+
+    let candidate = cleanPossibleName(explicit);
+
+    if(candidate && !looksLikeTechnicalOrAlias(candidate)){
+      return shorten(candidate);
     }
 
-    return short(text);
+    /*
+      Solo come fallback uso textContent, ma non deve mai produrre U1 pino,
+      Utente 1, Utente ABCD o testi tecnici.
+    */
+    candidate = cleanPossibleName(chip.textContent || "");
+
+    if(candidate && !looksLikeTechnicalOrAlias(candidate)){
+      return shorten(candidate);
+    }
+
+    return "";
   }
 
   function getChips(){
@@ -20846,17 +20886,54 @@ document.addEventListener("visibilitychange", function(){
     const seen = new Set();
 
     raw.forEach(function(chip, idx){
+      const sid = getSid(chip);
       const text = norm(chip.textContent || "");
-      const sid = getSid(chip) || ("idx-" + idx);
 
-      if(!sid && !/^Utente\b/i.test(text)) return;
-      if(seen.has(sid)) return;
+      if(!sid && !/^Utente\b/i.test(text) && !/^U\d+\b/i.test(text)) return;
 
-      seen.add(sid);
+      const key = sid || ("nosid-" + idx);
+
+      if(seen.has(key)) return;
+      seen.add(key);
       out.push(chip);
     });
 
     return out;
+  }
+
+  function rememberChips(){
+    const chips = getChips();
+
+    /*
+      Se per un refresh momentaneo non ci sono chip, NON svuotiamo nulla.
+    */
+    if(!chips.length) return;
+
+    chips.forEach(function(chip){
+      const sid = getSid(chip);
+      if(!sid) return;
+
+      chipBySid.set(sid, chip);
+
+      if(!aliasBySid.has(sid)){
+        aliasBySid.set(sid, "Utente " + nextAliasNumber);
+        nextAliasNumber++;
+      }
+
+      const realName = extractRealName(chip);
+
+      /*
+        Aggiorniamo il nome solo se è un vero nome pulito.
+        Se oggi vedo U1 pino, non sovrascrivo.
+      */
+      if(realName){
+        realNameBySid.set(sid, realName);
+      }
+    });
+  }
+
+  function labelForSid(sid){
+    return realNameBySid.get(sid) || aliasBySid.get(sid) || "Utente";
   }
 
   function findTitleTarget(){
@@ -20877,14 +20954,14 @@ document.addEventListener("visibilitychange", function(){
   function ensureBar(){
     ensureStyle();
 
-    let wrap = document.getElementById("followmeFixedAliasWrap20260519");
+    let wrap = document.getElementById("followmeStableAliasWrap20260519");
     if(wrap) return wrap;
 
     wrap = document.createElement("div");
-    wrap.id = "followmeFixedAliasWrap20260519";
+    wrap.id = "followmeStableAliasWrap20260519";
 
     const bar = document.createElement("div");
-    bar.id = "followmeFixedAliasBar20260519";
+    bar.id = "followmeStableAliasBar20260519";
     wrap.appendChild(bar);
 
     const target = findTitleTarget();
@@ -20898,19 +20975,15 @@ document.addEventListener("visibilitychange", function(){
     return wrap;
   }
 
-  function buildModel(){
-    return getChips().map(function(chip, idx){
-      const sid = getSid(chip) || ("idx-" + idx);
-      return {
-        sid,
-        label: extractLabel(chip, idx + 1),
-        active: isActive(chip),
-        chip
-      };
-    });
+  function activeSid(){
+    for(const [sid, chip] of chipBySid.entries()){
+      if(isActive(chip)) return sid;
+    }
+    return "";
   }
 
-  function clickChip(chip){
+  function clickSid(sid){
+    const chip = chipBySid.get(sid);
     if(!chip) return;
 
     chip.dispatchEvent(new MouseEvent("click", {
@@ -20920,73 +20993,65 @@ document.addEventListener("visibilitychange", function(){
     }));
   }
 
-  function updateActiveOnly(model){
-    const bar = document.getElementById("followmeFixedAliasBar20260519");
-    if(!bar) return;
-
-    Array.from(bar.children).forEach(function(btn, idx){
-      btn.classList.toggle("active", !!(model[idx] && model[idx].active));
-    });
-  }
-
   function render(){
-    scheduled = false;
-
     ensureBar();
+    rememberChips();
 
-    const bar = document.getElementById("followmeFixedAliasBar20260519");
+    const bar = document.getElementById("followmeStableAliasBar20260519");
     if(!bar) return;
 
-    const model = buildModel();
-
-    const signature = model.map(function(x){
-      return x.sid + ":" + x.label;
-    }).join("|");
-
-    const activeSignature = model.map(function(x){
-      return x.sid + ":" + (x.active ? "1" : "0");
-    }).join("|");
+    const sids = Array.from(aliasBySid.keys());
 
     /*
-      Caso più frequente: non cambia lista/nome, cambia solo active.
-      NON ricreiamo i bottoni.
+      Se non ho ancora nulla, non svuoto. Aspetto.
     */
-    if(signature === lastSignature){
-      if(activeSignature !== lastActiveSignature){
-        updateActiveOnly(model);
-        lastActiveSignature = activeSignature;
+    if(!sids.length) return;
+
+    const active = activeSid();
+
+    const signature = sids.map(function(sid){
+      return sid + ":" + labelForSid(sid);
+    }).join("|");
+
+    const activeSignature = active;
+
+    /*
+      Se non cambiano lista e label, aggiorna solo active.
+    */
+    if(signature === lastRenderedSignature){
+      if(activeSignature !== lastActiveSid){
+        Array.from(bar.children).forEach(function(btn){
+          btn.classList.toggle("active", btn.dataset.sessionId === active);
+        });
+        lastActiveSid = activeSignature;
       }
       return;
     }
 
-    lastSignature = signature;
-    lastActiveSignature = activeSignature;
+    lastRenderedSignature = signature;
+    lastActiveSid = activeSignature;
 
-    /*
-      Ricrea la barra solo se sono cambiati sessioni o nomi.
-      Questo elimina il lampeggio.
-    */
     const frag = document.createDocumentFragment();
 
-    model.forEach(function(item, idx){
+    sids.forEach(function(sid){
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.textContent = item.label || ("Utente " + (idx + 1));
-      btn.title = item.label || ("Utente " + (idx + 1));
-      btn.dataset.sessionId = item.sid;
-      btn.classList.toggle("active", item.active);
+      btn.textContent = labelForSid(sid);
+      btn.title = labelForSid(sid);
+      btn.dataset.sessionId = sid;
+      btn.classList.toggle("active", sid === active);
 
       btn.addEventListener("click", function(ev){
         ev.preventDefault();
         ev.stopPropagation();
-        clickChip(item.chip);
+        clickSid(sid);
 
-        /*
-          Solo active, non ridisegno totale.
-        */
         setTimeout(function(){
-          const m = buildModel();
-          updateActiveOnly(m);
+          const a = activeSid();
+          Array.from(bar.children).forEach(function(b){
+            b.classList.toggle("active", b.dataset.sessionId === a);
+          });
+          lastActiveSid = a;
         }, 100);
       }, true);
 
@@ -20996,30 +21061,25 @@ document.addEventListener("visibilitychange", function(){
     bar.replaceChildren(frag);
   }
 
-  function scheduleRender(){
-    if(scheduled) return;
-    scheduled = true;
-    requestAnimationFrame(render);
-  }
-
   function boot(){
-    scheduleRender();
-    setTimeout(scheduleRender, 350);
-    setTimeout(scheduleRender, 1200);
+    render();
+    setTimeout(render, 300);
+    setTimeout(render, 1200);
   }
 
-  /*
-    MutationObserver invece di setInterval aggressivo:
-    aggiorna quando la barra tecnica cambia davvero.
-  */
-  function observeRealStrip(){
+  function observe(){
     const strip = getRealStrip();
-    if(!strip || strip.dataset.fmAliasObserved20260519) return;
+    if(!strip || strip.dataset.fmStableAliasObserved20260519) return;
 
-    strip.dataset.fmAliasObserved20260519 = "1";
+    strip.dataset.fmStableAliasObserved20260519 = "1";
 
     const obs = new MutationObserver(function(){
-      scheduleRender();
+      /*
+        Non ridisegna immediatamente a ogni micro-variazione.
+        Aspetta un attimo e poi legge stato stabile.
+      */
+      clearTimeout(window.__fmStableAliasRenderTimer20260519);
+      window.__fmStableAliasRenderTimer20260519 = setTimeout(render, 180);
     });
 
     obs.observe(strip, {
@@ -21030,43 +21090,42 @@ document.addEventListener("visibilitychange", function(){
     });
   }
 
-  window.fmAdminFixedAliasNoBlink20260519 = {
+  window.fmAdminStableAliasNames20260519 = {
     boot,
-    render,
-    scheduleRender
+    render
   };
 
   if(document.readyState === "loading"){
     document.addEventListener("DOMContentLoaded", function(){
       boot();
-      observeRealStrip();
+      observe();
     });
   }else{
     boot();
-    observeRealStrip();
+    observe();
   }
 
   window.addEventListener("load", function(){
     setTimeout(function(){
       boot();
-      observeRealStrip();
+      observe();
     }, 250);
   });
 
   window.addEventListener("pageshow", function(){
     setTimeout(function(){
       boot();
-      observeRealStrip();
+      observe();
     }, 250);
   });
 
   /*
-    Fallback molto leggero: non ridisegna se non cambia la firma.
+    Fallback leggero: non svuota mai e non alterna label.
   */
   setInterval(function(){
-    observeRealStrip();
-    scheduleRender();
-  }, 3000);
+    observe();
+    render();
+  }, 2500);
 })();
 </script>
 
