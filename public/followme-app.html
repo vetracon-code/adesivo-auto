@@ -22012,5 +22012,568 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-admin-chat-only-menu-v2-final-20260519">
+(function(){
+  if(window.__FollowMeAdminChatOnlyMenuV2Final20260519) return;
+  window.__FollowMeAdminChatOnlyMenuV2Final20260519 = true;
+
+  /*
+    MENU ADMIN CHAT ONLY V2:
+    - agisce solo in body.followme-chat-only-mode;
+    - non tocca la prima pagina;
+    - sposta il menu accanto alla scritta Chat FollowMe;
+    - nasconde solo la vecchia toolbar chat admin in alto;
+    - Chiudi... apre scelta: questa chat / tutte.
+  */
+
+  function norm(v){
+    return String(v || "").replace(/\s+/g, " ").trim();
+  }
+
+  function textOf(el){
+    return norm(el && el.textContent || "");
+  }
+
+  function isInsideAdminChatPage(){
+    return document.body.classList.contains("followme-chat-only-mode") &&
+           !!document.getElementById("followmeOwnerChatMessages") &&
+           !!document.getElementById("followmeOwnerChatSessionStrip");
+  }
+
+  function ensureStyle(){
+    if(document.getElementById("followmeAdminChatOnlyMenuV2Style20260519")) return;
+
+    const style = document.createElement("style");
+    style.id = "followmeAdminChatOnlyMenuV2Style20260519";
+    style.textContent = `
+      #followmeAdminChatOnlyMenuSafe20260519{
+        display:none !important;
+      }
+
+      #followmeAdminChatOnlyMenuV2Wrap20260519{
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        gap:8px;
+        flex-wrap:wrap;
+        width:auto;
+        box-sizing:border-box;
+        margin:0 0 0 10px;
+        padding:0;
+        position:relative;
+        z-index:99999;
+      }
+
+      #followmeAdminChatOnlyMenuV2Wrap20260519 button{
+        border:0;
+        border-radius:999px;
+        padding:9px 13px;
+        font-weight:950;
+        font-size:13px;
+        cursor:pointer;
+        white-space:nowrap;
+        background:#ffffff;
+        color:#111827;
+        box-shadow:0 6px 16px rgba(15,23,42,.10);
+      }
+
+      #followmeAdminChatOnlyMenuV2Wrap20260519 .primary{
+        background:#111827;
+        color:#ffffff;
+      }
+
+      #followmeAdminChatOnlyMenuV2DropdownWrap20260519{
+        position:relative;
+        display:inline-flex;
+      }
+
+      #followmeAdminChatOnlyMenuV2Dropdown20260519{
+        display:none;
+        position:absolute;
+        top:calc(100% + 8px);
+        right:0;
+        min-width:270px;
+        padding:8px;
+        border-radius:16px;
+        background:#ffffff;
+        border:1px solid rgba(15,23,42,.10);
+        box-shadow:0 18px 44px rgba(15,23,42,.20);
+        z-index:100000;
+      }
+
+      #followmeAdminChatOnlyMenuV2DropdownWrap20260519.open #followmeAdminChatOnlyMenuV2Dropdown20260519{
+        display:block;
+      }
+
+      #followmeAdminChatOnlyMenuV2Dropdown20260519 .menu-title{
+        padding:7px 10px 5px;
+        font-size:11px;
+        font-weight:950;
+        color:#64748b;
+        text-transform:uppercase;
+        letter-spacing:.08em;
+      }
+
+      #followmeAdminChatOnlyMenuV2Dropdown20260519 button{
+        width:100%;
+        display:block;
+        text-align:left;
+        margin:3px 0;
+        border-radius:12px;
+        box-shadow:none;
+        background:#f8fafc;
+        color:#111827;
+      }
+
+      #followmeAdminChatOnlyMenuV2Dropdown20260519 button:hover{
+        background:#e5e7eb;
+      }
+
+      #followmeAdminChatOnlyMenuV2Dropdown20260519 button.warning{
+        background:#ffedd5;
+        color:#9a3412;
+      }
+
+      #followmeAdminChatOnlyMenuV2Dropdown20260519 button.danger{
+        background:#fee2e2;
+        color:#991b1b;
+      }
+
+      #followmeAdminCloseChoice20260519{
+        display:none;
+        position:fixed;
+        inset:0;
+        z-index:100001;
+        background:rgba(15,23,42,.44);
+        align-items:center;
+        justify-content:center;
+        padding:22px;
+        box-sizing:border-box;
+      }
+
+      #followmeAdminCloseChoice20260519.open{
+        display:flex;
+      }
+
+      #followmeAdminCloseChoice20260519 .card{
+        width:min(390px,100%);
+        border-radius:24px;
+        background:#ffffff;
+        color:#111827;
+        padding:20px;
+        box-shadow:0 26px 80px rgba(15,23,42,.32);
+      }
+
+      #followmeAdminCloseChoice20260519 h3{
+        margin:0 0 8px;
+        font-size:22px;
+        line-height:1.1;
+        letter-spacing:-.035em;
+      }
+
+      #followmeAdminCloseChoice20260519 p{
+        margin:0 0 16px;
+        color:#475569;
+        font-weight:650;
+        line-height:1.38;
+      }
+
+      #followmeAdminCloseChoice20260519 .actions{
+        display:grid;
+        gap:8px;
+      }
+
+      #followmeAdminCloseChoice20260519 button{
+        border:0;
+        border-radius:16px;
+        padding:12px 14px;
+        font-weight:950;
+        cursor:pointer;
+        font-size:14px;
+      }
+
+      #followmeAdminCloseChoice20260519 .one{
+        background:#ffedd5;
+        color:#9a3412;
+      }
+
+      #followmeAdminCloseChoice20260519 .all{
+        background:#fee2e2;
+        color:#991b1b;
+      }
+
+      #followmeAdminCloseChoice20260519 .cancel{
+        background:#e5e7eb;
+        color:#111827;
+      }
+
+      body.followme-chat-only-mode .fm-admin-v2-hidden-old-toolbar-20260519{
+        position:absolute !important;
+        left:-99999px !important;
+        top:auto !important;
+        width:1px !important;
+        height:1px !important;
+        max-width:1px !important;
+        max-height:1px !important;
+        overflow:hidden !important;
+        opacity:0 !important;
+        pointer-events:none !important;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function allButtons(){
+    return Array.from(document.querySelectorAll("button,a"))
+      .filter(function(el){
+        if(!el) return false;
+        if(el.closest("#followmeAdminChatOnlyMenuV2Wrap20260519")) return false;
+        if(el.closest("#followmeAdminCloseChoice20260519")) return false;
+        if(el.closest("#fmExtraDedicatedAdminPanel20260519")) return false;
+        return true;
+      });
+  }
+
+  function findByIdOrText(ids, texts){
+    for(const id of ids || []){
+      const el = document.getElementById(id);
+      if(el) return el;
+    }
+
+    const wanted = (texts || []).map(function(t){ return t.toLowerCase(); });
+
+    return allButtons().find(function(el){
+      const t = textOf(el).toLowerCase();
+      return wanted.some(function(w){
+        return t === w || t.includes(w);
+      });
+    }) || null;
+  }
+
+  function originals(){
+    return {
+      qr:findByIdOrText(
+        ["followmeOwnerQrBtn"],
+        ["qr"]
+      ),
+      reset:findByIdOrText(
+        ["followmeTopResetChatBtn", "followmeResetChatBtn"],
+        ["reset"]
+      ),
+      closeSelected:findByIdOrText(
+        ["followmeAdminCloseSelectedChatBtn20260519"],
+        ["chiudi chat selezionata"]
+      ),
+      closeAll:findByIdOrText(
+        ["followmeAdminCloseAllBtn20260519"],
+        ["chiudi tutto"]
+      ),
+      reopen:findByIdOrText(
+        ["followmeAdminReopenServiceBtn20260519"],
+        ["riapri servizio chat", "riapri servizio"]
+      ),
+      chatExport:findByIdOrText(
+        ["followmeAdminExportChatBtn20260519"],
+        ["scarica chat"]
+      ),
+      chatFiles:findByIdOrText(
+        ["followmeAdminExportChatFilesZipBtn20260519"],
+        ["scarica chat + files"]
+      ),
+      serverFiles:findByIdOrText(
+        ["followmeAdminExportServerFilesBtn20260519"],
+        ["scarica server files"]
+      )
+    };
+  }
+
+  function clickOriginal(el){
+    if(!el) {
+      alert("Comando non disponibile in questa schermata.");
+      return;
+    }
+
+    el.dispatchEvent(new MouseEvent("click", {
+      bubbles:true,
+      cancelable:true,
+      view:window
+    }));
+  }
+
+  function makeBtn(label, cls, fn){
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    if(cls) b.className = cls;
+
+    b.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      fn && fn();
+    }, true);
+
+    return b;
+  }
+
+  function addTitle(menu, text){
+    const d = document.createElement("div");
+    d.className = "menu-title";
+    d.textContent = text;
+    menu.appendChild(d);
+  }
+
+  function findTitleTarget(){
+    const candidates = Array.from(document.querySelectorAll("h1,h2,h3,.title,.chat-title,[class*='title']"));
+
+    for(const el of candidates){
+      const t = norm(el.textContent || "").toLowerCase();
+
+      if(t.includes("chat followme") || t.includes("followme chat") || t === "chat"){
+        return el;
+      }
+    }
+
+    /*
+      Fallback: sopra la barra alias stabile.
+    */
+    return document.getElementById("followmeStableAliasWrap20260519") ||
+           document.getElementById("followmeOwnerChatSessionStrip");
+  }
+
+  function ensureCloseChoice(){
+    let overlay = document.getElementById("followmeAdminCloseChoice20260519");
+    if(overlay) return overlay;
+
+    overlay = document.createElement("div");
+    overlay.id = "followmeAdminCloseChoice20260519";
+    overlay.innerHTML = `
+      <div class="card" role="dialog" aria-modal="true" aria-label="Chiudi chat">
+        <h3>Chiudi chat</h3>
+        <p>Scegli se chiudere solo la chat selezionata oppure chiudere il servizio per tutti.</p>
+        <div class="actions">
+          <button type="button" class="one">Solo questa chat</button>
+          <button type="button" class="all">Tutte le chat</button>
+          <button type="button" class="cancel">Annulla</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    overlay.querySelector(".one").addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      overlay.classList.remove("open");
+      clickOriginal(originals().closeSelected);
+    }, true);
+
+    overlay.querySelector(".all").addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      overlay.classList.remove("open");
+      clickOriginal(originals().closeAll);
+    }, true);
+
+    overlay.querySelector(".cancel").addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      overlay.classList.remove("open");
+    }, true);
+
+    overlay.addEventListener("click", function(ev){
+      if(ev.target === overlay) overlay.classList.remove("open");
+    });
+
+    return overlay;
+  }
+
+  function openCloseChoice(){
+    ensureCloseChoice().classList.add("open");
+  }
+
+  function ensureMenu(){
+    if(!isInsideAdminChatPage()){
+      const old = document.getElementById("followmeAdminChatOnlyMenuV2Wrap20260519");
+      if(old) old.remove();
+      return null;
+    }
+
+    ensureStyle();
+
+    let wrap = document.getElementById("followmeAdminChatOnlyMenuV2Wrap20260519");
+    if(wrap) return wrap;
+
+    wrap = document.createElement("div");
+    wrap.id = "followmeAdminChatOnlyMenuV2Wrap20260519";
+
+    const target = findTitleTarget();
+
+    if(target){
+      /*
+        Se possibile, mettilo accanto al titolo.
+      */
+      target.style.display = "flex";
+      target.style.alignItems = "center";
+      target.style.justifyContent = "center";
+      target.style.gap = "10px";
+
+      target.appendChild(wrap);
+    }else{
+      const strip = document.getElementById("followmeOwnerChatSessionStrip");
+      if(strip && strip.parentElement) strip.parentElement.insertBefore(wrap, strip);
+      else document.body.insertBefore(wrap, document.body.firstChild);
+    }
+
+    return wrap;
+  }
+
+  function render(){
+    const wrap = ensureMenu();
+    if(!wrap) return;
+
+    const o = originals();
+
+    const sig = Object.keys(o).map(function(k){
+      return k + ":" + !!o[k];
+    }).join("|");
+
+    if(wrap.dataset.signature === sig) return;
+    wrap.dataset.signature = sig;
+
+    wrap.innerHTML = "";
+
+    if(o.qr){
+      wrap.appendChild(makeBtn("QR", "primary", function(){ clickOriginal(o.qr); }));
+    }
+
+    if(o.reset){
+      wrap.appendChild(makeBtn("Reset", "", function(){ clickOriginal(o.reset); }));
+    }
+
+    const ddWrap = document.createElement("div");
+    ddWrap.id = "followmeAdminChatOnlyMenuV2DropdownWrap20260519";
+
+    const toggle = makeBtn("Altro ▾", "", function(){
+      ddWrap.classList.toggle("open");
+    });
+
+    const menu = document.createElement("div");
+    menu.id = "followmeAdminChatOnlyMenuV2Dropdown20260519";
+
+    addTitle(menu, "Gestione chat");
+    menu.appendChild(makeBtn("Chiudi…", "warning", openCloseChoice));
+    menu.appendChild(makeBtn("Riapri servizio chat", "", function(){ clickOriginal(o.reopen); }));
+
+    addTitle(menu, "Esportazione");
+    menu.appendChild(makeBtn("Scarica chat", "", function(){ clickOriginal(o.chatExport); }));
+    menu.appendChild(makeBtn("Scarica chat + files", "", function(){ clickOriginal(o.chatFiles); }));
+    menu.appendChild(makeBtn("Scarica server files", "", function(){ clickOriginal(o.serverFiles); }));
+
+    document.addEventListener("click", function(ev){
+      if(!ddWrap.contains(ev.target)) ddWrap.classList.remove("open");
+    });
+
+    ddWrap.appendChild(toggle);
+    ddWrap.appendChild(menu);
+    wrap.appendChild(ddWrap);
+
+    ensureCloseChoice();
+  }
+
+  function hideOldChatToolbar(){
+    if(!isInsideAdminChatPage()) return;
+
+    /*
+      Nasconde solo la toolbar chat originale in alto.
+      NON tocca prima pagina e NON tocca pulsanti contestuali Extra.
+    */
+    [
+      "followmeOwnerQrBtn",
+      "followmeTopResetChatBtn",
+      "followmeOwnerChatDisable",
+      "followmeAdminCloseSelectedChatBtn20260519",
+      "followmeAdminCloseAllBtn20260519",
+      "followmeAdminReopenServiceBtn20260519",
+      "followmeAdminExportChatBtn20260519",
+      "followmeAdminExportChatFilesZipBtn20260519",
+      "followmeAdminExportServerFilesBtn20260519"
+    ].forEach(function(id){
+      const el = document.getElementById(id);
+      if(el) el.classList.add("fm-admin-v2-hidden-old-toolbar-20260519");
+    });
+
+    /*
+      Nasconde eventuali vecchi pulsanti Spegni/Chiudi TUTTO/Pausa generati in zona chat,
+      ma solo se non sono dentro overlay/pannelli contestuali.
+    */
+    allButtons().forEach(function(el){
+      if(el.closest("#fmExtraDedicatedAdminPanel20260519")) return;
+      if(el.closest("#followmeResetChoiceOverlay")) return;
+
+      const t = textOf(el).toLowerCase();
+
+      if(
+        t === "spegni" ||
+        t === "pausa" ||
+        t === "pausa chat" ||
+        t === "chiudi tutto" ||
+        t === "riapri servizio chat" ||
+        t === "scarica chat" ||
+        t === "scarica chat + files" ||
+        t === "scarica server files" ||
+        t === "chiudi chat selezionata"
+      ){
+        el.classList.add("fm-admin-v2-hidden-old-toolbar-20260519");
+      }
+    });
+  }
+
+  function boot(){
+    render();
+    hideOldChatToolbar();
+
+    setTimeout(function(){
+      render();
+      hideOldChatToolbar();
+    }, 500);
+
+    setTimeout(function(){
+      render();
+      hideOldChatToolbar();
+    }, 1500);
+  }
+
+  window.fmAdminChatOnlyMenuV2_20260519 = {
+    boot,
+    render,
+    hideOldChatToolbar,
+    isInsideAdminChatPage
+  };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(function(){
+    render();
+    hideOldChatToolbar();
+  }, 1500);
+})();
+</script>
+
 </body>
 </html>
