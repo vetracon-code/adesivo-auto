@@ -22688,5 +22688,267 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-admin-menu-close-actions-fix-final-20260519">
+(function(){
+  if(window.__FollowMeAdminMenuCloseActionsFixFinal20260519) return;
+  window.__FollowMeAdminMenuCloseActionsFixFinal20260519 = true;
+
+  /*
+    FIX MENU CHIUDI:
+    - "Solo questa chat" non dipende più dal vecchio pulsante nascosto.
+    - "Tutte le chat" chiude tutto e poi forza uscita dalla modalità chat admin.
+  */
+
+  function cleanSid(v){
+    const s = String(v || "").trim();
+    return /^\d+$/.test(s) ? s : "";
+  }
+
+  function activeSid(){
+    const selectors = [
+      "#followmeStableAliasBar20260519 button.active",
+      "#followmeFixedAliasBar20260519 button.active",
+      "#followmeTopUserAliasBar20260519 button.active",
+      "#followmeSimpleUserAliasBar20260519 button.active",
+      "#followmeOwnerChatSessionStrip .active",
+      ".followme-owner-chat-session-strip .active",
+      ".followme-chat-session-strip .active",
+      ".fm-clean-session-strip .active"
+    ];
+
+    for(const sel of selectors){
+      const el = document.querySelector(sel);
+      if(!el) continue;
+
+      const sid = cleanSid(
+        el.dataset.sessionId ||
+        el.getAttribute("data-session-id") ||
+        el.dataset.id ||
+        el.getAttribute("data-id")
+      );
+
+      if(sid) return sid;
+    }
+
+    try{
+      const sid = cleanSid(window.currentOwnerSessionId || window.followMeOwnerCurrentSessionId || "");
+      if(sid) return sid;
+    }catch(e){}
+
+    return "";
+  }
+
+  function projectCode(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("app");
+      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
+    }catch(e){}
+
+    try{
+      if(window.FOLLOWME_PROJECT_CODE) return String(window.FOLLOWME_PROJECT_CODE);
+      if(window.followMeProjectCode) return String(window.followMeProjectCode);
+    }catch(e){}
+
+    return "FM-DEMO";
+  }
+
+  async function refreshSessions(){
+    try{
+      if(typeof window.refreshFollowMeOwnerChatSessions === "function"){
+        window.refreshFollowMeOwnerChatSessions();
+      }
+    }catch(e){}
+  }
+
+  function exitChatAdminView(){
+    /*
+      Prova prima le funzioni già esistenti/reset, poi fallback hard.
+      L'obiettivo è uscire dalla schermata chat dopo Chiudi TUTTO.
+    */
+
+    try{
+      if(typeof window.followMeResetChat === "function"){
+        window.followMeResetChat();
+        return;
+      }
+    }catch(e){}
+
+    try{
+      if(typeof window.followMeOpenResetChoice === "function"){
+        /*
+          Non apriamo il modal reset: se c'è, preferiamo uscire direttamente sotto.
+        */
+      }
+    }catch(e){}
+
+    try{
+      document.body.classList.remove("followme-chat-only-mode");
+    }catch(e){}
+
+    /*
+      Fallback robusto: ricarica la Web App senza lasciare stato chat vivo.
+      Mantiene la stessa URL admin.
+    */
+    setTimeout(function(){
+      try{
+        const url = new URL(location.href);
+        url.searchParams.set("closed_all", String(Date.now()));
+        location.replace(url.toString());
+      }catch(e){
+        location.reload();
+      }
+    }, 450);
+  }
+
+  async function closeSelectedDirect(){
+    const sid = activeSid();
+
+    if(!sid){
+      alert("Seleziona prima una chat utente.");
+      return;
+    }
+
+    const ok = confirm(
+      "Vuoi chiudere solo la chat selezionata?\n\n" +
+      "L’utente vedrà la pagina di chiusura.\n" +
+      "Gli altri utenti resteranno collegati."
+    );
+
+    if(!ok) return;
+
+    try{
+      const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/close-selected", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ confirm:"CHIUDI_CHAT_SELEZIONATA_MENU" })
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Chiusura chat selezionata non riuscita.");
+      }
+
+      await refreshSessions();
+
+      alert("Chat selezionata chiusa.");
+
+    }catch(err){
+      alert(err.message || "Errore chiusura chat selezionata.");
+    }
+  }
+
+  async function closeAllWithResetAndExit(){
+    const ok = confirm(
+      "Vuoi chiudere TUTTE le chat?\n\n" +
+      "Il sistema chiuderà tutte le conversazioni aperte,\n" +
+      "spegnerà il servizio chat e uscirà dalla schermata chat.\n\n" +
+      "Gli utenti vedranno la pagina di chiusura."
+    );
+
+    if(!ok) return;
+
+    try{
+      const code = projectCode();
+
+      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/chat/close-all-with-reset", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ confirm:"CHIUDI_TUTTO_CON_RESET_MENU_EXIT" })
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Chiusura totale non riuscita.");
+      }
+
+      await refreshSessions();
+
+      alert("Tutte le chat sono state chiuse. Servizio chat spento.");
+
+      exitChatAdminView();
+
+    }catch(err){
+      alert(err.message || "Errore chiusura totale.");
+    }
+  }
+
+  function hookCloseChoice(){
+    const overlay = document.getElementById("followmeAdminCloseChoice20260519");
+    if(!overlay) return;
+
+    const one = overlay.querySelector("button.one");
+    const all = overlay.querySelector("button.all");
+
+    if(one && one.dataset.menuCloseFix20260519 !== "1"){
+      one.dataset.menuCloseFix20260519 = "1";
+
+      one.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+
+        overlay.classList.remove("open");
+        closeSelectedDirect();
+
+        return false;
+      }, true);
+    }
+
+    if(all && all.dataset.menuCloseAllFix20260519 !== "1"){
+      all.dataset.menuCloseAllFix20260519 = "1";
+
+      all.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+
+        overlay.classList.remove("open");
+        closeAllWithResetAndExit();
+
+        return false;
+      }, true);
+    }
+  }
+
+  /*
+    Se esiste anche il vecchio hook "close all reset", questa patch passa prima
+    perché usa capture:true e stopImmediatePropagation.
+  */
+  function boot(){
+    hookCloseChoice();
+    setTimeout(hookCloseChoice, 300);
+    setTimeout(hookCloseChoice, 1200);
+  }
+
+  window.fmAdminMenuCloseActionsFix20260519 = {
+    boot,
+    hookCloseChoice,
+    closeSelectedDirect,
+    closeAllWithResetAndExit,
+    exitChatAdminView,
+    activeSid
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(hookCloseChoice, 800);
+})();
+</script>
+
 </body>
 </html>
