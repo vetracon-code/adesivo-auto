@@ -5840,10 +5840,14 @@
 
 
 
-<script id="followme-public-resume-pause-force-final-20260519">
+
+
+<script id="followme-public-resume-universal-final-20260519">
 (function(){
-  if(window.__FollowMePublicResumePauseForceFinal20260519) return;
-  window.__FollowMePublicResumePauseForceFinal20260519 = true;
+  if(window.__FollowMePublicResumeUniversalFinal20260519) return;
+  window.__FollowMePublicResumeUniversalFinal20260519 = true;
+
+  let resumeBusy = false;
 
   function cleanSid(v){
     const s = String(v || "").trim();
@@ -5873,103 +5877,106 @@
     return "";
   }
 
-  function removePauseStorage(){
+  function clearPauseStorage(){
     try{
-      const sid = sessionId();
-
-      [
-        "followme_chat_user_paused_" + sid,
-        "followme_chat_user_paused_unknown"
-      ].forEach(function(k){
-        localStorage.removeItem(k);
-        sessionStorage.removeItem(k);
-      });
-
       Object.keys(localStorage).forEach(function(k){
-        if(k.includes("followme_chat_user_paused")) localStorage.removeItem(k);
+        if(
+          k.includes("followme_chat_user_paused") ||
+          k.includes("followme") && k.includes("paused")
+        ){
+          localStorage.removeItem(k);
+        }
       });
+    }catch(e){}
 
+    try{
       Object.keys(sessionStorage).forEach(function(k){
-        if(k.includes("followme_chat_user_paused")) sessionStorage.removeItem(k);
+        if(
+          k.includes("followme_chat_user_paused") ||
+          k.includes("followme") && k.includes("paused")
+        ){
+          sessionStorage.removeItem(k);
+        }
       });
     }catch(e){}
   }
 
-  function findInput(){
+  function findTextInput(){
     return document.getElementById("messageInput") ||
            document.querySelector("textarea") ||
            document.querySelector("input[type='text']");
   }
 
-  function findSend(){
+  function findSendButton(){
     return document.getElementById("sendBtn") ||
            document.querySelector("button[type='submit']") ||
            document.querySelector(".send-btn");
   }
 
+  function removePauseClasses(){
+    [
+      "followme-public-locally-paused",
+      "followme-public-paused",
+      "fm-public-paused",
+      "fm-public-user-paused",
+      "user-paused"
+    ].forEach(function(cls){
+      document.body.classList.remove(cls);
+      document.documentElement.classList.remove(cls);
+    });
+  }
+
   function hidePauseOverlays(){
     [
-      "followmePublicPauseOverlay20260519"
+      "followmePublicPauseOverlay20260519",
+      "followmePublicPausedOverlay20260519",
+      "followmePublicPausedBox20260519"
     ].forEach(function(id){
       const el = document.getElementById(id);
       if(el){
         el.style.display = "none";
+        el.style.visibility = "hidden";
         el.setAttribute("aria-hidden", "true");
       }
     });
 
-    document.body.classList.remove("followme-public-locally-paused");
+    document.querySelectorAll("[id*='Pause'], [id*='pause'], [class*='pause'], [class*='paused']").forEach(function(el){
+      const txt = String(el.textContent || "").toLowerCase();
 
-    const input = findInput();
-    const send = findSend();
+      if(
+        txt.includes("chat messa in pausa") ||
+        txt.includes("riprendi") ||
+        txt.includes("attendi")
+      ){
+        el.style.display = "none";
+        el.style.visibility = "hidden";
+        el.setAttribute("aria-hidden", "true");
+      }
+    });
+  }
+
+  function enableComposer(){
+    const input = findTextInput();
+    const send = findSendButton();
 
     if(input){
       input.disabled = false;
+      input.readOnly = false;
       input.placeholder = "Digita il testo qui e premi invio";
     }
 
     if(send){
       send.disabled = false;
+      send.removeAttribute("aria-disabled");
+      send.classList.remove("disabled", "is-disabled");
     }
   }
 
-  async function unpauseServer(){
-    const sid = sessionId();
-    if(!sid) return;
-
-    /*
-      Endpoint già usato dalla patch pausa:
-      /api/followme/chat/session/:id/pause
-    */
-    try{
-      await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/pause", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ is_user_paused:false })
-      });
-    }catch(e){}
-
-    /*
-      Fallback: se qualche endpoint usa set-user-control/state management.
-      Non blocca se fallisce.
-    */
-    try{
-      await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/set-user-control", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ is_user_paused:false })
-      });
-    }catch(e){}
-  }
-
-  async function forceResume(){
-    removePauseStorage();
+  function forceLocalResume(){
+    clearPauseStorage();
+    removePauseClasses();
     hidePauseOverlays();
-
-    await unpauseServer();
-
-    removePauseStorage();
-    hidePauseOverlays();
+    enableComposer();
 
     try{
       if(window.fmPublicPauseResume20260519 && typeof window.fmPublicPauseResume20260519.setPausedLocal === "function"){
@@ -5977,9 +5984,48 @@
       }
     }catch(e){}
 
+    clearPauseStorage();
+    removePauseClasses();
+    hidePauseOverlays();
+    enableComposer();
+  }
+
+  async function syncServerResume(){
+    const sid = sessionId();
+    if(!sid) return;
+
+    const calls = [
+      fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/pause", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ is_user_paused:false })
+      }).catch(function(){}),
+
+      fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/set-user-control", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ is_user_paused:false })
+      }).catch(function(){})
+    ];
+
+    await Promise.allSettled(calls);
+  }
+
+  async function resumeNow(){
+    if(resumeBusy) return;
+    resumeBusy = true;
+
+    forceLocalResume();
+
+    try{
+      await syncServerResume();
+    }catch(e){}
+
+    forceLocalResume();
+
     try{
       if(window.fmPublicFastStateOnly20260519 && typeof window.fmPublicFastStateOnly20260519.fetchState === "function"){
-        setTimeout(window.fmPublicFastStateOnly20260519.fetchState, 80);
+        setTimeout(window.fmPublicFastStateOnly20260519.fetchState, 100);
       }
     }catch(e){}
 
@@ -5995,49 +6041,75 @@
       }
     }catch(e){}
 
-    setTimeout(hidePauseOverlays, 150);
-    setTimeout(hidePauseOverlays, 500);
-    setTimeout(hidePauseOverlays, 1200);
+    setTimeout(forceLocalResume, 100);
+    setTimeout(forceLocalResume, 400);
+    setTimeout(forceLocalResume, 1000);
+
+    setTimeout(function(){
+      resumeBusy = false;
+    }, 700);
   }
 
-  function bindResumeButtons(){
+  /*
+    Intercettazione universale:
+    funziona anche se il pulsante Riprendi viene ricreato o se vecchi handler
+    provano a bloccare il click.
+  */
+  document.addEventListener("click", function(ev){
+    const target = ev.target && ev.target.closest ? ev.target.closest("button,a,div,span") : ev.target;
+    if(!target) return;
+
+    const txt = String(target.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+
+    if(txt === "riprendi" || txt.includes("riprendi la chat") || txt.includes("riattiva la chat")){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      resumeNow();
+      return false;
+    }
+  }, true);
+
+  function ensureResumeButtonsWork(){
     document.querySelectorAll("button,a").forEach(function(el){
-      const t = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+      const txt = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
 
-      if(t !== "riprendi") return;
-
-      if(el.dataset.followmeForceResumeBound20260519) return;
-      el.dataset.followmeForceResumeBound20260519 = "1";
-
-      el.addEventListener("click", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        ev.stopImmediatePropagation();
-        forceResume();
-        return false;
-      }, true);
+      if(txt === "riprendi" || txt.includes("riprendi la chat") || txt.includes("riattiva la chat")){
+        el.disabled = false;
+        el.removeAttribute("aria-disabled");
+        el.style.pointerEvents = "auto";
+        el.style.cursor = "pointer";
+        el.onclick = function(ev){
+          if(ev){
+            ev.preventDefault();
+            ev.stopPropagation();
+          }
+          resumeNow();
+          return false;
+        };
+      }
     });
   }
 
   function boot(){
-    bindResumeButtons();
+    ensureResumeButtonsWork();
 
     /*
-      Se per errore il body non è in pausa ma l'overlay è visibile,
-      la nascondiamo.
+      Se non siamo davvero in pausa, impedisce che una vecchia overlay resti sopra.
     */
     if(!document.body.classList.contains("followme-public-locally-paused")){
       hidePauseOverlays();
+      enableComposer();
     }
 
-    setTimeout(bindResumeButtons, 300);
-    setTimeout(bindResumeButtons, 900);
+    setTimeout(ensureResumeButtonsWork, 250);
+    setTimeout(ensureResumeButtonsWork, 900);
   }
 
-  window.fmPublicResumePauseForce20260519 = {
+  window.fmPublicResumeUniversal20260519 = {
     boot,
-    forceResume,
-    hidePauseOverlays
+    resumeNow,
+    forceLocalResume
   };
 
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
@@ -6052,7 +6124,7 @@
     setTimeout(boot, 250);
   });
 
-  setInterval(bindResumeButtons, 1000);
+  setInterval(ensureResumeButtonsWork, 800);
 })();
 </script>
 
