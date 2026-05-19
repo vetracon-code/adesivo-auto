@@ -9587,6 +9587,52 @@ async function ensureFollowMeChatUserManagementColumns() {
   }
 }
 
+
+
+// followme-public-close-session-20260519
+app.post('/api/followme/chat/session/:session_id/close', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeChatSchema();
+
+    const sessionId = Number(req.params.session_id || 0);
+
+    if (!sessionId) {
+      return res.status(400).json({
+        success:false,
+        error:'Sessione mancante.'
+      });
+    }
+
+    const updated = await pool.query(
+      `UPDATE followme_chat_sessions
+       SET status = 'closed',
+           updated_at = NOW(),
+           last_seen_at = NOW()
+       WHERE id = $1
+       RETURNING id, status, updated_at`,
+      [sessionId]
+    );
+
+    if (!updated.rows.length) {
+      return res.status(404).json({
+        success:false,
+        error:'Sessione non trovata.'
+      });
+    }
+
+    return res.json({
+      success:true,
+      session:updated.rows[0]
+    });
+  } catch (err) {
+    console.error('followme public close session error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore chiusura chat.'
+    });
+  }
+});
+
 app.get('/api/followme/chat/session/:session_id/messages', async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
@@ -10093,7 +10139,7 @@ app.get('/api/followme/chat/session/:session_id/state', async (req, res) => {
     }
 
     const result = await pool.query(
-      `SELECT id, display_name, visitor_label, uploads_enabled, is_blocked, blocked_at, updated_at
+      `SELECT id, display_name, visitor_label, uploads_enabled, is_blocked, blocked_at, updated_at, owner_opened_at, last_seen_at, status
        FROM followme_chat_sessions
        WHERE id = $1
        LIMIT 1`,
