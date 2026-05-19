@@ -9484,57 +9484,9 @@ app.post('/api/followme/chat/:chat_token/session', express.json(), async (req, r
       return res.status(403).json({ success:false, error:'Chat non attiva.' });
     }
 
-    // Tiene UNA SOLA sessione open per QR/progetto.
-    // Se ci sono più sessioni aperte, conserva la più recente e chiude le altre.
-    const openSessions = await pool.query(
-      `SELECT id, visitor_label, display_name, uploads_enabled, is_blocked, status, created_at, last_seen_at
-       FROM followme_chat_sessions
-       WHERE project_id = $1
-         AND status = 'open'
-       ORDER BY created_at DESC, id DESC`,
-      [project.id]
-    );
-
-    if (openSessions.rows.length > 0) {
-      const session = openSessions.rows[0];
-      const keepId = session.id;
-
-      await pool.query(
-        `UPDATE followme_chat_sessions
-         SET status = 'closed',
-             updated_at = NOW()
-         WHERE project_id = $1
-           AND status = 'open'
-           AND id <> $2`,
-        [project.id, keepId]
-      );
-
-      await pool.query(
-        `UPDATE followme_chat_sessions
-         SET last_seen_at = NOW(),
-             updated_at = NOW()
-         WHERE id = $1`,
-        [keepId]
-      );
-
-      return res.json({
-        success:true,
-        reused:true,
-        project_code:project.code,
-        public_id:project.public_id,
-        session_id:keepId,
-        session:{
-          id:keepId,
-          visitor_label:session.visitor_label,
-          display_name:session.display_name,
-          uploads_enabled:session.uploads_enabled,
-          is_blocked:session.is_blocked,
-          status:'open',
-          created_at:session.created_at,
-          last_seen_at:new Date().toISOString()
-        }
-      });
-    }
+    // Ogni nuovo accesso pubblico crea una nuova sessione autonoma.
+    // NON riusiamo più l'ultima sessione open del progetto:
+    // utenti diversi devono sempre finire in chat separate.
 
     const visitorLabel = 'Utente ' + Math.random().toString(36).slice(2, 6).toUpperCase();
 
