@@ -19610,5 +19610,157 @@ document.addEventListener("visibilitychange", function(){
 
 
 
+
+
+<script id="followme-admin-clean-fast-confirmations-final-20260519">
+(function(){
+  if(window.__FollowMeAdminCleanFastConfirmationsFinal20260519) return;
+  window.__FollowMeAdminCleanFastConfirmationsFinal20260519 = true;
+
+  const silentPatterns = [
+    "extra abilitati",
+    "extra disabilitati",
+    "extra abilitato",
+    "extra disabilitato",
+    "caricamenti completi abilitati",
+    "caricamenti completi disabilitati",
+    "utente bloccato",
+    "utente sbloccato",
+    "utente riabilitato"
+  ];
+
+  function shouldSilence(msg){
+    const m = String(msg || "").toLowerCase();
+    return silentPatterns.some(function(p){ return m.includes(p); });
+  }
+
+  if(!window.__fmAdminCleanOriginalAlert20260519){
+    window.__fmAdminCleanOriginalAlert20260519 = window.alert.bind(window);
+
+    window.alert = function(message){
+      if(shouldSilence(message)) return;
+      return window.__fmAdminCleanOriginalAlert20260519(message);
+    };
+  }
+
+  /*
+    Se esiste una funzione toast globale, la alleggeriamo solo per questi messaggi.
+    Non blocchiamo gli errori veri.
+  */
+  function patchToast(){
+    try{
+      if(typeof window.toast !== "function") return;
+      if(window.toast.__fmCleanPatched20260519) return;
+
+      const oldToast = window.toast;
+
+      window.toast = function(message){
+        if(shouldSilence(message)) return;
+        return oldToast.apply(this, arguments);
+      };
+
+      window.toast.__fmCleanPatched20260519 = true;
+    }catch(e){}
+  }
+
+  function isControlButton(btn){
+    if(!btn) return false;
+
+    const t = String(btn.textContent || "").toLowerCase();
+
+    return t.includes("abilita extra") ||
+           t.includes("disabilita extra") ||
+           t.includes("extra on") ||
+           t.includes("extra off") ||
+           t.includes("blocca") ||
+           t.includes("sblocca") ||
+           t.includes("riabilita");
+  }
+
+  function unlockStuckButtons(){
+    document.querySelectorAll("button").forEach(function(btn){
+      if(!isControlButton(btn)) return;
+
+      /*
+        Non lasciamo i pulsanti disabilitati per secondi.
+        Se il server ha risposto, gli script esistenti cambieranno il testo.
+      */
+      if(btn.disabled){
+        btn.disabled = false;
+      }
+
+      btn.style.opacity = "";
+      btn.classList.remove("loading", "is-loading", "busy", "is-busy");
+      btn.removeAttribute("aria-busy");
+    });
+  }
+
+  if(!window.__fmAdminCleanFastFetchPatch20260519){
+    window.__fmAdminCleanFastFetchPatch20260519 = true;
+
+    const oldFetch = window.fetch.bind(window);
+
+    window.fetch = async function(input, init){
+      const res = await oldFetch(input, init);
+
+      try{
+        const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+
+        if(
+          url &&
+          url.includes("/api/followme/chat/session/") &&
+          (
+            url.includes("/set-user-control") ||
+            url.includes("/set-user-control-clean") ||
+            url.includes("/toggle-user-control") ||
+            url.includes("/settings")
+          )
+        ){
+          setTimeout(unlockStuckButtons, 80);
+          setTimeout(unlockStuckButtons, 250);
+          setTimeout(unlockStuckButtons, 700);
+
+          try{
+            if(typeof window.refreshFollowMeOwnerChatSessions === "function"){
+              setTimeout(window.refreshFollowMeOwnerChatSessions, 150);
+              setTimeout(window.refreshFollowMeOwnerChatSessions, 700);
+            }
+          }catch(e){}
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  function boot(){
+    patchToast();
+    unlockStuckButtons();
+  }
+
+  window.fmAdminCleanFastConfirmations20260519 = {
+    boot,
+    unlockStuckButtons
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(function(){
+    patchToast();
+    unlockStuckButtons();
+  }, 1000);
+})();
+</script>
+
 </body>
 </html>
