@@ -9807,7 +9807,7 @@ app.get('/api/followme/chat/session/:session_id/events', async (req, res) => {
       }
 
       sendSnapshot(false);
-    }, 700);
+    }, 250);
 
   } catch (err) {
     console.error('followme SSE events error:', err);

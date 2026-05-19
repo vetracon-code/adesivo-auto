@@ -19763,5 +19763,206 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-admin-final-message-dedupe-hard-20260519">
+(function(){
+  if(window.__FollowMeAdminFinalMessageDedupeHard20260519) return;
+  window.__FollowMeAdminFinalMessageDedupeHard20260519 = true;
+
+  function normText(t){
+    return String(t || "")
+      .replace(/\s+/g, " ")
+      .replace(/\u00a0/g, " ")
+      .trim()
+      .toLowerCase();
+  }
+
+  function normUrl(u){
+    try{
+      let s = String(u || "").trim();
+      if(!s) return "";
+      s = s.replace(/&amp;/g, "&");
+      const url = new URL(s, location.origin);
+      return url.pathname + url.search;
+    }catch(e){
+      return String(u || "").trim().replace(/^https?:\/\/[^\/]+/i, "");
+    }
+  }
+
+  function isInsideComposer(el){
+    return !!(el && el.closest && el.closest(
+      "form, footer, .followme-owner-chat-composer, .input-area, .followme-extra-menu, .followme-admin-attach-panel"
+    ));
+  }
+
+  function isBubble(el){
+    if(!el || isInsideComposer(el)) return false;
+
+    return el.matches && el.matches(
+      ".followme-owner-chat-bubble, .message, .bubble, [data-message-id]"
+    );
+  }
+
+  function senderOf(el){
+    if(!el) return "";
+
+    const cls = String(el.className || "").toLowerCase();
+    const ds = el.dataset || {};
+
+    const explicit =
+      ds.sender ||
+      ds.messageSender ||
+      ds.from ||
+      "";
+
+    if(explicit) return String(explicit).toLowerCase();
+
+    if(cls.includes("owner") || cls.includes("admin")) return "owner";
+    if(cls.includes("visitor") || cls.includes("user")) return "visitor";
+
+    return "";
+  }
+
+  function messageId(el){
+    return String(
+      el.getAttribute("data-message-id") ||
+      el.dataset.messageId ||
+      el.dataset.serverMessageId ||
+      ""
+    ).trim();
+  }
+
+  function attachmentUrl(el){
+    if(!el) return "";
+
+    const media = el.querySelector && el.querySelector(
+      "audio[src], img[src], video[src], a[href*='/uploads/followme-chat/'], [data-audio-url], [data-fm-attachment-url]"
+    );
+
+    if(media){
+      const raw =
+        media.getAttribute("src") ||
+        media.getAttribute("href") ||
+        media.getAttribute("data-audio-url") ||
+        media.getAttribute("data-fm-attachment-url") ||
+        "";
+
+      const u = normUrl(raw);
+      if(u) return u;
+    }
+
+    const html = el.innerHTML || "";
+    const txt = el.textContent || "";
+
+    const patterns = [
+      /src=["']([^"']*\/uploads\/followme-chat\/[^"']+)["']/i,
+      /href=["']([^"']*\/uploads\/followme-chat\/[^"']+)["']/i,
+      /data-audio-url=["']([^"']*\/uploads\/followme-chat\/[^"']+)["']/i,
+      /"url"\s*:\s*"([^"]*\/uploads\/followme-chat\/[^"]+)"/i,
+      /(\/uploads\/followme-chat\/[A-Za-z0-9._%\-]+)/i
+    ];
+
+    for(const re of patterns){
+      const m = html.match(re) || txt.match(re);
+      if(m && m[1]){
+        const u = normUrl(m[1]);
+        if(u) return u;
+      }
+    }
+
+    return "";
+  }
+
+  function keyFor(el){
+    const id = messageId(el);
+    if(id) return "id:" + id;
+
+    const url = attachmentUrl(el);
+    if(url) return "url:" + url;
+
+    const text = normText(el.textContent || "");
+    const sender = senderOf(el);
+
+    if(text && text.length >= 2){
+      return "txt:" + sender + ":" + text;
+    }
+
+    return "";
+  }
+
+  function preferServerBubble(a, b){
+    const aid = messageId(a);
+    const bid = messageId(b);
+
+    if(aid && !bid) return a;
+    if(!aid && bid) return b;
+
+    return a;
+  }
+
+  function getBubbles(){
+    return Array.from(document.querySelectorAll(
+      "#followmeOwnerChatMessages .followme-owner-chat-bubble, " +
+      "#followmeOwnerChatMessages .message, " +
+      "#followmeOwnerChatMessages .bubble, " +
+      ".followme-owner-chat-messages .followme-owner-chat-bubble, " +
+      ".followme-owner-chat-messages .message, " +
+      ".followme-owner-chat-messages .bubble, " +
+      "[data-message-id]"
+    )).filter(isBubble);
+  }
+
+  function dedupeHard(){
+    const seen = new Map();
+
+    getBubbles().forEach(function(el){
+      const key = keyFor(el);
+      if(!key) return;
+
+      if(!seen.has(key)){
+        seen.set(key, el);
+        return;
+      }
+
+      const first = seen.get(key);
+      const keep = preferServerBubble(first, el);
+      const remove = keep === first ? el : first;
+
+      if(remove && remove.parentNode){
+        remove.remove();
+      }
+
+      seen.set(key, keep);
+    });
+  }
+
+  function boot(){
+    dedupeHard();
+
+    setTimeout(dedupeHard, 120);
+    setTimeout(dedupeHard, 500);
+  }
+
+  window.fmAdminFinalMessageDedupeHard20260519 = {
+    boot,
+    dedupeHard
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(dedupeHard, 500);
+})();
+</script>
+
 </body>
 </html>
