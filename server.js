@@ -9939,6 +9939,131 @@ app.get('/api/followme/chat/session/:session_id/export-server-files', async (req
 });
 // end-followme-server-side-chat-files-export-final-20260519
 
+
+// followme-close-all-service-final-20260519
+app.get('/api/followme/chat/session/:session_id/service-state', async (req, res) => {
+  try {
+    if (typeof ensureFollowMeRuntimeFast === 'function') {
+      await ensureFollowMeRuntimeFast();
+    } else if (typeof ensureFollowMeChatSchema === 'function') {
+      await ensureFollowMeChatSchema();
+    }
+
+    const sessionId = Number(req.params.session_id || 0);
+
+    if (!sessionId) {
+      return res.status(400).json({
+        success:false,
+        error:'Sessione mancante.'
+      });
+    }
+
+    const r = await pool.query(
+      `SELECT
+         s.id,
+         s.status,
+         s.uploads_enabled,
+         s.is_blocked,
+         COALESCE(s.is_user_paused, FALSE) AS is_user_paused,
+         p.code AS project_code,
+         p.public_id,
+         COALESCE(p.chat_mode_enabled, FALSE) AS chat_mode_enabled
+       FROM followme_chat_sessions s
+       JOIN followme_projects p ON p.id = s.project_id
+       WHERE s.id = $1
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!r.rows.length) {
+      return res.status(404).json({
+        success:false,
+        error:'Sessione non trovata.'
+      });
+    }
+
+    return res.json({
+      success:true,
+      session:r.rows[0]
+    });
+  } catch(err) {
+    console.error('followme service-state error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore stato servizio.'
+    });
+  }
+});
+
+app.post('/api/followme/:code/chat/close-all', express.json(), async (req, res) => {
+  try {
+    if (typeof ensureFollowMeRuntimeFast === 'function') {
+      await ensureFollowMeRuntimeFast();
+    } else if (typeof ensureFollowMeChatSchema === 'function') {
+      await ensureFollowMeChatSchema();
+    }
+
+    const code = String(req.params.code || '').trim();
+
+    if (!code) {
+      return res.status(400).json({
+        success:false,
+        error:'Codice progetto mancante.'
+      });
+    }
+
+    const project = await pool.query(
+      `SELECT id, code, public_id
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!project.rows.length) {
+      return res.status(404).json({
+        success:false,
+        error:'Progetto non trovato.'
+      });
+    }
+
+    const projectId = project.rows[0].id;
+
+    await pool.query(
+      `UPDATE followme_projects
+       SET chat_mode_enabled = FALSE,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [projectId]
+    );
+
+    const closed = await pool.query(
+      `UPDATE followme_chat_sessions
+       SET status = 'closed',
+           updated_at = NOW()
+       WHERE project_id = $1
+         AND COALESCE(status, 'open') <> 'closed'
+       RETURNING id`,
+      [projectId]
+    );
+
+    return res.json({
+      success:true,
+      mode:'close_all',
+      project:project.rows[0],
+      closed_sessions:closed.rows.length,
+      message:'Servizio chat chiuso.'
+    });
+  } catch(err) {
+    console.error('followme close all error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore chiusura servizio chat.'
+    });
+  }
+});
+// end-followme-close-all-service-final-20260519
+
 app.get('/api/followme/chat/session/:session_id/messages', async (req, res) => {
   try {
     await ensureFollowMeRuntimeFast();

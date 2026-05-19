@@ -20356,5 +20356,168 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-admin-pause-and-close-all-final-20260519">
+(function(){
+  if(window.__FollowMeAdminPauseAndCloseAllFinal20260519) return;
+  window.__FollowMeAdminPauseAndCloseAllFinal20260519 = true;
+
+  function projectCode(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("app");
+      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
+    }catch(e){}
+
+    try{
+      if(window.FOLLOWME_PROJECT_CODE) return String(window.FOLLOWME_PROJECT_CODE);
+      if(window.followMeProjectCode) return String(window.followMeProjectCode);
+    }catch(e){}
+
+    return "FM-DEMO";
+  }
+
+  function renameCloseToPause(){
+    document.querySelectorAll("button,a").forEach(function(el){
+      const t = String(el.textContent || "").replace(/\s+/g, " ").trim();
+
+      if(t === "Chiudi"){
+        el.textContent = "Pausa";
+      }
+
+      if(t === "Chiudi chat"){
+        el.textContent = "Pausa chat";
+      }
+
+      if(t === "Spegni"){
+        el.textContent = "Chiudi TUTTO";
+      }
+    });
+  }
+
+  async function closeAll(){
+    const ok = confirm(
+      "Confermi CHIUDI TUTTO?\n\n" +
+      "La chat verrà chiusa per tutte le persone collegate.\n" +
+      "Gli utenti vedranno la pagina finale di chiusura.\n" +
+      "Lo storico resterà disponibile lato admin."
+    );
+
+    if(!ok) return;
+
+    const btn = document.getElementById("followmeAdminCloseAllBtn20260519");
+
+    try{
+      if(btn){
+        btn.disabled = true;
+        btn.textContent = "Chiusura...";
+      }
+
+      const code = projectCode();
+
+      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/chat/close-all", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ confirm:"CHIUDI_TUTTO" })
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Chiusura servizio non riuscita.");
+      }
+
+      alert("Servizio chat chiuso per tutti gli utenti collegati.");
+
+      try{
+        if(typeof window.refreshFollowMeOwnerChatSessions === "function"){
+          window.refreshFollowMeOwnerChatSessions();
+        }
+      }catch(e){}
+
+    }catch(err){
+      alert(err.message || "Errore chiusura totale.");
+    }finally{
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = "Chiudi TUTTO";
+      }
+    }
+  }
+
+  function findToolbarTarget(){
+    return document.querySelector("#followmeOwnerChatTopActions") ||
+           document.querySelector(".followme-owner-chat-actions") ||
+           document.querySelector(".followme-admin-wa-actions") ||
+           document.querySelector("#followmeOwnerChatMessages")?.parentElement ||
+           document.body;
+  }
+
+  function ensureCloseAllButton(){
+    if(document.getElementById("followmeAdminCloseAllBtn20260519")) return;
+
+    const btn = document.createElement("button");
+    btn.id = "followmeAdminCloseAllBtn20260519";
+    btn.type = "button";
+    btn.textContent = "Chiudi TUTTO";
+    btn.style.border = "0";
+    btn.style.borderRadius = "999px";
+    btn.style.padding = "9px 13px";
+    btn.style.fontWeight = "950";
+    btn.style.cursor = "pointer";
+    btn.style.background = "#111827";
+    btn.style.color = "#ffffff";
+    btn.style.margin = "4px";
+    btn.style.boxShadow = "0 8px 22px rgba(17,24,39,.18)";
+
+    btn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      closeAll();
+    }, true);
+
+    const target = findToolbarTarget();
+
+    if(target && target !== document.body){
+      target.insertBefore(btn, target.firstChild);
+    }else{
+      btn.style.position = "fixed";
+      btn.style.right = "14px";
+      btn.style.bottom = "224px";
+      btn.style.zIndex = "99999";
+      document.body.appendChild(btn);
+    }
+  }
+
+  function boot(){
+    renameCloseToPause();
+    ensureCloseAllButton();
+
+    setTimeout(renameCloseToPause, 400);
+    setTimeout(ensureCloseAllButton, 600);
+  }
+
+  window.fmAdminPauseAndCloseAll20260519 = {
+    boot,
+    closeAll
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(renameCloseToPause, 1500);
+  setInterval(ensureCloseAllButton, 2000);
+})();
+</script>
+
 </body>
 </html>
