@@ -4105,58 +4105,180 @@
 
 
 
-<script id="followme-public-hide-waiting-when-connected-final-20260519">
+
+
+<script id="followme-public-real-owner-connected-label-final-20260519">
 (function(){
-  if(window.__FollowMePublicHideWaitingWhenConnectedFinal20260519) return;
-  window.__FollowMePublicHideWaitingWhenConnectedFinal20260519 = true;
+  if(window.__FollowMePublicRealOwnerConnectedLabelFinal20260519) return;
+  window.__FollowMePublicRealOwnerConnectedLabelFinal20260519 = true;
+
+  let hasRealOwnerMessage = false;
+  let locallyPaused = false;
 
   function norm(txt){
     return String(txt || "").replace(/\s+/g, " ").trim().toLowerCase();
   }
 
-  function isWaitingText(el){
-    const t = norm(el.textContent);
-    return t === "connesso - in attesa del proprietario" ||
-           t.includes("connesso - in attesa del proprietario");
+  function cleanSid(v){
+    const s = String(v || "").trim();
+    return /^\d+$/.test(s) ? s : "";
   }
 
-  function isConnectedText(el){
-    return norm(el.textContent) === "connessi";
+  function sessionId(){
+    try{
+      const p = new URLSearchParams(location.search || "");
+      const fromUrl = cleanSid(p.get("session") || p.get("chatSession"));
+      if(fromUrl) return fromUrl;
+    }catch(e){}
+
+    const arr = [
+      window.followMeChatSessionId,
+      window.FOLLOWME_CHAT_SESSION_ID
+    ];
+
+    try{ arr.push(sessionStorage.getItem("followme_chat_session_id")); }catch(e){}
+    try{ arr.push(localStorage.getItem("followme_chat_session_id")); }catch(e){}
+
+    for(const v of arr){
+      const sid = cleanSid(v);
+      if(sid) return sid;
+    }
+
+    return "";
   }
 
-  function allSmallTextNodes(){
-    return Array.from(document.querySelectorAll("div,span,p,small,strong"))
+  function storageKey(){
+    return "followme_chat_user_paused_" + (sessionId() || "unknown");
+  }
+
+  function readPaused(){
+    try{
+      locallyPaused = localStorage.getItem(storageKey()) === "1";
+    }catch(e){
+      locallyPaused = false;
+    }
+
+    return locallyPaused || document.body.classList.contains("followme-public-locally-paused");
+  }
+
+  function findFollowMeTitle(){
+    const els = Array.from(document.querySelectorAll("h1,h2,h3,strong,div,span,p"));
+    return els.find(function(el){
+      return norm(el.textContent) === "followme chat";
+    }) || null;
+  }
+
+  function removeDuplicateStatusLabels(keep){
+    const labels = Array.from(document.querySelectorAll("div,span,p,small,strong"))
       .filter(function(el){
+        if(el === keep) return false;
         const t = norm(el.textContent);
-        if(!t) return false;
-
-        return t.includes("connesso - in attesa del proprietario") ||
-               t === "connessi" ||
+        return t === "connessi" ||
+               t === "connesso - in attesa del proprietario" ||
                t === "chat in pausa";
       });
-  }
 
-  function fixLabels(){
-    const nodes = allSmallTextNodes();
+    labels.forEach(function(el){
+      /*
+        Rimuoviamo solo duplicati piccoli/status, non tocchiamo contenitori grandi.
+      */
+      const childCount = el.children ? el.children.length : 0;
+      const textLen = String(el.textContent || "").trim().length;
 
-    const hasConnected = nodes.some(isConnectedText);
-    const hasPaused = nodes.some(function(el){ return norm(el.textContent) === "chat in pausa"; });
-
-    nodes.forEach(function(el){
-      if(isWaitingText(el)){
-        if(hasConnected || hasPaused){
-          el.style.display = "none";
-          el.setAttribute("aria-hidden", "true");
-        }else{
-          el.style.display = "";
-          el.removeAttribute("aria-hidden");
-        }
+      if(childCount <= 1 && textLen <= 45){
+        el.style.display = "none";
+        el.setAttribute("aria-hidden", "true");
       }
     });
   }
 
-  if(!window.__fmHideWaitingWhenConnectedFetchPatch20260519){
-    window.__fmHideWaitingWhenConnectedFetchPatch20260519 = true;
+  function getOrCreateSingleStatusLabel(){
+    let el = document.getElementById("followmePublicSingleStatusLabel20260519");
+
+    if(el) return el;
+
+    const title = findFollowMeTitle();
+
+    el = document.createElement("div");
+    el.id = "followmePublicSingleStatusLabel20260519";
+    el.className = "followme-public-chat-subtitle";
+    el.style.fontSize = ".82rem";
+    el.style.fontWeight = "800";
+    el.style.opacity = ".78";
+    el.style.marginTop = "2px";
+    el.style.lineHeight = "1.25";
+
+    if(title && title.parentElement){
+      title.parentElement.appendChild(el);
+    }else{
+      const top = document.querySelector("header") || document.querySelector(".top") || document.body;
+      top.appendChild(el);
+    }
+
+    return el;
+  }
+
+  function setLabel(){
+    const paused = readPaused();
+    const label = getOrCreateSingleStatusLabel();
+
+    if(paused){
+      label.textContent = "Chat in pausa";
+    }else if(hasRealOwnerMessage){
+      label.textContent = "Connessi";
+    }else{
+      label.textContent = "Connesso - in attesa del proprietario";
+    }
+
+    label.style.display = "";
+    label.removeAttribute("aria-hidden");
+
+    removeDuplicateStatusLabels(label);
+  }
+
+  function isRealOwnerMessage(m){
+    if(!m) return false;
+
+    const sender = String(m.sender || "").trim().toLowerCase();
+    if(sender !== "owner") return false;
+
+    const msg = String(m.message || "").trim();
+
+    /*
+      Escludiamo eventuali automatici/robot/system anche se arrivassero marcati owner.
+    */
+    const low = msg.toLowerCase();
+
+    if(low.includes("__followme_robot")) return false;
+    if(low.includes('"kind":"system"')) return false;
+    if(low.includes('"sender":"system"')) return false;
+    if(low.includes("ok, info trasmesse")) return false;
+
+    return true;
+  }
+
+  function applyMessages(messages){
+    if(!Array.isArray(messages)) return;
+
+    if(messages.some(isRealOwnerMessage)){
+      hasRealOwnerMessage = true;
+    }
+
+    setLabel();
+  }
+
+  /*
+    IMPORTANTE:
+    La state API NON deve più far diventare "Connessi".
+    owner_opened_at significa che admin ha aperto, non che ha scritto.
+  */
+  function applyState(session){
+    readPaused();
+    setLabel();
+  }
+
+  if(!window.__fmPublicRealOwnerConnectedFetchPatch20260519){
+    window.__fmPublicRealOwnerConnectedFetchPatch20260519 = true;
     const oldFetch = window.fetch.bind(window);
 
     window.fetch = async function(input, init){
@@ -4165,17 +4287,23 @@
       try{
         const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
 
-        if(
-          url &&
-          url.includes("/api/followme/chat/session/") &&
-          (
-            url.includes("/messages") ||
-            url.includes("/state")
-          )
-        ){
-          setTimeout(fixLabels, 80);
-          setTimeout(fixLabels, 350);
-          setTimeout(fixLabels, 1000);
+        if(url && url.includes("/api/followme/chat/session/") && url.includes("/messages")){
+          const clone = res.clone();
+          const data = await clone.json().catch(function(){ return null; });
+
+          if(data && Array.isArray(data.messages)){
+            setTimeout(function(){ applyMessages(data.messages); }, 50);
+            setTimeout(function(){ applyMessages(data.messages); }, 350);
+          }
+        }
+
+        if(url && url.includes("/api/followme/chat/session/") && url.includes("/state")){
+          const clone = res.clone();
+          const data = await clone.json().catch(function(){ return null; });
+
+          if(data && data.session){
+            setTimeout(function(){ applyState(data.session); }, 80);
+          }
         }
       }catch(e){}
 
@@ -4183,27 +4311,81 @@
     };
   }
 
-  function boot(){
-    fixLabels();
-    setTimeout(fixLabels, 300);
-    setTimeout(fixLabels, 1200);
+  async function loadMessagesOnce(){
+    const sid = sessionId();
+    if(!sid) {
+      setLabel();
+      return;
+    }
+
+    try{
+      const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/messages?after=0&v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(res.ok && data && Array.isArray(data.messages)){
+        applyMessages(data.messages);
+      }else{
+        setLabel();
+      }
+    }catch(e){
+      setLabel();
+    }
   }
 
-  window.fmPublicHideWaitingWhenConnected20260519 = boot;
+  function boot(){
+    readPaused();
+
+    /*
+      Reset iniziale: non presumiamo mai Connessi.
+      Lo diventiamo solo dopo aver letto un vero messaggio owner.
+    */
+    hasRealOwnerMessage = false;
+    setLabel();
+
+    setTimeout(loadMessagesOnce, 150);
+    setTimeout(loadMessagesOnce, 900);
+  }
+
+  window.fmPublicRealOwnerConnectedLabel20260519 = {
+    boot,
+    setLabel,
+    applyMessages,
+    state:function(){
+      return {
+        hasRealOwnerMessage,
+        locallyPaused:readPaused(),
+        sessionId:sessionId()
+      };
+    }
+  };
 
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 
   window.addEventListener("load", function(){
     setTimeout(boot, 250);
-    setTimeout(boot, 1200);
+    setTimeout(loadMessagesOnce, 1200);
   });
 
   window.addEventListener("pageshow", function(){
     setTimeout(boot, 250);
   });
 
-  setInterval(fixLabels, 1000);
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible"){
+      setTimeout(loadMessagesOnce, 250);
+    }
+  });
+
+  setInterval(function(){
+    readPaused();
+    setLabel();
+  }, 1000);
+
+  setInterval(loadMessagesOnce, 3000);
 })();
 </script>
 
