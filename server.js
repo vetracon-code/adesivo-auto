@@ -9102,7 +9102,7 @@ function makeFollowMeChatToken() {
 }
 
 async function ensureFollowMeChatToken(projectId) {
-  await ensureFollowMeChatSchema();
+  await ensureFollowMeChatSchemaFast();
 
   const current = await pool.query(
     `SELECT chat_public_token FROM followme_projects WHERE id = $1 LIMIT 1`,
@@ -9191,7 +9191,7 @@ async function sendFollowMeNewChatPush(project, sessionId) {
 /* Intercetta il QR pubblico FollowMe: se chat attiva, apre URL chat randomizzato. */
 app.get('/fm/u/:public_id', async (req, res, next) => {
   try {
-    await ensureFollowMeChatSchema();
+    await ensureFollowMeChatSchemaFast();
 
     const publicId = normalizeFollowMePublicId(req.params.public_id);
 
@@ -9221,7 +9221,7 @@ app.get('/fm/u/:public_id', async (req, res, next) => {
 
 app.post('/api/followme/:code/chat/enable', express.json(), async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
+    await ensureFollowMeChatSchemaFast();
 
     const code = normalizeFollowMeCode(req.params.code);
     const projectRes = await pool.query(
@@ -9259,7 +9259,7 @@ app.post('/api/followme/:code/chat/enable', express.json(), async (req, res) => 
 
 app.post('/api/followme/:code/chat/session/:session_id/reset', express.json(), async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
+    await ensureFollowMeChatSchemaFast();
 
     const code = normalizeFollowMeCode(req.params.code);
     const sessionId = Number(req.params.session_id || 0);
@@ -9323,7 +9323,7 @@ app.post('/api/followme/:code/chat/session/:session_id/reset', express.json(), a
 
 app.post('/api/followme/:code/chat/reset', express.json(), async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
+    await ensureFollowMeChatSchemaFast();
 
     const code = normalizeFollowMeCode(req.params.code);
 
@@ -9370,7 +9370,7 @@ app.post('/api/followme/:code/chat/reset', express.json(), async (req, res) => {
 
 app.post('/api/followme/:code/chat/disable', express.json(), async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
+    await ensureFollowMeChatSchemaFast();
 
     const code = normalizeFollowMeCode(req.params.code);
     const projectRes = await pool.query(
@@ -9398,7 +9398,7 @@ app.post('/api/followme/:code/chat/disable', express.json(), async (req, res) =>
 
 app.post('/api/followme/:code/chat/rotate-token', express.json(), async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
+    await ensureFollowMeChatSchemaFast();
 
     const code = normalizeFollowMeCode(req.params.code);
     const projectRes = await pool.query(
@@ -9437,7 +9437,7 @@ app.post('/api/followme/:code/chat/rotate-token', express.json(), async (req, re
 
 app.get('/fm/chat/c/:chat_token', async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
+    await ensureFollowMeChatSchemaFast();
 
     const token = String(req.params.chat_token || '').trim().toUpperCase();
 
@@ -9462,9 +9462,7 @@ app.get('/fm/chat/c/:chat_token', async (req, res) => {
 
 app.post('/api/followme/chat/:chat_token/session', express.json(), async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
-    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
-    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
+    await ensureFollowMeRuntimeFast();
 
     const chatToken = String(req.params.chat_token || '').trim();
 
@@ -9608,7 +9606,7 @@ async function ensureFollowMeChatUserManagementColumns() {
 // followme-public-close-session-20260519
 app.post('/api/followme/chat/session/:session_id/close', express.json(), async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
+    await ensureFollowMeChatSchemaFast();
 
     const sessionId = Number(req.params.session_id || 0);
 
@@ -9654,9 +9652,7 @@ app.post('/api/followme/chat/session/:session_id/close', express.json(), async (
 // followme-public-pause-session-20260519
 app.post('/api/followme/chat/session/:session_id/pause', express.json(), async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
-    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
-    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
+    await ensureFollowMeRuntimeFast();
 
     const sessionId = Number(req.params.session_id || 0);
     const isPaused = req.body && typeof req.body.is_user_paused === 'boolean'
@@ -9703,9 +9699,7 @@ app.post('/api/followme/chat/session/:session_id/pause', express.json(), async (
 
 app.get('/api/followme/chat/session/:session_id/messages', async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
-    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
-    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
+    await ensureFollowMeRuntimeFast();
 
     const sessionId = Number(req.params.session_id || 0);
     const after = Number(req.query.after || 0);
@@ -9789,9 +9783,7 @@ app.post('/api/followme/chat/session/:session_id/attachment-raw', express.raw({
   limit: '25mb'
 }), async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
-    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
-    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
+    await ensureFollowMeRuntimeFast();
 
     const fs = require('fs');
     const path = require('path');
@@ -9918,9 +9910,7 @@ app.post('/api/followme/chat/session/:session_id/attachment-raw', express.raw({
 
 app.post('/api/followme/chat/session/:session_id/attachment', express.json({ limit: '50mb' }), async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
-    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
-    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
+    await ensureFollowMeRuntimeFast();
 
     const fs = require('fs');
     const path = require('path');
@@ -10059,9 +10049,7 @@ app.post('/api/followme/chat/session/:session_id/attachment', express.json({ lim
 
 app.post('/api/followme/chat/session/:session_id/message', express.json(), async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
-    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
-    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
+    await ensureFollowMeRuntimeFast();
 
     const sessionId = Number(req.params.session_id || 0);
     const sender = String(req.body?.sender || '').trim() === 'owner' ? 'owner' : 'visitor';
@@ -10135,9 +10123,7 @@ app.post('/api/followme/chat/session/:session_id/message', express.json(), async
 // followme-user-set-explicit-clean-20260519
 app.post('/api/followme/chat/session/:session_id/set-user-control-clean', express.json(), async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
-    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
-    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
+    await ensureFollowMeRuntimeFast();
 
     const sessionId = Number(req.params.session_id || 0);
 
@@ -10200,11 +10186,70 @@ app.post('/api/followme/chat/session/:session_id/set-user-control-clean', expres
 });
 
 
+
+// followme-ensure-cache-fast-final-20260519
+let __followMeChatSchemaEnsuredOnce = false;
+let __followMeChatSchemaEnsuringPromise = null;
+
+async function ensureFollowMeChatSchemaFast() {
+  if (__followMeChatSchemaEnsuredOnce) return;
+
+  if (__followMeChatSchemaEnsuringPromise) {
+    await __followMeChatSchemaEnsuringPromise;
+    return;
+  }
+
+  __followMeChatSchemaEnsuringPromise = (async () => {
+    if (typeof ensureFollowMeChatSchema === 'function') {
+      await ensureFollowMeChatSchema();
+    }
+    __followMeChatSchemaEnsuredOnce = true;
+  })();
+
+  try {
+    await __followMeChatSchemaEnsuringPromise;
+  } finally {
+    __followMeChatSchemaEnsuringPromise = null;
+  }
+}
+
+let __followMeUserColumnsEnsuredOnce = false;
+let __followMeUserColumnsEnsuringPromise = null;
+
+async function ensureFollowMeChatUserManagementColumnsFast() {
+  if (__followMeUserColumnsEnsuredOnce) return;
+
+  if (__followMeUserColumnsEnsuringPromise) {
+    await __followMeUserColumnsEnsuringPromise;
+    return;
+  }
+
+  __followMeUserColumnsEnsuringPromise = (async () => {
+    if (typeof ensureFollowMeChatUserManagementColumns === 'function') {
+      await ensureFollowMeChatUserManagementColumns();
+    }
+    if (typeof ensureFollowMeUserPausedColumns === 'function') {
+      await ensureFollowMeUserPausedColumns();
+    }
+    __followMeUserColumnsEnsuredOnce = true;
+  })();
+
+  try {
+    await __followMeUserColumnsEnsuringPromise;
+  } finally {
+    __followMeUserColumnsEnsuringPromise = null;
+  }
+}
+
+async function ensureFollowMeRuntimeFast() {
+  await ensureFollowMeChatSchemaFast();
+  await ensureFollowMeChatUserManagementColumnsFast();
+}
+// end-followme-ensure-cache-fast-final-20260519
+
 app.get('/api/followme/chat/session/:session_id/state', async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
-    await ensureFollowMeChatUserManagementColumns();
-    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
+    await ensureFollowMeRuntimeFast();
 
     const sessionId = Number(req.params.session_id || 0);
 
@@ -10244,9 +10289,7 @@ app.get('/api/followme/chat/session/:session_id/state', async (req, res) => {
 // followme-user-set-explicit-20260518
 app.post('/api/followme/chat/session/:session_id/set-user-control', express.json(), async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
-    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
-    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
+    await ensureFollowMeRuntimeFast();
 
     const sessionId = Number(req.params.session_id || 0);
 
@@ -10307,9 +10350,7 @@ app.post('/api/followme/chat/session/:session_id/set-user-control', express.json
 // followme-user-toggle-atomic-20260518
 app.post('/api/followme/chat/session/:session_id/toggle-user-control', express.json(), async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
-    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
-    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
+    await ensureFollowMeRuntimeFast();
 
     const sessionId = Number(req.params.session_id || 0);
     const action = String(req.body?.action || '').trim();
@@ -10376,9 +10417,7 @@ app.post('/api/followme/chat/session/:session_id/toggle-user-control', express.j
 
 app.post('/api/followme/chat/session/:session_id/settings', express.json(), async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
-    await ensureFollowMeChatUserManagementColumns();
-    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
+    await ensureFollowMeRuntimeFast();
 
     const sessionId = Number(req.params.session_id || 0);
 
@@ -10440,7 +10479,7 @@ app.post('/api/followme/chat/session/:session_id/settings', express.json(), asyn
 
 app.post('/api/followme/chat/session/:session_id/name', express.json(), async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
+    await ensureFollowMeChatSchemaFast();
 
     const sessionId = Number(req.params.session_id || 0);
     let displayName = String(req.body?.display_name || '').trim();
@@ -10513,9 +10552,7 @@ app.post('/api/followme/chat/session/:session_id/name', express.json(), async (r
 
 app.get('/api/followme/:code/chat/sessions', async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
-    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
-    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
+    await ensureFollowMeRuntimeFast();
 
     const code = normalizeFollowMeCode(req.params.code);
 
@@ -10594,7 +10631,7 @@ app.get('/api/followme/:code/chat/sessions', async (req, res) => {
 
 app.get('/api/followme/:code/chat/latest-open-session', async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
+    await ensureFollowMeChatSchemaFast();
 
     const code = normalizeFollowMeCode(req.params.code);
 
@@ -10641,7 +10678,7 @@ app.get('/api/followme/:code/chat/latest-open-session', async (req, res) => {
 
 app.post('/api/followme/:code/chat/session/:session_id/rename', express.json(), async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
+    await ensureFollowMeChatSchemaFast();
 
     const code = normalizeFollowMeCode(req.params.code);
     const sessionId = Number(req.params.session_id || 0);
@@ -10698,7 +10735,7 @@ app.post('/api/followme/:code/chat/session/:session_id/rename', express.json(), 
 
 app.get('/api/followme/:code/chat/session/:session_id', async (req, res) => {
   try {
-    await ensureFollowMeChatSchema();
+    await ensureFollowMeChatSchemaFast();
 
     const code = normalizeFollowMeCode(req.params.code);
     const sessionId = Number(req.params.session_id || 0);
