@@ -21651,5 +21651,366 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-admin-chat-only-menu-safe-final-20260519">
+(function(){
+  if(window.__FollowMeAdminChatOnlyMenuSafeFinal20260519) return;
+  window.__FollowMeAdminChatOnlyMenuSafeFinal20260519 = true;
+
+  /*
+    MENU ADMIN CHAT ONLY - VERSIONE SICURA:
+    - appare SOLO nella schermata chat admin dopo il primo collegamento;
+    - non agisce sulla prima pagina;
+    - NON nasconde pulsanti originali;
+    - crea un menu parallelo per test;
+    - se qualcosa non va, basta rimuovere questa patch.
+  */
+
+  function norm(v){
+    return String(v || "").replace(/\s+/g, " ").trim();
+  }
+
+  function textOf(el){
+    return norm(el && el.textContent || "");
+  }
+
+  function isInsideAdminChatPage(){
+    return document.body.classList.contains("followme-chat-only-mode") &&
+           !!document.getElementById("followmeOwnerChatMessages") &&
+           !!document.getElementById("followmeOwnerChatSessionStrip");
+  }
+
+  function ensureStyle(){
+    if(document.getElementById("followmeAdminChatOnlyMenuSafeStyle20260519")) return;
+
+    const style = document.createElement("style");
+    style.id = "followmeAdminChatOnlyMenuSafeStyle20260519";
+    style.textContent = `
+      #followmeAdminChatOnlyMenuSafe20260519{
+        display:flex;
+        align-items:center;
+        gap:8px;
+        flex-wrap:wrap;
+        width:100%;
+        box-sizing:border-box;
+        margin:8px 0 10px;
+        padding:8px;
+        border-radius:18px;
+        background:rgba(248,250,252,.96);
+        border:1px solid rgba(15,23,42,.08);
+        box-shadow:0 8px 22px rgba(15,23,42,.05);
+        position:relative;
+        z-index:9999;
+      }
+
+      #followmeAdminChatOnlyMenuSafe20260519 button{
+        border:0;
+        border-radius:999px;
+        padding:10px 14px;
+        font-weight:950;
+        font-size:13px;
+        cursor:pointer;
+        white-space:nowrap;
+        background:#ffffff;
+        color:#111827;
+        box-shadow:0 6px 16px rgba(15,23,42,.08);
+      }
+
+      #followmeAdminChatOnlyMenuSafe20260519 .primary{
+        background:#111827;
+        color:#ffffff;
+      }
+
+      #followmeAdminChatOnlyMenuSafe20260519 .safe-note{
+        font-size:11px;
+        font-weight:850;
+        color:#64748b;
+        margin-left:2px;
+      }
+
+      #followmeAdminChatOnlyMenuSafeWrap20260519{
+        position:relative;
+        display:inline-flex;
+      }
+
+      #followmeAdminChatOnlyMenuSafeDropdown20260519{
+        display:none;
+        position:absolute;
+        top:calc(100% + 8px);
+        right:0;
+        min-width:260px;
+        padding:8px;
+        border-radius:16px;
+        background:#ffffff;
+        border:1px solid rgba(15,23,42,.10);
+        box-shadow:0 18px 44px rgba(15,23,42,.18);
+        z-index:100000;
+      }
+
+      #followmeAdminChatOnlyMenuSafeWrap20260519.open #followmeAdminChatOnlyMenuSafeDropdown20260519{
+        display:block;
+      }
+
+      #followmeAdminChatOnlyMenuSafeDropdown20260519 .menu-title{
+        padding:7px 10px 5px;
+        font-size:11px;
+        font-weight:950;
+        color:#64748b;
+        text-transform:uppercase;
+        letter-spacing:.08em;
+      }
+
+      #followmeAdminChatOnlyMenuSafeDropdown20260519 button{
+        width:100%;
+        display:block;
+        text-align:left;
+        margin:3px 0;
+        border-radius:12px;
+        box-shadow:none;
+        background:#f8fafc;
+        color:#111827;
+      }
+
+      #followmeAdminChatOnlyMenuSafeDropdown20260519 button:hover{
+        background:#e5e7eb;
+      }
+
+      #followmeAdminChatOnlyMenuSafeDropdown20260519 button.warning{
+        background:#ffedd5;
+        color:#9a3412;
+      }
+
+      #followmeAdminChatOnlyMenuSafeDropdown20260519 button.danger{
+        background:#fee2e2;
+        color:#991b1b;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function allButtons(){
+    return Array.from(document.querySelectorAll("button,a"))
+      .filter(function(el){
+        if(!el) return false;
+        if(el.closest("#followmeAdminChatOnlyMenuSafe20260519")) return false;
+        if(el.closest("#fmExtraDedicatedAdminPanel20260519")) return false;
+        return true;
+      });
+  }
+
+  function findByIdOrText(ids, texts){
+    for(const id of ids || []){
+      const el = document.getElementById(id);
+      if(el) return el;
+    }
+
+    const wanted = (texts || []).map(function(t){ return t.toLowerCase(); });
+
+    return allButtons().find(function(el){
+      const t = textOf(el).toLowerCase();
+      return wanted.some(function(w){
+        return t === w || t.includes(w);
+      });
+    }) || null;
+  }
+
+  function originals(){
+    return {
+      qr:findByIdOrText(
+        ["followmeOwnerQrBtn"],
+        ["qr"]
+      ),
+      reset:findByIdOrText(
+        ["followmeTopResetChatBtn", "followmeResetChatBtn"],
+        ["reset"]
+      ),
+      closeSelected:findByIdOrText(
+        ["followmeAdminCloseSelectedChatBtn20260519"],
+        ["chiudi chat selezionata"]
+      ),
+      closeAll:findByIdOrText(
+        ["followmeAdminCloseAllBtn20260519"],
+        ["chiudi tutto"]
+      ),
+      reopen:findByIdOrText(
+        ["followmeAdminReopenServiceBtn20260519"],
+        ["riapri servizio chat", "riapri servizio"]
+      ),
+      chatExport:findByIdOrText(
+        ["followmeAdminExportChatBtn20260519"],
+        ["scarica chat"]
+      ),
+      chatFiles:findByIdOrText(
+        ["followmeAdminExportChatFilesZipBtn20260519"],
+        ["scarica chat + files"]
+      ),
+      serverFiles:findByIdOrText(
+        ["followmeAdminExportServerFilesBtn20260519"],
+        ["scarica server files"]
+      )
+    };
+  }
+
+  function clickOriginal(el){
+    if(!el) return;
+
+    el.dispatchEvent(new MouseEvent("click", {
+      bubbles:true,
+      cancelable:true,
+      view:window
+    }));
+  }
+
+  function makeBtn(label, cls, original){
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    if(cls) b.className = cls;
+
+    b.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+
+      if(!original){
+        alert("Comando non disponibile in questa schermata.");
+        return;
+      }
+
+      clickOriginal(original);
+    }, true);
+
+    return b;
+  }
+
+  function addTitle(menu, text){
+    const d = document.createElement("div");
+    d.className = "menu-title";
+    d.textContent = text;
+    menu.appendChild(d);
+  }
+
+  function insertionTarget(){
+    return document.getElementById("followmeStableAliasWrap20260519") ||
+           document.getElementById("followmeOwnerChatSessionStrip") ||
+           document.getElementById("followmeOwnerChatMessages");
+  }
+
+  function ensureMenu(){
+    if(!isInsideAdminChatPage()){
+      const old = document.getElementById("followmeAdminChatOnlyMenuSafe20260519");
+      if(old) old.remove();
+      return;
+    }
+
+    ensureStyle();
+
+    let bar = document.getElementById("followmeAdminChatOnlyMenuSafe20260519");
+    if(bar) return bar;
+
+    bar = document.createElement("div");
+    bar.id = "followmeAdminChatOnlyMenuSafe20260519";
+
+    const target = insertionTarget();
+
+    if(target && target.parentElement){
+      target.insertAdjacentElement("beforebegin", bar);
+    }else{
+      document.body.insertBefore(bar, document.body.firstChild);
+    }
+
+    return bar;
+  }
+
+  function render(){
+    const bar = ensureMenu();
+    if(!bar) return;
+
+    const o = originals();
+
+    const sig = Object.keys(o).map(function(k){
+      return k + ":" + !!o[k];
+    }).join("|");
+
+    if(bar.dataset.signature === sig) return;
+    bar.dataset.signature = sig;
+
+    bar.innerHTML = "";
+
+    if(o.qr) bar.appendChild(makeBtn("QR", "primary", o.qr));
+    if(o.reset) bar.appendChild(makeBtn("Reset", "", o.reset));
+
+    const wrap = document.createElement("div");
+    wrap.id = "followmeAdminChatOnlyMenuSafeWrap20260519";
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.textContent = "Altro ▾";
+
+    const menu = document.createElement("div");
+    menu.id = "followmeAdminChatOnlyMenuSafeDropdown20260519";
+
+    addTitle(menu, "Gestione chat");
+    menu.appendChild(makeBtn("Chiudi chat selezionata", "warning", o.closeSelected));
+    menu.appendChild(makeBtn("Chiudi TUTTO", "danger", o.closeAll));
+    menu.appendChild(makeBtn("Riapri servizio chat", "", o.reopen));
+
+    addTitle(menu, "Esportazione");
+    menu.appendChild(makeBtn("Scarica chat", "", o.chatExport));
+    menu.appendChild(makeBtn("Scarica chat + files", "", o.chatFiles));
+    menu.appendChild(makeBtn("Scarica server files", "", o.serverFiles));
+
+    toggle.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      wrap.classList.toggle("open");
+    }, true);
+
+    document.addEventListener("click", function(ev){
+      if(!wrap.contains(ev.target)) wrap.classList.remove("open");
+    });
+
+    wrap.appendChild(toggle);
+    wrap.appendChild(menu);
+    bar.appendChild(wrap);
+
+    const note = document.createElement("span");
+    note.className = "safe-note";
+    note.textContent = "menu test";
+    bar.appendChild(note);
+  }
+
+  function boot(){
+    render();
+    setTimeout(render, 500);
+    setTimeout(render, 1500);
+  }
+
+  window.fmAdminChatOnlyMenuSafe20260519 = {
+    boot,
+    render,
+    isInsideAdminChatPage
+  };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(render, 1500);
+})();
+</script>
+
 </body>
 </html>
