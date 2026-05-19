@@ -19612,10 +19612,12 @@ document.addEventListener("visibilitychange", function(){
 
 
 
-<script id="followme-admin-clean-fast-confirmations-final-20260519">
+
+
+<script id="followme-admin-message-dedupe-light-final-20260519">
 (function(){
-  if(window.__FollowMeAdminCleanFastConfirmationsFinal20260519) return;
-  window.__FollowMeAdminCleanFastConfirmationsFinal20260519 = true;
+  if(window.__FollowMeAdminMessageDedupeLightFinal20260519) return;
+  window.__FollowMeAdminMessageDedupeLightFinal20260519 = true;
 
   const silentPatterns = [
     "extra abilitati",
@@ -19634,23 +19636,19 @@ document.addEventListener("visibilitychange", function(){
     return silentPatterns.some(function(p){ return m.includes(p); });
   }
 
-  if(!window.__fmAdminCleanOriginalAlert20260519){
-    window.__fmAdminCleanOriginalAlert20260519 = window.alert.bind(window);
+  if(!window.__fmAdminMessageDedupeOriginalAlert20260519){
+    window.__fmAdminMessageDedupeOriginalAlert20260519 = window.alert.bind(window);
 
     window.alert = function(message){
       if(shouldSilence(message)) return;
-      return window.__fmAdminCleanOriginalAlert20260519(message);
+      return window.__fmAdminMessageDedupeOriginalAlert20260519(message);
     };
   }
 
-  /*
-    Se esiste una funzione toast globale, la alleggeriamo solo per questi messaggi.
-    Non blocchiamo gli errori veri.
-  */
   function patchToast(){
     try{
       if(typeof window.toast !== "function") return;
-      if(window.toast.__fmCleanPatched20260519) return;
+      if(window.toast.__fmMessageDedupeToastPatched20260519) return;
 
       const oldToast = window.toast;
 
@@ -19659,44 +19657,49 @@ document.addEventListener("visibilitychange", function(){
         return oldToast.apply(this, arguments);
       };
 
-      window.toast.__fmCleanPatched20260519 = true;
+      window.toast.__fmMessageDedupeToastPatched20260519 = true;
     }catch(e){}
   }
 
-  function isControlButton(btn){
-    if(!btn) return false;
+  function messageKey(el){
+    if(!el) return "";
 
-    const t = String(btn.textContent || "").toLowerCase();
+    const id =
+      el.getAttribute("data-message-id") ||
+      el.dataset.messageId ||
+      el.dataset.serverMessageId ||
+      "";
 
-    return t.includes("abilita extra") ||
-           t.includes("disabilita extra") ||
-           t.includes("extra on") ||
-           t.includes("extra off") ||
-           t.includes("blocca") ||
-           t.includes("sblocca") ||
-           t.includes("riabilita");
+    if(id) return "id:" + String(id).trim();
+
+    return "";
   }
 
-  function unlockStuckButtons(){
-    document.querySelectorAll("button").forEach(function(btn){
-      if(!isControlButton(btn)) return;
+  function dedupeMessages(){
+    const seen = new Set();
 
-      /*
-        Non lasciamo i pulsanti disabilitati per secondi.
-        Se il server ha risposto, gli script esistenti cambieranno il testo.
-      */
-      if(btn.disabled){
-        btn.disabled = false;
+    document.querySelectorAll(
+      "#followmeOwnerChatMessages .followme-owner-chat-bubble, " +
+      "#followmeOwnerChatMessages .message, " +
+      "#followmeOwnerChatMessages .bubble, " +
+      ".followme-owner-chat-messages .followme-owner-chat-bubble, " +
+      ".followme-owner-chat-messages .message, " +
+      ".followme-owner-chat-messages .bubble, " +
+      "[data-message-id]"
+    ).forEach(function(el){
+      const key = messageKey(el);
+      if(!key) return;
+
+      if(seen.has(key)){
+        el.remove();
+      }else{
+        seen.add(key);
       }
-
-      btn.style.opacity = "";
-      btn.classList.remove("loading", "is-loading", "busy", "is-busy");
-      btn.removeAttribute("aria-busy");
     });
   }
 
-  if(!window.__fmAdminCleanFastFetchPatch20260519){
-    window.__fmAdminCleanFastFetchPatch20260519 = true;
+  if(!window.__fmAdminMessageDedupeFetchPatch20260519){
+    window.__fmAdminMessageDedupeFetchPatch20260519 = true;
 
     const oldFetch = window.fetch.bind(window);
 
@@ -19705,6 +19708,12 @@ document.addEventListener("visibilitychange", function(){
 
       try{
         const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+
+        if(url && url.includes("/api/followme/chat/session/") && url.includes("/messages")){
+          setTimeout(dedupeMessages, 80);
+          setTimeout(dedupeMessages, 300);
+          setTimeout(dedupeMessages, 900);
+        }
 
         if(
           url &&
@@ -19716,14 +19725,10 @@ document.addEventListener("visibilitychange", function(){
             url.includes("/settings")
           )
         ){
-          setTimeout(unlockStuckButtons, 80);
-          setTimeout(unlockStuckButtons, 250);
-          setTimeout(unlockStuckButtons, 700);
-
           try{
             if(typeof window.refreshFollowMeOwnerChatSessions === "function"){
-              setTimeout(window.refreshFollowMeOwnerChatSessions, 150);
-              setTimeout(window.refreshFollowMeOwnerChatSessions, 700);
+              setTimeout(window.refreshFollowMeOwnerChatSessions, 100);
+              setTimeout(window.refreshFollowMeOwnerChatSessions, 500);
             }
           }catch(e){}
         }
@@ -19735,12 +19740,12 @@ document.addEventListener("visibilitychange", function(){
 
   function boot(){
     patchToast();
-    unlockStuckButtons();
+    dedupeMessages();
   }
 
-  window.fmAdminCleanFastConfirmations20260519 = {
+  window.fmAdminMessageDedupeLight20260519 = {
     boot,
-    unlockStuckButtons
+    dedupeMessages
   };
 
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
@@ -19748,17 +19753,13 @@ document.addEventListener("visibilitychange", function(){
 
   window.addEventListener("load", function(){
     setTimeout(boot, 250);
-    setTimeout(boot, 1200);
   });
 
   window.addEventListener("pageshow", function(){
     setTimeout(boot, 250);
   });
 
-  setInterval(function(){
-    patchToast();
-    unlockStuckButtons();
-  }, 1000);
+  setInterval(dedupeMessages, 1000);
 })();
 </script>
 

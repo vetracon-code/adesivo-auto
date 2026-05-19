@@ -9701,6 +9701,121 @@ app.post('/api/followme/chat/session/:session_id/pause', express.json(), async (
   }
 });
 
+
+// followme-chat-sse-realtime-final-20260519
+app.get('/api/followme/chat/session/:session_id/events', async (req, res) => {
+  try {
+    if (typeof ensureFollowMeChatSchema === 'function') await ensureFollowMeChatSchema();
+    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
+    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
+
+    const sessionId = Number(req.params.session_id || 0);
+
+    if (!sessionId) {
+      return res.status(400).end();
+    }
+
+    res.writeHead(200, {
+      'Content-Type':'text/event-stream',
+      'Cache-Control':'no-cache, no-transform',
+      'Connection':'keep-alive',
+      'X-Accel-Buffering':'no'
+    });
+
+    if (res.flushHeaders) res.flushHeaders();
+
+    let closed = false;
+    let lastPayload = '';
+
+    req.on('close', () => {
+      closed = true;
+    });
+
+    async function readSnapshot() {
+      const r = await pool.query(
+        `SELECT
+           s.id,
+           s.uploads_enabled,
+           s.is_blocked,
+           COALESCE(s.is_user_paused, FALSE) AS is_user_paused,
+           s.status,
+           COALESCE(MAX(m.id), 0) AS last_message_id
+         FROM followme_chat_sessions s
+         LEFT JOIN followme_chat_messages m ON m.session_id = s.id
+         WHERE s.id = $1
+         GROUP BY s.id, s.uploads_enabled, s.is_blocked, s.is_user_paused, s.status
+         LIMIT 1`,
+        [sessionId]
+      );
+
+      if (!r.rows.length) {
+        return {
+          success:false,
+          missing:true,
+          session_id:sessionId
+        };
+      }
+
+      const row = r.rows[0];
+
+      return {
+        success:true,
+        session_id:String(row.id),
+        uploads_enabled:!!row.uploads_enabled,
+        is_blocked:!!row.is_blocked,
+        is_user_paused:!!row.is_user_paused,
+        status:row.status || 'open',
+        last_message_id:String(row.last_message_id || '0'),
+        ts:Date.now()
+      };
+    }
+
+    async function sendSnapshot(force) {
+      if (closed) return;
+
+      try {
+        const payload = await readSnapshot();
+        const compact = JSON.stringify({
+          success:payload.success,
+          session_id:payload.session_id,
+          uploads_enabled:payload.uploads_enabled,
+          is_blocked:payload.is_blocked,
+          is_user_paused:payload.is_user_paused,
+          status:payload.status,
+          last_message_id:payload.last_message_id
+        });
+
+        if (force || compact !== lastPayload) {
+          lastPayload = compact;
+          res.write(`event: followme\n`);
+          res.write(`data: ${JSON.stringify(payload)}\n\n`);
+        } else {
+          res.write(`: keepalive ${Date.now()}\n\n`);
+        }
+      } catch (err) {
+        res.write(`event: followme_error\n`);
+        res.write(`data: ${JSON.stringify({ success:false, error:'snapshot_error' })}\n\n`);
+      }
+    }
+
+    await sendSnapshot(true);
+
+    const timer = setInterval(() => {
+      if (closed) {
+        clearInterval(timer);
+        return;
+      }
+
+      sendSnapshot(false);
+    }, 700);
+
+  } catch (err) {
+    console.error('followme SSE events error:', err);
+    try { res.status(500).end(); } catch(e) {}
+  }
+});
+// end-followme-chat-sse-realtime-final-20260519
+
 app.get('/api/followme/chat/session/:session_id/messages', async (req, res) => {
   try {
     await ensureFollowMeChatSchema();

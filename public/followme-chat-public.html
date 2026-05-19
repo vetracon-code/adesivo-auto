@@ -4721,15 +4721,17 @@
 
 
 
-<script id="followme-public-fast-state-sync-final-20260519">
-(function(){
-  if(window.__FollowMePublicFastStateSyncFinal20260519) return;
-  window.__FollowMePublicFastStateSyncFinal20260519 = true;
 
-  let lastUploads = null;
-  let lastBlocked = null;
-  let fastUntil = Date.now() + 15000;
-  let inFlight = false;
+
+<script id="followme-public-realtime-sse-and-message-dedupe-final-20260519">
+(function(){
+  if(window.__FollowMePublicRealtimeSseAndDedupeFinal20260519) return;
+  window.__FollowMePublicRealtimeSseAndDedupeFinal20260519 = true;
+
+  let es = null;
+  let lastMessageId = "";
+  let reloadTimer = null;
+  let stateTimer = null;
 
   function cleanSid(v){
     const s = String(v || "").trim();
@@ -4771,12 +4773,25 @@
            document.querySelector(".send-btn");
   }
 
-  function applyComposerBlocked(blocked){
+  function applyState(payload){
+    if(!payload || !payload.success) return;
+
+    const uploads = !!payload.uploads_enabled;
+    const blocked = !!payload.is_blocked;
+
+    document.body.classList.toggle("followme-public-uploads-enabled", uploads);
+    document.body.classList.toggle("fm-public-extra-enabled-live", uploads);
+    document.body.classList.toggle("fm-public-extra-adminlike-on", uploads);
+
+    document.body.classList.toggle("followme-public-user-blocked", blocked);
+    document.body.classList.toggle("fm-public-blocked-live", blocked);
+    document.body.classList.toggle("fm-public-user-blocked-adminlike", blocked);
+
     const input = findInput();
     const send = findSend();
 
     if(input){
-      input.disabled = !!blocked;
+      input.disabled = blocked;
 
       if(blocked){
         input.dataset.oldPlaceholder = input.dataset.oldPlaceholder || input.placeholder || "";
@@ -4786,38 +4801,8 @@
       }
     }
 
-    if(send){
-      send.disabled = !!blocked;
-    }
-  }
+    if(send) send.disabled = blocked;
 
-  function applyState(session){
-    if(!session) return;
-
-    const uploads = !!session.uploads_enabled;
-    const blocked = !!session.is_blocked;
-
-    lastUploads = uploads;
-    lastBlocked = blocked;
-
-    /*
-      Classi usate dai vari blocchi pubblici già presenti.
-      Le aggiorniamo tutte per compatibilità.
-    */
-    document.body.classList.toggle("followme-public-uploads-enabled", uploads);
-    document.body.classList.toggle("fm-public-extra-enabled-live", uploads);
-    document.body.classList.toggle("fm-public-extra-adminlike-on", uploads);
-
-    document.body.classList.toggle("followme-public-user-blocked", blocked);
-    document.body.classList.toggle("fm-public-blocked-live", blocked);
-    document.body.classList.toggle("fm-public-user-blocked-adminlike", blocked);
-
-    applyComposerBlocked(blocked);
-
-    /*
-      Se esistono barre extra già create, forziamo solo visibilità coerente.
-      Non creiamo nuovi pulsanti e non tocchiamo l'audio/allegati.
-    */
     [
       "fmPublicAdminLikeExtraBar20260518",
       "fmPublicExtraBarForce20260518"
@@ -4835,58 +4820,122 @@
     });
   }
 
-  async function fetchState(){
-    const sid = sessionId();
-    if(!sid || inFlight) return;
-
-    inFlight = true;
+  function callLoadMessages(){
+    try{
+      if(typeof window.followMePublicLoadMessages === "function"){
+        window.followMePublicLoadMessages();
+        return;
+      }
+    }catch(e){}
 
     try{
-      const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/state?v=" + Date.now(), {
-        cache:"no-store"
-      });
-
-      const data = await res.json().catch(function(){ return null; });
-
-      if(res.ok && data && data.success && data.session){
-        const uploads = !!data.session.uploads_enabled;
-        const blocked = !!data.session.is_blocked;
-
-        if(uploads !== lastUploads || blocked !== lastBlocked){
-          fastUntil = Date.now() + 12000;
-        }
-
-        applyState(data.session);
+      if(typeof window.loadMessages === "function"){
+        window.loadMessages();
+        return;
       }
-    }catch(e){
-    }finally{
-      inFlight = false;
-    }
+    }catch(e){}
   }
 
-  /*
-    Poll rapido ma leggero:
-    - veloce nei primi secondi e quando cambia stato;
-    - più calmo dopo.
-  */
-  function loop(){
-    fetchState();
+  function scheduleMessagesReload(){
+    if(reloadTimer) clearTimeout(reloadTimer);
 
-    const delay = Date.now() < fastUntil ? 650 : 1600;
-    setTimeout(loop, delay);
+    reloadTimer = setTimeout(function(){
+      callLoadMessages();
+      setTimeout(dedupeMessages, 80);
+      setTimeout(dedupeMessages, 350);
+    }, 60);
+  }
+
+  function scheduleStateApply(payload){
+    if(stateTimer) clearTimeout(stateTimer);
+
+    stateTimer = setTimeout(function(){
+      applyState(payload);
+    }, 20);
+  }
+
+  function messageKey(el){
+    if(!el) return "";
+
+    const id =
+      el.getAttribute("data-message-id") ||
+      el.dataset.messageId ||
+      el.dataset.serverMessageId ||
+      "";
+
+    if(id) return "id:" + String(id).trim();
+
+    return "";
+  }
+
+  function dedupeMessages(){
+    const seen = new Set();
+
+    document.querySelectorAll(
+      ".message, .bubble, .followme-public-bubble, .followme-owner-chat-bubble, [data-message-id]"
+    ).forEach(function(el){
+      const key = messageKey(el);
+      if(!key) return;
+
+      if(seen.has(key)){
+        el.remove();
+      }else{
+        seen.add(key);
+      }
+    });
+  }
+
+  function connect(){
+    const sid = sessionId();
+    if(!sid || !window.EventSource) return;
+
+    try{
+      if(es) es.close();
+    }catch(e){}
+
+    es = new EventSource("/api/followme/chat/session/" + encodeURIComponent(sid) + "/events?v=" + Date.now());
+
+    es.addEventListener("followme", function(ev){
+      let data = null;
+
+      try{
+        data = JSON.parse(ev.data || "{}");
+      }catch(e){
+        return;
+      }
+
+      scheduleStateApply(data);
+
+      const mid = String(data.last_message_id || "0");
+
+      if(mid && mid !== lastMessageId){
+        lastMessageId = mid;
+        scheduleMessagesReload();
+      }
+
+      setTimeout(dedupeMessages, 120);
+    });
+
+    es.onerror = function(){
+      try{ es.close(); }catch(e){}
+      es = null;
+
+      setTimeout(connect, 1800);
+    };
   }
 
   function boot(){
-    fastUntil = Date.now() + 15000;
-    fetchState();
-    setTimeout(fetchState, 250);
-    setTimeout(fetchState, 700);
-    setTimeout(fetchState, 1400);
+    dedupeMessages();
+    connect();
+
+    setTimeout(dedupeMessages, 300);
+    setTimeout(dedupeMessages, 1000);
   }
 
-  window.fmPublicFastStateSync20260519 = {
+  window.fmPublicRealtimeSseDedupe20260519 = {
     boot,
-    fetchState,
+    connect,
+    dedupeMessages,
     applyState
   };
 
@@ -4895,7 +4944,6 @@
 
   window.addEventListener("load", function(){
     setTimeout(boot, 250);
-    setTimeout(fetchState, 1200);
   });
 
   window.addEventListener("pageshow", function(){
@@ -4904,12 +4952,12 @@
 
   document.addEventListener("visibilitychange", function(){
     if(document.visibilityState === "visible"){
-      fastUntil = Date.now() + 10000;
-      setTimeout(fetchState, 150);
+      setTimeout(connect, 200);
+      setTimeout(dedupeMessages, 300);
     }
   });
 
-  loop();
+  setInterval(dedupeMessages, 1000);
 })();
 </script>
 
