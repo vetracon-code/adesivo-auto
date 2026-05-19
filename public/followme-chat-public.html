@@ -3686,6 +3686,19 @@
     return locallyPaused;
   }
 
+  function notifyPauseServer(value){
+    const sid = sessionId();
+    if(!sid) return;
+
+    try{
+      fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/pause", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ is_user_paused: !!value })
+      }).catch(function(){});
+    }catch(e){}
+  }
+
   function writePaused(value){
     locallyPaused = !!value;
 
@@ -3693,6 +3706,8 @@
       if(locallyPaused) localStorage.setItem(storageKey(), "1");
       else localStorage.removeItem(storageKey());
     }catch(e){}
+
+    notifyPauseServer(locallyPaused);
 
     document.body.classList.toggle("followme-public-locally-paused", locallyPaused);
     applyComposerPausedState();
@@ -3932,6 +3947,7 @@
     const ownerId = latestOwnerMessageId(messages);
 
     if(ownerId){
+      knownOwnerConnected = true;
       setSubtitle(true);
 
       if(!lastOwnerMessageIdSeen){

@@ -9464,6 +9464,7 @@ app.post('/api/followme/chat/:chat_token/session', express.json(), async (req, r
   try {
     await ensureFollowMeChatSchema();
     if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
+    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
 
     const chatToken = String(req.params.chat_token || '').trim();
 
@@ -9576,10 +9577,25 @@ async function ensureFollowMeChatDisplayNameColumn() {
 }
 
 
+
+
+// followme-user-paused-columns-20260519
+async function ensureFollowMeUserPausedColumns() {
+  try {
+    await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS is_user_paused BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS user_paused_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`);
+  } catch (err) {
+    console.warn('ensureFollowMeUserPausedColumns error:', err.message || err);
+  }
+}
+
 async function ensureFollowMeChatUserManagementColumns() {
   try {
     await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS uploads_enabled BOOLEAN DEFAULT FALSE`);
     await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS is_user_paused BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS user_paused_at TIMESTAMPTZ`);
     await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS blocked_at TIMESTAMPTZ`);
     await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`);
   } catch (err) {
@@ -9633,10 +9649,63 @@ app.post('/api/followme/chat/session/:session_id/close', express.json(), async (
   }
 });
 
+
+
+// followme-public-pause-session-20260519
+app.post('/api/followme/chat/session/:session_id/pause', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeChatSchema();
+    if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
+    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
+
+    const sessionId = Number(req.params.session_id || 0);
+    const isPaused = req.body && typeof req.body.is_user_paused === 'boolean'
+      ? req.body.is_user_paused
+      : true;
+
+    if (!sessionId) {
+      return res.status(400).json({
+        success:false,
+        error:'Sessione mancante.'
+      });
+    }
+
+    const updated = await pool.query(
+      `UPDATE followme_chat_sessions
+       SET is_user_paused = $2,
+           user_paused_at = CASE WHEN $2 = TRUE THEN NOW() ELSE NULL END,
+           updated_at = NOW(),
+           last_seen_at = NOW()
+       WHERE id = $1
+       RETURNING id, is_user_paused, user_paused_at, updated_at`,
+      [sessionId, isPaused]
+    );
+
+    if (!updated.rows.length) {
+      return res.status(404).json({
+        success:false,
+        error:'Sessione non trovata.'
+      });
+    }
+
+    return res.json({
+      success:true,
+      session:updated.rows[0]
+    });
+  } catch (err) {
+    console.error('followme public pause session error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore aggiornamento pausa chat.'
+    });
+  }
+});
+
 app.get('/api/followme/chat/session/:session_id/messages', async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
     if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
+    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
 
     const sessionId = Number(req.params.session_id || 0);
     const after = Number(req.query.after || 0);
@@ -9722,6 +9791,7 @@ app.post('/api/followme/chat/session/:session_id/attachment-raw', express.raw({
   try {
     await ensureFollowMeChatSchema();
     if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
+    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
 
     const fs = require('fs');
     const path = require('path');
@@ -9850,6 +9920,7 @@ app.post('/api/followme/chat/session/:session_id/attachment', express.json({ lim
   try {
     await ensureFollowMeChatSchema();
     if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
+    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
 
     const fs = require('fs');
     const path = require('path');
@@ -9990,6 +10061,7 @@ app.post('/api/followme/chat/session/:session_id/message', express.json(), async
   try {
     await ensureFollowMeChatSchema();
     if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
+    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
 
     const sessionId = Number(req.params.session_id || 0);
     const sender = String(req.body?.sender || '').trim() === 'owner' ? 'owner' : 'visitor';
@@ -10065,6 +10137,7 @@ app.post('/api/followme/chat/session/:session_id/set-user-control-clean', expres
   try {
     await ensureFollowMeChatSchema();
     if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
+    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
 
     const sessionId = Number(req.params.session_id || 0);
 
@@ -10131,6 +10204,7 @@ app.get('/api/followme/chat/session/:session_id/state', async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
     await ensureFollowMeChatUserManagementColumns();
+    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
 
     const sessionId = Number(req.params.session_id || 0);
 
@@ -10139,7 +10213,7 @@ app.get('/api/followme/chat/session/:session_id/state', async (req, res) => {
     }
 
     const result = await pool.query(
-      `SELECT id, display_name, visitor_label, uploads_enabled, is_blocked, blocked_at, updated_at, owner_opened_at, last_seen_at, status
+      `SELECT id, display_name, visitor_label, uploads_enabled, is_blocked, blocked_at, is_user_paused, user_paused_at, updated_at, owner_opened_at, last_seen_at, status
        FROM followme_chat_sessions
        WHERE id = $1
        LIMIT 1`,
@@ -10172,6 +10246,7 @@ app.post('/api/followme/chat/session/:session_id/set-user-control', express.json
   try {
     await ensureFollowMeChatSchema();
     if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
+    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
 
     const sessionId = Number(req.params.session_id || 0);
 
@@ -10234,6 +10309,7 @@ app.post('/api/followme/chat/session/:session_id/toggle-user-control', express.j
   try {
     await ensureFollowMeChatSchema();
     if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
+    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
 
     const sessionId = Number(req.params.session_id || 0);
     const action = String(req.body?.action || '').trim();
@@ -10302,6 +10378,7 @@ app.post('/api/followme/chat/session/:session_id/settings', express.json(), asyn
   try {
     await ensureFollowMeChatSchema();
     await ensureFollowMeChatUserManagementColumns();
+    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
 
     const sessionId = Number(req.params.session_id || 0);
 
@@ -10438,6 +10515,7 @@ app.get('/api/followme/:code/chat/sessions', async (req, res) => {
   try {
     await ensureFollowMeChatSchema();
     if (typeof ensureFollowMeChatUserManagementColumns === 'function') await ensureFollowMeChatUserManagementColumns();
+    if (typeof ensureFollowMeUserPausedColumns === 'function') await ensureFollowMeUserPausedColumns();
 
     const code = normalizeFollowMeCode(req.params.code);
 
@@ -10471,6 +10549,8 @@ app.get('/api/followme/:code/chat/sessions', async (req, res) => {
          s.display_name,
              uploads_enabled,
              is_blocked,
+             COALESCE(is_user_paused, FALSE) AS is_user_paused,
+             user_paused_at,
          s.status,
          s.created_at,
          s.last_seen_at,
