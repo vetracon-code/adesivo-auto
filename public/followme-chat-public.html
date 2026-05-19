@@ -2288,581 +2288,6 @@
 
 
 
-<script id="followme-public-audio-panel-fix-20260519">
-(function(){
-  if(window.__FollowMePublicAudioPanelFix20260519) return;
-  window.__FollowMePublicAudioPanelFix20260519 = true;
-
-  let mediaRecorder = null;
-  let audioChunks = [];
-  let audioBlob = null;
-  let audioStream = null;
-  let isRecording = false;
-  let startedAt = 0;
-  let timer = null;
-
-  function cleanSid(v){
-    const s = String(v || "").trim();
-    return /^\d+$/.test(s) ? s : "";
-  }
-
-  function getSid(){
-    try{
-      const q = new URLSearchParams(location.search || "");
-      const fromUrl = cleanSid(q.get("session") || q.get("chatSession"));
-      if(fromUrl) return fromUrl;
-    }catch(e){}
-
-    const arr = [
-      window.followMeChatSessionId,
-      window.FOLLOWME_CHAT_SESSION_ID
-    ];
-
-    try{ arr.push(sessionStorage.getItem("followme_chat_session_id")); }catch(e){}
-    try{ arr.push(localStorage.getItem("followme_chat_session_id")); }catch(e){}
-
-    for(const v of arr){
-      const sid = cleanSid(v);
-      if(sid) return sid;
-    }
-
-    return "";
-  }
-
-  function canUseExtra(){
-    return document.body.classList.contains("fm-public-extra-inline-on") &&
-           !document.body.classList.contains("fm-public-clean-blocked");
-  }
-
-  function findComposer(){
-    return document.querySelector(".followme-public-composer") ||
-           document.querySelector(".composer") ||
-           document.querySelector("form") ||
-           document.body;
-  }
-
-  function chooseMimeType(){
-    try{
-      if(!window.MediaRecorder || !MediaRecorder.isTypeSupported) return "";
-
-      const candidates = [
-        "audio/mp4",
-        "audio/aac",
-        "audio/webm;codecs=opus",
-        "audio/webm",
-        "audio/ogg;codecs=opus"
-      ];
-
-      for(const type of candidates){
-        if(MediaRecorder.isTypeSupported(type)) return type;
-      }
-    }catch(e){}
-
-    return "";
-  }
-
-  function extensionForMime(mime){
-    mime = String(mime || "").toLowerCase();
-
-    if(mime.includes("mp4")) return "m4a";
-    if(mime.includes("aac")) return "aac";
-    if(mime.includes("ogg")) return "ogg";
-    if(mime.includes("webm")) return "webm";
-
-    return "audio";
-  }
-
-  function injectCss(){
-    if(document.getElementById("followmePublicAudioPanelFixCss20260519")) return;
-
-    const style = document.createElement("style");
-    style.id = "followmePublicAudioPanelFixCss20260519";
-    style.textContent = `
-      #fmPublicAudioPanel20260519{
-        display:none;
-        position:absolute;
-        left:10px;
-        right:10px;
-        bottom:58px;
-        z-index:100000;
-        background:#ffffff;
-        color:#202629;
-        border-radius:22px;
-        border:1px solid rgba(0,0,0,.10);
-        box-shadow:0 18px 60px rgba(0,0,0,.28);
-        padding:12px;
-        box-sizing:border-box;
-      }
-
-      #fmPublicAudioPanel20260519.is-open{
-        display:block !important;
-      }
-
-      body.fm-public-clean-blocked #fmPublicAudioPanel20260519,
-      body:not(.fm-public-extra-inline-on) #fmPublicAudioPanel20260519{
-        display:none !important;
-      }
-
-      #fmPublicAudioPanel20260519 .fm-audio-title{
-        font-size:.86rem;
-        font-weight:950;
-        margin-bottom:6px;
-      }
-
-      #fmPublicAudioPanel20260519 .fm-audio-status{
-        min-height:22px;
-        font-size:.76rem;
-        line-height:1.35;
-        color:#667085;
-        font-weight:800;
-        margin-bottom:10px;
-      }
-
-      #fmPublicAudioPanel20260519 .fm-audio-actions{
-        display:grid;
-        grid-template-columns:repeat(2,minmax(0,1fr));
-        gap:8px;
-      }
-
-      #fmPublicAudioPanel20260519 button{
-        min-height:40px;
-        border-radius:999px;
-        border:1px solid rgba(0,0,0,.08);
-        background:#f6f7f8;
-        color:#202629;
-        font-size:.82rem;
-        font-weight:950;
-        cursor:pointer;
-      }
-
-      #fmPublicAudioPanel20260519 button.primary{
-        background:#25d366;
-        color:#ffffff;
-        border-color:rgba(37,211,102,.45);
-      }
-
-      #fmPublicAudioPanel20260519 button.danger{
-        background:#fff1ef;
-        color:#b42318;
-      }
-
-      #fmPublicAudioPanel20260519 button.warn{
-        background:#fff7e8;
-        color:#9a5b00;
-      }
-
-      #fmPublicAudioPanel20260519 button:disabled{
-        opacity:.45;
-        cursor:not-allowed;
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  function ensurePanel(){
-    let panel = document.getElementById("fmPublicAudioPanel20260519");
-    if(panel) return panel;
-
-    const composer = findComposer();
-
-    try{
-      if(getComputedStyle(composer).position === "static"){
-        composer.style.position = "relative";
-      }
-    }catch(e){
-      composer.style.position = "relative";
-    }
-
-    panel = document.createElement("div");
-    panel.id = "fmPublicAudioPanel20260519";
-    panel.innerHTML = `
-      <div class="fm-audio-title">Messaggio audio</div>
-      <div class="fm-audio-status" id="fmPublicAudioStatus20260519">Premi Registra per autorizzare il microfono e iniziare.</div>
-      <div class="fm-audio-actions">
-        <button type="button" id="fmPublicAudioStart20260519" class="primary">Registra</button>
-        <button type="button" id="fmPublicAudioStop20260519" class="warn" disabled>Stop</button>
-        <button type="button" id="fmPublicAudioSend20260519" class="primary" disabled>Invia audio</button>
-        <button type="button" id="fmPublicAudioCancel20260519" class="danger">Annulla</button>
-      </div>
-    `;
-
-    composer.appendChild(panel);
-    bindPanel();
-
-    return panel;
-  }
-
-  function setStatus(msg){
-    const el = document.getElementById("fmPublicAudioStatus20260519");
-    if(el) el.textContent = msg;
-  }
-
-  function setButtons(state){
-    const start = document.getElementById("fmPublicAudioStart20260519");
-    const stop = document.getElementById("fmPublicAudioStop20260519");
-    const send = document.getElementById("fmPublicAudioSend20260519");
-
-    if(!start || !stop || !send) return;
-
-    if(state === "idle"){
-      start.disabled = false;
-      stop.disabled = true;
-      send.disabled = true;
-    }
-
-    if(state === "recording"){
-      start.disabled = true;
-      stop.disabled = false;
-      send.disabled = true;
-    }
-
-    if(state === "ready"){
-      start.disabled = false;
-      stop.disabled = true;
-      send.disabled = false;
-    }
-
-    if(state === "sending"){
-      start.disabled = true;
-      stop.disabled = true;
-      send.disabled = true;
-    }
-  }
-
-  function openPanel(){
-    if(!canUseExtra()) return;
-
-    const panel = ensurePanel();
-    panel.classList.add("is-open");
-
-    if(audioBlob){
-      setButtons("ready");
-      setStatus("Audio pronto. Puoi inviarlo o registrarlo di nuovo.");
-    }else{
-      setButtons("idle");
-      setStatus("Premi Registra per autorizzare il microfono e iniziare.");
-    }
-  }
-
-  function closePanel(){
-    const panel = document.getElementById("fmPublicAudioPanel20260519");
-    if(panel) panel.classList.remove("is-open");
-  }
-
-  function resetAudio(){
-    try{
-      if(mediaRecorder && isRecording){
-        mediaRecorder.stop();
-      }
-    }catch(e){}
-
-    try{
-      if(audioStream){
-        audioStream.getTracks().forEach(t => t.stop());
-      }
-    }catch(e){}
-
-    mediaRecorder = null;
-    audioChunks = [];
-    audioBlob = null;
-    audioStream = null;
-    isRecording = false;
-    startedAt = 0;
-
-    if(timer){
-      clearInterval(timer);
-      timer = null;
-    }
-
-    setButtons("idle");
-    setStatus("Premi Registra per autorizzare il microfono e iniziare.");
-  }
-
-  function updateTimer(){
-    if(!isRecording || !startedAt) return;
-
-    const sec = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-    setStatus("Registrazione in corso… " + sec + "s");
-  }
-
-  async function startRecording(){
-    try{
-      if(!canUseExtra()) return;
-
-      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-        setStatus("Microfono non supportato su questo dispositivo/browser.");
-        return;
-      }
-
-      if(!window.MediaRecorder){
-        setStatus("Registrazione audio non supportata da questo browser.");
-        return;
-      }
-
-      resetAudio();
-
-      setStatus("Richiesta autorizzazione microfono…");
-
-      audioStream = await navigator.mediaDevices.getUserMedia({ audio:true });
-
-      const mimeType = chooseMimeType();
-      const options = mimeType ? { mimeType } : undefined;
-
-      audioChunks = [];
-      mediaRecorder = new MediaRecorder(audioStream, options);
-
-      mediaRecorder.ondataavailable = function(ev){
-        if(ev.data && ev.data.size > 0){
-          audioChunks.push(ev.data);
-        }
-      };
-
-      mediaRecorder.onerror = function(ev){
-        console.warn("MediaRecorder error:", ev);
-        setStatus("Errore registrazione audio.");
-      };
-
-      mediaRecorder.onstop = function(){
-        try{
-          if(audioStream){
-            audioStream.getTracks().forEach(t => t.stop());
-          }
-        }catch(e){}
-
-        audioStream = null;
-        isRecording = false;
-
-        if(timer){
-          clearInterval(timer);
-          timer = null;
-        }
-
-        const finalMime = mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : (mimeType || "audio/webm");
-
-        if(!audioChunks.length){
-          audioBlob = null;
-          setButtons("idle");
-          setStatus("Registrazione vuota. Riprova parlando dopo aver premuto Registra.");
-          return;
-        }
-
-        audioBlob = new Blob(audioChunks, { type: finalMime });
-
-        if(!audioBlob || audioBlob.size < 1000){
-          setButtons("idle");
-          setStatus("Audio troppo breve o vuoto. Riprova.");
-          return;
-        }
-
-        setButtons("ready");
-        setStatus("Audio registrato. Premi Invia audio.");
-      };
-
-      mediaRecorder.start(250);
-      isRecording = true;
-      startedAt = Date.now();
-
-      setButtons("recording");
-      setStatus("Registrazione in corso… 0s");
-
-      timer = setInterval(updateTimer, 500);
-
-    }catch(err){
-      console.error("startRecording error:", err);
-
-      resetAudio();
-
-      const msg = String(err && (err.name || err.message) || err || "");
-
-      if(msg.includes("NotAllowed") || msg.includes("Permission") || msg.includes("denied")){
-        setStatus("Microfono non autorizzato. Consenti l’uso del microfono nelle impostazioni di Safari/iPhone e riprova.");
-      }else{
-        setStatus("Errore microfono: " + (err.message || msg || "non disponibile"));
-      }
-    }
-  }
-
-  function stopRecording(){
-    try{
-      if(mediaRecorder && isRecording){
-        setStatus("Preparazione audio…");
-        mediaRecorder.stop();
-      }
-    }catch(err){
-      console.error("stopRecording error:", err);
-      setStatus("Errore stop registrazione.");
-      resetAudio();
-    }
-  }
-
-  async function uploadAudio(){
-    try{
-      if(!audioBlob || audioBlob.size <= 0){
-        setStatus("Nessun audio da inviare.");
-        return;
-      }
-
-      const sid = getSid();
-      if(!sid){
-        setStatus("Sessione chat mancante.");
-        return;
-      }
-
-      setButtons("sending");
-      setStatus("Invio audio…");
-
-      const mime = audioBlob.type || "audio/webm";
-      const ext = extensionForMime(mime);
-      const filename = "audio_" + Date.now() + "." + ext;
-
-      const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/attachment-raw", {
-        method:"POST",
-        headers:{
-          "Content-Type": mime,
-          "X-FollowMe-Sender": "visitor",
-          "X-FollowMe-Kind": "audio",
-          "X-FollowMe-Filename": encodeURIComponent(filename)
-        },
-        body: await audioBlob.arrayBuffer()
-      });
-
-      const data = await res.json().catch(()=>null);
-
-      if(!res.ok || !data || !data.success){
-        throw new Error((data && data.error) || "Errore invio audio.");
-      }
-
-      if(window.fmPublicAppendLocalAttachmentBubble20260519 && data.attachment){
-        window.fmPublicAppendLocalAttachmentBubble20260519(data.attachment, "visitor");
-      }
-
-      if(window.fmPublicRenderAllAttachments20260519){
-        window.fmPublicRenderAllAttachments20260519();
-      }
-
-      try{
-        if(typeof window.followMePublicLoadMessages === "function") window.followMePublicLoadMessages();
-      }catch(e){}
-
-      try{
-        if(typeof window.loadMessages === "function") window.loadMessages();
-      }catch(e){}
-
-      setStatus("Audio inviato.");
-      closePanel();
-
-      audioBlob = null;
-      audioChunks = [];
-      setButtons("idle");
-
-    }catch(err){
-      console.error("uploadAudio error:", err);
-      setButtons("ready");
-      setStatus(err.message || "Errore invio audio.");
-    }
-  }
-
-  function bindPanel(){
-    const start = document.getElementById("fmPublicAudioStart20260519");
-    const stop = document.getElementById("fmPublicAudioStop20260519");
-    const send = document.getElementById("fmPublicAudioSend20260519");
-    const cancel = document.getElementById("fmPublicAudioCancel20260519");
-
-    if(start && start.dataset.boundAudioFix !== "1"){
-      start.dataset.boundAudioFix = "1";
-      start.addEventListener("click", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        startRecording();
-      }, true);
-    }
-
-    if(stop && stop.dataset.boundAudioFix !== "1"){
-      stop.dataset.boundAudioFix = "1";
-      stop.addEventListener("click", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        stopRecording();
-      }, true);
-    }
-
-    if(send && send.dataset.boundAudioFix !== "1"){
-      send.dataset.boundAudioFix = "1";
-      send.addEventListener("click", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        uploadAudio();
-      }, true);
-    }
-
-    if(cancel && cancel.dataset.boundAudioFix !== "1"){
-      cancel.dataset.boundAudioFix = "1";
-      cancel.addEventListener("click", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        resetAudio();
-        closePanel();
-      }, true);
-    }
-  }
-
-  function patchExistingAudioButton(){
-    const oldBtn = document.getElementById("fmPublicAudioBtn20260519");
-
-    if(!oldBtn || oldBtn.dataset.audioPanelPatched === "1") return;
-
-    oldBtn.dataset.audioPanelPatched = "1";
-    oldBtn.textContent = "🎙️ Audio";
-
-    oldBtn.addEventListener("click", function(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
-      ev.stopImmediatePropagation();
-
-      openPanel();
-    }, true);
-  }
-
-  function boot(){
-    injectCss();
-    ensurePanel();
-    patchExistingAudioButton();
-    setButtons(audioBlob ? "ready" : "idle");
-
-    setTimeout(patchExistingAudioButton, 300);
-    setTimeout(patchExistingAudioButton, 900);
-  }
-
-  window.fmPublicOpenAudioPanel20260519 = openPanel;
-  window.fmPublicAudioDebug20260519 = function(){
-    return {
-      hasMediaDevices:!!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
-      hasMediaRecorder:!!window.MediaRecorder,
-      chosenMime:chooseMimeType(),
-      isRecording,
-      hasBlob:!!audioBlob,
-      blobSize:audioBlob ? audioBlob.size : 0
-    };
-  };
-
-  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
-  else boot();
-
-  window.addEventListener("load", function(){
-    setTimeout(boot, 250);
-    setTimeout(patchExistingAudioButton, 1200);
-  });
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 250);
-  });
-
-  setInterval(patchExistingAudioButton, 2000);
-})();
-</script>
-
-
-
 <script id="followme-public-audio-state-reset-final-20260519">
 (function(){
   if(window.__FollowMePublicAudioStateResetFinal20260519) return;
@@ -3358,142 +2783,632 @@
 
 
 
-<script id="followme-public-audio-server-only-final-20260519">
+
+
+<script id="followme-public-audio-clean-controller-20260519">
 (function(){
-  if(window.__FollowMePublicAudioServerOnlyFinal20260519) return;
-  window.__FollowMePublicAudioServerOnlyFinal20260519 = true;
+  if(window.__FollowMePublicAudioCleanController20260519) return;
+  window.__FollowMePublicAudioCleanController20260519 = true;
 
-  function isAudioAttachment(a){
-    return !!a && (
-      a.kind === "audio" ||
-      String(a.mime || "").toLowerCase().indexOf("audio/") === 0
-    );
+  let recorder = null;
+  let stream = null;
+  let chunks = [];
+  let blob = null;
+  let recording = false;
+  let sending = false;
+  let timer = null;
+  let startedAt = 0;
+
+  function esc(v){
+    return String(v == null ? "" : v)
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;");
   }
 
-  /*
-    Disattiva definitivamente l'append locale audio.
-    Gli audio devono comparire SOLO dopo reload dal server.
-    Questo elimina:
-    - doppi audio lato utente;
-    - audio fantasma quando il server dà errore.
-  */
-  const previousAppend = window.fmPublicAppendLocalAttachmentBubble20260519;
+  function cleanSid(v){
+    const s = String(v || "").trim();
+    return /^\d+$/.test(s) ? s : "";
+  }
 
-  window.fmPublicAppendLocalAttachmentBubble20260519 = function(attachment, sender){
-    if(isAudioAttachment(attachment)){
-      setTimeout(forceReloadMessages, 120);
-      setTimeout(forceReloadMessages, 500);
-      setTimeout(forceReloadMessages, 1200);
-      return;
+  function getSid(){
+    try{
+      const q = new URLSearchParams(location.search || "");
+      const fromUrl = cleanSid(q.get("session") || q.get("chatSession"));
+      if(fromUrl) return fromUrl;
+    }catch(e){}
+
+    const arr = [
+      window.followMeChatSessionId,
+      window.FOLLOWME_CHAT_SESSION_ID
+    ];
+
+    try{ arr.push(sessionStorage.getItem("followme_chat_session_id")); }catch(e){}
+    try{ arr.push(localStorage.getItem("followme_chat_session_id")); }catch(e){}
+
+    for(const v of arr){
+      const sid = cleanSid(v);
+      if(sid) return sid;
     }
 
-    if(typeof previousAppend === "function"){
-      return previousAppend(attachment, sender);
+    return "";
+  }
+
+  function canUseExtra(){
+    return document.body.classList.contains("fm-public-extra-inline-on") &&
+           !document.body.classList.contains("fm-public-clean-blocked") &&
+           !document.body.classList.contains("followme-public-user-blocked");
+  }
+
+  function findComposer(){
+    return document.querySelector(".followme-public-composer") ||
+           document.querySelector(".composer") ||
+           document.querySelector("form") ||
+           document.body;
+  }
+
+  function findMessagesBox(){
+    return document.getElementById("messages") ||
+           document.getElementById("chatMessages") ||
+           document.getElementById("followmePublicMessages") ||
+           document.querySelector(".messages") ||
+           document.querySelector(".chat-messages") ||
+           document.querySelector(".followme-public-messages") ||
+           document.querySelector("main") ||
+           document.body;
+  }
+
+  function chooseMime(){
+    try{
+      if(!window.MediaRecorder || !MediaRecorder.isTypeSupported) return "";
+
+      const candidates = [
+        "audio/mp4",
+        "audio/aac",
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/ogg;codecs=opus"
+      ];
+
+      for(const t of candidates){
+        if(MediaRecorder.isTypeSupported(t)) return t;
+      }
+    }catch(e){}
+
+    return "";
+  }
+
+  function extForMime(mime){
+    mime = String(mime || "").toLowerCase();
+
+    if(mime.includes("mp4")) return "m4a";
+    if(mime.includes("aac")) return "aac";
+    if(mime.includes("ogg")) return "ogg";
+    if(mime.includes("webm")) return "webm";
+
+    return "audio";
+  }
+
+  function parseAttachmentMessage(message){
+    try{
+      const obj = typeof message === "string" ? JSON.parse(message) : message;
+      if(obj && obj.__followme_attachment) return obj;
+    }catch(e){}
+    return null;
+  }
+
+  function renderAttachment(a){
+    const url = a.url || "";
+    const name = a.label || a.filename || "Allegato";
+    const mime = a.mime || "";
+    const kind = a.kind || "";
+
+    if(kind === "audio" || mime.indexOf("audio/") === 0){
+      return '<div class="followme-attachment-audio" data-audio-url="' + esc(url) + '">' +
+        '<span>🎙️</span><audio controls preload="metadata" src="' + esc(url) + '"></audio>' +
+      '</div>';
     }
-  };
 
-  function forceReloadMessages(){
-    try{
-      if(typeof window.followMePublicLoadMessages === "function"){
-        window.followMePublicLoadMessages();
-      }
-    }catch(e){}
+    if(kind === "image" || mime.indexOf("image/") === 0){
+      return '<a class="followme-attachment-card" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+        '<img class="followme-attachment-image" src="' + esc(url) + '" alt="' + esc(name) + '">' +
+        '<span class="followme-attachment-meta">' + esc(name) + '</span>' +
+      '</a>';
+    }
+
+    if(kind === "location"){
+      return '<a class="followme-attachment-location" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+        '<span>📍</span><span><span class="followme-attachment-name">Posizione condivisa</span><span class="followme-attachment-meta">Apri mappa</span></span>' +
+      '</a>';
+    }
+
+    return '<a class="followme-attachment-file" href="' + esc(url) + '" target="_blank" rel="noopener" download>' +
+      '<span>📎</span><span><span class="followme-attachment-name">' + esc(name) + '</span><span class="followme-attachment-meta">Apri documento</span></span>' +
+    '</a>';
+  }
+
+  function appendServerMessage(message){
+    if(!message) return;
+
+    const id = String(message.id || "").trim();
+    if(id && document.querySelector('[data-message-id="' + CSS.escape(id) + '"]')) return;
+
+    const a = parseAttachmentMessage(message.message);
+    if(!a) return;
+
+    const box = findMessagesBox();
+
+    const bubble = document.createElement("div");
+    bubble.className = "message bubble followme-public-bubble visitor";
+
+    if(id){
+      bubble.dataset.messageId = id;
+      bubble.setAttribute("data-message-id", id);
+    }
+
+    bubble.dataset.fmAttachmentRendered = "1";
+    if(a.url) bubble.dataset.fmAttachmentUrl = a.url;
+    bubble.innerHTML = renderAttachment(a);
+
+    box.appendChild(bubble);
 
     try{
-      if(typeof window.loadMessages === "function"){
-        window.loadMessages();
-      }
-    }catch(e){}
-
-    try{
-      if(typeof window.fmPublicRenderAllAttachments20260519 === "function"){
-        window.fmPublicRenderAllAttachments20260519();
-      }
+      box.scrollTop = box.scrollHeight;
     }catch(e){}
   }
 
-  function removeLocalAudioGhosts(){
-    /*
-      Rimuove soltanto audio locali senza data-message-id.
-      Gli audio reali caricati dal server devono restare.
-    */
-    document.querySelectorAll(".followme-public-bubble, .message, .bubble").forEach(function(el){
-      const html = el.innerHTML || "";
-      const txt = el.textContent || "";
+  function forceReload(){
+    try{
+      if(typeof window.followMePublicLoadMessages === "function") window.followMePublicLoadMessages();
+    }catch(e){}
 
-      const isAudio =
-        html.includes("<audio") ||
-        html.includes("followme-attachment-audio") ||
-        txt.includes('"kind":"audio"') ||
-        txt.includes('"kind": "audio"');
+    try{
+      if(typeof window.loadMessages === "function") window.loadMessages();
+    }catch(e){}
 
-      if(!isAudio) return;
-
-      const hasServerId =
-        el.hasAttribute("data-message-id") ||
-        el.dataset.messageId ||
-        el.dataset.serverMessageId;
-
-      if(!hasServerId){
-        /*
-          Se è una bolla locale creata da append immediato, la togliamo.
-          Il reload server la ricreerà se l'audio è stato davvero salvato.
-        */
-        el.remove();
-      }
-    });
+    try{
+      if(typeof window.fmPublicRenderAllAttachments20260519 === "function") window.fmPublicRenderAllAttachments20260519();
+    }catch(e){}
   }
 
-  if(!window.__fmAudioServerOnlyFetchPatch20260519){
-    window.__fmAudioServerOnlyFetchPatch20260519 = true;
-    const oldFetch = window.fetch.bind(window);
+  function injectCss(){
+    if(document.getElementById("fmPublicCleanAudioCss20260519")) return;
 
-    window.fetch = async function(input, init){
-      const res = await oldFetch(input, init);
+    const style = document.createElement("style");
+    style.id = "fmPublicCleanAudioCss20260519";
+    style.textContent = `
+      #fmPublicCleanAudioPanel20260519{
+        display:none;
+        position:absolute;
+        left:10px;
+        right:10px;
+        bottom:58px;
+        z-index:100001;
+        background:#fff;
+        color:#202629;
+        border-radius:22px;
+        border:1px solid rgba(0,0,0,.10);
+        box-shadow:0 18px 60px rgba(0,0,0,.28);
+        padding:12px;
+        box-sizing:border-box;
+      }
 
-      try{
-        const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+      #fmPublicCleanAudioPanel20260519.is-open{
+        display:block !important;
+      }
 
-        const isAudioUpload =
-          url &&
-          url.includes("/api/followme/chat/session/") &&
-          url.includes("/attachment-raw");
+      #fmPublicCleanAudioPanel20260519 .fm-audio-title{
+        font-size:.86rem;
+        font-weight:950;
+        margin-bottom:6px;
+      }
 
-        if(isAudioUpload){
-          const clone = res.clone();
-          const data = await clone.json().catch(function(){ return null; });
+      #fmPublicCleanAudioPanel20260519 .fm-audio-status{
+        min-height:22px;
+        font-size:.76rem;
+        line-height:1.35;
+        color:#667085;
+        font-weight:800;
+        margin-bottom:10px;
+      }
 
-          removeLocalAudioGhosts();
+      #fmPublicCleanAudioPanel20260519 .fm-audio-actions{
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:8px;
+      }
 
-          if(data && data.success){
-            setTimeout(forceReloadMessages, 120);
-            setTimeout(forceReloadMessages, 500);
-            setTimeout(forceReloadMessages, 1200);
-          }
+      #fmPublicCleanAudioPanel20260519 button{
+        min-height:40px;
+        border-radius:999px;
+        border:1px solid rgba(0,0,0,.08);
+        background:#f6f7f8;
+        color:#202629;
+        font-size:.82rem;
+        font-weight:950;
+        cursor:pointer;
+      }
+
+      #fmPublicCleanAudioPanel20260519 button.primary{
+        background:#25d366;
+        color:#fff;
+      }
+
+      #fmPublicCleanAudioPanel20260519 button.danger{
+        background:#fff1ef;
+        color:#b42318;
+      }
+
+      #fmPublicCleanAudioPanel20260519 button.warn{
+        background:#fff7e8;
+        color:#9a5b00;
+      }
+
+      #fmPublicCleanAudioPanel20260519 button:disabled{
+        opacity:.45;
+        cursor:not-allowed;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function ensurePanel(){
+    let panel = document.getElementById("fmPublicCleanAudioPanel20260519");
+    if(panel) return panel;
+
+    const composer = findComposer();
+
+    try{
+      if(getComputedStyle(composer).position === "static"){
+        composer.style.position = "relative";
+      }
+    }catch(e){
+      composer.style.position = "relative";
+    }
+
+    panel = document.createElement("div");
+    panel.id = "fmPublicCleanAudioPanel20260519";
+    panel.innerHTML = `
+      <div class="fm-audio-title">Messaggio audio</div>
+      <div class="fm-audio-status" id="fmPublicCleanAudioStatus20260519">Premi Registra per iniziare.</div>
+      <div class="fm-audio-actions">
+        <button type="button" id="fmPublicCleanAudioStart20260519" class="primary">Registra</button>
+        <button type="button" id="fmPublicCleanAudioStop20260519" class="warn" disabled>Stop</button>
+        <button type="button" id="fmPublicCleanAudioSend20260519" class="primary" disabled>Invia audio</button>
+        <button type="button" id="fmPublicCleanAudioCancel20260519" class="danger">Annulla</button>
+      </div>
+    `;
+
+    composer.appendChild(panel);
+    bindPanel();
+
+    return panel;
+  }
+
+  function status(msg){
+    const el = document.getElementById("fmPublicCleanAudioStatus20260519");
+    if(el) el.textContent = msg;
+  }
+
+  function setButtons(state){
+    const start = document.getElementById("fmPublicCleanAudioStart20260519");
+    const stop = document.getElementById("fmPublicCleanAudioStop20260519");
+    const send = document.getElementById("fmPublicCleanAudioSend20260519");
+
+    if(!start || !stop || !send) return;
+
+    start.disabled = state === "recording" || state === "sending";
+    stop.disabled = state !== "recording";
+    send.disabled = state !== "ready";
+  }
+
+  function stopStream(){
+    try{
+      if(stream) stream.getTracks().forEach(t => t.stop());
+    }catch(e){}
+    stream = null;
+  }
+
+  function resetAll(){
+    try{
+      if(recorder && recording){
+        recorder.stop();
+      }
+    }catch(e){}
+
+    stopStream();
+
+    if(timer){
+      clearInterval(timer);
+      timer = null;
+    }
+
+    recorder = null;
+    chunks = [];
+    blob = null;
+    recording = false;
+    sending = false;
+    startedAt = 0;
+
+    const oldAudioBtn = document.getElementById("fmPublicAudioBtn20260519");
+    if(oldAudioBtn){
+      oldAudioBtn.textContent = "🎙️ Audio";
+      oldAudioBtn.disabled = false;
+    }
+
+    setButtons("idle");
+    status("Premi Registra per iniziare.");
+  }
+
+  function openPanel(){
+    if(!canUseExtra()) return;
+
+    ensurePanel();
+    resetAll();
+
+    const panel = document.getElementById("fmPublicCleanAudioPanel20260519");
+    if(panel) panel.classList.add("is-open");
+
+    status("Premi Registra per iniziare.");
+  }
+
+  function closePanel(){
+    const panel = document.getElementById("fmPublicCleanAudioPanel20260519");
+    if(panel) panel.classList.remove("is-open");
+  }
+
+  async function startRecording(){
+    try{
+      if(!canUseExtra()) return;
+
+      resetAll();
+
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        status("Microfono non supportato da questo dispositivo.");
+        return;
+      }
+
+      if(!window.MediaRecorder){
+        status("Registrazione audio non supportata da questo browser.");
+        return;
+      }
+
+      status("Richiesta autorizzazione microfono…");
+
+      stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+
+      const mime = chooseMime();
+      recorder = new MediaRecorder(stream, mime ? { mimeType:mime } : undefined);
+
+      chunks = [];
+      blob = null;
+
+      recorder.ondataavailable = function(ev){
+        if(ev.data && ev.data.size > 0) chunks.push(ev.data);
+      };
+
+      recorder.onstop = function(){
+        stopStream();
+
+        if(timer){
+          clearInterval(timer);
+          timer = null;
         }
 
-        if(url && url.includes("/api/followme/chat/session/") && url.includes("/messages")){
-          setTimeout(function(){
-            removeLocalAudioGhosts();
-            try{
-              if(typeof window.fmPublicRenderAllAttachments20260519 === "function"){
-                window.fmPublicRenderAllAttachments20260519();
-              }
-            }catch(e){}
-          }, 120);
-        }
-      }catch(e){}
+        recording = false;
 
-      return res;
-    };
+        const finalMime = recorder && recorder.mimeType ? recorder.mimeType : (mime || "audio/webm");
+        blob = new Blob(chunks, { type:finalMime });
+
+        if(!blob || blob.size < 1000){
+          blob = null;
+          setButtons("idle");
+          status("Audio troppo breve o vuoto. Riprova.");
+          return;
+        }
+
+        setButtons("ready");
+        status("Audio pronto. Premi Invia audio.");
+      };
+
+      recorder.start(250);
+      recording = true;
+      startedAt = Date.now();
+
+      setButtons("recording");
+      status("Registrazione in corso… 0s");
+
+      timer = setInterval(function(){
+        if(!recording) return;
+        const sec = Math.floor((Date.now() - startedAt) / 1000);
+        status("Registrazione in corso… " + sec + "s");
+      }, 500);
+
+    }catch(err){
+      console.error("clean audio start error:", err);
+      resetAll();
+
+      const msg = String(err && (err.name || err.message) || err || "");
+
+      if(msg.includes("NotAllowed") || msg.includes("denied") || msg.includes("Permission")){
+        status("Microfono non autorizzato. Consenti il microfono nelle impostazioni e riprova.");
+      }else{
+        status("Errore microfono: " + (err.message || msg || "non disponibile"));
+      }
+    }
+  }
+
+  function stopRecording(){
+    try{
+      if(recorder && recording){
+        status("Preparazione audio…");
+        recorder.stop();
+      }
+    }catch(err){
+      console.error("clean audio stop error:", err);
+      resetAll();
+      status("Errore stop registrazione.");
+    }
+  }
+
+  async function sendAudio(){
+    if(sending) return;
+
+    try{
+      const sid = getSid();
+
+      if(!sid){
+        status("Sessione chat mancante.");
+        return;
+      }
+
+      if(!blob || blob.size < 1000){
+        status("Nessun audio valido da inviare.");
+        return;
+      }
+
+      sending = true;
+      setButtons("sending");
+      status("Invio audio…");
+
+      const mime = blob.type || "audio/webm";
+      const ext = extForMime(mime);
+      const filename = "audio_" + Date.now() + "." + ext;
+
+      const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/attachment-raw", {
+        method:"POST",
+        headers:{
+          "Content-Type": mime,
+          "X-FollowMe-Sender": "visitor",
+          "X-FollowMe-Kind": "audio",
+          "X-FollowMe-Filename": encodeURIComponent(filename)
+        },
+        body: await blob.arrayBuffer()
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Errore invio audio.");
+      }
+
+      if(data.message){
+        appendServerMessage(data.message);
+      }
+
+      status("Audio inviato.");
+      closePanel();
+
+      blob = null;
+      chunks = [];
+      sending = false;
+      setButtons("idle");
+
+      setTimeout(forceReload, 250);
+      setTimeout(forceReload, 900);
+      setTimeout(forceReload, 1800);
+
+    }catch(err){
+      console.error("clean audio send error:", err);
+      sending = false;
+      setButtons(blob ? "ready" : "idle");
+      status(err.message || "Errore invio audio.");
+    }
+  }
+
+  function bindPanel(){
+    const start = document.getElementById("fmPublicCleanAudioStart20260519");
+    const stop = document.getElementById("fmPublicCleanAudioStop20260519");
+    const send = document.getElementById("fmPublicCleanAudioSend20260519");
+    const cancel = document.getElementById("fmPublicCleanAudioCancel20260519");
+
+    if(start && start.dataset.cleanAudioBound !== "1"){
+      start.dataset.cleanAudioBound = "1";
+      start.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        startRecording();
+      }, true);
+    }
+
+    if(stop && stop.dataset.cleanAudioBound !== "1"){
+      stop.dataset.cleanAudioBound = "1";
+      stop.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        stopRecording();
+      }, true);
+    }
+
+    if(send && send.dataset.cleanAudioBound !== "1"){
+      send.dataset.cleanAudioBound = "1";
+      send.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        sendAudio();
+      }, true);
+    }
+
+    if(cancel && cancel.dataset.cleanAudioBound !== "1"){
+      cancel.dataset.cleanAudioBound = "1";
+      cancel.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        resetAll();
+        closePanel();
+      }, true);
+    }
+  }
+
+  function bindAudioIntercept(){
+    if(document.body.dataset.cleanAudioDocumentIntercept === "1") return;
+    document.body.dataset.cleanAudioDocumentIntercept = "1";
+
+    document.addEventListener("click", function(ev){
+      const btn = ev.target && ev.target.closest ? ev.target.closest("#fmPublicAudioBtn20260519") : null;
+      if(!btn) return;
+
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+
+      btn.textContent = "🎙️ Audio";
+      openPanel();
+
+      return false;
+    }, true);
+  }
+
+  function keepAudioButtonClean(){
+    const btn = document.getElementById("fmPublicAudioBtn20260519");
+    if(btn && String(btn.textContent || "").toLowerCase().includes("stop")){
+      btn.textContent = "🎙️ Audio";
+    }
   }
 
   function boot(){
-    removeLocalAudioGhosts();
-    forceReloadMessages();
+    injectCss();
+    ensurePanel();
+    bindAudioIntercept();
+    keepAudioButtonClean();
   }
 
-  window.fmPublicAudioServerOnlyFix20260519 = boot;
+  window.fmPublicCleanAudioController20260519 = {
+    openPanel,
+    resetAll,
+    state:function(){
+      return {
+        recording,
+        sending,
+        hasBlob:!!blob,
+        blobSize:blob ? blob.size : 0,
+        sid:getSid(),
+        mime:blob ? blob.type : chooseMime()
+      };
+    }
+  };
 
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
@@ -3507,7 +3422,7 @@
     setTimeout(boot, 250);
   });
 
-  setInterval(removeLocalAudioGhosts, 1500);
+  setInterval(keepAudioButtonClean, 1000);
 })();
 </script>
 
