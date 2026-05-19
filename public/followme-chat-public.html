@@ -2861,6 +2861,199 @@
 })();
 </script>
 
+
+
+<script id="followme-public-attachment-dedupe-final-20260519">
+(function(){
+  if(window.__FollowMePublicAttachmentDedupeFinal20260519) return;
+  window.__FollowMePublicAttachmentDedupeFinal20260519 = true;
+
+  const seen = new Set();
+
+  function esc(v){
+    return String(v == null ? "" : v)
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;");
+  }
+
+  function parseAttachmentMessage(message){
+    try{
+      const obj = typeof message === "string" ? JSON.parse(message) : message;
+      if(obj && obj.__followme_attachment) return obj;
+    }catch(e){}
+    return null;
+  }
+
+  function keyFor(a){
+    if(!a) return "";
+    return [
+      a.url || "",
+      a.filename || "",
+      a.label || "",
+      a.mime || "",
+      a.kind || "",
+      a.created_at || ""
+    ].join("|");
+  }
+
+  function renderAttachment(a){
+    const url = a.url || "";
+    const name = a.label || a.filename || "Allegato";
+    const mime = a.mime || "";
+    const kind = a.kind || "";
+
+    if(kind === "image" || mime.indexOf("image/") === 0){
+      return '<a class="followme-attachment-card" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+        '<img class="followme-attachment-image" src="' + esc(url) + '" alt="' + esc(name) + '">' +
+        '<span class="followme-attachment-meta">' + esc(name) + (a.temporary ? ' · Allegato temporaneo' : '') + '</span>' +
+      '</a>';
+    }
+
+    if(kind === "audio" || mime.indexOf("audio/") === 0){
+      return '<div class="followme-attachment-audio">' +
+        '<span>🎙️</span><audio controls src="' + esc(url) + '"></audio>' +
+      '</div>';
+    }
+
+    if(kind === "location"){
+      return '<a class="followme-attachment-location" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+        '<span>📍</span><span><span class="followme-attachment-name">Posizione condivisa</span><span class="followme-attachment-meta">Apri mappa</span></span>' +
+      '</a>';
+    }
+
+    return '<a class="followme-attachment-file" href="' + esc(url) + '" target="_blank" rel="noopener" download>' +
+      '<span>📎</span><span><span class="followme-attachment-name">' + esc(name) + '</span><span class="followme-attachment-meta">Apri documento</span></span>' +
+    '</a>';
+  }
+
+  function findMessagesBox(){
+    return document.getElementById("messages") ||
+           document.getElementById("chatMessages") ||
+           document.getElementById("followmePublicMessages") ||
+           document.querySelector(".messages") ||
+           document.querySelector(".chat-messages") ||
+           document.querySelector(".followme-public-messages") ||
+           document.querySelector("main") ||
+           document.body;
+  }
+
+  function bubbleAttachmentKey(el){
+    if(!el) return "";
+
+    if(el.dataset && el.dataset.fmAttachmentKey){
+      return el.dataset.fmAttachmentKey;
+    }
+
+    const txt = (el.textContent || "").trim();
+    const a = parseAttachmentMessage(txt);
+    return keyFor(a);
+  }
+
+  function rebuildSeenFromDom(){
+    document.querySelectorAll("[data-fm-attachment-key]").forEach(el => {
+      const k = el.dataset.fmAttachmentKey || "";
+      if(k) seen.add(k);
+    });
+
+    document.querySelectorAll(".message, .bubble, .followme-public-bubble, [data-message-id]").forEach(el => {
+      const k = bubbleAttachmentKey(el);
+      if(k) seen.add(k);
+    });
+  }
+
+  function appendLocalAttachmentBubble(attachment, sender){
+    const box = findMessagesBox();
+    if(!box || !attachment) return;
+
+    rebuildSeenFromDom();
+
+    const k = keyFor(attachment);
+    if(k && seen.has(k)) return;
+    if(k) seen.add(k);
+
+    const bubble = document.createElement("div");
+    bubble.className = "message bubble followme-public-bubble " + (sender === "owner" ? "owner" : "visitor");
+    bubble.dataset.fmAttachmentRendered = "1";
+    if(k) bubble.dataset.fmAttachmentKey = k;
+    bubble.innerHTML = renderAttachment(attachment);
+
+    box.appendChild(bubble);
+
+    try{
+      box.scrollTop = box.scrollHeight;
+    }catch(e){}
+  }
+
+  function renderAndDedupe(){
+    rebuildSeenFromDom();
+
+    const bubbles = Array.from(document.querySelectorAll(".message, .bubble, .followme-public-bubble, [data-message-id]"));
+    const localSeen = new Set();
+
+    bubbles.forEach(function(b){
+      let k = b.dataset.fmAttachmentKey || "";
+      let a = null;
+
+      if(!k){
+        const txt = (b.textContent || "").trim();
+        a = parseAttachmentMessage(txt);
+        k = keyFor(a);
+      }
+
+      if(!k) return;
+
+      if(localSeen.has(k)){
+        b.remove();
+        return;
+      }
+
+      localSeen.add(k);
+      seen.add(k);
+
+      if(b.dataset.fmAttachmentRendered === "1") return;
+
+      if(!a){
+        const txt = (b.textContent || "").trim();
+        a = parseAttachmentMessage(txt);
+      }
+
+      if(!a) return;
+
+      b.dataset.fmAttachmentRendered = "1";
+      b.dataset.fmAttachmentKey = k;
+      b.innerHTML = renderAttachment(a);
+    });
+  }
+
+  // Sovrascrive la funzione globale usata dalla patch audio:
+  // ora l'append locale è deduplicato.
+  window.fmPublicAppendLocalAttachmentBubble20260519 = appendLocalAttachmentBubble;
+  window.fmPublicRenderAllAttachments20260519 = renderAndDedupe;
+
+  function boot(){
+    renderAndDedupe();
+    setTimeout(renderAndDedupe, 200);
+    setTimeout(renderAndDedupe, 700);
+  }
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(renderAndDedupe, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(renderAndDedupe, 250);
+  });
+
+  setInterval(renderAndDedupe, 1200);
+})();
+</script>
+
 </body>
 </html>
 
