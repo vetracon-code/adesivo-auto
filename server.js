@@ -9435,6 +9435,144 @@ app.post('/api/followme/:code/chat/rotate-token', express.json(), async (req, re
   }
 });
 
+
+// followme-selected-closed-static-page-final-20260519
+app.get('/fm/chat/closed', (req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+
+  return res.send(`<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Conversazione conclusa</title>
+  <style>
+    html,body{
+      margin:0;
+      padding:0;
+      min-height:100%;
+      background:#020617;
+      overflow:hidden;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    }
+
+    body{
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:28px;
+      box-sizing:border-box;
+      color:#f8fafc;
+      background:
+        radial-gradient(circle at 50% 18%, rgba(59,130,246,.26), transparent 33%),
+        radial-gradient(circle at 20% 82%, rgba(168,85,247,.18), transparent 31%),
+        linear-gradient(145deg, #020617 0%, #0f172a 48%, #020617 100%);
+    }
+
+    .shell{
+      position:relative;
+      width:min(430px,100%);
+      border-radius:32px;
+      padding:38px 28px 34px;
+      text-align:center;
+      background:rgba(15,23,42,.72);
+      border:1px solid rgba(255,255,255,.12);
+      box-shadow:
+        0 28px 90px rgba(0,0,0,.42),
+        inset 0 1px 0 rgba(255,255,255,.08);
+      backdrop-filter:blur(18px);
+      -webkit-backdrop-filter:blur(18px);
+      overflow:hidden;
+    }
+
+    .shell:before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:linear-gradient(120deg, rgba(255,255,255,.16), transparent 34%, transparent 70%, rgba(255,255,255,.06));
+      pointer-events:none;
+    }
+
+    .orb{
+      width:62px;
+      height:62px;
+      border-radius:999px;
+      margin:0 auto 20px;
+      background:
+        radial-gradient(circle at 35% 28%, #ffffff, #93c5fd 30%, #2563eb 68%, #1e1b4b 100%);
+      box-shadow:
+        0 0 0 8px rgba(59,130,246,.10),
+        0 20px 48px rgba(37,99,235,.42);
+    }
+
+    .kicker{
+      position:relative;
+      z-index:1;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:26px;
+      padding:0 12px;
+      border-radius:999px;
+      background:rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.12);
+      color:#bfdbfe;
+      font-weight:900;
+      font-size:12px;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      margin-bottom:16px;
+    }
+
+    h1{
+      position:relative;
+      z-index:1;
+      margin:0 0 12px;
+      color:#ffffff;
+      font-size:34px;
+      line-height:1.02;
+      letter-spacing:-.055em;
+      font-weight:950;
+    }
+
+    .lead{
+      position:relative;
+      z-index:1;
+      margin:0 auto;
+      max-width:320px;
+      color:#cbd5e1;
+      font-size:17px;
+      line-height:1.42;
+      font-weight:650;
+    }
+
+    .small{
+      position:relative;
+      z-index:1;
+      margin:18px 0 0;
+      color:#94a3b8;
+      font-size:13px;
+      line-height:1.35;
+      font-weight:700;
+    }
+  </style>
+</head>
+<body>
+  <section class="shell">
+    <div class="orb"></div>
+    <div class="kicker">FollowMe Chat</div>
+    <h1>Conversazione conclusa</h1>
+    <p class="lead">Questa chat è stata chiusa dal proprietario.</p>
+    <p class="small">Grazie per averci contattato.</p>
+  </section>
+</body>
+</html>`);
+});
+// end-followme-selected-closed-static-page-final-20260519
+
 app.get('/fm/chat/c/:chat_token', async (req, res) => {
   try {
     await ensureFollowMeChatSchemaFast();
