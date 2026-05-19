@@ -19073,5 +19073,177 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-admin-attachment-render-dedupe-final-20260519">
+(function(){
+  if(window.__FollowMeAdminAttachmentRenderDedupeFinal20260519) return;
+  window.__FollowMeAdminAttachmentRenderDedupeFinal20260519 = true;
+
+  function normUrl(u){
+    try{
+      let s = String(u || "").trim();
+      if(!s) return "";
+      s = s.replace(/&amp;/g, "&");
+      const url = new URL(s, location.origin);
+      return url.pathname + url.search;
+    }catch(e){
+      return String(u || "").trim().replace(/^https?:\/\/[^\/]+/i, "");
+    }
+  }
+
+  function isAttachmentBubble(el){
+    if(!el) return false;
+
+    const html = el.innerHTML || "";
+    const txt = el.textContent || "";
+
+    return html.includes("__followme_attachment") ||
+           html.includes("followme-attachment") ||
+           html.includes("/uploads/followme-chat/") ||
+           !!(el.querySelector && el.querySelector("audio,img,a[href*='/uploads/followme-chat/']"));
+  }
+
+  function getKey(el){
+    if(!el || !isAttachmentBubble(el)) return "";
+
+    const id =
+      el.getAttribute("data-message-id") ||
+      el.dataset.messageId ||
+      el.dataset.serverMessageId ||
+      "";
+
+    if(id) return "id:" + String(id).trim();
+
+    const media = el.querySelector && el.querySelector(
+      "audio[src], img[src], a[href*='/uploads/followme-chat/'], [data-audio-url], [data-fm-attachment-url]"
+    );
+
+    if(media){
+      const raw =
+        media.getAttribute("src") ||
+        media.getAttribute("href") ||
+        media.getAttribute("data-audio-url") ||
+        media.getAttribute("data-fm-attachment-url") ||
+        "";
+
+      const u = normUrl(raw);
+      if(u) return "url:" + u;
+    }
+
+    const html = el.innerHTML || "";
+    const txt = el.textContent || "";
+
+    const patterns = [
+      /src=["']([^"']*\/uploads\/followme-chat\/[^"']+)["']/i,
+      /href=["']([^"']*\/uploads\/followme-chat\/[^"']+)["']/i,
+      /data-audio-url=["']([^"']*\/uploads\/followme-chat\/[^"']+)["']/i,
+      /"url"\s*:\s*"([^"]*\/uploads\/followme-chat\/[^"]+)"/i,
+      /(\/uploads\/followme-chat\/[A-Za-z0-9._%\-]+)/i
+    ];
+
+    for(const re of patterns){
+      const m = html.match(re) || txt.match(re);
+      if(m && m[1]){
+        const u = normUrl(m[1]);
+        if(u) return "url:" + u;
+      }
+    }
+
+    return "";
+  }
+
+  function getAttachmentBubbles(){
+    return Array.from(document.querySelectorAll(
+      "#followmeOwnerChatMessages .followme-owner-chat-bubble, " +
+      "#followmeOwnerChatMessages .message, " +
+      "#followmeOwnerChatMessages .bubble, " +
+      ".followme-owner-chat-messages .followme-owner-chat-bubble, " +
+      ".followme-owner-chat-messages .message, " +
+      ".followme-owner-chat-messages .bubble, " +
+      "[data-message-id], [data-fm-attachment-url]"
+    )).filter(isAttachmentBubble);
+  }
+
+  function dedupe(){
+    const seen = new Map();
+
+    getAttachmentBubbles().forEach(function(el){
+      const key = getKey(el);
+      if(!key) return;
+
+      if(seen.has(key)){
+        const first = seen.get(key);
+
+        const firstHasId = !!(
+          first.getAttribute("data-message-id") ||
+          first.dataset.messageId ||
+          first.dataset.serverMessageId
+        );
+
+        const currentHasId = !!(
+          el.getAttribute("data-message-id") ||
+          el.dataset.messageId ||
+          el.dataset.serverMessageId
+        );
+
+        if(!firstHasId && currentHasId){
+          first.remove();
+          seen.set(key, el);
+        }else{
+          el.remove();
+        }
+      }else{
+        seen.set(key, el);
+      }
+    });
+  }
+
+  if(!window.__fmAdminAttachmentDedupeFetchPatch20260519){
+    window.__fmAdminAttachmentDedupeFetchPatch20260519 = true;
+    const oldFetch = window.fetch.bind(window);
+
+    window.fetch = async function(input, init){
+      const res = await oldFetch(input, init);
+
+      try{
+        const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+
+        if(url && url.includes("/api/followme/chat/session/")){
+          setTimeout(dedupe, 50);
+          setTimeout(dedupe, 250);
+          setTimeout(dedupe, 900);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  function boot(){
+    dedupe();
+    setTimeout(dedupe, 200);
+    setTimeout(dedupe, 900);
+    setTimeout(dedupe, 1800);
+  }
+
+  window.fmAdminAttachmentRenderDedupe20260519 = boot;
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(dedupe, 1200);
+})();
+</script>
+
 </body>
 </html>
