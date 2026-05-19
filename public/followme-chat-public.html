@@ -3629,13 +3629,17 @@
 
 
 
+
+
 <script id="followme-public-status-and-close-final-20260519">
 (function(){
   if(window.__FollowMePublicStatusAndCloseFinal20260519) return;
   window.__FollowMePublicStatusAndCloseFinal20260519 = true;
 
   let knownOwnerConnected = false;
-  let closing = false;
+  let locallyPaused = false;
+  let lastOwnerMessageIdSeen = "";
+  let lastKnownOwnerMessageId = "";
 
   function cleanSid(v){
     const s = String(v || "").trim();
@@ -3665,11 +3669,36 @@
     return "";
   }
 
+  function storageKey(){
+    return "followme_chat_user_paused_" + (sessionId() || "unknown");
+  }
+
+  function readPaused(){
+    try{
+      locallyPaused = localStorage.getItem(storageKey()) === "1";
+    }catch(e){
+      locallyPaused = false;
+    }
+
+    document.body.classList.toggle("followme-public-locally-paused", locallyPaused);
+    applyComposerPausedState();
+
+    return locallyPaused;
+  }
+
+  function writePaused(value){
+    locallyPaused = !!value;
+
+    try{
+      if(locallyPaused) localStorage.setItem(storageKey(), "1");
+      else localStorage.removeItem(storageKey());
+    }catch(e){}
+
+    document.body.classList.toggle("followme-public-locally-paused", locallyPaused);
+    applyComposerPausedState();
+  }
+
   function findChatSubtitle(){
-    /*
-      Cerca prima elementi già usati come sottotitolo.
-      Se non li trova, crea una riga sotto il titolo FollowMe Chat.
-    */
     const candidates = [
       document.getElementById("followmePublicChatSubtitle"),
       document.getElementById("followmeChatSubtitle"),
@@ -3687,7 +3716,7 @@
         txt.includes("conness") ||
         txt.includes("attesa") ||
         txt.includes("proprietario") ||
-        txt.includes("online") ||
+        txt.includes("pausa") ||
         txt.includes("chat")
       ){
         return el;
@@ -3709,8 +3738,6 @@
       sub.style.fontWeight = "800";
       sub.style.opacity = ".78";
       sub.style.marginTop = "2px";
-      sub.textContent = "Connesso - in attesa del proprietario";
-
       title.parentElement.appendChild(sub);
       return sub;
     }
@@ -3724,9 +3751,206 @@
 
     knownOwnerConnected = !!connected;
 
+    if(locallyPaused){
+      el.textContent = "Chat in pausa";
+      return;
+    }
+
     el.textContent = knownOwnerConnected
       ? "Connessi"
       : "Connesso - in attesa del proprietario";
+  }
+
+  function findComposerElements(){
+    return Array.from(document.querySelectorAll("textarea,input[type='text'],button")).filter(function(el){
+      const txt = String(el.textContent || el.value || el.getAttribute("aria-label") || "").toLowerCase();
+
+      if(txt.includes("chiudi")) return false;
+      if(txt.includes("riattiva")) return false;
+
+      return true;
+    });
+  }
+
+  function applyComposerPausedState(){
+    findComposerElements().forEach(function(el){
+      try{
+        if(locallyPaused){
+          el.disabled = true;
+        }else{
+          if(!document.body.classList.contains("followme-public-user-blocked")){
+            el.disabled = false;
+          }
+        }
+      }catch(e){}
+    });
+  }
+
+  function ensurePausedNotice(){
+    let box = document.getElementById("followmePublicPausedNotice20260519");
+
+    if(box) return box;
+
+    box = document.createElement("div");
+    box.id = "followmePublicPausedNotice20260519";
+    box.style.display = "none";
+    box.style.margin = "14px";
+    box.style.padding = "14px 16px";
+    box.style.borderRadius = "18px";
+    box.style.background = "rgba(255,255,255,.94)";
+    box.style.color = "#202629";
+    box.style.fontWeight = "900";
+    box.style.textAlign = "center";
+    box.style.boxShadow = "0 10px 32px rgba(0,0,0,.18)";
+    box.innerHTML = `
+      <div id="followmePublicPausedText20260519">Chat messa in pausa su questo dispositivo.</div>
+      <button id="followmePublicReactivateBtn20260519" type="button" style="
+        margin-top:10px;
+        min-height:42px;
+        border:0;
+        border-radius:999px;
+        padding:0 18px;
+        background:#25d366;
+        color:#fff;
+        font-weight:950;
+        cursor:pointer;
+      ">Riattiva chat</button>
+    `;
+
+    const main = document.querySelector("main") || document.body;
+    main.appendChild(box);
+
+    const btn = box.querySelector("#followmePublicReactivateBtn20260519");
+    if(btn){
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        reactivateChat();
+      }, true);
+    }
+
+    return box;
+  }
+
+  function showPausedNotice(ownerReplied){
+    const box = ensurePausedNotice();
+    const txt = document.getElementById("followmePublicPausedText20260519");
+
+    if(txt){
+      txt.textContent = ownerReplied
+        ? "Il proprietario ha risposto. Vuoi riattivare la chat?"
+        : "Chat messa in pausa su questo dispositivo.";
+    }
+
+    box.style.display = "block";
+  }
+
+  function hidePausedNotice(){
+    const box = document.getElementById("followmePublicPausedNotice20260519");
+    if(box) box.style.display = "none";
+  }
+
+  function pauseChatLocally(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+    }
+
+    /*
+      IMPORTANTE:
+      Non chiudiamo più la sessione lato server.
+      L'utente mette solo in pausa la propria UI.
+    */
+    writePaused(true);
+    showPausedNotice(false);
+    setSubtitle(knownOwnerConnected);
+
+    return false;
+  }
+
+  function reactivateChat(){
+    writePaused(false);
+    hidePausedNotice();
+    setSubtitle(knownOwnerConnected);
+
+    try{
+      if(typeof window.followMePublicLoadMessages === "function") window.followMePublicLoadMessages();
+    }catch(e){}
+
+    try{
+      if(typeof window.loadMessages === "function") window.loadMessages();
+    }catch(e){}
+
+    try{
+      const input =
+        document.getElementById("messageInput") ||
+        document.querySelector("textarea") ||
+        document.querySelector("input[type='text']");
+      if(input) input.focus();
+    }catch(e){}
+  }
+
+  function findCloseButtons(){
+    const buttons = Array.from(document.querySelectorAll("button,a"));
+
+    return buttons.filter(function(el){
+      const txt = String(el.textContent || el.getAttribute("aria-label") || "").trim().toLowerCase();
+
+      return txt === "chiudi" ||
+             txt.includes("chiudi chat") ||
+             txt.includes("chiudi");
+    });
+  }
+
+  function bindCloseButtons(){
+    findCloseButtons().forEach(function(btn){
+      if(btn.dataset.fmCloseLocalOnlyBound === "1") return;
+
+      btn.dataset.fmCloseLocalOnlyBound = "1";
+      btn.id = btn.id || "followmePublicCloseBtn20260519";
+
+      btn.addEventListener("click", pauseChatLocally, true);
+    });
+  }
+
+  function latestOwnerMessageId(messages){
+    if(!Array.isArray(messages)) return "";
+
+    const ownerMessages = messages.filter(function(m){
+      return m && m.sender === "owner";
+    });
+
+    if(!ownerMessages.length) return "";
+
+    const last = ownerMessages[ownerMessages.length - 1];
+    return String(last.id || last.created_at || "").trim();
+  }
+
+  function applyMessages(messages){
+    if(!Array.isArray(messages)) return;
+
+    const ownerId = latestOwnerMessageId(messages);
+
+    if(ownerId){
+      setSubtitle(true);
+
+      if(!lastOwnerMessageIdSeen){
+        lastOwnerMessageIdSeen = ownerId;
+      }
+
+      if(ownerId !== lastKnownOwnerMessageId){
+        const hadPrevious = !!lastKnownOwnerMessageId;
+        lastKnownOwnerMessageId = ownerId;
+
+        /*
+          Se l'utente aveva chiuso/pausato e admin scrive dopo,
+          non riattiviamo automaticamente: proponiamo la riattivazione.
+        */
+        if(locallyPaused && hadPrevious){
+          showPausedNotice(true);
+        }
+      }
+    }
   }
 
   function applyState(session){
@@ -3739,14 +3963,19 @@
 
     setSubtitle(ownerConnected);
 
+    /*
+      Se admin in futuro chiuderà davvero la sessione server,
+      qui potremo mostrare "Chat chiusa dal proprietario".
+      Per ora NON trattiamo il Chiudi utente come chiusura definitiva.
+    */
     if(String(session.status || "").toLowerCase() === "closed"){
-      showClosedState();
+      document.body.classList.add("followme-public-session-closed");
     }
   }
 
   async function fetchState(){
     const sid = sessionId();
-    if(!sid || closing) return;
+    if(!sid) return;
 
     try{
       const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/state?v=" + Date.now(), {
@@ -3778,13 +4007,12 @@
           const data = await clone.json().catch(function(){ return null; });
 
           if(data && Array.isArray(data.messages)){
-            if(data.messages.some(function(m){ return m && m.sender === "owner"; })){
-              setSubtitle(true);
-            }
+            setTimeout(function(){ applyMessages(data.messages); }, 50);
+            setTimeout(function(){ applyComposerPausedState(); }, 80);
+          }
 
-            if(data.session){
-              applyState(data.session);
-            }
+          if(data && data.session){
+            applyState(data.session);
           }
         }
       }catch(e){}
@@ -3793,158 +4021,45 @@
     };
   }
 
-  function clearChatStorage(){
-    const keys = [];
+  function injectCss(){
+    if(document.getElementById("followmePublicLocalPauseCss20260519")) return;
 
-    try{
-      for(let i = 0; i < localStorage.length; i++){
-        const k = localStorage.key(i);
-        if(k && /followme|fm_|chat/i.test(k)) keys.push(["local", k]);
-      }
-    }catch(e){}
-
-    try{
-      for(let i = 0; i < sessionStorage.length; i++){
-        const k = sessionStorage.key(i);
-        if(k && /followme|fm_|chat/i.test(k)) keys.push(["session", k]);
-      }
-    }catch(e){}
-
-    keys.forEach(function(pair){
-      try{
-        if(pair[0] === "local") localStorage.removeItem(pair[1]);
-        else sessionStorage.removeItem(pair[1]);
-      }catch(e){}
-    });
-
-    try{ delete window.followMeChatSessionId; }catch(e){}
-    try{ delete window.FOLLOWME_CHAT_SESSION_ID; }catch(e){}
-  }
-
-  function disableComposer(){
-    document.body.classList.add("followme-public-session-closed");
-
-    document.querySelectorAll("textarea,input,button").forEach(function(el){
-      const txt = String(el.textContent || el.value || "").toLowerCase();
-
-      if(
-        el.id === "followmePublicCloseBtn20260519" ||
-        txt.includes("chiudi")
-      ){
-        return;
+    const style = document.createElement("style");
+    style.id = "followmePublicLocalPauseCss20260519";
+    style.textContent = `
+      body.followme-public-locally-paused .followme-public-composer,
+      body.followme-public-locally-paused .composer{
+        opacity:.55;
+        pointer-events:none;
       }
 
-      try{ el.disabled = true; }catch(e){}
-    });
-  }
-
-  function showClosedState(){
-    disableComposer();
-
-    let box = document.getElementById("followmePublicClosedFinalNotice20260519");
-
-    if(!box){
-      box = document.createElement("div");
-      box.id = "followmePublicClosedFinalNotice20260519";
-      box.style.margin = "14px";
-      box.style.padding = "14px 16px";
-      box.style.borderRadius = "18px";
-      box.style.background = "rgba(255,255,255,.92)";
-      box.style.color = "#202629";
-      box.style.fontWeight = "900";
-      box.style.textAlign = "center";
-      box.style.boxShadow = "0 10px 32px rgba(0,0,0,.18)";
-      box.textContent = "Chat chiusa definitivamente.";
-
-      const main = document.querySelector("main") || document.body;
-      main.appendChild(box);
-    }
-
-    setSubtitle(false);
-  }
-
-  function findCloseButtons(){
-    const buttons = Array.from(document.querySelectorAll("button,a"));
-
-    return buttons.filter(function(el){
-      const txt = String(el.textContent || el.getAttribute("aria-label") || "").trim().toLowerCase();
-
-      return txt === "chiudi" ||
-             txt.includes("chiudi chat") ||
-             txt.includes("chiudi");
-    });
-  }
-
-  async function closeChat(ev){
-    if(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
-      ev.stopImmediatePropagation();
-    }
-
-    if(closing) return false;
-    closing = true;
-
-    const sid = sessionId();
-
-    try{
-      if(sid){
-        await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/close", {
-          method:"POST",
-          headers:{ "Content-Type":"application/json" },
-          body:JSON.stringify({ reason:"closed_by_visitor" })
-        }).catch(function(){});
+      body.followme-public-locally-paused #followmePublicPausedNotice20260519{
+        display:block !important;
       }
-    }catch(e){}
+    `;
 
-    clearChatStorage();
-    showClosedState();
-
-    /*
-      Svuota la cronologia corrente nella UI senza toccare il DB.
-      Così se l’utente riapre il QR parte una nuova sessione pulita.
-    */
-    try{
-      const boxes = [
-        document.getElementById("messages"),
-        document.getElementById("chatMessages"),
-        document.getElementById("followmePublicMessages"),
-        document.querySelector(".messages"),
-        document.querySelector(".chat-messages"),
-        document.querySelector(".followme-public-messages")
-      ].filter(Boolean);
-
-      boxes.forEach(function(b){
-        b.innerHTML = "";
-      });
-    }catch(e){}
-
-    return false;
-  }
-
-  function bindCloseButtons(){
-    findCloseButtons().forEach(function(btn){
-      if(btn.dataset.fmCloseFinalBound === "1") return;
-
-      btn.dataset.fmCloseFinalBound = "1";
-      btn.id = btn.id || "followmePublicCloseBtn20260519";
-
-      btn.addEventListener("click", closeChat, true);
-    });
+    document.head.appendChild(style);
   }
 
   function boot(){
+    injectCss();
     patchMessagesFetchForOwnerActivity();
-    setSubtitle(false);
+    readPaused();
+    setSubtitle(knownOwnerConnected);
     bindCloseButtons();
     fetchState();
+
+    if(locallyPaused){
+      showPausedNotice(false);
+    }
 
     setTimeout(bindCloseButtons, 500);
     setTimeout(fetchState, 700);
     setTimeout(fetchState, 1800);
   }
 
-  window.fmPublicCloseChatFinal20260519 = closeChat;
+  window.fmPublicPauseChatLocalOnly20260519 = pauseChatLocally;
+  window.fmPublicReactivateChat20260519 = reactivateChat;
   window.fmPublicRefreshConnectedLabel20260519 = fetchState;
 
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
@@ -3968,6 +4083,7 @@
 
   setInterval(fetchState, 3000);
   setInterval(bindCloseButtons, 1500);
+  setInterval(applyComposerPausedState, 1500);
 })();
 </script>
 
