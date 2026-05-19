@@ -6169,6 +6169,250 @@
 
 
 
+
+
+<script id="followme-public-pause-local-only-final-20260519">
+(function(){
+  if(window.__FollowMePublicPauseLocalOnlyFinal20260519) return;
+  window.__FollowMePublicPauseLocalOnlyFinal20260519 = true;
+
+  /*
+    La pausa utente deve essere SOLO locale.
+    Non deve aggiornare il server, perché altrimenti un ID sessione ereditato
+    può mettere in pausa l'utente sbagliato.
+  */
+
+  function findInput(){
+    return document.getElementById("messageInput") ||
+           document.querySelector("textarea") ||
+           document.querySelector("input[type='text']");
+  }
+
+  function findSend(){
+    return document.getElementById("sendBtn") ||
+           document.querySelector("button[type='submit']") ||
+           document.querySelector(".send-btn");
+  }
+
+  function ensureStyle(){
+    if(document.getElementById("followmePublicPauseLocalOnlyStyle20260519")) return;
+
+    const style = document.createElement("style");
+    style.id = "followmePublicPauseLocalOnlyStyle20260519";
+    style.textContent = `
+      body.followme-public-locally-paused #followmePublicPauseOverlay20260519{
+        display:flex !important;
+        visibility:visible !important;
+      }
+
+      body:not(.followme-public-locally-paused) #followmePublicPauseOverlay20260519{
+        display:none !important;
+        visibility:hidden !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function ensureOverlay(){
+    let overlay = document.getElementById("followmePublicPauseOverlay20260519");
+
+    if(!overlay){
+      overlay = document.createElement("div");
+      overlay.id = "followmePublicPauseOverlay20260519";
+      document.body.appendChild(overlay);
+    }
+
+    overlay.innerHTML = `
+      <div class="fm-pause-card">
+        <div class="fm-hourglass">⌛</div>
+        <h2>Chat messa in pausa</h2>
+        <p>Attendi…<br>Puoi riprendere la conversazione quando vuoi.</p>
+        <button type="button" id="followmePublicResumeBtn20260519">Riprendi</button>
+      </div>
+    `;
+
+    const btn = document.getElementById("followmePublicResumeBtn20260519");
+    if(btn){
+      btn.disabled = false;
+      btn.style.pointerEvents = "auto";
+      btn.onclick = function(ev){
+        if(ev){
+          ev.preventDefault();
+          ev.stopPropagation();
+        }
+        resumeLocal();
+        return false;
+      };
+    }
+
+    ensureStyle();
+  }
+
+  function pauseLocal(){
+    ensureOverlay();
+
+    document.body.classList.add("followme-public-locally-paused");
+
+    const input = findInput();
+    const send = findSend();
+
+    if(input){
+      input.disabled = true;
+      input.placeholder = "Chat in pausa";
+    }
+
+    if(send){
+      send.disabled = true;
+    }
+  }
+
+  function resumeLocal(){
+    document.body.classList.remove("followme-public-locally-paused");
+
+    const overlay = document.getElementById("followmePublicPauseOverlay20260519");
+    if(overlay){
+      overlay.style.display = "none";
+      overlay.style.visibility = "hidden";
+      overlay.setAttribute("aria-hidden", "true");
+    }
+
+    const input = findInput();
+    const send = findSend();
+
+    if(input){
+      input.disabled = false;
+      input.readOnly = false;
+      input.placeholder = "Digita il testo qui e premi invio";
+    }
+
+    if(send){
+      send.disabled = false;
+      send.removeAttribute("aria-disabled");
+    }
+
+    try{
+      if(typeof window.followMePublicLoadMessages === "function"){
+        setTimeout(window.followMePublicLoadMessages, 100);
+      }
+    }catch(e){}
+
+    try{
+      if(typeof window.loadMessages === "function"){
+        setTimeout(window.loadMessages, 100);
+      }
+    }catch(e){}
+  }
+
+  /*
+    Intercetta Pausa e Riprendi a livello documento.
+    Così non dipendiamo dai vecchi handler.
+  */
+  document.addEventListener("click", function(ev){
+    const target = ev.target && ev.target.closest ? ev.target.closest("button,a,div,span") : ev.target;
+    if(!target) return;
+
+    const txt = String(target.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+
+    if(txt === "pausa" || txt === "pausa chat"){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      pauseLocal();
+      return false;
+    }
+
+    if(txt === "riprendi" || txt.includes("riprendi la chat") || txt.includes("riattiva la chat")){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      resumeLocal();
+      return false;
+    }
+  }, true);
+
+  /*
+    Blocca qualsiasi vecchia patch che tenta di scrivere la pausa sul server.
+    La pausa deve restare solo locale.
+  */
+  if(!window.__fmPublicPauseLocalOnlyFetchPatch20260519){
+    window.__fmPublicPauseLocalOnlyFetchPatch20260519 = true;
+
+    const oldFetch = window.fetch.bind(window);
+
+    window.fetch = function(input, init){
+      try{
+        const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+
+        if(
+          url &&
+          url.includes("/api/followme/chat/session/") &&
+          url.includes("/pause")
+        ){
+          return Promise.resolve(new Response(JSON.stringify({
+            success:true,
+            local_only:true,
+            skipped_server_pause:true
+          }), {
+            status:200,
+            headers:{ "Content-Type":"application/json" }
+          }));
+        }
+      }catch(e){}
+
+      return oldFetch(input, init);
+    };
+  }
+
+  function renameCloseToPause(){
+    document.querySelectorAll("button,a").forEach(function(el){
+      const t = String(el.textContent || "").replace(/\s+/g, " ").trim();
+
+      if(t === "Chiudi") el.textContent = "Pausa";
+      if(t === "Chiudi chat") el.textContent = "Pausa chat";
+    });
+  }
+
+  function boot(){
+    ensureOverlay();
+    renameCloseToPause();
+
+    /*
+      Non ripristiniamo mai pause da localStorage:
+      la pausa non deve propagarsi tra utenti/sessioni.
+    */
+    document.body.classList.remove("followme-public-locally-paused");
+
+    const input = findInput();
+    if(input && input.placeholder === "Chat in pausa"){
+      input.placeholder = "Digita il testo qui e premi invio";
+      input.disabled = false;
+    }
+
+    setTimeout(renameCloseToPause, 400);
+  }
+
+  window.fmPublicPauseLocalOnly20260519 = {
+    boot,
+    pauseLocal,
+    resumeLocal
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1000);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(renameCloseToPause, 1500);
+})();
+</script>
+
 </body>
 </html>
 
