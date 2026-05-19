@@ -2863,497 +2863,6 @@
 
 
 
-<script id="followme-public-attachment-dedupe-final-20260519">
-(function(){
-  if(window.__FollowMePublicAttachmentDedupeFinal20260519) return;
-  window.__FollowMePublicAttachmentDedupeFinal20260519 = true;
-
-  const seen = new Set();
-
-  function esc(v){
-    return String(v == null ? "" : v)
-      .replace(/&/g,"&amp;")
-      .replace(/</g,"&lt;")
-      .replace(/>/g,"&gt;")
-      .replace(/"/g,"&quot;");
-  }
-
-  function parseAttachmentMessage(message){
-    try{
-      const obj = typeof message === "string" ? JSON.parse(message) : message;
-      if(obj && obj.__followme_attachment) return obj;
-    }catch(e){}
-    return null;
-  }
-
-  function keyFor(a){
-    if(!a) return "";
-    return [
-      a.url || "",
-      a.filename || "",
-      a.label || "",
-      a.mime || "",
-      a.kind || "",
-      a.created_at || ""
-    ].join("|");
-  }
-
-  function renderAttachment(a){
-    const url = a.url || "";
-    const name = a.label || a.filename || "Allegato";
-    const mime = a.mime || "";
-    const kind = a.kind || "";
-
-    if(kind === "image" || mime.indexOf("image/") === 0){
-      return '<a class="followme-attachment-card" href="' + esc(url) + '" target="_blank" rel="noopener">' +
-        '<img class="followme-attachment-image" src="' + esc(url) + '" alt="' + esc(name) + '">' +
-        '<span class="followme-attachment-meta">' + esc(name) + (a.temporary ? ' · Allegato temporaneo' : '') + '</span>' +
-      '</a>';
-    }
-
-    if(kind === "audio" || mime.indexOf("audio/") === 0){
-      return '<div class="followme-attachment-audio">' +
-        '<span>🎙️</span><audio controls src="' + esc(url) + '"></audio>' +
-      '</div>';
-    }
-
-    if(kind === "location"){
-      return '<a class="followme-attachment-location" href="' + esc(url) + '" target="_blank" rel="noopener">' +
-        '<span>📍</span><span><span class="followme-attachment-name">Posizione condivisa</span><span class="followme-attachment-meta">Apri mappa</span></span>' +
-      '</a>';
-    }
-
-    return '<a class="followme-attachment-file" href="' + esc(url) + '" target="_blank" rel="noopener" download>' +
-      '<span>📎</span><span><span class="followme-attachment-name">' + esc(name) + '</span><span class="followme-attachment-meta">Apri documento</span></span>' +
-    '</a>';
-  }
-
-  function findMessagesBox(){
-    return document.getElementById("messages") ||
-           document.getElementById("chatMessages") ||
-           document.getElementById("followmePublicMessages") ||
-           document.querySelector(".messages") ||
-           document.querySelector(".chat-messages") ||
-           document.querySelector(".followme-public-messages") ||
-           document.querySelector("main") ||
-           document.body;
-  }
-
-  function bubbleAttachmentKey(el){
-    if(!el) return "";
-
-    if(el.dataset && el.dataset.fmAttachmentKey){
-      return el.dataset.fmAttachmentKey;
-    }
-
-    const txt = (el.textContent || "").trim();
-    const a = parseAttachmentMessage(txt);
-    return keyFor(a);
-  }
-
-  function rebuildSeenFromDom(){
-    document.querySelectorAll("[data-fm-attachment-key]").forEach(el => {
-      const k = el.dataset.fmAttachmentKey || "";
-      if(k) seen.add(k);
-    });
-
-    document.querySelectorAll(".message, .bubble, .followme-public-bubble, [data-message-id]").forEach(el => {
-      const k = bubbleAttachmentKey(el);
-      if(k) seen.add(k);
-    });
-  }
-
-  function appendLocalAttachmentBubble(attachment, sender){
-    const box = findMessagesBox();
-    if(!box || !attachment) return;
-
-    rebuildSeenFromDom();
-
-    const k = keyFor(attachment);
-    if(k && seen.has(k)) return;
-    if(k) seen.add(k);
-
-    const bubble = document.createElement("div");
-    bubble.className = "message bubble followme-public-bubble " + (sender === "owner" ? "owner" : "visitor");
-    bubble.dataset.fmAttachmentRendered = "1";
-    if(k) bubble.dataset.fmAttachmentKey = k;
-    bubble.innerHTML = renderAttachment(attachment);
-
-    box.appendChild(bubble);
-
-    try{
-      box.scrollTop = box.scrollHeight;
-    }catch(e){}
-  }
-
-  function renderAndDedupe(){
-    rebuildSeenFromDom();
-
-    const bubbles = Array.from(document.querySelectorAll(".message, .bubble, .followme-public-bubble, [data-message-id]"));
-    const localSeen = new Set();
-
-    bubbles.forEach(function(b){
-      let k = b.dataset.fmAttachmentKey || "";
-      let a = null;
-
-      if(!k){
-        const txt = (b.textContent || "").trim();
-        a = parseAttachmentMessage(txt);
-        k = keyFor(a);
-      }
-
-      if(!k) return;
-
-      if(localSeen.has(k)){
-        b.remove();
-        return;
-      }
-
-      localSeen.add(k);
-      seen.add(k);
-
-      if(b.dataset.fmAttachmentRendered === "1") return;
-
-      if(!a){
-        const txt = (b.textContent || "").trim();
-        a = parseAttachmentMessage(txt);
-      }
-
-      if(!a) return;
-
-      b.dataset.fmAttachmentRendered = "1";
-      b.dataset.fmAttachmentKey = k;
-      b.innerHTML = renderAttachment(a);
-    });
-  }
-
-  // Sovrascrive la funzione globale usata dalla patch audio:
-  // ora l'append locale è deduplicato.
-  window.fmPublicAppendLocalAttachmentBubble20260519 = appendLocalAttachmentBubble;
-  window.fmPublicRenderAllAttachments20260519 = renderAndDedupe;
-
-  function boot(){
-    renderAndDedupe();
-    setTimeout(renderAndDedupe, 200);
-    setTimeout(renderAndDedupe, 700);
-  }
-
-  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
-  else boot();
-
-  window.addEventListener("load", function(){
-    setTimeout(boot, 250);
-    setTimeout(renderAndDedupe, 1200);
-  });
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(renderAndDedupe, 250);
-  });
-
-  setInterval(renderAndDedupe, 1200);
-})();
-</script>
-
-
-
-
-
-
-
-<script id="followme-public-audio-success-only-final-20260519">
-(function(){
-  if(window.__FollowMePublicAudioSuccessOnlyFinal20260519) return;
-  window.__FollowMePublicAudioSuccessOnlyFinal20260519 = true;
-
-  let uploadBusy = false;
-  let lastClickAt = 0;
-
-  function findSendAudio(){
-    return document.getElementById("fmPublicAudioSend20260519");
-  }
-
-  function setStatus(msg){
-    const el = document.getElementById("fmPublicAudioStatus20260519");
-    if(el) el.textContent = msg;
-  }
-
-  function isAudioAttachmentUrl(url){
-    return url &&
-      url.includes("/api/followme/chat/session/") &&
-      url.includes("/attachment-raw");
-  }
-
-  function headerValue(headers, name){
-    try{
-      if(!headers) return "";
-
-      if(typeof headers.get === "function"){
-        return headers.get(name) || headers.get(name.toLowerCase()) || "";
-      }
-
-      return headers[name] || headers[name.toLowerCase()] || "";
-    }catch(e){
-      return "";
-    }
-  }
-
-  function isAudioUpload(init){
-    try{
-      const h = init && init.headers ? init.headers : {};
-      const kind = headerValue(h, "X-FollowMe-Kind");
-      const contentType = headerValue(h, "Content-Type");
-
-      return String(kind).toLowerCase() === "audio" ||
-             String(contentType).toLowerCase().startsWith("audio/");
-    }catch(e){
-      return false;
-    }
-  }
-
-  function parseAttachmentMessage(message){
-    try{
-      const obj = typeof message === "string" ? JSON.parse(message) : message;
-      if(obj && obj.__followme_attachment) return obj;
-    }catch(e){}
-    return null;
-  }
-
-  function attachmentKey(a){
-    if(!a) return "";
-    return [
-      a.url || "",
-      a.filename || "",
-      a.label || "",
-      a.mime || "",
-      a.kind || "",
-      a.created_at || ""
-    ].join("|");
-  }
-
-  function removeLocalGhostAudio(){
-    /*
-      Elimina solo eventuali audio locali non legati a messaggio server.
-      Lascia intatti i messaggi con data-message-id o già caricati dal server.
-    */
-    document.querySelectorAll(".followme-public-bubble, .message, .bubble").forEach(function(el){
-      const html = el.innerHTML || "";
-      const txt = el.textContent || "";
-
-      const isAudio =
-        html.includes("<audio") ||
-        html.includes("followme-attachment-audio") ||
-        txt.includes('"kind":"audio"') ||
-        txt.includes('"kind": "audio"');
-
-      if(!isAudio) return;
-
-      const hasServerId =
-        el.hasAttribute("data-message-id") ||
-        el.dataset.messageId ||
-        el.dataset.serverMessageId;
-
-      const isLocal =
-        !hasServerId &&
-        (
-          el.classList.contains("followme-public-bubble") ||
-          el.dataset.fmLocalAttachment === "1" ||
-          el.dataset.fmAttachmentRendered === "1"
-        );
-
-      if(isLocal){
-        el.remove();
-      }
-    });
-  }
-
-  function renderAll(){
-    try{
-      if(typeof window.fmPublicRenderAllAttachments20260519 === "function"){
-        window.fmPublicRenderAllAttachments20260519();
-      }
-    }catch(e){}
-
-    try{
-      if(typeof window.followMePublicLoadMessages === "function"){
-        window.followMePublicLoadMessages();
-      }
-    }catch(e){}
-
-    try{
-      if(typeof window.loadMessages === "function"){
-        window.loadMessages();
-      }
-    }catch(e){}
-  }
-
-  /*
-    La cosa importante:
-    intercettiamo SOLO la risposta audio.
-    Se success:true, lasciamo che sia il reload messaggi a mostrarlo.
-    Se errore, rimuoviamo qualsiasi bolla locale.
-  */
-  if(!window.__fmAudioSuccessOnlyOriginalFetch20260519){
-    window.__fmAudioSuccessOnlyOriginalFetch20260519 = window.fetch.bind(window);
-  }
-
-  window.fetch = async function(input, init){
-    const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
-
-    if(isAudioAttachmentUrl(url) && isAudioUpload(init)){
-      if(uploadBusy){
-        return new Response(JSON.stringify({
-          success:false,
-          error:"Invio audio già in corso."
-        }), {
-          status:409,
-          headers:{ "Content-Type":"application/json" }
-        });
-      }
-
-      uploadBusy = true;
-      setStatus("Invio audio…");
-
-      try{
-        const res = await window.__fmAudioSuccessOnlyOriginalFetch20260519(input, init);
-        const clone = res.clone();
-        const data = await clone.json().catch(function(){ return null; });
-
-        if(!res.ok || !data || !data.success){
-          removeLocalGhostAudio();
-          setStatus((data && data.error) || "Errore invio audio.");
-          return res;
-        }
-
-        /*
-          NON aggiungiamo più una bolla locale audio.
-          Ricarichiamo dal server, così l'audio esiste una sola volta
-          e se il server fallisce non resta lato utente.
-        */
-        removeLocalGhostAudio();
-
-        setTimeout(renderAll, 100);
-        setTimeout(renderAll, 500);
-        setTimeout(renderAll, 1200);
-
-        setStatus("Audio inviato.");
-        return res;
-
-      }catch(err){
-        removeLocalGhostAudio();
-        setStatus(err.message || "Errore invio audio.");
-        throw err;
-      }finally{
-        setTimeout(function(){
-          uploadBusy = false;
-        }, 900);
-      }
-    }
-
-    return window.__fmAudioSuccessOnlyOriginalFetch20260519(input, init);
-  };
-
-  function patchButton(){
-    const send = findSendAudio();
-    if(!send || send.dataset.audioSuccessOnlyBound === "1") return;
-
-    send.dataset.audioSuccessOnlyBound = "1";
-
-    send.addEventListener("click", function(ev){
-      const now = Date.now();
-
-      /*
-        Blocca doppio tap immediato ma non blocca registrazioni successive.
-      */
-      if(uploadBusy || now - lastClickAt < 900){
-        ev.preventDefault();
-        ev.stopPropagation();
-        ev.stopImmediatePropagation();
-        return false;
-      }
-
-      lastClickAt = now;
-    }, true);
-  }
-
-  function dedupeAudioDom(){
-    const seen = new Set();
-
-    document.querySelectorAll(".message, .bubble, .followme-public-bubble, [data-message-id]").forEach(function(el){
-      const html = el.innerHTML || "";
-      const txt = el.textContent || "";
-
-      const isAudio =
-        html.includes("<audio") ||
-        html.includes("followme-attachment-audio") ||
-        txt.includes('"kind":"audio"') ||
-        txt.includes('"kind": "audio"');
-
-      if(!isAudio) return;
-
-      let key = "";
-
-      const srcMatch = html.match(/<audio[^>]+src="([^"]+)"/i);
-      if(srcMatch && srcMatch[1]) key = srcMatch[1];
-
-      if(!key){
-        const urlMatch = txt.match(/"url"\s*:\s*"([^"]+)"/);
-        if(urlMatch && urlMatch[1]) key = urlMatch[1];
-      }
-
-      if(!key) key = txt.slice(0, 220);
-
-      if(seen.has(key)){
-        el.remove();
-        return;
-      }
-
-      seen.add(key);
-    });
-  }
-
-  function boot(){
-    patchButton();
-    dedupeAudioDom();
-    setTimeout(patchButton, 300);
-    setTimeout(dedupeAudioDom, 600);
-  }
-
-  window.fmAudioSuccessOnlyState20260519 = function(){
-    return {
-      uploadBusy,
-      lastClickAt
-    };
-  };
-
-  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
-  else boot();
-
-  window.addEventListener("load", function(){
-    setTimeout(boot, 250);
-    setTimeout(boot, 1200);
-  });
-
-  window.addEventListener("pageshow", function(){
-    uploadBusy = false;
-    setTimeout(boot, 250);
-  });
-
-  document.addEventListener("visibilitychange", function(){
-    if(document.visibilityState === "visible"){
-      uploadBusy = false;
-      setTimeout(boot, 250);
-    }
-  });
-
-  setInterval(function(){
-    patchButton();
-    dedupeAudioDom();
-  }, 1000);
-})();
-</script>
-
-
-
 <script id="followme-public-audio-state-reset-final-20260519">
 (function(){
   if(window.__FollowMePublicAudioStateResetFinal20260519) return;
@@ -3639,10 +3148,20 @@
 
 
 
-<script id="followme-public-audio-no-replace-final-20260519">
+
+
+<script id="followme-public-keep-all-attachments-final-20260519">
 (function(){
-  if(window.__FollowMePublicAudioNoReplaceFinal20260519) return;
-  window.__FollowMePublicAudioNoReplaceFinal20260519 = true;
+  if(window.__FollowMePublicKeepAllAttachmentsFinal20260519) return;
+  window.__FollowMePublicKeepAllAttachmentsFinal20260519 = true;
+
+  function esc(v){
+    return String(v == null ? "" : v)
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;");
+  }
 
   function parseAttachmentMessage(message){
     try{
@@ -3652,77 +3171,188 @@
     return null;
   }
 
-  function dedupeOnlyExactDuplicates(){
-    const seen = new Set();
+  function renderAttachment(a){
+    const url = a.url || "";
+    const name = a.label || a.filename || "Allegato";
+    const mime = a.mime || "";
+    const kind = a.kind || "";
 
-    document.querySelectorAll(".message, .bubble, .followme-public-bubble, [data-message-id]").forEach(function(el){
-      const html = el.innerHTML || "";
-      const txt = el.textContent || "";
+    if(kind === "image" || mime.indexOf("image/") === 0){
+      return '<a class="followme-attachment-card" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+        '<img class="followme-attachment-image" src="' + esc(url) + '" alt="' + esc(name) + '">' +
+        '<span class="followme-attachment-meta">' + esc(name) + (a.persistent ? ' · Salvato' : '') + '</span>' +
+      '</a>';
+    }
 
-      let key = "";
+    if(kind === "audio" || mime.indexOf("audio/") === 0){
+      return '<div class="followme-attachment-audio" data-audio-url="' + esc(url) + '">' +
+        '<span>🎙️</span><audio controls preload="metadata" src="' + esc(url) + '"></audio>' +
+      '</div>';
+    }
 
-      const srcMatch = html.match(/<(?:audio|img)[^>]+src="([^"]+)"/i);
-      if(srcMatch && srcMatch[1]) key = srcMatch[1];
+    if(kind === "location"){
+      return '<a class="followme-attachment-location" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+        '<span>📍</span><span><span class="followme-attachment-name">Posizione condivisa</span><span class="followme-attachment-meta">Apri mappa</span></span>' +
+      '</a>';
+    }
 
-      if(!key){
-        const a = parseAttachmentMessage(txt);
-        if(a && a.url) key = a.url;
+    return '<a class="followme-attachment-file" href="' + esc(url) + '" target="_blank" rel="noopener" download>' +
+      '<span>📎</span><span><span class="followme-attachment-name">' + esc(name) + '</span><span class="followme-attachment-meta">Apri documento</span></span>' +
+    '</a>';
+  }
+
+  function injectCss(){
+    if(document.getElementById("followmeKeepAllAttachmentsCss20260519")) return;
+
+    const style = document.createElement("style");
+    style.id = "followmeKeepAllAttachmentsCss20260519";
+    style.textContent = `
+      .followme-attachment-card{
+        display:block;
+        max-width:280px;
+        border-radius:16px;
+        overflow:hidden;
+        background:rgba(0,0,0,.08);
+        text-decoration:none;
+        color:inherit;
       }
 
-      // Se non ho una URL file, non deduplico: rischio di cancellare messaggi diversi.
-      if(!key) return;
-
-      if(seen.has(key)){
-        el.remove();
-        return;
+      .followme-attachment-image{
+        display:block;
+        width:100%;
+        max-width:280px;
+        max-height:280px;
+        object-fit:cover;
+        border-radius:16px;
       }
 
-      seen.add(key);
+      .followme-attachment-file,
+      .followme-attachment-location,
+      .followme-attachment-audio{
+        display:flex;
+        align-items:center;
+        gap:10px;
+        padding:10px 12px;
+        border-radius:16px;
+        background:rgba(255,255,255,.16);
+        color:inherit;
+        text-decoration:none;
+        font-weight:800;
+      }
+
+      .followme-attachment-audio audio{
+        width:210px;
+        max-width:100%;
+      }
+
+      .followme-attachment-name{
+        display:block;
+        font-size:.86rem;
+        font-weight:900;
+      }
+
+      .followme-attachment-meta{
+        display:block;
+        font-size:.72rem;
+        opacity:.72;
+        margin-top:2px;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function renderAllAttachments(){
+    /*
+      Regola fondamentale:
+      NON rimuoviamo mai bolle audio diverse.
+      Renderizziamo soltanto le bolle che contengono JSON attachment.
+    */
+    document.querySelectorAll(".message, .bubble, .followme-public-bubble, [data-message-id]").forEach(function(b){
+      if(b.dataset.fmAttachmentRendered === "1") return;
+
+      const txt = (b.textContent || "").trim();
+      const a = parseAttachmentMessage(txt);
+
+      if(!a) return;
+
+      b.dataset.fmAttachmentRendered = "1";
+
+      if(a.url){
+        b.dataset.fmAttachmentUrl = a.url;
+      }
+
+      b.innerHTML = renderAttachment(a);
     });
   }
 
-  function removeFileNotFoundBubblesIfReplacedByValidOnes(){
-    /*
-      Non cancella messaggi reali.
-      Rimuove solo eventuali bolle locali che mostrano file non trovato
-      e non hanno data-message-id, quindi sono residui UI.
-    */
-    document.querySelectorAll(".message, .bubble, .followme-public-bubble").forEach(function(el){
-      const txt = String(el.textContent || "").toLowerCase();
-      const hasServerId =
-        el.hasAttribute("data-message-id") ||
-        el.dataset.messageId ||
-        el.dataset.serverMessageId;
+  /*
+    Append locale disattivato per gli audio:
+    l'audio deve apparire dal reload server, così non creiamo duplicati/fantasmi.
+    Per immagini/documenti lasciamo append locale solo se già usato.
+  */
+  const oldAppend = window.fmPublicAppendLocalAttachmentBubble20260519;
 
-      if(!hasServerId && (txt.includes("file non trovato") || txt.includes("not found"))){
-        el.remove();
-      }
-    });
+  window.fmPublicAppendLocalAttachmentBubble20260519 = function(attachment, sender){
+    if(attachment && (attachment.kind === "audio" || String(attachment.mime || "").indexOf("audio/") === 0)){
+      setTimeout(renderAllAttachments, 150);
+      setTimeout(function(){
+        try{ if(typeof window.followMePublicLoadMessages === "function") window.followMePublicLoadMessages(); }catch(e){}
+        try{ if(typeof window.loadMessages === "function") window.loadMessages(); }catch(e){}
+      }, 250);
+      setTimeout(renderAllAttachments, 800);
+      return;
+    }
+
+    if(typeof oldAppend === "function"){
+      return oldAppend(attachment, sender);
+    }
+  };
+
+  if(!window.__fmKeepAllPublicFetchPatch20260519){
+    window.__fmKeepAllPublicFetchPatch20260519 = true;
+    const oldFetch = window.fetch.bind(window);
+
+    window.fetch = async function(input, init){
+      const res = await oldFetch(input, init);
+
+      try{
+        const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+
+        if(url && url.includes("/api/followme/chat/session/") && (
+          url.includes("/messages") ||
+          url.includes("/attachment")
+        )){
+          setTimeout(renderAllAttachments, 100);
+          setTimeout(renderAllAttachments, 500);
+          setTimeout(renderAllAttachments, 1200);
+        }
+      }catch(e){}
+
+      return res;
+    };
   }
 
   function boot(){
-    dedupeOnlyExactDuplicates();
-    removeFileNotFoundBubblesIfReplacedByValidOnes();
-
-    setTimeout(dedupeOnlyExactDuplicates, 300);
-    setTimeout(removeFileNotFoundBubblesIfReplacedByValidOnes, 600);
+    injectCss();
+    renderAllAttachments();
   }
 
-  window.fmPublicNoReplaceAudioFix20260519 = boot;
+  window.fmPublicRenderAllAttachments20260519 = renderAllAttachments;
+  window.fmPublicKeepAllAttachments20260519 = boot;
 
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 
   window.addEventListener("load", function(){
     setTimeout(boot, 250);
-    setTimeout(boot, 1200);
+    setTimeout(renderAllAttachments, 1200);
   });
 
   window.addEventListener("pageshow", function(){
-    setTimeout(boot, 250);
+    setTimeout(renderAllAttachments, 250);
   });
 
-  setInterval(boot, 1500);
+  setInterval(renderAllAttachments, 1500);
 })();
 </script>
 
