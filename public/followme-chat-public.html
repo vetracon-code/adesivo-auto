@@ -3352,6 +3352,291 @@
 })();
 </script>
 
+
+
+<script id="followme-public-audio-state-reset-final-20260519">
+(function(){
+  if(window.__FollowMePublicAudioStateResetFinal20260519) return;
+  window.__FollowMePublicAudioStateResetFinal20260519 = true;
+
+  let forcedAudioOpenAt = 0;
+
+  function setAudioBtnIdle(){
+    const audioBtn = document.getElementById("fmPublicAudioBtn20260519");
+    if(audioBtn){
+      audioBtn.textContent = "🎙️ Audio";
+      audioBtn.disabled = false;
+      audioBtn.removeAttribute("disabled");
+      audioBtn.dataset.recording = "0";
+      audioBtn.dataset.audioState = "idle";
+    }
+  }
+
+  function setPanelIdle(){
+    const start = document.getElementById("fmPublicAudioStart20260519");
+    const stop = document.getElementById("fmPublicAudioStop20260519");
+    const send = document.getElementById("fmPublicAudioSend20260519");
+    const status = document.getElementById("fmPublicAudioStatus20260519");
+
+    if(start){
+      start.disabled = false;
+      start.removeAttribute("disabled");
+    }
+
+    if(stop){
+      stop.disabled = true;
+      stop.setAttribute("disabled", "disabled");
+    }
+
+    if(send){
+      send.disabled = true;
+      send.setAttribute("disabled", "disabled");
+      send.dataset.forceSending = "";
+      send.dataset.singleSendGuard = "";
+      send.dataset.multiAudioSendBound = send.dataset.multiAudioSendBound || "";
+    }
+
+    if(status){
+      status.textContent = "Premi Registra per autorizzare il microfono e iniziare.";
+    }
+  }
+
+  function closeAudioPanel(){
+    const panel = document.getElementById("fmPublicAudioPanel20260519");
+    if(panel){
+      panel.classList.remove("is-open");
+    }
+  }
+
+  function hardResetAudioUi(){
+    setAudioBtnIdle();
+    setPanelIdle();
+
+    try{
+      if(window.fmAudioSuccessOnlyState20260519){
+        // Solo lettura: non possiamo azzerare le closure interne, ma impediamo lo stato UI sporco.
+        window.__fmAudioLastHardResetAt = Date.now();
+      }
+    }catch(e){}
+
+    try{
+      if(window.fmAudioMultipleSendFixState20260519){
+        window.__fmAudioLastHardResetAt = Date.now();
+      }
+    }catch(e){}
+  }
+
+  /*
+    Patch del pulsante +:
+    ogni volta che riapro il menu allegati, l'audio deve ripartire da stato pulito.
+  */
+  function patchPlusButton(){
+    const plus = document.getElementById("fmPublicInlinePlusBtn20260519");
+    if(!plus || plus.dataset.audioResetPlusBound === "1") return;
+
+    plus.dataset.audioResetPlusBound = "1";
+
+    plus.addEventListener("click", function(){
+      hardResetAudioUi();
+    }, true);
+  }
+
+  /*
+    Patch del pulsante Audio:
+    non deve mai mostrare Stop audio prima di essere entrati nel pannello.
+    Quando lo clicco, resetta e poi apre il pannello pulito.
+  */
+  function patchAudioButton(){
+    const audioBtn = document.getElementById("fmPublicAudioBtn20260519");
+    if(!audioBtn) return;
+
+    if(audioBtn.textContent.trim().toLowerCase().includes("stop")){
+      setAudioBtnIdle();
+    }
+
+    if(audioBtn.dataset.audioResetFinalBound === "1") return;
+
+    audioBtn.dataset.audioResetFinalBound = "1";
+
+    audioBtn.addEventListener("click", function(ev){
+      /*
+        Se il vecchio handler prova a trasformarlo in Stop audio,
+        lo rimettiamo subito in stato Audio e apriamo il pannello.
+      */
+      forcedAudioOpenAt = Date.now();
+
+      setTimeout(function(){
+        setAudioBtnIdle();
+        setPanelIdle();
+
+        if(typeof window.fmPublicOpenAudioPanel20260519 === "function"){
+          window.fmPublicOpenAudioPanel20260519();
+        }else{
+          const panel = document.getElementById("fmPublicAudioPanel20260519");
+          if(panel) panel.classList.add("is-open");
+        }
+      }, 20);
+    }, true);
+  }
+
+  /*
+    Patch Registra:
+    quando parte una nuova registrazione deve essere un ciclo nuovo.
+  */
+  function patchStartButton(){
+    const start = document.getElementById("fmPublicAudioStart20260519");
+    if(!start || start.dataset.audioResetStartBound === "1") return;
+
+    start.dataset.audioResetStartBound = "1";
+
+    start.addEventListener("click", function(){
+      const send = document.getElementById("fmPublicAudioSend20260519");
+      if(send){
+        send.disabled = true;
+        send.setAttribute("disabled", "disabled");
+      }
+
+      const stop = document.getElementById("fmPublicAudioStop20260519");
+      if(stop){
+        stop.disabled = false;
+        stop.removeAttribute("disabled");
+      }
+
+      const audioBtn = document.getElementById("fmPublicAudioBtn20260519");
+      if(audioBtn){
+        audioBtn.textContent = "🎙️ Audio";
+      }
+    }, true);
+  }
+
+  /*
+    Patch Stop:
+    dopo Stop deve abilitare Invia audio, non lasciare Audio in stato Stop.
+  */
+  function patchStopButton(){
+    const stop = document.getElementById("fmPublicAudioStop20260519");
+    if(!stop || stop.dataset.audioResetStopBound === "1") return;
+
+    stop.dataset.audioResetStopBound = "1";
+
+    stop.addEventListener("click", function(){
+      setTimeout(function(){
+        setAudioBtnIdle();
+
+        const send = document.getElementById("fmPublicAudioSend20260519");
+        if(send){
+          send.disabled = false;
+          send.removeAttribute("disabled");
+        }
+      }, 450);
+    }, true);
+  }
+
+  /*
+    Patch Invia:
+    dopo un invio, riuscito o fallito, il ciclo deve tornare pulito.
+    Il messaggio in chat viene comunque gestito dalle patch di rendering esistenti.
+  */
+  function patchSendButton(){
+    const send = document.getElementById("fmPublicAudioSend20260519");
+    if(!send || send.dataset.audioResetSendBound === "1") return;
+
+    send.dataset.audioResetSendBound = "1";
+
+    send.addEventListener("click", function(){
+      const status = document.getElementById("fmPublicAudioStatus20260519");
+      if(status) status.textContent = "Invio audio…";
+
+      setTimeout(function(){
+        setAudioBtnIdle();
+      }, 200);
+
+      setTimeout(function(){
+        closeAudioPanel();
+        hardResetAudioUi();
+      }, 1800);
+
+      setTimeout(function(){
+        hardResetAudioUi();
+      }, 3500);
+    }, false);
+  }
+
+  function patchCancelButton(){
+    const cancel = document.getElementById("fmPublicAudioCancel20260519");
+    if(!cancel || cancel.dataset.audioResetCancelBound === "1") return;
+
+    cancel.dataset.audioResetCancelBound = "1";
+
+    cancel.addEventListener("click", function(){
+      closeAudioPanel();
+      hardResetAudioUi();
+    }, true);
+  }
+
+  /*
+    Osservatore: se qualsiasi vecchio script rimette "Stop audio" sul bottone menu,
+    lo correggiamo, tranne durante i primi istanti del click Audio.
+  */
+  function watchAudioButtonLabel(){
+    const audioBtn = document.getElementById("fmPublicAudioBtn20260519");
+    if(!audioBtn || audioBtn.dataset.audioLabelObserver === "1") return;
+
+    audioBtn.dataset.audioLabelObserver = "1";
+
+    const obs = new MutationObserver(function(){
+      const t = String(audioBtn.textContent || "").trim().toLowerCase();
+
+      if(t.includes("stop") && Date.now() - forcedAudioOpenAt > 300){
+        setAudioBtnIdle();
+      }
+    });
+
+    obs.observe(audioBtn, { childList:true, characterData:true, subtree:true });
+  }
+
+  function boot(){
+    patchPlusButton();
+    patchAudioButton();
+    patchStartButton();
+    patchStopButton();
+    patchSendButton();
+    patchCancelButton();
+    watchAudioButtonLabel();
+
+    const audioBtn = document.getElementById("fmPublicAudioBtn20260519");
+    if(audioBtn && String(audioBtn.textContent || "").toLowerCase().includes("stop")){
+      setAudioBtnIdle();
+    }
+  }
+
+  window.fmPublicHardResetAudioUi20260519 = hardResetAudioUi;
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 900);
+    setTimeout(hardResetAudioUi, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+    setTimeout(hardResetAudioUi, 500);
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible"){
+      setTimeout(boot, 250);
+      setTimeout(hardResetAudioUi, 500);
+    }
+  });
+
+  setInterval(boot, 1000);
+})();
+</script>
+
 </body>
 </html>
 
