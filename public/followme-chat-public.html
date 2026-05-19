@@ -3054,6 +3054,218 @@
 })();
 </script>
 
+
+
+<script id="followme-public-audio-single-send-guard-20260519">
+(function(){
+  if(window.__FollowMePublicAudioSingleSendGuard20260519) return;
+  window.__FollowMePublicAudioSingleSendGuard20260519 = true;
+
+  let audioUploadBusy = false;
+  let lastAudioUploadKey = "";
+  let lastAudioUploadAt = 0;
+
+  function isAudioAttachmentUrl(url){
+    return url &&
+      url.includes("/api/followme/chat/session/") &&
+      url.includes("/attachment-raw");
+  }
+
+  function isAudioUpload(init){
+    try{
+      const h = init && init.headers ? init.headers : {};
+      const kind =
+        h["X-FollowMe-Kind"] ||
+        h["x-followme-kind"] ||
+        (h.get ? h.get("X-FollowMe-Kind") : "") ||
+        "";
+
+      const contentType =
+        h["Content-Type"] ||
+        h["content-type"] ||
+        (h.get ? h.get("Content-Type") : "") ||
+        "";
+
+      return String(kind).toLowerCase() === "audio" ||
+             String(contentType).toLowerCase().startsWith("audio/");
+    }catch(e){
+      return false;
+    }
+  }
+
+  async function hashBlobLike(body){
+    try{
+      if(!body) return "";
+
+      let buffer = null;
+
+      if(body instanceof ArrayBuffer){
+        buffer = body;
+      }else if(body && body.arrayBuffer){
+        buffer = await body.arrayBuffer();
+      }
+
+      if(!buffer) return "";
+
+      const bytes = new Uint8Array(buffer);
+      const size = bytes.length;
+
+      let sample = "";
+      const max = Math.min(size, 32);
+
+      for(let i = 0; i < max; i++){
+        sample += bytes[i].toString(16).padStart(2, "0");
+      }
+
+      return size + ":" + sample;
+    }catch(e){
+      return "";
+    }
+  }
+
+  if(!window.__fmAudioSingleSendOriginalFetch20260519){
+    window.__fmAudioSingleSendOriginalFetch20260519 = window.fetch.bind(window);
+  }
+
+  window.fetch = async function(input, init){
+    const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+
+    if(isAudioAttachmentUrl(url) && isAudioUpload(init)){
+      const now = Date.now();
+      const key = await hashBlobLike(init && init.body);
+
+      if(audioUploadBusy){
+        console.warn("[FollowMe audio] invio audio duplicato bloccato: upload già in corso.");
+        return new Response(JSON.stringify({
+          success:false,
+          duplicate_blocked:true,
+          error:"Invio audio già in corso."
+        }), {
+          status:409,
+          headers:{ "Content-Type":"application/json" }
+        });
+      }
+
+      if(key && key === lastAudioUploadKey && now - lastAudioUploadAt < 10000){
+        console.warn("[FollowMe audio] invio audio duplicato bloccato: stesso file entro 10 secondi.");
+        return new Response(JSON.stringify({
+          success:false,
+          duplicate_blocked:true,
+          error:"Audio già inviato."
+        }), {
+          status:409,
+          headers:{ "Content-Type":"application/json" }
+        });
+      }
+
+      audioUploadBusy = true;
+      lastAudioUploadKey = key;
+      lastAudioUploadAt = now;
+
+      try{
+        return await window.__fmAudioSingleSendOriginalFetch20260519(input, init);
+      }finally{
+        setTimeout(function(){
+          audioUploadBusy = false;
+        }, 2500);
+      }
+    }
+
+    return window.__fmAudioSingleSendOriginalFetch20260519(input, init);
+  };
+
+  function hardPatchSendButton(){
+    const send = document.getElementById("fmPublicAudioSend20260519");
+    if(!send || send.dataset.singleSendGuard === "1") return;
+
+    send.dataset.singleSendGuard = "1";
+
+    send.addEventListener("click", function(ev){
+      if(audioUploadBusy){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        return false;
+      }
+
+      // Micro-blocco immediato contro doppio tap iPhone.
+      send.disabled = true;
+      setTimeout(function(){
+        if(!audioUploadBusy) send.disabled = false;
+      }, 1800);
+    }, true);
+  }
+
+  function dedupeAudioDom(){
+    const seen = new Set();
+
+    document.querySelectorAll(".message, .bubble, .followme-public-bubble, [data-message-id]").forEach(function(el){
+      const html = el.innerHTML || "";
+      const txt = el.textContent || "";
+
+      const isAudio =
+        html.includes("<audio") ||
+        html.includes("followme-attachment-audio") ||
+        txt.includes('"kind":"audio"') ||
+        txt.includes('"kind": "audio"');
+
+      if(!isAudio) return;
+
+      let key = "";
+
+      const srcMatch = html.match(/<audio[^>]+src="([^"]+)"/i);
+      if(srcMatch && srcMatch[1]) key = srcMatch[1];
+
+      if(!key){
+        const urlMatch = txt.match(/"url"\s*:\s*"([^"]+)"/);
+        if(urlMatch && urlMatch[1]) key = urlMatch[1];
+      }
+
+      if(!key) key = txt.slice(0, 220);
+
+      if(seen.has(key)){
+        el.remove();
+        return;
+      }
+
+      seen.add(key);
+    });
+  }
+
+  function boot(){
+    hardPatchSendButton();
+    dedupeAudioDom();
+    setTimeout(hardPatchSendButton, 300);
+    setTimeout(dedupeAudioDom, 500);
+  }
+
+  window.fmAudioSingleSendGuardState20260519 = function(){
+    return {
+      audioUploadBusy,
+      lastAudioUploadKey,
+      lastAudioUploadAt
+    };
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(function(){
+    hardPatchSendButton();
+    dedupeAudioDom();
+  }, 1000);
+})();
+</script>
+
 </body>
 </html>
 
