@@ -6194,6 +6194,347 @@
 })();
 </script>
 
+
+
+<script id="followme-public-selected-close-page-polish-final-20260519">
+(function(){
+  if(window.__FollowMePublicSelectedClosePagePolishFinal20260519) return;
+  window.__FollowMePublicSelectedClosePagePolishFinal20260519 = true;
+
+  /*
+    FIX FINALE CHIUSURA CHAT SELEZIONATA:
+    - se la sessione è closed, mostra una pagina scura/elegante;
+    - rimuove Richiedi Extra e qualunque pulsante residuo;
+    - impedisce agli script successivi di ricreare pulsanti o nuove sessioni.
+  */
+
+  let hardClosed = false;
+
+  function cleanSid(v){
+    const s = String(v || "").trim();
+    return /^\d+$/.test(s) ? s : "";
+  }
+
+  function sid(){
+    const arr = [];
+
+    try{ arr.push(window.__FM_PUBLIC_SESSION_ID_LOCKED__); }catch(e){}
+    try{ arr.push(window.followMeChatSessionId); }catch(e){}
+    try{ arr.push(window.FOLLOWME_CHAT_SESSION_ID); }catch(e){}
+    try{ arr.push(document.documentElement.dataset.fmSessionId); }catch(e){}
+    try{ arr.push(document.body.dataset.fmSessionId); }catch(e){}
+    try{ arr.push(sessionStorage.getItem("followme_chat_session_id")); }catch(e){}
+
+    for(const v of arr){
+      const x = cleanSid(v);
+      if(x) return x;
+    }
+
+    return "";
+  }
+
+  function markClosed(){
+    hardClosed = true;
+
+    try{ window.__FM_PUBLIC_CHAT_SELECTED_CLOSED__ = true; }catch(e){}
+    try{ window.__FM_PUBLIC_DISABLE_EXTRA_BUTTON__ = true; }catch(e){}
+    try{ sessionStorage.setItem("followme_selected_chat_closed", "1"); }catch(e){}
+  }
+
+  function removeFloatingButtons(){
+    const ids = [
+      "fmExtraDedicatedButton20260519",
+      "fmExtraCleanButton20260519",
+      "followmePublicRequestExtraBtn20260519"
+    ];
+
+    ids.forEach(function(id){
+      const el = document.getElementById(id);
+      if(el) el.remove();
+    });
+
+    document.querySelectorAll("button,a").forEach(function(el){
+      const t = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+
+      if(
+        t === "richiedi extra" ||
+        t === "richiedi" ||
+        t === "extra" ||
+        t === "pausa" ||
+        t === "pausa chat" ||
+        t === "chiudi" ||
+        t === "chiudi chat"
+      ){
+        el.remove();
+      }
+    });
+  }
+
+  function showElegantClosedPage(){
+    markClosed();
+    removeFloatingButtons();
+
+    /*
+      Se esiste già una pagina chiusa vecchia/provvisoria, la sostituiamo.
+    */
+    document.body.innerHTML = `
+      <main id="followmeSelectedElegantClosedPage20260519">
+        <section class="fm-closed-shell">
+          <div class="fm-closed-orb"></div>
+          <div class="fm-closed-kicker">FollowMe Chat</div>
+          <h1>Conversazione conclusa</h1>
+          <p class="fm-closed-lead">
+            Questa chat è stata chiusa dal proprietario.
+          </p>
+          <p class="fm-closed-small">
+            Grazie per averci contattato.
+          </p>
+        </section>
+      </main>
+    `;
+
+    const style = document.createElement("style");
+    style.id = "followmeSelectedElegantClosedStyle20260519";
+    style.textContent = `
+      html, body{
+        margin:0 !important;
+        padding:0 !important;
+        min-height:100% !important;
+        overflow:hidden !important;
+        background:#020617 !important;
+      }
+
+      #followmeSelectedElegantClosedPage20260519{
+        min-height:100vh;
+        width:100%;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:28px;
+        box-sizing:border-box;
+        color:#f8fafc;
+        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+        background:
+          radial-gradient(circle at 50% 20%, rgba(59,130,246,.22), transparent 32%),
+          radial-gradient(circle at 20% 80%, rgba(168,85,247,.18), transparent 30%),
+          linear-gradient(145deg, #020617 0%, #0f172a 48%, #020617 100%);
+      }
+
+      #followmeSelectedElegantClosedPage20260519 .fm-closed-shell{
+        position:relative;
+        width:min(430px,100%);
+        border-radius:32px;
+        padding:38px 28px 34px;
+        text-align:center;
+        background:rgba(15,23,42,.72);
+        border:1px solid rgba(255,255,255,.12);
+        box-shadow:
+          0 28px 90px rgba(0,0,0,.42),
+          inset 0 1px 0 rgba(255,255,255,.08);
+        backdrop-filter:blur(18px);
+        -webkit-backdrop-filter:blur(18px);
+        overflow:hidden;
+      }
+
+      #followmeSelectedElegantClosedPage20260519 .fm-closed-shell:before{
+        content:"";
+        position:absolute;
+        inset:0;
+        background:linear-gradient(120deg, rgba(255,255,255,.16), transparent 34%, transparent 70%, rgba(255,255,255,.06));
+        pointer-events:none;
+      }
+
+      #followmeSelectedElegantClosedPage20260519 .fm-closed-orb{
+        width:62px;
+        height:62px;
+        border-radius:999px;
+        margin:0 auto 20px;
+        background:
+          radial-gradient(circle at 35% 28%, #ffffff, #93c5fd 30%, #2563eb 68%, #1e1b4b 100%);
+        box-shadow:
+          0 0 0 8px rgba(59,130,246,.10),
+          0 20px 48px rgba(37,99,235,.42);
+      }
+
+      #followmeSelectedElegantClosedPage20260519 .fm-closed-kicker{
+        position:relative;
+        z-index:1;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        min-height:26px;
+        padding:0 12px;
+        border-radius:999px;
+        background:rgba(255,255,255,.08);
+        border:1px solid rgba(255,255,255,.12);
+        color:#bfdbfe;
+        font-weight:900;
+        font-size:12px;
+        letter-spacing:.08em;
+        text-transform:uppercase;
+        margin-bottom:16px;
+      }
+
+      #followmeSelectedElegantClosedPage20260519 h1{
+        position:relative;
+        z-index:1;
+        margin:0 0 12px;
+        color:#ffffff;
+        font-size:34px;
+        line-height:1.02;
+        letter-spacing:-.055em;
+        font-weight:950;
+      }
+
+      #followmeSelectedElegantClosedPage20260519 .fm-closed-lead{
+        position:relative;
+        z-index:1;
+        margin:0 auto;
+        max-width:320px;
+        color:#cbd5e1;
+        font-size:17px;
+        line-height:1.42;
+        font-weight:650;
+      }
+
+      #followmeSelectedElegantClosedPage20260519 .fm-closed-small{
+        position:relative;
+        z-index:1;
+        margin:18px 0 0;
+        color:#94a3b8;
+        font-size:13px;
+        line-height:1.35;
+        font-weight:700;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  /*
+    Blocca gli script Extra dopo la chiusura.
+  */
+  if(!window.__fmSelectedClosePolishFetchPatch20260519){
+    window.__fmSelectedClosePolishFetchPatch20260519 = true;
+
+    const oldFetch = window.fetch.bind(window);
+
+    window.fetch = function(input, init){
+      try{
+        const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+        const method = String((init && init.method) || "").toUpperCase();
+
+        const isCreateSession =
+          url &&
+          url.includes("/api/followme/chat/") &&
+          url.includes("/session") &&
+          !url.includes("/session/") &&
+          (method === "POST" || method === "");
+
+        const isRequestExtra =
+          url &&
+          url.includes("/api/followme/chat/session/") &&
+          url.includes("/request-extra");
+
+        if((hardClosed || window.__FM_PUBLIC_CHAT_SELECTED_CLOSED__) && (isCreateSession || isRequestExtra)){
+          return Promise.resolve(new Response(JSON.stringify({
+            success:false,
+            closed:true,
+            blocked_after_selected_close:true,
+            error:"Chat conclusa."
+          }), {
+            status:409,
+            headers:{ "Content-Type":"application/json" }
+          }));
+        }
+      }catch(e){}
+
+      return oldFetch(input, init);
+    };
+  }
+
+  async function check(){
+    if(hardClosed || window.__FM_PUBLIC_CHAT_SELECTED_CLOSED__){
+      showElegantClosedPage();
+      return;
+    }
+
+    const sessionId = sid();
+    if(!sessionId) return;
+
+    try{
+      const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/state?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(res.ok && data && data.success && data.session){
+        if(String(data.session.status || "").toLowerCase() === "closed"){
+          showElegantClosedPage();
+        }
+      }
+    }catch(e){}
+  }
+
+  /*
+    Intercetta anche il caso in cui vecchi script provino a ricreare il bottone.
+  */
+  const mo = new MutationObserver(function(){
+    if(hardClosed || window.__FM_PUBLIC_CHAT_SELECTED_CLOSED__){
+      removeFloatingButtons();
+
+      if(!document.getElementById("followmeSelectedElegantClosedPage20260519")){
+        showElegantClosedPage();
+      }
+    }
+  });
+
+  function boot(){
+    try{
+      if(sessionStorage.getItem("followme_selected_chat_closed") === "1"){
+        hardClosed = true;
+        window.__FM_PUBLIC_CHAT_SELECTED_CLOSED__ = true;
+      }
+    }catch(e){}
+
+    try{
+      mo.observe(document.documentElement, { childList:true, subtree:true });
+    }catch(e){}
+
+    setTimeout(check, 200);
+    setTimeout(check, 800);
+    setTimeout(check, 1600);
+  }
+
+  window.fmPublicSelectedClosePagePolish20260519 = {
+    boot,
+    check,
+    showElegantClosedPage,
+    removeFloatingButtons
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(check, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(function(){
+    if(hardClosed || window.__FM_PUBLIC_CHAT_SELECTED_CLOSED__){
+      removeFloatingButtons();
+    }
+    check();
+  }, 1200);
+})();
+</script>
+
 </body>
 </html>
 
