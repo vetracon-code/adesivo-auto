@@ -4107,13 +4107,14 @@
 
 
 
+
+
 <script id="followme-public-real-owner-connected-label-final-20260519">
 (function(){
-  if(window.__FollowMePublicRealOwnerConnectedLabelFinal20260519) return;
-  window.__FollowMePublicRealOwnerConnectedLabelFinal20260519 = true;
+  if(window.__FollowMePublicRealOwnerConnectedLabelFinalV220250519) return;
+  window.__FollowMePublicRealOwnerConnectedLabelFinalV220250519 = true;
 
   let hasRealOwnerMessage = false;
-  let locallyPaused = false;
 
   function norm(txt){
     return String(txt || "").replace(/\s+/g, " ").trim().toLowerCase();
@@ -4147,66 +4148,66 @@
     return "";
   }
 
-  function storageKey(){
-    return "followme_chat_user_paused_" + (sessionId() || "unknown");
-  }
-
-  function readPaused(){
+  function isPaused(){
     try{
-      locallyPaused = localStorage.getItem(storageKey()) === "1";
-    }catch(e){
-      locallyPaused = false;
-    }
+      const sid = sessionId() || "unknown";
+      if(localStorage.getItem("followme_chat_user_paused_" + sid) === "1") return true;
+    }catch(e){}
 
-    return locallyPaused || document.body.classList.contains("followme-public-locally-paused");
+    return document.body.classList.contains("followme-public-locally-paused");
   }
 
-  function findFollowMeTitle(){
+  function isRealOwnerMessage(m){
+    if(!m) return false;
+
+    const sender = String(m.sender || "").trim().toLowerCase();
+
+    /*
+      Deve essere scritto realmente dall’admin/proprietario.
+      Robot, system, messaggi automatici e apertura chat NON valgono.
+    */
+    if(sender !== "owner") return false;
+
+    const raw = String(m.message || "").trim();
+    const low = raw.toLowerCase();
+
+    if(!raw) return false;
+
+    if(low.includes("__followme_robot")) return false;
+    if(low.includes("__system")) return false;
+    if(low.includes('"sender":"system"')) return false;
+    if(low.includes('"sender": "system"')) return false;
+    if(low.includes('"kind":"system"')) return false;
+    if(low.includes('"kind": "system"')) return false;
+    if(low.includes("ok, info trasmesse")) return false;
+    if(low.includes("chat aperta")) return false;
+    if(low.includes("utente connesso")) return false;
+
+    return true;
+  }
+
+  function findTitle(){
     const els = Array.from(document.querySelectorAll("h1,h2,h3,strong,div,span,p"));
     return els.find(function(el){
       return norm(el.textContent) === "followme chat";
     }) || null;
   }
 
-  function removeDuplicateStatusLabels(keep){
-    const labels = Array.from(document.querySelectorAll("div,span,p,small,strong"))
-      .filter(function(el){
-        if(el === keep) return false;
-        const t = norm(el.textContent);
-        return t === "connessi" ||
-               t === "connesso - in attesa del proprietario" ||
-               t === "chat in pausa";
-      });
-
-    labels.forEach(function(el){
-      /*
-        Rimuoviamo solo duplicati piccoli/status, non tocchiamo contenitori grandi.
-      */
-      const childCount = el.children ? el.children.length : 0;
-      const textLen = String(el.textContent || "").trim().length;
-
-      if(childCount <= 1 && textLen <= 45){
-        el.style.display = "none";
-        el.setAttribute("aria-hidden", "true");
-      }
-    });
-  }
-
-  function getOrCreateSingleStatusLabel(){
-    let el = document.getElementById("followmePublicSingleStatusLabel20260519");
+  function getSingleLabel(){
+    let el = document.getElementById("followmePublicSingleRealOwnerStatus20260519");
 
     if(el) return el;
 
-    const title = findFollowMeTitle();
-
     el = document.createElement("div");
-    el.id = "followmePublicSingleStatusLabel20260519";
+    el.id = "followmePublicSingleRealOwnerStatus20260519";
     el.className = "followme-public-chat-subtitle";
     el.style.fontSize = ".82rem";
     el.style.fontWeight = "800";
     el.style.opacity = ".78";
     el.style.marginTop = "2px";
     el.style.lineHeight = "1.25";
+
+    const title = findTitle();
 
     if(title && title.parentElement){
       title.parentElement.appendChild(el);
@@ -4218,11 +4219,32 @@
     return el;
   }
 
-  function setLabel(){
-    const paused = readPaused();
-    const label = getOrCreateSingleStatusLabel();
+  function hideAllOtherStatusLabels(keep){
+    const statusTexts = [
+      "connesso - in attesa del proprietario",
+      "connessi",
+      "chat in pausa"
+    ];
 
-    if(paused){
+    Array.from(document.querySelectorAll("div,span,p,small,strong")).forEach(function(el){
+      if(el === keep) return;
+
+      const t = norm(el.textContent || "");
+
+      if(!statusTexts.includes(t)) return;
+
+      /*
+        Non cancelliamo contenitori grandi, li nascondiamo soltanto.
+      */
+      el.style.display = "none";
+      el.setAttribute("aria-hidden", "true");
+    });
+  }
+
+  function setFinalLabel(){
+    const label = getSingleLabel();
+
+    if(isPaused()){
       label.textContent = "Chat in pausa";
     }else if(hasRealOwnerMessage){
       label.textContent = "Connessi";
@@ -4233,88 +4255,22 @@
     label.style.display = "";
     label.removeAttribute("aria-hidden");
 
-    removeDuplicateStatusLabels(label);
-  }
-
-  function isRealOwnerMessage(m){
-    if(!m) return false;
-
-    const sender = String(m.sender || "").trim().toLowerCase();
-    if(sender !== "owner") return false;
-
-    const msg = String(m.message || "").trim();
-
-    /*
-      Escludiamo eventuali automatici/robot/system anche se arrivassero marcati owner.
-    */
-    const low = msg.toLowerCase();
-
-    if(low.includes("__followme_robot")) return false;
-    if(low.includes('"kind":"system"')) return false;
-    if(low.includes('"sender":"system"')) return false;
-    if(low.includes("ok, info trasmesse")) return false;
-
-    return true;
+    hideAllOtherStatusLabels(label);
   }
 
   function applyMessages(messages){
-    if(!Array.isArray(messages)) return;
-
-    if(messages.some(isRealOwnerMessage)){
+    if(Array.isArray(messages) && messages.some(isRealOwnerMessage)){
       hasRealOwnerMessage = true;
     }
 
-    setLabel();
+    setFinalLabel();
   }
 
-  /*
-    IMPORTANTE:
-    La state API NON deve più far diventare "Connessi".
-    owner_opened_at significa che admin ha aperto, non che ha scritto.
-  */
-  function applyState(session){
-    readPaused();
-    setLabel();
-  }
-
-  if(!window.__fmPublicRealOwnerConnectedFetchPatch20260519){
-    window.__fmPublicRealOwnerConnectedFetchPatch20260519 = true;
-    const oldFetch = window.fetch.bind(window);
-
-    window.fetch = async function(input, init){
-      const res = await oldFetch(input, init);
-
-      try{
-        const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
-
-        if(url && url.includes("/api/followme/chat/session/") && url.includes("/messages")){
-          const clone = res.clone();
-          const data = await clone.json().catch(function(){ return null; });
-
-          if(data && Array.isArray(data.messages)){
-            setTimeout(function(){ applyMessages(data.messages); }, 50);
-            setTimeout(function(){ applyMessages(data.messages); }, 350);
-          }
-        }
-
-        if(url && url.includes("/api/followme/chat/session/") && url.includes("/state")){
-          const clone = res.clone();
-          const data = await clone.json().catch(function(){ return null; });
-
-          if(data && data.session){
-            setTimeout(function(){ applyState(data.session); }, 80);
-          }
-        }
-      }catch(e){}
-
-      return res;
-    };
-  }
-
-  async function loadMessagesOnce(){
+  async function loadAllMessages(){
     const sid = sessionId();
-    if(!sid) {
-      setLabel();
+
+    if(!sid){
+      setFinalLabel();
       return;
     }
 
@@ -4328,35 +4284,70 @@
       if(res.ok && data && Array.isArray(data.messages)){
         applyMessages(data.messages);
       }else{
-        setLabel();
+        setFinalLabel();
       }
     }catch(e){
-      setLabel();
+      setFinalLabel();
     }
   }
 
-  function boot(){
-    readPaused();
+  if(!window.__fmPublicRealOwnerConnectedFetchPatchV220250519){
+    window.__fmPublicRealOwnerConnectedFetchPatchV220250519 = true;
 
+    const oldFetch = window.fetch.bind(window);
+
+    window.fetch = async function(input, init){
+      const res = await oldFetch(input, init);
+
+      try{
+        const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+
+        if(url && url.includes("/api/followme/chat/session/") && url.includes("/messages")){
+          const clone = res.clone();
+          const data = await clone.json().catch(function(){ return null; });
+
+          if(data && Array.isArray(data.messages)){
+            setTimeout(function(){ applyMessages(data.messages); }, 40);
+            setTimeout(function(){ applyMessages(data.messages); }, 250);
+            setTimeout(loadAllMessages, 700);
+          }
+        }
+
+        /*
+          La state API NON deve mai attivare Connessi:
+          owner_opened_at indica solo che admin ha aperto la chat.
+        */
+        if(url && url.includes("/api/followme/chat/session/") && url.includes("/state")){
+          setTimeout(setFinalLabel, 80);
+          setTimeout(setFinalLabel, 400);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  function boot(){
     /*
-      Reset iniziale: non presumiamo mai Connessi.
-      Lo diventiamo solo dopo aver letto un vero messaggio owner.
+      Non presumiamo mai Connessi all’avvio.
+      Lo diventa solo leggendo un vero messaggio owner nei messaggi.
     */
     hasRealOwnerMessage = false;
-    setLabel();
+    setFinalLabel();
 
-    setTimeout(loadMessagesOnce, 150);
-    setTimeout(loadMessagesOnce, 900);
+    setTimeout(loadAllMessages, 150);
+    setTimeout(loadAllMessages, 900);
+    setTimeout(loadAllMessages, 1800);
   }
 
   window.fmPublicRealOwnerConnectedLabel20260519 = {
     boot,
-    setLabel,
-    applyMessages,
+    loadAllMessages,
+    setFinalLabel,
     state:function(){
       return {
         hasRealOwnerMessage,
-        locallyPaused:readPaused(),
+        paused:isPaused(),
         sessionId:sessionId()
       };
     }
@@ -4367,7 +4358,7 @@
 
   window.addEventListener("load", function(){
     setTimeout(boot, 250);
-    setTimeout(loadMessagesOnce, 1200);
+    setTimeout(loadAllMessages, 1200);
   });
 
   window.addEventListener("pageshow", function(){
@@ -4376,16 +4367,12 @@
 
   document.addEventListener("visibilitychange", function(){
     if(document.visibilityState === "visible"){
-      setTimeout(loadMessagesOnce, 250);
+      setTimeout(loadAllMessages, 250);
     }
   });
 
-  setInterval(function(){
-    readPaused();
-    setLabel();
-  }, 1000);
-
-  setInterval(loadMessagesOnce, 3000);
+  setInterval(loadAllMessages, 3000);
+  setInterval(setFinalLabel, 800);
 })();
 </script>
 
