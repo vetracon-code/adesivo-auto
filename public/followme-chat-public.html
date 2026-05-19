@@ -5910,6 +5910,272 @@
 })();
 </script>
 
+
+
+
+
+<script id="followme-public-request-extra-button-fix-final-20260519">
+(function(){
+  if(window.__FollowMePublicRequestExtraButtonFixFinal20260519) return;
+  window.__FollowMePublicRequestExtraButtonFixFinal20260519 = true;
+
+  /*
+    FIX:
+    Il pulsante Richiedi Extra non deve comportarsi come Pausa.
+    Non riusiamo il vecchio bottone con vecchi event listener:
+    lo sostituiamo fisicamente con un bottone nuovo.
+  */
+
+  function ensureStyle(){
+    if(document.getElementById("followmePublicRequestExtraButtonFixStyle20260519")) return;
+
+    const style = document.createElement("style");
+    style.id = "followmePublicRequestExtraButtonFixStyle20260519";
+    style.textContent = `
+      #followmePublicRequestExtraBtn20260519{
+        border:0 !important;
+        border-radius:16px !important;
+        width:78px !important;
+        min-width:78px !important;
+        max-width:78px !important;
+        height:46px !important;
+        padding:5px 7px !important;
+        font-weight:950 !important;
+        font-size:12px !important;
+        line-height:1.03 !important;
+        letter-spacing:-.02em !important;
+        background:#111827 !important;
+        color:#ffffff !important;
+        cursor:pointer !important;
+        box-shadow:0 8px 22px rgba(17,24,39,.18) !important;
+        display:inline-flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        flex-direction:column !important;
+        text-align:center !important;
+        white-space:normal !important;
+        z-index:99990 !important;
+      }
+
+      #followmePublicRequestExtraBtn20260519 .fm-extra-line{
+        display:block !important;
+        width:100% !important;
+      }
+
+      #followmePublicRequestExtraBtn20260519:hover{
+        background:#020617 !important;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function cleanPauseResidues(){
+    document.body.classList.remove(
+      "followme-public-locally-paused",
+      "followme-public-paused",
+      "fm-public-paused",
+      "fm-public-user-paused",
+      "user-paused"
+    );
+
+    document.documentElement.classList.remove(
+      "followme-public-locally-paused",
+      "followme-public-paused",
+      "fm-public-paused",
+      "fm-public-user-paused",
+      "user-paused"
+    );
+
+    [
+      "followmePublicPauseOverlay20260519",
+      "followmePublicPausedOverlay20260519",
+      "followmePublicPausedBox20260519"
+    ].forEach(function(id){
+      const el = document.getElementById(id);
+      if(el) el.remove();
+    });
+  }
+
+  function findOldPauseOrExtraButton(){
+    const all = Array.from(document.querySelectorAll("button,a"));
+
+    for(const el of all){
+      const t = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+
+      if(
+        el.id === "followmePublicRequestExtraBtn20260519" ||
+        t === "richiedi extra" ||
+        t === "richiedi" ||
+        t === "extra" ||
+        t === "pausa" ||
+        t === "pausa chat" ||
+        t === "chiudi" ||
+        t === "chiudi chat"
+      ){
+        return el;
+      }
+    }
+
+    return null;
+  }
+
+  function callRequestExtraFlow(){
+    cleanPauseResidues();
+
+    try{
+      if(window.fmPublicRequestExtra20260519 && typeof window.fmPublicRequestExtra20260519.showRequestConfirm === "function"){
+        window.fmPublicRequestExtra20260519.showRequestConfirm();
+        return;
+      }
+    }catch(e){}
+
+    /*
+      Fallback se la patch principale non fosse ancora pronta.
+    */
+    alert("Stai chiedendo la possibilità di inviare foto, messaggi audio, posizione e altri allegati.");
+  }
+
+  function replaceWithCleanButton(){
+    ensureStyle();
+    cleanPauseResidues();
+
+    let current = document.getElementById("followmePublicRequestExtraBtn20260519");
+
+    /*
+      Se il pulsante esiste ma può avere vecchi listener, lo sostituiamo una volta
+      con clone pulito. Usiamo data-clean per evitare sostituzioni continue.
+    */
+    if(current && current.dataset.cleanRequestExtra20260519 === "1"){
+      current.innerHTML = "<span class='fm-extra-line'>Richiedi</span><span class='fm-extra-line'>Extra</span>";
+      current.disabled = false;
+      current.style.display = "";
+      current.style.visibility = "";
+      return current;
+    }
+
+    const old = current || findOldPauseOrExtraButton();
+
+    const btn = document.createElement("button");
+    btn.id = "followmePublicRequestExtraBtn20260519";
+    btn.type = "button";
+    btn.dataset.cleanRequestExtra20260519 = "1";
+    btn.innerHTML = "<span class='fm-extra-line'>Richiedi</span><span class='fm-extra-line'>Extra</span>";
+    btn.setAttribute("aria-label", "Richiedi Extra");
+
+    btn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      callRequestExtraFlow();
+      return false;
+    }, true);
+
+    if(old && old.parentElement){
+      old.parentElement.replaceChild(btn, old);
+    }else{
+      btn.style.position = "fixed";
+      btn.style.top = "14px";
+      btn.style.right = "14px";
+      document.body.appendChild(btn);
+    }
+
+    return btn;
+  }
+
+  /*
+    Intercetta eventuali vecchi click Pausa ancora presenti prima che facciano danni.
+  */
+  document.addEventListener("click", function(ev){
+    const target = ev.target && ev.target.closest ? ev.target.closest("button,a") : ev.target;
+    if(!target) return;
+
+    const t = String(target.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+
+    if(
+      target.id === "followmePublicRequestExtraBtn20260519" ||
+      t === "richiedi extra" ||
+      t === "richiedi" ||
+      t === "extra"
+    ){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      callRequestExtraFlow();
+      return false;
+    }
+
+    if(t === "pausa" || t === "pausa chat" || t === "chiudi" || t === "chiudi chat"){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      replaceWithCleanButton();
+      callRequestExtraFlow();
+      return false;
+    }
+  }, true);
+
+  /*
+    Neutralizza qualsiasi vecchia chiamata /pause lato pubblico.
+  */
+  if(!window.__fmPublicRequestExtraBlockPauseFetch20260519){
+    window.__fmPublicRequestExtraBlockPauseFetch20260519 = true;
+
+    const oldFetch = window.fetch.bind(window);
+
+    window.fetch = function(input, init){
+      try{
+        const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+
+        if(url && url.includes("/api/followme/chat/session/") && url.includes("/pause")){
+          return Promise.resolve(new Response(JSON.stringify({
+            success:true,
+            pause_removed:true,
+            request_extra_mode:true
+          }), {
+            status:200,
+            headers:{ "Content-Type":"application/json" }
+          }));
+        }
+      }catch(e){}
+
+      return oldFetch(input, init);
+    };
+  }
+
+  function boot(){
+    cleanPauseResidues();
+    replaceWithCleanButton();
+
+    setTimeout(replaceWithCleanButton, 300);
+    setTimeout(replaceWithCleanButton, 1000);
+  }
+
+  window.fmPublicRequestExtraButtonFix20260519 = {
+    boot,
+    replaceWithCleanButton,
+    callRequestExtraFlow
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(function(){
+    cleanPauseResidues();
+    replaceWithCleanButton();
+  }, 1500);
+})();
+</script>
+
 </body>
 </html>
 
