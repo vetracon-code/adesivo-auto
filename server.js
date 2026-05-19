@@ -10171,6 +10171,141 @@ app.post('/api/followme/chat/session/:session_id/close-selected', express.json()
 });
 // end-followme-close-selected-chat-final-20260519
 
+
+// followme-close-all-with-reset-final-20260519
+app.post('/api/followme/:code/chat/close-all-with-reset', express.json(), async (req, res) => {
+  try {
+    if (typeof ensureFollowMeRuntimeFast === 'function') {
+      await ensureFollowMeRuntimeFast();
+    } else if (typeof ensureFollowMeChatSchema === 'function') {
+      await ensureFollowMeChatSchema();
+    }
+
+    if (typeof ensureFollowMeExtraRequestsTable20260519 === 'function') {
+      await ensureFollowMeExtraRequestsTable20260519();
+    }
+
+    const code = String(req.params.code || '').trim();
+
+    if (!code) {
+      return res.status(400).json({
+        success:false,
+        error:'Codice progetto mancante.'
+      });
+    }
+
+    const projectRes = await pool.query(
+      `SELECT id, code, public_id, chat_mode_enabled
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!projectRes.rows.length) {
+      return res.status(404).json({
+        success:false,
+        error:'Progetto non trovato.'
+      });
+    }
+
+    const project = projectRes.rows[0];
+
+    /*
+      1) Chiude tutte le sessioni del progetto.
+      Non le cancelliamo qui, così le pagine utente possono ancora leggere
+      lo stato "closed" e mostrare la pagina di chiusura corretta.
+    */
+    const closedSessions = await pool.query(
+      `UPDATE followme_chat_sessions
+       SET status = 'closed',
+           uploads_enabled = FALSE,
+           is_blocked = FALSE,
+           is_user_paused = FALSE,
+           user_paused_at = NULL,
+           blocked_at = NULL,
+           updated_at = NOW()
+       WHERE project_id = $1
+       RETURNING id`,
+      [project.id]
+    );
+
+    /*
+      2) Spegne il servizio chat generale.
+    */
+    await pool.query(
+      `UPDATE followme_projects
+       SET chat_mode_enabled = FALSE,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [project.id]
+    );
+
+    /*
+      3) Reset richieste Extra: chiude tutto quello che è pendente.
+      Manteniamo lo storico ma non lasciamo richieste appese.
+    */
+    try {
+      await pool.query(
+        `UPDATE followme_extra_requests
+         SET status = CASE WHEN status = 'pending' THEN 'closed_by_reset' ELSE status END,
+             responded_at = COALESCE(responded_at, NOW()),
+             response_message = COALESCE(response_message, 'Servizio chat chiuso.')
+         WHERE project_id = $1`,
+        [project.id]
+      );
+    } catch(e) {
+      /*
+        Tabella assente su vecchi ambienti: non bloccare la chiusura.
+      */
+    }
+
+    /*
+      4) Messaggio tecnico sulle sessioni chiuse.
+      Utile se qualche client legge ancora i messaggi prima del redirect/stato.
+    */
+    for (const row of closedSessions.rows) {
+      try {
+        await pool.query(
+          `INSERT INTO followme_chat_messages
+           (session_id, project_id, sender, message, created_at)
+           VALUES ($1,$2,'owner',$3,NOW())`,
+          [
+            row.id,
+            project.id,
+            JSON.stringify({
+              __followme_all_chats_closed_with_reset:true,
+              session_id:String(row.id),
+              text:'Servizio chat chiuso dal proprietario.',
+              created_at:new Date().toISOString()
+            })
+          ]
+        );
+      } catch(e) {}
+    }
+
+    return res.json({
+      success:true,
+      mode:'close_all_with_reset',
+      project:{
+        id:project.id,
+        code:project.code,
+        public_id:project.public_id,
+        chat_mode_enabled:false
+      },
+      closed_sessions:closedSessions.rows.length,
+      message:'Tutte le chat sono state chiuse e il servizio è stato spento.'
+    });
+  } catch(err) {
+    console.error('followme close all with reset error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore chiusura totale con reset.'
+    });
+  }
+});
+// end-followme-close-all-with-reset-final-20260519
+
 app.post('/api/followme/:code/chat/close-all', express.json(), async (req, res) => {
   try {
     if (typeof ensureFollowMeRuntimeFast === 'function') {

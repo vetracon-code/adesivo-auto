@@ -22575,5 +22575,118 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-admin-close-all-reset-menu-hook-final-20260519">
+(function(){
+  if(window.__FollowMeAdminCloseAllResetMenuHookFinal20260519) return;
+  window.__FollowMeAdminCloseAllResetMenuHookFinal20260519 = true;
+
+  function projectCode(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("app");
+      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
+    }catch(e){}
+
+    try{
+      if(window.FOLLOWME_PROJECT_CODE) return String(window.FOLLOWME_PROJECT_CODE);
+      if(window.followMeProjectCode) return String(window.followMeProjectCode);
+    }catch(e){}
+
+    return "FM-DEMO";
+  }
+
+  async function closeAllWithReset(){
+    const ok = confirm(
+      "Vuoi chiudere TUTTE le chat?\n\n" +
+      "Il sistema chiuderà tutte le conversazioni aperte,\n" +
+      "spegnerà il servizio chat e azzererà gli stati operativi.\n\n" +
+      "Gli utenti vedranno la pagina di chiusura."
+    );
+
+    if(!ok) return;
+
+    try{
+      const code = projectCode();
+
+      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/chat/close-all-with-reset", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ confirm:"CHIUDI_TUTTO_CON_RESET" })
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Chiusura totale non riuscita.");
+      }
+
+      alert("Tutte le chat sono state chiuse. Servizio chat spento.");
+
+      try{
+        if(typeof window.refreshFollowMeOwnerChatSessions === "function"){
+          window.refreshFollowMeOwnerChatSessions();
+        }
+      }catch(e){}
+
+    }catch(err){
+      alert(err.message || "Errore chiusura totale.");
+    }
+  }
+
+  /*
+    Aggancia il pulsante "Tutte le chat" del menu V2, se presente.
+    Non tocca la prima pagina.
+  */
+  function hook(){
+    const overlay = document.getElementById("followmeAdminCloseChoice20260519");
+    if(!overlay) return;
+
+    const all = overlay.querySelector("button.all");
+    if(!all || all.dataset.closeAllResetHooked === "1") return;
+
+    all.dataset.closeAllResetHooked = "1";
+
+    all.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+
+      overlay.classList.remove("open");
+      closeAllWithReset();
+
+      return false;
+    }, true);
+  }
+
+  function boot(){
+    hook();
+    setTimeout(hook, 500);
+    setTimeout(hook, 1500);
+  }
+
+  window.fmAdminCloseAllWithReset20260519 = {
+    boot,
+    hook,
+    closeAllWithReset
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(hook, 1000);
+})();
+</script>
+
 </body>
 </html>
