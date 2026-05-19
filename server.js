@@ -9697,6 +9697,248 @@ app.post('/api/followme/chat/session/:session_id/pause', express.json(), async (
   }
 });
 
+
+// followme-server-side-chat-files-export-final-20260519
+function followMeTarPad(value, length, padChar) {
+  value = String(value || '');
+  if (value.length >= length) return value.slice(0, length);
+  return value + String(padChar || '\0').repeat(length - value.length);
+}
+
+function followMeTarOctal(value, length) {
+  const s = Math.max(0, Number(value || 0)).toString(8);
+  return followMeTarPad(s, length - 1, ' ') + '\0';
+}
+
+function followMeTarHeader(name, size, mode, mtime, typeflag) {
+  const buf = Buffer.alloc(512, 0);
+  const safeName = String(name || 'file').replace(/^\/+/, '').slice(0, 100);
+
+  buf.write(followMeTarPad(safeName, 100, '\0'), 0, 100, 'utf8');
+  buf.write(followMeTarOctal(mode || 0o644, 8), 100, 8, 'ascii');
+  buf.write(followMeTarOctal(0, 8), 108, 8, 'ascii');
+  buf.write(followMeTarOctal(0, 8), 116, 8, 'ascii');
+  buf.write(followMeTarOctal(size || 0, 12), 124, 12, 'ascii');
+  buf.write(followMeTarOctal(Math.floor((mtime || Date.now()) / 1000), 12), 136, 12, 'ascii');
+
+  // checksum placeholder
+  for (let i = 148; i < 156; i++) buf[i] = 0x20;
+
+  buf.write(String(typeflag || '0'), 156, 1, 'ascii');
+  buf.write('ustar', 257, 5, 'ascii');
+  buf.write('00', 263, 2, 'ascii');
+
+  let sum = 0;
+  for (let i = 0; i < 512; i++) sum += buf[i];
+
+  const chk = followMeTarOctal(sum, 8);
+  buf.write(chk, 148, 8, 'ascii');
+
+  return buf;
+}
+
+function followMeTarFile(name, content) {
+  const data = Buffer.isBuffer(content) ? content : Buffer.from(String(content || ''), 'utf8');
+  const header = followMeTarHeader(name, data.length, 0o644, Date.now(), '0');
+  const pad = Buffer.alloc((512 - (data.length % 512)) % 512, 0);
+  return Buffer.concat([header, data, pad]);
+}
+
+function followMeSafeArchiveName(name) {
+  return String(name || 'file')
+    .replace(/[\\/:*?"<>|]+/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120) || 'file';
+}
+
+function followMeParseAttachment(message) {
+  try {
+    const obj = JSON.parse(String(message || ''));
+    if (obj && obj.__followme_attachment === true) return obj;
+  } catch(e) {}
+  return null;
+}
+
+function followMeAttachmentFileNameFromUrl(url) {
+  const m = String(url || '').match(/\/uploads\/followme-chat\/([^"'\s/?#]+)/);
+  return m ? m[1] : '';
+}
+
+function followMeAttachmentLocalPathFromPayload(payload) {
+  const path = require('path');
+  const file = followMeAttachmentFileNameFromUrl(payload && payload.url);
+  if (!file) return '';
+
+  return path.join(__dirname, 'public', 'uploads', 'followme-chat', file);
+}
+
+function followMeCleanChatMessageForExport(message) {
+  const att = followMeParseAttachment(message);
+
+  if (att) {
+    const kind = att.kind || 'allegato';
+    const label = att.label || att.filename || 'file';
+    const url = att.url || '';
+    return '[ALLEGATO: ' + kind + '] ' + label + (url ? ' - ' + url : '');
+  }
+
+  return String(message || '');
+}
+
+function followMeBuildChatTxt(sessionId, rows) {
+  const lines = [];
+
+  lines.push('FOLLOWME CHAT - ESPORTAZIONE SERVER');
+  lines.push('Sessione: ' + sessionId);
+  lines.push('Data esportazione: ' + new Date().toLocaleString('it-IT'));
+  lines.push('------------------------------------------------------------');
+  lines.push('');
+
+  for (const row of rows) {
+    const sender = String(row.sender || '').toLowerCase() === 'owner' ? 'ADMIN' : 'UTENTE';
+    const date = row.created_at ? new Date(row.created_at).toLocaleString('it-IT') : '';
+    lines.push('[' + date + '] ' + sender);
+    lines.push(followMeCleanChatMessageForExport(row.message));
+    lines.push('');
+  }
+
+  lines.push('------------------------------------------------------------');
+  lines.push('Fine esportazione.');
+
+  return lines.join('\n');
+}
+
+app.get('/api/followme/chat/session/:session_id/export-server-files', async (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const zlib = require('zlib');
+
+    if (typeof ensureFollowMeRuntimeFast === 'function') {
+      await ensureFollowMeRuntimeFast();
+    } else if (typeof ensureFollowMeChatSchema === 'function') {
+      await ensureFollowMeChatSchema();
+    }
+
+    const sessionId = Number(req.params.session_id || 0);
+
+    if (!sessionId) {
+      return res.status(400).json({
+        success:false,
+        error:'Sessione mancante.'
+      });
+    }
+
+    const messagesResult = await pool.query(
+      `SELECT id, session_id, sender, message, created_at
+       FROM followme_chat_messages
+       WHERE session_id = $1
+       ORDER BY id ASC
+       LIMIT 10000`,
+      [sessionId]
+    );
+
+    const rows = messagesResult.rows || [];
+
+    const manifest = {
+      session_id:String(sessionId),
+      exported_at:new Date().toISOString(),
+      total_messages:rows.length,
+      attachments:[],
+      missing:[]
+    };
+
+    const parts = [];
+
+    parts.push(followMeTarFile('chat.txt', followMeBuildChatTxt(sessionId, rows)));
+
+    let index = 1;
+
+    for (const row of rows) {
+      const att = followMeParseAttachment(row.message);
+      if (!att || !att.url) continue;
+
+      const localPath = followMeAttachmentLocalPathFromPayload(att);
+      const base = followMeSafeArchiveName(att.filename || att.label || ('allegato-' + index));
+      const archiveName = 'allegati/' + String(index).padStart(3, '0') + '-' + base;
+
+      const item = {
+        message_id:row.id,
+        created_at:row.created_at,
+        sender:row.sender,
+        kind:att.kind || null,
+        label:att.label || att.filename || null,
+        mime:att.mime || null,
+        url:att.url || null,
+        local_file:localPath ? path.basename(localPath) : null,
+        saved_as:archiveName
+      };
+
+      try {
+        if (localPath && fs.existsSync(localPath)) {
+          const data = fs.readFileSync(localPath);
+          parts.push(followMeTarFile(archiveName, data));
+          item.size_bytes = data.length;
+          item.available = true;
+          manifest.attachments.push(item);
+        } else {
+          item.available = false;
+          item.error = 'File non presente sul filesystem Render al momento dell’esportazione.';
+          manifest.missing.push(item);
+        }
+      } catch(err) {
+        item.available = false;
+        item.error = err.message || String(err);
+        manifest.missing.push(item);
+      }
+
+      index++;
+    }
+
+    parts.push(followMeTarFile('manifest.json', JSON.stringify(manifest, null, 2)));
+
+    if (manifest.missing.length) {
+      const missingLines = [
+        'ALLEGATI NON DISPONIBILI',
+        'Sessione: ' + sessionId,
+        'Data: ' + new Date().toLocaleString('it-IT'),
+        ''
+      ];
+
+      for (const item of manifest.missing) {
+        missingLines.push('- ' + (item.label || 'file') + ' | ' + (item.url || '') + ' | ' + (item.error || 'non disponibile'));
+      }
+
+      parts.push(followMeTarFile('allegati-non-disponibili.txt', missingLines.join('\n')));
+    }
+
+    // Fine tar: due blocchi da 512 zero
+    parts.push(Buffer.alloc(1024, 0));
+
+    const tar = Buffer.concat(parts);
+    const gz = zlib.gzipSync(tar, { level: 6 });
+
+    const filename = 'followme-chat-sessione-' + sessionId + '-server-files-' +
+      new Date().toISOString().slice(0,19).replace(/[:T]/g, '-') +
+      '.tar.gz';
+
+    res.setHeader('Content-Type', 'application/gzip');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
+    res.setHeader('Cache-Control', 'no-store');
+
+    return res.send(gz);
+
+  } catch(err) {
+    console.error('followme server side export files error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore esportazione server files.'
+    });
+  }
+});
+// end-followme-server-side-chat-files-export-final-20260519
+
 app.get('/api/followme/chat/session/:session_id/messages', async (req, res) => {
   try {
     await ensureFollowMeRuntimeFast();
