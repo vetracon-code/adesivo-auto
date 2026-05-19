@@ -5960,6 +5960,312 @@
 })();
 </script>
 
+
+
+<script id="followme-public-extra-locked-session-final-20260519">
+(function(){
+  if(window.__FollowMePublicExtraLockedSessionFinal20260519) return;
+  window.__FollowMePublicExtraLockedSessionFinal20260519 = true;
+
+  /*
+    FIX CRITICO:
+    Richiedi Extra deve usare SOLO la sessione reale della pagina corrente.
+    Non deve leggere vecchi ID, localStorage o ID di altre chat.
+  */
+
+  function cleanSid(v){
+    const s = String(v || "").trim();
+    return /^\d+$/.test(s) ? s : "";
+  }
+
+  function lockSid(v){
+    const sid = cleanSid(v);
+    if(!sid) return "";
+
+    window.__FM_PUBLIC_SESSION_ID_LOCKED__ = sid;
+    window.followMeChatSessionId = sid;
+    window.FOLLOWME_CHAT_SESSION_ID = sid;
+
+    try{ sessionStorage.setItem("followme_chat_session_id", sid); }catch(e){}
+    try{ localStorage.removeItem("followme_chat_session_id"); }catch(e){}
+
+    try{
+      document.documentElement.dataset.fmSessionId = sid;
+      document.body.dataset.fmSessionId = sid;
+    }catch(e){}
+
+    return sid;
+  }
+
+  function lockedSid(){
+    const candidates = [
+      window.__FM_PUBLIC_SESSION_ID_LOCKED__,
+      window.followMeChatSessionId,
+      window.FOLLOWME_CHAT_SESSION_ID
+    ];
+
+    try{ candidates.push(document.documentElement.dataset.fmSessionId); }catch(e){}
+    try{ candidates.push(document.body.dataset.fmSessionId); }catch(e){}
+    try{ candidates.push(sessionStorage.getItem("followme_chat_session_id")); }catch(e){}
+
+    for(const v of candidates){
+      const sid = cleanSid(v);
+      if(sid) return lockSid(sid);
+    }
+
+    return "";
+  }
+
+  /*
+    Intercetta la creazione sessione e blocca immediatamente il session_id ritornato dal server.
+  */
+  if(!window.__fmExtraLockedSessionFetchPatch20260519){
+    window.__fmExtraLockedSessionFetchPatch20260519 = true;
+
+    const oldFetch = window.fetch.bind(window);
+
+    window.fetch = async function(input, init){
+      const res = await oldFetch(input, init);
+
+      try{
+        const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+
+        if(url && url.includes("/api/followme/chat/") && url.includes("/session")){
+          const clone = res.clone();
+          const data = await clone.json().catch(function(){ return null; });
+
+          const sid = cleanSid(
+            data && (
+              data.session_id ||
+              data.sessionId ||
+              data.chat_session_id ||
+              data.chatSessionId ||
+              (data.session && data.session.id)
+            )
+          );
+
+          if(sid) lockSid(sid);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  async function sendExtraRequestClean(){
+    const sid = lockedSid();
+
+    if(!sid){
+      alert("Chat non ancora pronta. Attendi un istante e riprova.");
+      return;
+    }
+
+    const requestId = "extra-" + sid + "-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
+
+    const payload = {
+      __followme_extra_request:true,
+      request_id:requestId,
+      session_id:sid,
+      kind:"extra_request",
+      text:"Richiesta Extra ricevuta. L’utente chiede di poter inviare foto, audio, posizione e altri allegati.",
+      created_at:new Date().toISOString()
+    };
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/message", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({
+        sender:"visitor",
+        message:JSON.stringify(payload)
+      })
+    });
+
+    const data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || !data.success){
+      throw new Error((data && data.error) || "Invio richiesta non riuscito.");
+    }
+
+    return data;
+  }
+
+  function findMessages(){
+    return document.getElementById("messages") ||
+           document.getElementById("chatMessages") ||
+           document.getElementById("followmePublicMessages") ||
+           document.querySelector(".messages") ||
+           document.querySelector(".chat-messages") ||
+           document.querySelector(".followme-public-messages");
+  }
+
+  function addBot(html){
+    const box = findMessages();
+
+    if(!box){
+      alert(String(html || "").replace(/<[^>]+>/g, ""));
+      return null;
+    }
+
+    const card = document.createElement("div");
+    card.className = "bot message fm-extra-locked-card";
+    card.style.margin = "10px 0";
+    card.style.padding = "12px 14px";
+    card.style.borderRadius = "18px";
+    card.style.background = "#f8fafc";
+    card.style.border = "1px solid rgba(15,23,42,.08)";
+    card.style.color = "#0f172a";
+    card.style.fontWeight = "700";
+    card.style.lineHeight = "1.42";
+    card.innerHTML = html;
+
+    box.appendChild(card);
+
+    try{ box.scrollTop = box.scrollHeight; }catch(e){}
+
+    return card;
+  }
+
+  function showConfirmLocked(){
+    const sid = lockedSid();
+
+    if(!sid){
+      addBot("<strong>Chat non ancora pronta.</strong><br>Attendi un istante e riprova.");
+      return;
+    }
+
+    const card = addBot(
+      "<strong>Stai chiedendo la possibilità di inviare foto, messaggi audio, posizione e altri allegati.</strong><br><br>" +
+      "Vuoi inviare la richiesta al proprietario?" +
+      "<div class='fm-extra-clean-actions'>" +
+        "<button type='button' class='fm-extra-clean-confirm'>Conferma</button>" +
+        "<button type='button' class='fm-extra-clean-cancel'>Annulla</button>" +
+      "</div>"
+    );
+
+    if(!card) return;
+
+    const confirm = card.querySelector(".fm-extra-clean-confirm");
+    const cancel = card.querySelector(".fm-extra-clean-cancel");
+
+    if(confirm){
+      confirm.onclick = async function(ev){
+        if(ev){
+          ev.preventDefault();
+          ev.stopPropagation();
+        }
+
+        confirm.disabled = true;
+        if(cancel) cancel.disabled = true;
+        confirm.textContent = "Invio...";
+
+        try{
+          await sendExtraRequestClean();
+
+          card.innerHTML =
+            "<strong>Richiesta inviata.</strong><br>" +
+            "Attendi la risposta del proprietario.";
+
+        }catch(err){
+          confirm.disabled = false;
+          if(cancel) cancel.disabled = false;
+          confirm.textContent = "Conferma";
+          addBot("<strong>Non sono riuscito a inviare la richiesta.</strong><br>Riprova tra poco.");
+        }
+
+        return false;
+      };
+    }
+
+    if(cancel){
+      cancel.onclick = function(ev){
+        if(ev){
+          ev.preventDefault();
+          ev.stopPropagation();
+        }
+
+        card.innerHTML = "Richiesta annullata.";
+        return false;
+      };
+    }
+  }
+
+  function ensureButtonOverride(){
+    const btn = document.getElementById("fmExtraCleanButton20260519");
+
+    if(btn){
+      btn.onclick = function(ev){
+        if(ev){
+          ev.preventDefault();
+          ev.stopPropagation();
+        }
+
+        showConfirmLocked();
+        return false;
+      };
+    }
+  }
+
+  /*
+    Intercetta il click prima di qualunque vecchia logica.
+  */
+  document.addEventListener("click", function(ev){
+    const target = ev.target && ev.target.closest ? ev.target.closest("button,a") : ev.target;
+    if(!target) return;
+
+    const txt = String(target.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+
+    if(
+      target.id === "fmExtraCleanButton20260519" ||
+      txt === "richiedi extra" ||
+      txt === "richiedi" ||
+      txt === "extra"
+    ){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      showConfirmLocked();
+      return false;
+    }
+  }, true);
+
+  function boot(){
+    lockedSid();
+    ensureButtonOverride();
+
+    setTimeout(function(){
+      lockedSid();
+      ensureButtonOverride();
+    }, 400);
+
+    setTimeout(function(){
+      lockedSid();
+      ensureButtonOverride();
+    }, 1200);
+  }
+
+  window.fmPublicExtraLockedSession20260519 = {
+    boot,
+    lockedSid,
+    showConfirmLocked,
+    sendExtraRequestClean
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(boot, 1500);
+})();
+</script>
+
 </body>
 </html>
 
