@@ -18529,5 +18529,67 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-admin-audio-no-replace-final-20260519">
+(function(){
+  if(window.__FollowMeAdminAudioNoReplaceFinal20260519) return;
+  window.__FollowMeAdminAudioNoReplaceFinal20260519 = true;
+
+  function parseAttachmentMessage(message){
+    try{
+      const obj = typeof message === "string" ? JSON.parse(message) : message;
+      if(obj && obj.__followme_attachment) return obj;
+    }catch(e){}
+    return null;
+  }
+
+  function dedupeOnlyExactDuplicates(){
+    const seen = new Set();
+
+    document.querySelectorAll(".followme-owner-chat-bubble, .message, .bubble, [data-message-id]").forEach(function(el){
+      const html = el.innerHTML || "";
+      const txt = el.textContent || "";
+
+      let key = "";
+
+      const srcMatch = html.match(/<(?:audio|img)[^>]+src="([^"]+)"/i);
+      if(srcMatch && srcMatch[1]) key = srcMatch[1];
+
+      if(!key){
+        const a = parseAttachmentMessage(txt);
+        if(a && a.url) key = a.url;
+      }
+
+      if(!key) return;
+
+      if(seen.has(key)){
+        el.remove();
+        return;
+      }
+
+      seen.add(key);
+    });
+  }
+
+  function boot(){
+    dedupeOnlyExactDuplicates();
+    setTimeout(dedupeOnlyExactDuplicates, 400);
+  }
+
+  window.fmAdminNoReplaceAudioFix20260519 = boot;
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1200);
+  });
+
+  setInterval(boot, 1500);
+})();
+</script>
+
 </body>
 </html>

@@ -3637,6 +3637,95 @@
 })();
 </script>
 
+
+
+<script id="followme-public-audio-no-replace-final-20260519">
+(function(){
+  if(window.__FollowMePublicAudioNoReplaceFinal20260519) return;
+  window.__FollowMePublicAudioNoReplaceFinal20260519 = true;
+
+  function parseAttachmentMessage(message){
+    try{
+      const obj = typeof message === "string" ? JSON.parse(message) : message;
+      if(obj && obj.__followme_attachment) return obj;
+    }catch(e){}
+    return null;
+  }
+
+  function dedupeOnlyExactDuplicates(){
+    const seen = new Set();
+
+    document.querySelectorAll(".message, .bubble, .followme-public-bubble, [data-message-id]").forEach(function(el){
+      const html = el.innerHTML || "";
+      const txt = el.textContent || "";
+
+      let key = "";
+
+      const srcMatch = html.match(/<(?:audio|img)[^>]+src="([^"]+)"/i);
+      if(srcMatch && srcMatch[1]) key = srcMatch[1];
+
+      if(!key){
+        const a = parseAttachmentMessage(txt);
+        if(a && a.url) key = a.url;
+      }
+
+      // Se non ho una URL file, non deduplico: rischio di cancellare messaggi diversi.
+      if(!key) return;
+
+      if(seen.has(key)){
+        el.remove();
+        return;
+      }
+
+      seen.add(key);
+    });
+  }
+
+  function removeFileNotFoundBubblesIfReplacedByValidOnes(){
+    /*
+      Non cancella messaggi reali.
+      Rimuove solo eventuali bolle locali che mostrano file non trovato
+      e non hanno data-message-id, quindi sono residui UI.
+    */
+    document.querySelectorAll(".message, .bubble, .followme-public-bubble").forEach(function(el){
+      const txt = String(el.textContent || "").toLowerCase();
+      const hasServerId =
+        el.hasAttribute("data-message-id") ||
+        el.dataset.messageId ||
+        el.dataset.serverMessageId;
+
+      if(!hasServerId && (txt.includes("file non trovato") || txt.includes("not found"))){
+        el.remove();
+      }
+    });
+  }
+
+  function boot(){
+    dedupeOnlyExactDuplicates();
+    removeFileNotFoundBubblesIfReplacedByValidOnes();
+
+    setTimeout(dedupeOnlyExactDuplicates, 300);
+    setTimeout(removeFileNotFoundBubblesIfReplacedByValidOnes, 600);
+  }
+
+  window.fmPublicNoReplaceAudioFix20260519 = boot;
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(boot, 1500);
+})();
+</script>
+
 </body>
 </html>
 

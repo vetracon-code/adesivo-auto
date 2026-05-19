@@ -1922,6 +1922,31 @@ app.get('/come-funziona', (req, res) => {
 
 
 // FollowMe temporary attachment cleanup.
+
+// followme-chat-persistent-attachments-guard-20260519
+async function isFollowMeChatUploadReferenced(storedFileName) {
+  try {
+    const file = String(storedFileName || '').trim();
+    if (!file) return false;
+
+    const url = '/uploads/followme-chat/' + file;
+
+    const q = await pool.query(
+      `SELECT 1
+       FROM followme_chat_messages
+       WHERE message LIKE $1
+       LIMIT 1`,
+      ['%' + url + '%']
+    );
+
+    return q.rows.length > 0;
+  } catch (err) {
+    console.warn('isFollowMeChatUploadReferenced error:', err.message || err);
+    // In caso di dubbio NON cancelliamo.
+    return true;
+  }
+}
+
 // Cancella automaticamente i file caricati in public/uploads/followme-chat dopo 2 minuti.
 const FOLLOWME_ATTACHMENT_TTL_MS = 2 * 60 * 1000;
 const FOLLOWME_ATTACHMENT_CLEANUP_INTERVAL_MS = 30 * 1000;
@@ -1953,6 +1978,9 @@ function cleanupFollowMeTemporaryAttachments() {
 
       if (age > FOLLOWME_ATTACHMENT_TTL_MS) {
         try {
+          // followme-chat-persistent-skip-delete-20260519
+          // Allegati FollowMe Chat persistenti: non cancellare automaticamente.
+          return;
           fs.unlinkSync(fullPath);
           console.log('[followme cleanup] deleted temporary attachment:', file);
         } catch (e) {
@@ -9740,8 +9768,8 @@ app.post('/api/followme/chat/session/:session_id/attachment-raw', express.raw({
 
     const payload = {
       __followme_attachment: true,
-      temporary: true,
-      expires_in_seconds: 120,
+      temporary: false,
+      persistent: true,
       kind: kind || (cleanMime.startsWith('image/') ? 'image' : cleanMime.startsWith('audio/') ? 'audio' : 'document'),
       url: attachmentUrl,
       filename: safeFilename,
@@ -9883,8 +9911,8 @@ app.post('/api/followme/chat/session/:session_id/attachment', express.json({ lim
 
     const payload = {
       __followme_attachment: true,
-      temporary: true,
-      expires_in_seconds: 120,
+      temporary: false,
+      persistent: true,
       kind,
       url: attachmentUrl,
       filename: safeFilename,
