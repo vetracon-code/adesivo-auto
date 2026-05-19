@@ -21135,28 +21135,22 @@ document.addEventListener("visibilitychange", function(){
 
 
 
-<script id="followme-admin-extra-request-session-filter-final-20260519">
+
+
+<script id="followme-admin-extra-request-dedicated-panel-final-20260519">
 (function(){
-  if(window.__FollowMeAdminExtraRequestSessionFilterFinal20260519) return;
-  window.__FollowMeAdminExtraRequestSessionFilterFinal20260519 = true;
+  if(window.__FollowMeAdminExtraRequestDedicatedPanelFinal20260519) return;
+  window.__FollowMeAdminExtraRequestDedicatedPanelFinal20260519 = true;
 
-  /*
-    FIX ADMIN:
-    Le richieste Extra sono già scritte nel DB sulla sessione corretta.
-    Qui filtriamo il rendering admin:
-    - mostro una richiesta solo se payload.session_id === sessione attiva;
-    - Accetta/Rifiuta usa sempre payload.session_id;
-    - X nasconde solo il frame visivo.
-  */
-
-  const handled = new Set();
+  let lastSid = "";
+  let busy = false;
 
   function cleanSid(v){
     const s = String(v || "").trim();
     return /^\d+$/.test(s) ? s : "";
   }
 
-  function activeSessionId(){
+  function activeSid(){
     const selectors = [
       "#followmeStableAliasBar20260519 button.active",
       "#followmeFixedAliasBar20260519 button.active",
@@ -21190,267 +21184,268 @@ document.addEventListener("visibilitychange", function(){
     return "";
   }
 
-  function parseExtraPayload(text){
-    const raw = String(text || "");
+  function ensureStyle(){
+    if(document.getElementById("fmExtraDedicatedAdminStyle20260519")) return;
 
-    try{
-      const obj = JSON.parse(raw);
-      if(obj && obj.__followme_extra_request) return obj;
-    }catch(e){}
-
-    const start = raw.indexOf("{");
-    const end = raw.lastIndexOf("}");
-
-    if(start >= 0 && end > start){
-      try{
-        const obj = JSON.parse(raw.slice(start, end + 1));
-        if(obj && obj.__followme_extra_request) return obj;
-      }catch(e){}
-    }
-
-    return null;
-  }
-
-  function messageContainers(){
-    return Array.from(document.querySelectorAll(
-      "#followmeOwnerChatMessages *," +
-      ".followme-owner-chat-messages *," +
-      ".chat-messages *," +
-      ".messages *"
-    ));
-  }
-
-  function requestNodes(){
-    return messageContainers().map(function(node){
-      if(!node) return null;
-
-      /*
-        Se lo abbiamo già decorato, il payload è salvato in dataset.
-      */
-      let payload = null;
-
-      if(node.dataset && node.dataset.fmExtraPayload20260519){
-        try{ payload = JSON.parse(node.dataset.fmExtraPayload20260519); }catch(e){}
+    const style = document.createElement("style");
+    style.id = "fmExtraDedicatedAdminStyle20260519";
+    style.textContent = `
+      #fmExtraDedicatedAdminPanel20260519{
+        display:none;
+        position:relative;
+        max-width:min(420px, 94%);
+        margin:10px 0;
+        padding:12px 44px 12px 14px;
+        border-radius:18px;
+        background:#fff7ed;
+        border:1px solid rgba(249,115,22,.22);
+        box-shadow:0 10px 28px rgba(15,23,42,.08);
+        color:#111827;
       }
 
-      if(!payload){
-        payload = parseExtraPayload(node.textContent || "");
+      #fmExtraDedicatedAdminPanel20260519 .x{
+        position:absolute;
+        top:8px;
+        right:8px;
+        width:26px;
+        height:26px;
+        border:0;
+        border-radius:999px;
+        background:rgba(15,23,42,.10);
+        color:#111827;
+        font-size:18px;
+        font-weight:950;
+        line-height:24px;
+        cursor:pointer;
       }
 
-      if(!payload) return null;
+      #fmExtraDedicatedAdminPanel20260519 .actions{
+        display:flex;
+        gap:8px;
+        flex-wrap:wrap;
+        margin-top:10px;
+      }
 
-      const sid = cleanSid(payload.session_id);
-      if(!sid) return null;
+      #fmExtraDedicatedAdminPanel20260519 .actions button{
+        border:0;
+        border-radius:999px;
+        padding:9px 13px;
+        font-weight:950;
+        cursor:pointer;
+      }
 
-      return { node, payload, sid };
-    }).filter(Boolean);
-  }
+      #fmExtraDedicatedAdminPanel20260519 .accept{
+        background:#16a34a;
+        color:#fff;
+      }
 
-  async function setExtra(sessionId, enabled){
-    const sid = cleanSid(sessionId);
-    if(!sid) throw new Error("Sessione richiesta non valida.");
-
-    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/set-user-control", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ uploads_enabled:!!enabled })
-    });
-
-    const data = await res.json().catch(function(){ return null; });
-
-    if(!res.ok || !data || !data.success){
-      throw new Error((data && data.error) || "Aggiornamento Extra non riuscito.");
-    }
-
-    return data;
-  }
-
-  async function sendOwnerMessage(sessionId, message){
-    const sid = cleanSid(sessionId);
-    if(!sid) throw new Error("Sessione richiesta non valida.");
-
-    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/message", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({
-        sender:"owner",
-        message:String(message || "")
-      })
-    });
-
-    const data = await res.json().catch(function(){ return null; });
-
-    if(!res.ok || !data || !data.success){
-      throw new Error((data && data.error) || "Invio messaggio non riuscito.");
-    }
-
-    return data;
-  }
-
-  function buildFrame(item){
-    const node = item.node;
-    const payload = item.payload;
-    const sid = item.sid;
-    const requestId = String(payload.request_id || ("sid-" + sid + "-" + Date.now()));
-
-    node.dataset.fmExtraPayload20260519 = JSON.stringify(payload);
-    node.dataset.fmExtraSid20260519 = sid;
-    node.dataset.fmExtraRequestId20260519 = requestId;
-    node.dataset.fmExtraDecorated20260519 = "1";
-
-    node.style.display = "";
-    node.style.visibility = "";
-    node.style.position = "relative";
-    node.style.maxWidth = "min(420px, 92%)";
-    node.style.marginRight = "auto";
-    node.style.padding = "12px 44px 12px 14px";
-    node.style.borderRadius = "18px";
-
-    node.innerHTML = `
-      <button type="button" class="fm-extra-close-x-20260519" title="Nascondi richiesta">×</button>
-      <div style="font-weight:900;margin-bottom:6px;">Richiesta Extra ricevuta.</div>
-      <div style="font-weight:650;line-height:1.35;">L’utente chiede di poter inviare foto, audio, posizione e altri allegati.</div>
-      <div style="font-size:11px;opacity:.55;margin-top:5px;">Sessione ${sid}</div>
-      <div class="fm-extra-actions-20260519" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
-        <button type="button" class="fm-extra-accept-20260519" style="border:0;border-radius:999px;padding:9px 13px;font-weight:950;cursor:pointer;background:#16a34a;color:#fff;">Accetta Extra</button>
-        <button type="button" class="fm-extra-reject-20260519" style="border:0;border-radius:999px;padding:9px 13px;font-weight:950;cursor:pointer;background:#e5e7eb;color:#111827;">Rifiuta</button>
-      </div>
+      #fmExtraDedicatedAdminPanel20260519 .reject{
+        background:#e5e7eb;
+        color:#111827;
+      }
     `;
 
-    const close = node.querySelector(".fm-extra-close-x-20260519");
-    const accept = node.querySelector(".fm-extra-accept-20260519");
-    const reject = node.querySelector(".fm-extra-reject-20260519");
-    const box = node.querySelector(".fm-extra-actions-20260519");
-
-    if(close){
-      close.style.position = "absolute";
-      close.style.top = "8px";
-      close.style.right = "8px";
-      close.style.width = "26px";
-      close.style.height = "26px";
-      close.style.border = "0";
-      close.style.borderRadius = "999px";
-      close.style.background = "rgba(15,23,42,.10)";
-      close.style.color = "#111827";
-      close.style.fontSize = "18px";
-      close.style.fontWeight = "950";
-      close.style.lineHeight = "24px";
-      close.style.cursor = "pointer";
-
-      close.addEventListener("click", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-
-        node.style.display = "none";
-        node.setAttribute("aria-hidden", "true");
-      }, true);
-    }
-
-    if(accept){
-      accept.addEventListener("click", async function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-
-        const key = "accept-" + requestId + "-" + sid;
-        if(handled.has(key)) return;
-        handled.add(key);
-
-        accept.disabled = true;
-        reject.disabled = true;
-        accept.textContent = "Abilito...";
-
-        try{
-          await setExtra(sid, true);
-          await sendOwnerMessage(
-            sid,
-            "Richiesta accettata. Ora puoi inviare foto, messaggi audio, posizione e altri allegati."
-          );
-
-          accept.textContent = "Extra abilitato";
-          if(box) box.style.opacity = ".72";
-
-          try{
-            if(typeof window.refreshFollowMeOwnerChatSessions === "function"){
-              window.refreshFollowMeOwnerChatSessions();
-            }
-          }catch(e){}
-
-        }catch(err){
-          handled.delete(key);
-          accept.disabled = false;
-          reject.disabled = false;
-          accept.textContent = "Accetta Extra";
-          alert(err.message || "Errore abilitazione Extra.");
-        }
-      }, true);
-    }
-
-    if(reject){
-      reject.addEventListener("click", async function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-
-        const key = "reject-" + requestId + "-" + sid;
-        if(handled.has(key)) return;
-        handled.add(key);
-
-        accept.disabled = true;
-        reject.disabled = true;
-        reject.textContent = "Rifiuto...";
-
-        try{
-          await sendOwnerMessage(
-            sid,
-            "In questo momento non è possibile abilitare l’invio Extra. Riprova più tardi."
-          );
-
-          reject.textContent = "Rifiutato";
-          if(box) box.style.opacity = ".72";
-
-        }catch(err){
-          handled.delete(key);
-          accept.disabled = false;
-          reject.disabled = false;
-          reject.textContent = "Rifiuta";
-          alert(err.message || "Errore invio rifiuto.");
-        }
-      }, true);
-    }
+    document.head.appendChild(style);
   }
 
-  function scan(){
-    const active = activeSessionId();
+  function findTarget(){
+    return document.querySelector("#followmeOwnerChatMessages") ||
+           document.querySelector(".followme-owner-chat-messages") ||
+           document.querySelector(".chat-messages") ||
+           document.querySelector(".messages") ||
+           document.body;
+  }
 
-    requestNodes().forEach(function(item){
-      /*
-        Se ho una sessione attiva, mostro solo le richieste di quella sessione.
-        Questo impedisce che Utente 2 venga mostrato dentro Utente 1.
-      */
-      if(active && item.sid !== active){
-        item.node.style.display = "none";
-        item.node.setAttribute("aria-hidden", "true");
+  function ensurePanel(){
+    ensureStyle();
+
+    let panel = document.getElementById("fmExtraDedicatedAdminPanel20260519");
+    if(panel) return panel;
+
+    panel = document.createElement("div");
+    panel.id = "fmExtraDedicatedAdminPanel20260519";
+
+    const target = findTarget();
+
+    if(target && target !== document.body && target.parentElement){
+      target.parentElement.insertBefore(panel, target);
+    }else{
+      document.body.appendChild(panel);
+    }
+
+    return panel;
+  }
+
+  async function loadRequests(sid){
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/extra-requests?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    const data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || !data.success){
+      throw new Error((data && data.error) || "Errore lettura richieste Extra.");
+    }
+
+    return data;
+  }
+
+  async function respond(sid, requestId, action){
+    const res = await fetch(
+      "/api/followme/chat/session/" + encodeURIComponent(sid) +
+      "/extra-request/" + encodeURIComponent(requestId) + "/respond",
+      {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ action })
+      }
+    );
+
+    const data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || !data.success){
+      throw new Error((data && data.error) || "Errore risposta Extra.");
+    }
+
+    return data;
+  }
+
+  function hidePanel(){
+    const panel = ensurePanel();
+    panel.style.display = "none";
+    panel.innerHTML = "";
+  }
+
+  async function render(){
+    if(busy) return;
+
+    const sid = activeSid();
+
+    if(!sid){
+      hidePanel();
+      return;
+    }
+
+    busy = true;
+
+    try{
+      const data = await loadRequests(sid);
+      const pending = (data.requests || []).find(r => r.status === "pending");
+
+      const panel = ensurePanel();
+
+      if(!pending){
+        panel.style.display = "none";
+        panel.innerHTML = "";
+        lastSid = sid;
         return;
       }
 
-      item.node.style.display = "";
-      item.node.removeAttribute("aria-hidden");
+      lastSid = sid;
 
-      if(item.node.dataset.fmExtraDecorated20260519 !== "1"){
-        buildFrame(item);
+      panel.dataset.sessionId = sid;
+      panel.dataset.requestId = pending.request_id;
+      panel.style.display = "block";
+
+      panel.innerHTML = `
+        <button type="button" class="x" title="Nascondi richiesta">×</button>
+        <div style="font-weight:950;margin-bottom:6px;">Richiesta Extra ricevuta</div>
+        <div style="font-weight:650;line-height:1.35;">Questo utente chiede di poter inviare foto, audio, posizione e altri allegati.</div>
+        <div style="font-size:11px;opacity:.55;margin-top:5px;">Sessione ${sid}</div>
+        <div class="actions">
+          <button type="button" class="accept">Accetta Extra</button>
+          <button type="button" class="reject">Rifiuta</button>
+        </div>
+      `;
+
+      const x = panel.querySelector(".x");
+      const accept = panel.querySelector(".accept");
+      const reject = panel.querySelector(".reject");
+
+      if(x){
+        x.onclick = function(ev){
+          ev.preventDefault();
+          ev.stopPropagation();
+          hidePanel();
+          return false;
+        };
       }
-    });
+
+      if(accept){
+        accept.onclick = async function(ev){
+          ev.preventDefault();
+          ev.stopPropagation();
+
+          accept.disabled = true;
+          reject.disabled = true;
+          accept.textContent = "Abilito...";
+
+          try{
+            await respond(sid, pending.request_id, "accept");
+            panel.style.display = "none";
+            panel.innerHTML = "";
+
+            try{
+              if(typeof window.refreshFollowMeOwnerChatSessions === "function"){
+                window.refreshFollowMeOwnerChatSessions();
+              }
+            }catch(e){}
+
+          }catch(err){
+            accept.disabled = false;
+            reject.disabled = false;
+            accept.textContent = "Accetta Extra";
+            alert(err.message || "Errore abilitazione Extra.");
+          }
+
+          return false;
+        };
+      }
+
+      if(reject){
+        reject.onclick = async function(ev){
+          ev.preventDefault();
+          ev.stopPropagation();
+
+          accept.disabled = true;
+          reject.disabled = true;
+          reject.textContent = "Rifiuto...";
+
+          try{
+            await respond(sid, pending.request_id, "reject");
+            panel.style.display = "none";
+            panel.innerHTML = "";
+          }catch(err){
+            accept.disabled = false;
+            reject.disabled = false;
+            reject.textContent = "Rifiuta";
+            alert(err.message || "Errore rifiuto Extra.");
+          }
+
+          return false;
+        };
+      }
+
+    }catch(e){
+      /*
+        Non mostriamo alert in polling.
+      */
+    }finally{
+      busy = false;
+    }
   }
 
   function boot(){
-    scan();
-    setTimeout(scan, 300);
-    setTimeout(scan, 1000);
+    ensurePanel();
+    render();
+    setTimeout(render, 400);
+    setTimeout(render, 1200);
   }
 
-  window.fmAdminExtraRequestSessionFilter20260519 = {
+  window.fmExtraDedicatedAdminPanel20260519 = {
     boot,
-    scan,
-    activeSessionId
+    render,
+    activeSid
   };
 
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
@@ -21465,7 +21460,7 @@ document.addEventListener("visibilitychange", function(){
     setTimeout(boot, 250);
   });
 
-  setInterval(scan, 800);
+  setInterval(render, 1200);
 })();
 </script>
 

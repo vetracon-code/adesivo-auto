@@ -10073,6 +10073,279 @@ app.post('/api/followme/:code/chat/reopen-service', express.json(), async (req, 
 
 
 
+
+// followme-extra-request-dedicated-final-20260519
+async function ensureFollowMeExtraRequestsTable20260519() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS followme_extra_requests (
+      id BIGSERIAL PRIMARY KEY,
+      session_id BIGINT NOT NULL REFERENCES followme_chat_sessions(id) ON DELETE CASCADE,
+      project_id BIGINT NOT NULL,
+      request_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      responded_at TIMESTAMPTZ,
+      response_message TEXT
+    )
+  `);
+
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS followme_extra_requests_request_id_uq
+    ON followme_extra_requests(request_id)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS followme_extra_requests_session_status_idx
+    ON followme_extra_requests(session_id, status, id DESC)
+  `);
+}
+
+app.post('/api/followme/chat/session/:session_id/request-extra', express.json(), async (req, res) => {
+  try {
+    if (typeof ensureFollowMeRuntimeFast === 'function') {
+      await ensureFollowMeRuntimeFast();
+    } else if (typeof ensureFollowMeChatSchema === 'function') {
+      await ensureFollowMeChatSchema();
+    }
+
+    await ensureFollowMeExtraRequestsTable20260519();
+
+    const sessionId = Number(req.params.session_id || 0);
+
+    if (!sessionId) {
+      return res.status(400).json({ success:false, error:'Sessione non valida.' });
+    }
+
+    const sessionRes = await pool.query(
+      `SELECT id, project_id, visitor_label, display_name, uploads_enabled, status
+       FROM followme_chat_sessions
+       WHERE id = $1
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!sessionRes.rows.length) {
+      return res.status(404).json({ success:false, error:'Sessione non trovata.' });
+    }
+
+    const session = sessionRes.rows[0];
+
+    if (session.status !== 'open') {
+      return res.status(409).json({ success:false, error:'Sessione non aperta.' });
+    }
+
+    if (session.uploads_enabled === true) {
+      return res.json({
+        success:true,
+        already_enabled:true,
+        session_id:session.id,
+        message:'Extra già attivo.'
+      });
+    }
+
+    const requestId = String(
+      req.body && req.body.request_id
+        ? req.body.request_id
+        : `extra-${session.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    );
+
+    const inserted = await pool.query(
+      `INSERT INTO followme_extra_requests
+       (session_id, project_id, request_id, status, created_at)
+       VALUES ($1,$2,$3,'pending',NOW())
+       ON CONFLICT (request_id) DO UPDATE
+       SET status = followme_extra_requests.status
+       RETURNING id, session_id, project_id, request_id, status, created_at`,
+      [session.id, session.project_id, requestId]
+    );
+
+    /*
+      Inseriamo anche un messaggio visibile nella chat corretta, ma l'azione admin
+      NON userà più il DOM: userà la tabella dedicata sopra.
+    */
+    await pool.query(
+      `INSERT INTO followme_chat_messages
+       (session_id, project_id, sender, message, created_at)
+       VALUES ($1,$2,'visitor',$3,NOW())`,
+      [
+        session.id,
+        session.project_id,
+        JSON.stringify({
+          __followme_extra_request_notice:true,
+          request_id:requestId,
+          session_id:String(session.id),
+          text:'Richiesta Extra ricevuta.',
+          created_at:new Date().toISOString()
+        })
+      ]
+    );
+
+    return res.json({
+      success:true,
+      request:inserted.rows[0],
+      session:{
+        id:session.id,
+        visitor_label:session.visitor_label,
+        display_name:session.display_name,
+        uploads_enabled:session.uploads_enabled
+      }
+    });
+  } catch(err) {
+    console.error('followme request-extra error:', err);
+    return res.status(500).json({ success:false, error:'Errore richiesta Extra.' });
+  }
+});
+
+app.get('/api/followme/chat/session/:session_id/extra-requests', async (req, res) => {
+  try {
+    if (typeof ensureFollowMeRuntimeFast === 'function') {
+      await ensureFollowMeRuntimeFast();
+    } else if (typeof ensureFollowMeChatSchema === 'function') {
+      await ensureFollowMeChatSchema();
+    }
+
+    await ensureFollowMeExtraRequestsTable20260519();
+
+    const sessionId = Number(req.params.session_id || 0);
+
+    if (!sessionId) {
+      return res.status(400).json({ success:false, error:'Sessione non valida.' });
+    }
+
+    const sessionRes = await pool.query(
+      `SELECT id, project_id, visitor_label, display_name, uploads_enabled, status
+       FROM followme_chat_sessions
+       WHERE id = $1
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!sessionRes.rows.length) {
+      return res.status(404).json({ success:false, error:'Sessione non trovata.' });
+    }
+
+    const requests = await pool.query(
+      `SELECT id, session_id, project_id, request_id, status, created_at, responded_at, response_message
+       FROM followme_extra_requests
+       WHERE session_id = $1
+       ORDER BY id DESC
+       LIMIT 10`,
+      [sessionId]
+    );
+
+    return res.json({
+      success:true,
+      session:sessionRes.rows[0],
+      requests:requests.rows
+    });
+  } catch(err) {
+    console.error('followme extra-requests list error:', err);
+    return res.status(500).json({ success:false, error:'Errore lettura richieste Extra.' });
+  }
+});
+
+app.post('/api/followme/chat/session/:session_id/extra-request/:request_id/respond', express.json(), async (req, res) => {
+  try {
+    if (typeof ensureFollowMeRuntimeFast === 'function') {
+      await ensureFollowMeRuntimeFast();
+    } else if (typeof ensureFollowMeChatSchema === 'function') {
+      await ensureFollowMeChatSchema();
+    }
+
+    await ensureFollowMeExtraRequestsTable20260519();
+
+    const sessionId = Number(req.params.session_id || 0);
+    const requestId = String(req.params.request_id || '').trim();
+    const action = String((req.body && req.body.action) || '').trim().toLowerCase();
+
+    if (!sessionId || !requestId) {
+      return res.status(400).json({ success:false, error:'Richiesta non valida.' });
+    }
+
+    if (action !== 'accept' && action !== 'reject') {
+      return res.status(400).json({ success:false, error:'Azione non valida.' });
+    }
+
+    const sessionRes = await pool.query(
+      `SELECT id, project_id, visitor_label, display_name, uploads_enabled, status
+       FROM followme_chat_sessions
+       WHERE id = $1
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!sessionRes.rows.length) {
+      return res.status(404).json({ success:false, error:'Sessione non trovata.' });
+    }
+
+    const session = sessionRes.rows[0];
+
+    const reqRes = await pool.query(
+      `SELECT id, session_id, project_id, request_id, status
+       FROM followme_extra_requests
+       WHERE session_id = $1
+         AND request_id = $2
+       LIMIT 1`,
+      [sessionId, requestId]
+    );
+
+    if (!reqRes.rows.length) {
+      return res.status(404).json({ success:false, error:'Richiesta Extra non trovata per questa sessione.' });
+    }
+
+    const responseMessage = action === 'accept'
+      ? 'Richiesta accettata. Ora puoi inviare foto, messaggi audio, posizione e altri allegati.'
+      : 'In questo momento non è possibile abilitare l’invio Extra. Riprova più tardi.';
+
+    if (action === 'accept') {
+      await pool.query(
+        `UPDATE followme_chat_sessions
+         SET uploads_enabled = TRUE,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [sessionId]
+      );
+    }
+
+    const updatedReq = await pool.query(
+      `UPDATE followme_extra_requests
+       SET status = $3,
+           responded_at = NOW(),
+           response_message = $4
+       WHERE session_id = $1
+         AND request_id = $2
+       RETURNING id, session_id, request_id, status, responded_at, response_message`,
+      [sessionId, requestId, action === 'accept' ? 'accepted' : 'rejected', responseMessage]
+    );
+
+    await pool.query(
+      `INSERT INTO followme_chat_messages
+       (session_id, project_id, sender, message, created_at)
+       VALUES ($1,$2,'owner',$3,NOW())`,
+      [sessionId, session.project_id, responseMessage]
+    );
+
+    const freshSession = await pool.query(
+      `SELECT id, project_id, visitor_label, display_name, uploads_enabled, is_blocked, status
+       FROM followme_chat_sessions
+       WHERE id = $1
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    return res.json({
+      success:true,
+      action,
+      request:updatedReq.rows[0],
+      session:freshSession.rows[0]
+    });
+  } catch(err) {
+    console.error('followme extra-request respond error:', err);
+    return res.status(500).json({ success:false, error:'Errore risposta richiesta Extra.' });
+  }
+});
+// end-followme-extra-request-dedicated-final-20260519
+
 app.get('/api/followme/chat/session/:session_id/messages', async (req, res) => {
   try {
     await ensureFollowMeRuntimeFast();
