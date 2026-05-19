@@ -18597,35 +18597,51 @@ document.addEventListener("visibilitychange", function(){
 
 
 
-<script id="followme-admin-audio-exact-dedupe-final-20260519">
+
+
+<script id="followme-admin-audio-robust-dedupe-final-20260519">
 (function(){
-  if(window.__FollowMeAdminAudioExactDedupeFinal20260519) return;
-  window.__FollowMeAdminAudioExactDedupeFinal20260519 = true;
+  if(window.__FollowMeAdminAudioRobustDedupeFinal20260519) return;
+  window.__FollowMeAdminAudioRobustDedupeFinal20260519 = true;
 
-  function getAudioKey(el){
-    if(!el) return "";
+  function normalizeUrl(u){
+    try{
+      let s = String(u || "").trim();
 
-    const id =
-      el.getAttribute("data-message-id") ||
-      el.dataset.messageId ||
-      el.dataset.serverMessageId ||
-      "";
+      if(!s) return "";
 
-    if(id) return "id:" + String(id).trim();
+      s = s.replace(/&amp;/g, "&");
 
-    const audio = el.querySelector && el.querySelector("audio[src]");
-    if(audio && audio.getAttribute("src")){
-      return "url:" + audio.getAttribute("src");
+      try{
+        const url = new URL(s, location.origin);
+        s = url.pathname + url.search;
+      }catch(e){}
+
+      s = s.replace(/^https?:\/\/[^\/]+/i, "");
+      s = s.replace(/^\/+/, "/");
+
+      return s;
+    }catch(e){
+      return String(u || "").trim();
     }
+  }
 
-    const urlFromData = el.dataset.fmAttachmentUrl || "";
-    if(urlFromData) return "url:" + urlFromData;
+  function parseJsonAttachmentFromText(txt){
+    try{
+      const clean = String(txt || "").trim();
+      if(!clean.includes("__followme_attachment")) return null;
 
-    const html = el.innerHTML || "";
-    const srcMatch = html.match(/<audio[^>]+src="([^"]+)"/i);
-    if(srcMatch && srcMatch[1]) return "url:" + srcMatch[1];
+      const first = clean.indexOf("{");
+      const last = clean.lastIndexOf("}");
 
-    return "";
+      if(first < 0 || last <= first) return null;
+
+      const obj = JSON.parse(clean.slice(first, last + 1));
+
+      if(obj && obj.__followme_attachment) return obj;
+    }catch(e){}
+
+    return null;
   }
 
   function isAudioBubble(el){
@@ -18636,42 +18652,200 @@ document.addEventListener("visibilitychange", function(){
 
     return html.includes("<audio") ||
            html.includes("followme-attachment-audio") ||
+           html.includes("data-audio-url") ||
            txt.includes('"kind":"audio"') ||
-           txt.includes('"kind": "audio"');
+           txt.includes('"kind": "audio"') ||
+           txt.includes("audio/");
   }
 
-  function dedupeExactAdminAudio(){
-    const seen = new Set();
+  function audioKey(el){
+    if(!el || !isAudioBubble(el)) return "";
 
-    document.querySelectorAll(
+    /*
+      Priorità 1: src reale del player audio.
+    */
+    const audio = el.querySelector && el.querySelector("audio");
+    if(audio){
+      const src =
+        audio.getAttribute("src") ||
+        audio.currentSrc ||
+        audio.src ||
+        "";
+
+      const norm = normalizeUrl(src);
+      if(norm) return "url:" + norm;
+    }
+
+    /*
+      Priorità 2: data-audio-url sul contenitore.
+    */
+    const audioBox = el.querySelector && el.querySelector("[data-audio-url]");
+    if(audioBox){
+      const norm = normalizeUrl(audioBox.getAttribute("data-audio-url") || "");
+      if(norm) return "url:" + norm;
+    }
+
+    /*
+      Priorità 3: dataset attachment URL.
+    */
+    if(el.dataset && el.dataset.fmAttachmentUrl){
+      const norm = normalizeUrl(el.dataset.fmAttachmentUrl);
+      if(norm) return "url:" + norm;
+    }
+
+    /*
+      Priorità 4: JSON originale nella bolla.
+    */
+    const att = parseJsonAttachmentFromText(el.textContent || "");
+    if(att && att.url){
+      const norm = normalizeUrl(att.url);
+      if(norm) return "url:" + norm;
+    }
+
+    /*
+      Priorità 5: estrazione grezza da HTML/JSON.
+    */
+    const html = el.innerHTML || "";
+    const txt = el.textContent || "";
+
+    const patterns = [
+      /src=["']([^"']*\/uploads\/followme-chat\/[^"']+)["']/i,
+      /data-audio-url=["']([^"']*\/uploads\/followme-chat\/[^"']+)["']/i,
+      /"url"\s*:\s*"([^"]*\/uploads\/followme-chat\/[^"]+)"/i,
+      /(\/uploads\/followme-chat\/[A-Za-z0-9._%\-]+)/i
+    ];
+
+    for(const re of patterns){
+      const m = html.match(re) || txt.match(re);
+      if(m && m[1]){
+        const norm = normalizeUrl(m[1]);
+        if(norm) return "url:" + norm;
+      }
+    }
+
+    /*
+      Fallback: se ha message id usiamo quello.
+      Lo mettiamo dopo l’URL perché il doppione potrebbe averne solo uno.
+    */
+    const id =
+      el.getAttribute("data-message-id") ||
+      el.dataset.messageId ||
+      el.dataset.serverMessageId ||
+      "";
+
+    if(id) return "id:" + String(id).trim();
+
+    return "";
+  }
+
+  function getAdminAudioBubbles(){
+    return Array.from(document.querySelectorAll(
       "#followmeOwnerChatMessages .followme-owner-chat-bubble, " +
       "#followmeOwnerChatMessages .message, " +
       "#followmeOwnerChatMessages .bubble, " +
       ".followme-owner-chat-messages .followme-owner-chat-bubble, " +
       ".followme-owner-chat-messages .message, " +
       ".followme-owner-chat-messages .bubble"
-    ).forEach(function(el){
-      if(!isAudioBubble(el)) return;
+    )).filter(isAudioBubble);
+  }
 
-      const key = getAudioKey(el);
+  function dedupeRobustAdminAudio(){
+    const bubbles = getAdminAudioBubbles();
+    const seenByKey = new Map();
+
+    bubbles.forEach(function(el){
+      const key = audioKey(el);
 
       /*
-        Se non ho ID né URL, NON cancello nulla:
-        evitiamo di eliminare audio diversi per errore.
+        Se non troviamo né URL né id, non cancelliamo:
+        meglio un duplicato che perdere un audio diverso.
       */
       if(!key) return;
 
-      if(seen.has(key)){
-        el.remove();
+      if(seenByKey.has(key)){
+        const first = seenByKey.get(key);
+
+        /*
+          Preferiamo tenere quello con data-message-id.
+          Se entrambi ce l’hanno, teniamo il primo apparso.
+        */
+        const firstHasId = !!(
+          first.getAttribute("data-message-id") ||
+          first.dataset.messageId ||
+          first.dataset.serverMessageId
+        );
+
+        const currentHasId = !!(
+          el.getAttribute("data-message-id") ||
+          el.dataset.messageId ||
+          el.dataset.serverMessageId
+        );
+
+        if(!firstHasId && currentHasId){
+          first.remove();
+          seenByKey.set(key, el);
+        }else{
+          el.remove();
+        }
+
         return;
       }
 
-      seen.add(key);
+      seenByKey.set(key, el);
     });
   }
 
-  if(!window.__fmAdminAudioExactDedupeFetchPatch20260519){
-    window.__fmAdminAudioExactDedupeFetchPatch20260519 = true;
+  /*
+    Seconda passata specifica per il tuo caso:
+    se il primo audio è duplicato ma uno dei due non ha URL leggibile,
+    confrontiamo solo i primi audio vicini e cancelliamo quello locale senza id.
+  */
+  function dedupeFirstLocalGhostAudio(){
+    const bubbles = getAdminAudioBubbles();
+
+    if(bubbles.length < 2) return;
+
+    const first = bubbles[0];
+    const second = bubbles[1];
+
+    const firstKey = audioKey(first);
+    const secondKey = audioKey(second);
+
+    if(firstKey && secondKey && firstKey !== secondKey) return;
+
+    const firstHasId = !!(
+      first.getAttribute("data-message-id") ||
+      first.dataset.messageId ||
+      first.dataset.serverMessageId
+    );
+
+    const secondHasId = !!(
+      second.getAttribute("data-message-id") ||
+      second.dataset.messageId ||
+      second.dataset.serverMessageId
+    );
+
+    /*
+      Cancella solo se uno dei due è chiaramente una bolla locale/senza id.
+    */
+    if(firstHasId && !secondHasId){
+      second.remove();
+    }else if(!firstHasId && secondHasId){
+      first.remove();
+    }
+  }
+
+  function run(){
+    dedupeRobustAdminAudio();
+    setTimeout(dedupeRobustAdminAudio, 120);
+    setTimeout(dedupeFirstLocalGhostAudio, 180);
+    setTimeout(dedupeRobustAdminAudio, 450);
+    setTimeout(dedupeFirstLocalGhostAudio, 700);
+    setTimeout(dedupeRobustAdminAudio, 1400);
+  }
+
+  if(!window.__fmAdminAudioRobustDedupeFetchPatch20260519){
+    window.__fmAdminAudioRobustDedupeFetchPatch20260519 = true;
     const oldFetch = window.fetch.bind(window);
 
     window.fetch = async function(input, init){
@@ -18681,9 +18855,7 @@ document.addEventListener("visibilitychange", function(){
         const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
 
         if(url && url.includes("/api/followme/chat/session/") && url.includes("/messages")){
-          setTimeout(dedupeExactAdminAudio, 80);
-          setTimeout(dedupeExactAdminAudio, 400);
-          setTimeout(dedupeExactAdminAudio, 1200);
+          run();
         }
       }catch(e){}
 
@@ -18691,23 +18863,23 @@ document.addEventListener("visibilitychange", function(){
     };
   }
 
-  function boot(){
-    dedupeExactAdminAudio();
-    setTimeout(dedupeExactAdminAudio, 300);
-    setTimeout(dedupeExactAdminAudio, 1200);
-  }
+  window.fmAdminAudioRobustDedupe20260519 = run;
 
-  window.fmAdminAudioExactDedupe20260519 = boot;
-
-  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
-  else boot();
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", run);
+  else run();
 
   window.addEventListener("load", function(){
-    setTimeout(boot, 250);
-    setTimeout(boot, 1200);
+    setTimeout(run, 250);
+    setTimeout(run, 1200);
   });
 
-  setInterval(dedupeExactAdminAudio, 1500);
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible"){
+      setTimeout(run, 250);
+    }
+  });
+
+  setInterval(run, 1200);
 })();
 </script>
 
