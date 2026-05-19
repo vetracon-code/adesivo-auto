@@ -21133,10 +21133,21 @@ document.addEventListener("visibilitychange", function(){
 
 
 
-<script id="followme-admin-handle-extra-request-clean-final-20260519">
+
+
+<script id="followme-admin-extra-request-session-filter-final-20260519">
 (function(){
-  if(window.__FollowMeAdminHandleExtraRequestCleanFinal20260519) return;
-  window.__FollowMeAdminHandleExtraRequestCleanFinal20260519 = true;
+  if(window.__FollowMeAdminExtraRequestSessionFilterFinal20260519) return;
+  window.__FollowMeAdminExtraRequestSessionFilterFinal20260519 = true;
+
+  /*
+    FIX ADMIN:
+    Le richieste Extra sono già scritte nel DB sulla sessione corretta.
+    Qui filtriamo il rendering admin:
+    - mostro una richiesta solo se payload.session_id === sessione attiva;
+    - Accetta/Rifiuta usa sempre payload.session_id;
+    - X nasconde solo il frame visivo.
+  */
 
   const handled = new Set();
 
@@ -21145,7 +21156,41 @@ document.addEventListener("visibilitychange", function(){
     return /^\d+$/.test(s) ? s : "";
   }
 
-  function parseJsonFromText(text){
+  function activeSessionId(){
+    const selectors = [
+      "#followmeStableAliasBar20260519 button.active",
+      "#followmeFixedAliasBar20260519 button.active",
+      "#followmeTopUserAliasBar20260519 button.active",
+      "#followmeSimpleUserAliasBar20260519 button.active",
+      "#followmeOwnerChatSessionStrip .active",
+      ".followme-owner-chat-session-strip .active",
+      ".followme-chat-session-strip .active",
+      ".fm-clean-session-strip .active"
+    ];
+
+    for(const sel of selectors){
+      const el = document.querySelector(sel);
+      if(!el) continue;
+
+      const sid = cleanSid(
+        el.dataset.sessionId ||
+        el.getAttribute("data-session-id") ||
+        el.dataset.id ||
+        el.getAttribute("data-id")
+      );
+
+      if(sid) return sid;
+    }
+
+    try{
+      const sid = cleanSid(window.currentOwnerSessionId || window.followMeOwnerCurrentSessionId || "");
+      if(sid) return sid;
+    }catch(e){}
+
+    return "";
+  }
+
+  function parseExtraPayload(text){
     const raw = String(text || "");
 
     try{
@@ -21166,7 +21211,7 @@ document.addEventListener("visibilitychange", function(){
     return null;
   }
 
-  function findMessageNodes(){
+  function messageContainers(){
     return Array.from(document.querySelectorAll(
       "#followmeOwnerChatMessages *," +
       ".followme-owner-chat-messages *," +
@@ -21175,9 +21220,23 @@ document.addEventListener("visibilitychange", function(){
     ));
   }
 
-  function findRequestNodes(){
-    return findMessageNodes().map(function(node){
-      const payload = parseJsonFromText(node.textContent || "");
+  function requestNodes(){
+    return messageContainers().map(function(node){
+      if(!node) return null;
+
+      /*
+        Se lo abbiamo già decorato, il payload è salvato in dataset.
+      */
+      let payload = null;
+
+      if(node.dataset && node.dataset.fmExtraPayload20260519){
+        try{ payload = JSON.parse(node.dataset.fmExtraPayload20260519); }catch(e){}
+      }
+
+      if(!payload){
+        payload = parseExtraPayload(node.textContent || "");
+      }
+
       if(!payload) return null;
 
       const sid = cleanSid(payload.session_id);
@@ -21228,136 +21287,170 @@ document.addEventListener("visibilitychange", function(){
     return data;
   }
 
-  function decorateRequest(item){
+  function buildFrame(item){
     const node = item.node;
     const payload = item.payload;
     const sid = item.sid;
-    const requestId = String(payload.request_id || ("sid-" + sid));
+    const requestId = String(payload.request_id || ("sid-" + sid + "-" + Date.now()));
 
-    if(!node || node.dataset.fmExtraCleanDecorated === requestId) return;
+    node.dataset.fmExtraPayload20260519 = JSON.stringify(payload);
+    node.dataset.fmExtraSid20260519 = sid;
+    node.dataset.fmExtraRequestId20260519 = requestId;
+    node.dataset.fmExtraDecorated20260519 = "1";
 
-    node.dataset.fmExtraCleanDecorated = requestId;
+    node.style.display = "";
+    node.style.visibility = "";
+    node.style.position = "relative";
+    node.style.maxWidth = "min(420px, 92%)";
+    node.style.marginRight = "auto";
+    node.style.padding = "12px 44px 12px 14px";
+    node.style.borderRadius = "18px";
 
     node.innerHTML = `
+      <button type="button" class="fm-extra-close-x-20260519" title="Nascondi richiesta">×</button>
       <div style="font-weight:900;margin-bottom:6px;">Richiesta Extra ricevuta.</div>
       <div style="font-weight:650;line-height:1.35;">L’utente chiede di poter inviare foto, audio, posizione e altri allegati.</div>
       <div style="font-size:11px;opacity:.55;margin-top:5px;">Sessione ${sid}</div>
+      <div class="fm-extra-actions-20260519" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+        <button type="button" class="fm-extra-accept-20260519" style="border:0;border-radius:999px;padding:9px 13px;font-weight:950;cursor:pointer;background:#16a34a;color:#fff;">Accetta Extra</button>
+        <button type="button" class="fm-extra-reject-20260519" style="border:0;border-radius:999px;padding:9px 13px;font-weight:950;cursor:pointer;background:#e5e7eb;color:#111827;">Rifiuta</button>
+      </div>
     `;
 
-    const box = document.createElement("div");
-    box.style.display = "flex";
-    box.style.gap = "8px";
-    box.style.flexWrap = "wrap";
-    box.style.marginTop = "10px";
+    const close = node.querySelector(".fm-extra-close-x-20260519");
+    const accept = node.querySelector(".fm-extra-accept-20260519");
+    const reject = node.querySelector(".fm-extra-reject-20260519");
+    const box = node.querySelector(".fm-extra-actions-20260519");
 
-    const accept = document.createElement("button");
-    accept.type = "button";
-    accept.textContent = "Accetta Extra";
-    accept.style.border = "0";
-    accept.style.borderRadius = "999px";
-    accept.style.padding = "9px 13px";
-    accept.style.fontWeight = "950";
-    accept.style.cursor = "pointer";
-    accept.style.background = "#16a34a";
-    accept.style.color = "#fff";
+    if(close){
+      close.style.position = "absolute";
+      close.style.top = "8px";
+      close.style.right = "8px";
+      close.style.width = "26px";
+      close.style.height = "26px";
+      close.style.border = "0";
+      close.style.borderRadius = "999px";
+      close.style.background = "rgba(15,23,42,.10)";
+      close.style.color = "#111827";
+      close.style.fontSize = "18px";
+      close.style.fontWeight = "950";
+      close.style.lineHeight = "24px";
+      close.style.cursor = "pointer";
 
-    const reject = document.createElement("button");
-    reject.type = "button";
-    reject.textContent = "Rifiuta";
-    reject.style.border = "0";
-    reject.style.borderRadius = "999px";
-    reject.style.padding = "9px 13px";
-    reject.style.fontWeight = "950";
-    reject.style.cursor = "pointer";
-    reject.style.background = "#e5e7eb";
-    reject.style.color = "#111827";
+      close.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
 
-    box.appendChild(accept);
-    box.appendChild(reject);
-    node.appendChild(box);
+        node.style.display = "none";
+        node.setAttribute("aria-hidden", "true");
+      }, true);
+    }
 
-    accept.addEventListener("click", async function(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
+    if(accept){
+      accept.addEventListener("click", async function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
 
-      const key = "accept-" + requestId + "-" + sid;
-      if(handled.has(key)) return;
-      handled.add(key);
+        const key = "accept-" + requestId + "-" + sid;
+        if(handled.has(key)) return;
+        handled.add(key);
 
-      accept.disabled = true;
-      reject.disabled = true;
-      accept.textContent = "Abilito...";
-
-      try{
-        await setExtra(sid, true);
-
-        await sendOwnerMessage(
-          sid,
-          "Richiesta accettata. Ora puoi inviare foto, messaggi audio, posizione e altri allegati."
-        );
-
-        accept.textContent = "Extra abilitato";
-        box.style.opacity = ".72";
+        accept.disabled = true;
+        reject.disabled = true;
+        accept.textContent = "Abilito...";
 
         try{
-          if(typeof window.refreshFollowMeOwnerChatSessions === "function"){
-            window.refreshFollowMeOwnerChatSessions();
-          }
-        }catch(e){}
+          await setExtra(sid, true);
+          await sendOwnerMessage(
+            sid,
+            "Richiesta accettata. Ora puoi inviare foto, messaggi audio, posizione e altri allegati."
+          );
 
-      }catch(err){
-        handled.delete(key);
-        accept.disabled = false;
-        reject.disabled = false;
-        accept.textContent = "Accetta Extra";
-        alert(err.message || "Errore abilitazione Extra.");
-      }
-    }, true);
+          accept.textContent = "Extra abilitato";
+          if(box) box.style.opacity = ".72";
 
-    reject.addEventListener("click", async function(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
+          try{
+            if(typeof window.refreshFollowMeOwnerChatSessions === "function"){
+              window.refreshFollowMeOwnerChatSessions();
+            }
+          }catch(e){}
 
-      const key = "reject-" + requestId + "-" + sid;
-      if(handled.has(key)) return;
-      handled.add(key);
+        }catch(err){
+          handled.delete(key);
+          accept.disabled = false;
+          reject.disabled = false;
+          accept.textContent = "Accetta Extra";
+          alert(err.message || "Errore abilitazione Extra.");
+        }
+      }, true);
+    }
 
-      accept.disabled = true;
-      reject.disabled = true;
-      reject.textContent = "Rifiuto...";
+    if(reject){
+      reject.addEventListener("click", async function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
 
-      try{
-        await sendOwnerMessage(
-          sid,
-          "In questo momento non è possibile abilitare l’invio Extra. Riprova più tardi."
-        );
+        const key = "reject-" + requestId + "-" + sid;
+        if(handled.has(key)) return;
+        handled.add(key);
 
-        reject.textContent = "Rifiutato";
-        box.style.opacity = ".72";
+        accept.disabled = true;
+        reject.disabled = true;
+        reject.textContent = "Rifiuto...";
 
-      }catch(err){
-        handled.delete(key);
-        accept.disabled = false;
-        reject.disabled = false;
-        reject.textContent = "Rifiuta";
-        alert(err.message || "Errore invio rifiuto.");
-      }
-    }, true);
+        try{
+          await sendOwnerMessage(
+            sid,
+            "In questo momento non è possibile abilitare l’invio Extra. Riprova più tardi."
+          );
+
+          reject.textContent = "Rifiutato";
+          if(box) box.style.opacity = ".72";
+
+        }catch(err){
+          handled.delete(key);
+          accept.disabled = false;
+          reject.disabled = false;
+          reject.textContent = "Rifiuta";
+          alert(err.message || "Errore invio rifiuto.");
+        }
+      }, true);
+    }
   }
 
   function scan(){
-    findRequestNodes().forEach(decorateRequest);
+    const active = activeSessionId();
+
+    requestNodes().forEach(function(item){
+      /*
+        Se ho una sessione attiva, mostro solo le richieste di quella sessione.
+        Questo impedisce che Utente 2 venga mostrato dentro Utente 1.
+      */
+      if(active && item.sid !== active){
+        item.node.style.display = "none";
+        item.node.setAttribute("aria-hidden", "true");
+        return;
+      }
+
+      item.node.style.display = "";
+      item.node.removeAttribute("aria-hidden");
+
+      if(item.node.dataset.fmExtraDecorated20260519 !== "1"){
+        buildFrame(item);
+      }
+    });
   }
 
   function boot(){
     scan();
-    setTimeout(scan, 400);
-    setTimeout(scan, 1200);
+    setTimeout(scan, 300);
+    setTimeout(scan, 1000);
   }
 
-  window.fmAdminHandleExtraRequestClean20260519 = {
+  window.fmAdminExtraRequestSessionFilter20260519 = {
     boot,
-    scan
+    scan,
+    activeSessionId
   };
 
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
@@ -21372,7 +21465,7 @@ document.addEventListener("visibilitychange", function(){
     setTimeout(boot, 250);
   });
 
-  setInterval(scan, 1200);
+  setInterval(scan, 800);
 })();
 </script>
 
