@@ -20848,5 +20848,261 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+
+
+<script id="followme-admin-simple-user-alias-bar-final-20260519">
+(function(){
+  if(window.__FollowMeAdminSimpleUserAliasBarFinal20260519) return;
+  window.__FollowMeAdminSimpleUserAliasBarFinal20260519 = true;
+
+  /*
+    Barra alias semplice:
+    - mostra solo Utente 1, Utente 2, Utente 3...
+    - non mostra badge, stati, extra, pausa, codici tecnici
+    - al click richiama il chip reale corrispondente
+    - non modifica logica interna
+  */
+
+  function ensureStyle(){
+    if(document.getElementById("followmeAdminSimpleUserAliasBarStyle20260519")) return;
+
+    const style = document.createElement("style");
+    style.id = "followmeAdminSimpleUserAliasBarStyle20260519";
+    style.textContent = `
+      #followmeSimpleUserAliasBar20260519{
+        display:flex;
+        flex-wrap:nowrap;
+        gap:8px;
+        align-items:center;
+        overflow-x:auto;
+        overflow-y:hidden;
+        padding:8px 4px 10px;
+        margin:6px 0 8px;
+        min-height:52px;
+        border-radius:16px;
+        background:rgba(248,250,252,.86);
+        border:1px solid rgba(15,23,42,.08);
+        -webkit-overflow-scrolling:touch;
+      }
+
+      #followmeSimpleUserAliasBar20260519 button{
+        flex:0 0 auto;
+        min-width:104px;
+        height:40px;
+        border:1px solid rgba(15,23,42,.12);
+        border-radius:999px;
+        padding:0 16px;
+        background:#ffffff;
+        color:#0f172a;
+        font-weight:900;
+        font-size:14px;
+        letter-spacing:-.01em;
+        cursor:pointer;
+        white-space:nowrap;
+        box-shadow:0 6px 16px rgba(15,23,42,.08);
+        transition:background-color .15s ease, color .15s ease, border-color .15s ease;
+      }
+
+      #followmeSimpleUserAliasBar20260519 button.active{
+        background:#111827;
+        color:#ffffff;
+        border-color:#111827;
+      }
+
+      #followmeSimpleUserAliasBar20260519 button:hover{
+        border-color:#111827;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function getRealStrip(){
+    return document.querySelector("#followmeOwnerChatSessionStrip") ||
+           document.querySelector(".followme-owner-chat-session-strip") ||
+           document.querySelector(".followme-chat-session-strip") ||
+           document.querySelector(".fm-clean-session-strip");
+  }
+
+  function getRealChips(){
+    const strip = getRealStrip();
+    if(!strip) return [];
+
+    const chips = Array.from(strip.querySelectorAll(
+      "button, .followme-chat-session-chip, [data-session-id], [data-id]"
+    )).filter(function(el){
+      if(!el) return false;
+
+      const text = String(el.textContent || "").replace(/\s+/g, " ").trim();
+      const sid = getSessionIdFromChip(el);
+
+      /*
+        Deve essere un vero elemento sessione: o ha data-session-id/data-id,
+        o ha un testo tipo Utente.
+      */
+      return !!sid || /^Utente\b/i.test(text);
+    });
+
+    /*
+      Rimuove duplicati DOM sullo stesso session id.
+    */
+    const seen = new Set();
+    const out = [];
+
+    chips.forEach(function(chip){
+      const sid = getSessionIdFromChip(chip) || chip.textContent;
+
+      if(seen.has(sid)) return;
+      seen.add(sid);
+      out.push(chip);
+    });
+
+    return out;
+  }
+
+  function getSessionIdFromChip(chip){
+    if(!chip) return "";
+
+    return String(
+      chip.dataset.sessionId ||
+      chip.getAttribute("data-session-id") ||
+      chip.dataset.id ||
+      chip.getAttribute("data-id") ||
+      ""
+    ).trim();
+  }
+
+  function ensureBar(){
+    ensureStyle();
+
+    let bar = document.getElementById("followmeSimpleUserAliasBar20260519");
+    if(bar) return bar;
+
+    bar = document.createElement("div");
+    bar.id = "followmeSimpleUserAliasBar20260519";
+    bar.setAttribute("aria-label", "Utenti FollowMe");
+
+    const strip = getRealStrip();
+
+    if(strip && strip.parentElement){
+      strip.parentElement.insertBefore(bar, strip);
+
+      /*
+        Non eliminiamo la barra reale: la lasciamo al sistema.
+        La rendiamo solo meno dominante, ma disponibile.
+      */
+      strip.style.minHeight = "1px";
+      strip.style.maxHeight = "34px";
+      strip.style.opacity = "0.28";
+      strip.style.overflowX = "auto";
+    }else{
+      document.body.insertBefore(bar, document.body.firstChild);
+    }
+
+    return bar;
+  }
+
+  function isChipActive(chip){
+    if(!chip) return false;
+
+    return chip.classList.contains("active") ||
+           chip.getAttribute("aria-selected") === "true" ||
+           chip.dataset.active === "true";
+  }
+
+  function clickRealChip(chip){
+    if(!chip) return;
+
+    try{
+      chip.scrollIntoView({ behavior:"smooth", inline:"center", block:"nearest" });
+    }catch(e){}
+
+    /*
+      Click reale: usa la logica interna già esistente.
+    */
+    chip.dispatchEvent(new MouseEvent("click", {
+      bubbles:true,
+      cancelable:true,
+      view:window
+    }));
+  }
+
+  function renderBar(){
+    const bar = ensureBar();
+    const chips = getRealChips();
+
+    if(!bar) return;
+
+    const currentKeys = chips.map(function(chip, idx){
+      return getSessionIdFromChip(chip) || String(idx + 1);
+    }).join("|");
+
+    if(bar.dataset.keys === currentKeys && bar.children.length === chips.length){
+      /*
+        Aggiorna solo stato active.
+      */
+      Array.from(bar.children).forEach(function(btn, idx){
+        btn.classList.toggle("active", isChipActive(chips[idx]));
+      });
+      return;
+    }
+
+    bar.dataset.keys = currentKeys;
+    bar.innerHTML = "";
+
+    chips.forEach(function(chip, idx){
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = "Utente " + (idx + 1);
+      btn.title = "Utente " + (idx + 1);
+      btn.dataset.aliasIndex = String(idx + 1);
+
+      const sid = getSessionIdFromChip(chip);
+      if(sid) btn.dataset.sessionId = sid;
+
+      btn.classList.toggle("active", isChipActive(chip));
+
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        clickRealChip(chip);
+        setTimeout(renderBar, 120);
+      }, true);
+
+      bar.appendChild(btn);
+    });
+  }
+
+  function boot(){
+    renderBar();
+    setTimeout(renderBar, 250);
+    setTimeout(renderBar, 1000);
+  }
+
+  window.fmAdminSimpleUserAliasBar20260519 = {
+    boot,
+    renderBar
+  };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(renderBar, 1200);
+})();
+</script>
+
 </body>
 </html>
