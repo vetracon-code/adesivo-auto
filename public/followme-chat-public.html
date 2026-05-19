@@ -2286,6 +2286,581 @@
 })();
 </script>
 
+
+
+<script id="followme-public-audio-panel-fix-20260519">
+(function(){
+  if(window.__FollowMePublicAudioPanelFix20260519) return;
+  window.__FollowMePublicAudioPanelFix20260519 = true;
+
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let audioBlob = null;
+  let audioStream = null;
+  let isRecording = false;
+  let startedAt = 0;
+  let timer = null;
+
+  function cleanSid(v){
+    const s = String(v || "").trim();
+    return /^\d+$/.test(s) ? s : "";
+  }
+
+  function getSid(){
+    try{
+      const q = new URLSearchParams(location.search || "");
+      const fromUrl = cleanSid(q.get("session") || q.get("chatSession"));
+      if(fromUrl) return fromUrl;
+    }catch(e){}
+
+    const arr = [
+      window.followMeChatSessionId,
+      window.FOLLOWME_CHAT_SESSION_ID
+    ];
+
+    try{ arr.push(sessionStorage.getItem("followme_chat_session_id")); }catch(e){}
+    try{ arr.push(localStorage.getItem("followme_chat_session_id")); }catch(e){}
+
+    for(const v of arr){
+      const sid = cleanSid(v);
+      if(sid) return sid;
+    }
+
+    return "";
+  }
+
+  function canUseExtra(){
+    return document.body.classList.contains("fm-public-extra-inline-on") &&
+           !document.body.classList.contains("fm-public-clean-blocked");
+  }
+
+  function findComposer(){
+    return document.querySelector(".followme-public-composer") ||
+           document.querySelector(".composer") ||
+           document.querySelector("form") ||
+           document.body;
+  }
+
+  function chooseMimeType(){
+    try{
+      if(!window.MediaRecorder || !MediaRecorder.isTypeSupported) return "";
+
+      const candidates = [
+        "audio/mp4",
+        "audio/aac",
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/ogg;codecs=opus"
+      ];
+
+      for(const type of candidates){
+        if(MediaRecorder.isTypeSupported(type)) return type;
+      }
+    }catch(e){}
+
+    return "";
+  }
+
+  function extensionForMime(mime){
+    mime = String(mime || "").toLowerCase();
+
+    if(mime.includes("mp4")) return "m4a";
+    if(mime.includes("aac")) return "aac";
+    if(mime.includes("ogg")) return "ogg";
+    if(mime.includes("webm")) return "webm";
+
+    return "audio";
+  }
+
+  function injectCss(){
+    if(document.getElementById("followmePublicAudioPanelFixCss20260519")) return;
+
+    const style = document.createElement("style");
+    style.id = "followmePublicAudioPanelFixCss20260519";
+    style.textContent = `
+      #fmPublicAudioPanel20260519{
+        display:none;
+        position:absolute;
+        left:10px;
+        right:10px;
+        bottom:58px;
+        z-index:100000;
+        background:#ffffff;
+        color:#202629;
+        border-radius:22px;
+        border:1px solid rgba(0,0,0,.10);
+        box-shadow:0 18px 60px rgba(0,0,0,.28);
+        padding:12px;
+        box-sizing:border-box;
+      }
+
+      #fmPublicAudioPanel20260519.is-open{
+        display:block !important;
+      }
+
+      body.fm-public-clean-blocked #fmPublicAudioPanel20260519,
+      body:not(.fm-public-extra-inline-on) #fmPublicAudioPanel20260519{
+        display:none !important;
+      }
+
+      #fmPublicAudioPanel20260519 .fm-audio-title{
+        font-size:.86rem;
+        font-weight:950;
+        margin-bottom:6px;
+      }
+
+      #fmPublicAudioPanel20260519 .fm-audio-status{
+        min-height:22px;
+        font-size:.76rem;
+        line-height:1.35;
+        color:#667085;
+        font-weight:800;
+        margin-bottom:10px;
+      }
+
+      #fmPublicAudioPanel20260519 .fm-audio-actions{
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:8px;
+      }
+
+      #fmPublicAudioPanel20260519 button{
+        min-height:40px;
+        border-radius:999px;
+        border:1px solid rgba(0,0,0,.08);
+        background:#f6f7f8;
+        color:#202629;
+        font-size:.82rem;
+        font-weight:950;
+        cursor:pointer;
+      }
+
+      #fmPublicAudioPanel20260519 button.primary{
+        background:#25d366;
+        color:#ffffff;
+        border-color:rgba(37,211,102,.45);
+      }
+
+      #fmPublicAudioPanel20260519 button.danger{
+        background:#fff1ef;
+        color:#b42318;
+      }
+
+      #fmPublicAudioPanel20260519 button.warn{
+        background:#fff7e8;
+        color:#9a5b00;
+      }
+
+      #fmPublicAudioPanel20260519 button:disabled{
+        opacity:.45;
+        cursor:not-allowed;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function ensurePanel(){
+    let panel = document.getElementById("fmPublicAudioPanel20260519");
+    if(panel) return panel;
+
+    const composer = findComposer();
+
+    try{
+      if(getComputedStyle(composer).position === "static"){
+        composer.style.position = "relative";
+      }
+    }catch(e){
+      composer.style.position = "relative";
+    }
+
+    panel = document.createElement("div");
+    panel.id = "fmPublicAudioPanel20260519";
+    panel.innerHTML = `
+      <div class="fm-audio-title">Messaggio audio</div>
+      <div class="fm-audio-status" id="fmPublicAudioStatus20260519">Premi Registra per autorizzare il microfono e iniziare.</div>
+      <div class="fm-audio-actions">
+        <button type="button" id="fmPublicAudioStart20260519" class="primary">Registra</button>
+        <button type="button" id="fmPublicAudioStop20260519" class="warn" disabled>Stop</button>
+        <button type="button" id="fmPublicAudioSend20260519" class="primary" disabled>Invia audio</button>
+        <button type="button" id="fmPublicAudioCancel20260519" class="danger">Annulla</button>
+      </div>
+    `;
+
+    composer.appendChild(panel);
+    bindPanel();
+
+    return panel;
+  }
+
+  function setStatus(msg){
+    const el = document.getElementById("fmPublicAudioStatus20260519");
+    if(el) el.textContent = msg;
+  }
+
+  function setButtons(state){
+    const start = document.getElementById("fmPublicAudioStart20260519");
+    const stop = document.getElementById("fmPublicAudioStop20260519");
+    const send = document.getElementById("fmPublicAudioSend20260519");
+
+    if(!start || !stop || !send) return;
+
+    if(state === "idle"){
+      start.disabled = false;
+      stop.disabled = true;
+      send.disabled = true;
+    }
+
+    if(state === "recording"){
+      start.disabled = true;
+      stop.disabled = false;
+      send.disabled = true;
+    }
+
+    if(state === "ready"){
+      start.disabled = false;
+      stop.disabled = true;
+      send.disabled = false;
+    }
+
+    if(state === "sending"){
+      start.disabled = true;
+      stop.disabled = true;
+      send.disabled = true;
+    }
+  }
+
+  function openPanel(){
+    if(!canUseExtra()) return;
+
+    const panel = ensurePanel();
+    panel.classList.add("is-open");
+
+    if(audioBlob){
+      setButtons("ready");
+      setStatus("Audio pronto. Puoi inviarlo o registrarlo di nuovo.");
+    }else{
+      setButtons("idle");
+      setStatus("Premi Registra per autorizzare il microfono e iniziare.");
+    }
+  }
+
+  function closePanel(){
+    const panel = document.getElementById("fmPublicAudioPanel20260519");
+    if(panel) panel.classList.remove("is-open");
+  }
+
+  function resetAudio(){
+    try{
+      if(mediaRecorder && isRecording){
+        mediaRecorder.stop();
+      }
+    }catch(e){}
+
+    try{
+      if(audioStream){
+        audioStream.getTracks().forEach(t => t.stop());
+      }
+    }catch(e){}
+
+    mediaRecorder = null;
+    audioChunks = [];
+    audioBlob = null;
+    audioStream = null;
+    isRecording = false;
+    startedAt = 0;
+
+    if(timer){
+      clearInterval(timer);
+      timer = null;
+    }
+
+    setButtons("idle");
+    setStatus("Premi Registra per autorizzare il microfono e iniziare.");
+  }
+
+  function updateTimer(){
+    if(!isRecording || !startedAt) return;
+
+    const sec = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+    setStatus("Registrazione in corso… " + sec + "s");
+  }
+
+  async function startRecording(){
+    try{
+      if(!canUseExtra()) return;
+
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        setStatus("Microfono non supportato su questo dispositivo/browser.");
+        return;
+      }
+
+      if(!window.MediaRecorder){
+        setStatus("Registrazione audio non supportata da questo browser.");
+        return;
+      }
+
+      resetAudio();
+
+      setStatus("Richiesta autorizzazione microfono…");
+
+      audioStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+
+      const mimeType = chooseMimeType();
+      const options = mimeType ? { mimeType } : undefined;
+
+      audioChunks = [];
+      mediaRecorder = new MediaRecorder(audioStream, options);
+
+      mediaRecorder.ondataavailable = function(ev){
+        if(ev.data && ev.data.size > 0){
+          audioChunks.push(ev.data);
+        }
+      };
+
+      mediaRecorder.onerror = function(ev){
+        console.warn("MediaRecorder error:", ev);
+        setStatus("Errore registrazione audio.");
+      };
+
+      mediaRecorder.onstop = function(){
+        try{
+          if(audioStream){
+            audioStream.getTracks().forEach(t => t.stop());
+          }
+        }catch(e){}
+
+        audioStream = null;
+        isRecording = false;
+
+        if(timer){
+          clearInterval(timer);
+          timer = null;
+        }
+
+        const finalMime = mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : (mimeType || "audio/webm");
+
+        if(!audioChunks.length){
+          audioBlob = null;
+          setButtons("idle");
+          setStatus("Registrazione vuota. Riprova parlando dopo aver premuto Registra.");
+          return;
+        }
+
+        audioBlob = new Blob(audioChunks, { type: finalMime });
+
+        if(!audioBlob || audioBlob.size < 1000){
+          setButtons("idle");
+          setStatus("Audio troppo breve o vuoto. Riprova.");
+          return;
+        }
+
+        setButtons("ready");
+        setStatus("Audio registrato. Premi Invia audio.");
+      };
+
+      mediaRecorder.start(250);
+      isRecording = true;
+      startedAt = Date.now();
+
+      setButtons("recording");
+      setStatus("Registrazione in corso… 0s");
+
+      timer = setInterval(updateTimer, 500);
+
+    }catch(err){
+      console.error("startRecording error:", err);
+
+      resetAudio();
+
+      const msg = String(err && (err.name || err.message) || err || "");
+
+      if(msg.includes("NotAllowed") || msg.includes("Permission") || msg.includes("denied")){
+        setStatus("Microfono non autorizzato. Consenti l’uso del microfono nelle impostazioni di Safari/iPhone e riprova.");
+      }else{
+        setStatus("Errore microfono: " + (err.message || msg || "non disponibile"));
+      }
+    }
+  }
+
+  function stopRecording(){
+    try{
+      if(mediaRecorder && isRecording){
+        setStatus("Preparazione audio…");
+        mediaRecorder.stop();
+      }
+    }catch(err){
+      console.error("stopRecording error:", err);
+      setStatus("Errore stop registrazione.");
+      resetAudio();
+    }
+  }
+
+  async function uploadAudio(){
+    try{
+      if(!audioBlob || audioBlob.size <= 0){
+        setStatus("Nessun audio da inviare.");
+        return;
+      }
+
+      const sid = getSid();
+      if(!sid){
+        setStatus("Sessione chat mancante.");
+        return;
+      }
+
+      setButtons("sending");
+      setStatus("Invio audio…");
+
+      const mime = audioBlob.type || "audio/webm";
+      const ext = extensionForMime(mime);
+      const filename = "audio_" + Date.now() + "." + ext;
+
+      const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/attachment-raw", {
+        method:"POST",
+        headers:{
+          "Content-Type": mime,
+          "X-FollowMe-Sender": "visitor",
+          "X-FollowMe-Kind": "audio",
+          "X-FollowMe-Filename": encodeURIComponent(filename)
+        },
+        body: await audioBlob.arrayBuffer()
+      });
+
+      const data = await res.json().catch(()=>null);
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Errore invio audio.");
+      }
+
+      if(window.fmPublicAppendLocalAttachmentBubble20260519 && data.attachment){
+        window.fmPublicAppendLocalAttachmentBubble20260519(data.attachment, "visitor");
+      }
+
+      if(window.fmPublicRenderAllAttachments20260519){
+        window.fmPublicRenderAllAttachments20260519();
+      }
+
+      try{
+        if(typeof window.followMePublicLoadMessages === "function") window.followMePublicLoadMessages();
+      }catch(e){}
+
+      try{
+        if(typeof window.loadMessages === "function") window.loadMessages();
+      }catch(e){}
+
+      setStatus("Audio inviato.");
+      closePanel();
+
+      audioBlob = null;
+      audioChunks = [];
+      setButtons("idle");
+
+    }catch(err){
+      console.error("uploadAudio error:", err);
+      setButtons("ready");
+      setStatus(err.message || "Errore invio audio.");
+    }
+  }
+
+  function bindPanel(){
+    const start = document.getElementById("fmPublicAudioStart20260519");
+    const stop = document.getElementById("fmPublicAudioStop20260519");
+    const send = document.getElementById("fmPublicAudioSend20260519");
+    const cancel = document.getElementById("fmPublicAudioCancel20260519");
+
+    if(start && start.dataset.boundAudioFix !== "1"){
+      start.dataset.boundAudioFix = "1";
+      start.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        startRecording();
+      }, true);
+    }
+
+    if(stop && stop.dataset.boundAudioFix !== "1"){
+      stop.dataset.boundAudioFix = "1";
+      stop.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        stopRecording();
+      }, true);
+    }
+
+    if(send && send.dataset.boundAudioFix !== "1"){
+      send.dataset.boundAudioFix = "1";
+      send.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        uploadAudio();
+      }, true);
+    }
+
+    if(cancel && cancel.dataset.boundAudioFix !== "1"){
+      cancel.dataset.boundAudioFix = "1";
+      cancel.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        resetAudio();
+        closePanel();
+      }, true);
+    }
+  }
+
+  function patchExistingAudioButton(){
+    const oldBtn = document.getElementById("fmPublicAudioBtn20260519");
+
+    if(!oldBtn || oldBtn.dataset.audioPanelPatched === "1") return;
+
+    oldBtn.dataset.audioPanelPatched = "1";
+    oldBtn.textContent = "🎙️ Audio";
+
+    oldBtn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+
+      openPanel();
+    }, true);
+  }
+
+  function boot(){
+    injectCss();
+    ensurePanel();
+    patchExistingAudioButton();
+    setButtons(audioBlob ? "ready" : "idle");
+
+    setTimeout(patchExistingAudioButton, 300);
+    setTimeout(patchExistingAudioButton, 900);
+  }
+
+  window.fmPublicOpenAudioPanel20260519 = openPanel;
+  window.fmPublicAudioDebug20260519 = function(){
+    return {
+      hasMediaDevices:!!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+      hasMediaRecorder:!!window.MediaRecorder,
+      chosenMime:chooseMimeType(),
+      isRecording,
+      hasBlob:!!audioBlob,
+      blobSize:audioBlob ? audioBlob.size : 0
+    };
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(patchExistingAudioButton, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(patchExistingAudioButton, 2000);
+})();
+</script>
+
 </body>
 </html>
 
