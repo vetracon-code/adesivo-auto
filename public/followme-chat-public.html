@@ -5838,6 +5838,224 @@
 })();
 </script>
 
+
+
+<script id="followme-public-resume-pause-force-final-20260519">
+(function(){
+  if(window.__FollowMePublicResumePauseForceFinal20260519) return;
+  window.__FollowMePublicResumePauseForceFinal20260519 = true;
+
+  function cleanSid(v){
+    const s = String(v || "").trim();
+    return /^\d+$/.test(s) ? s : "";
+  }
+
+  function sessionId(){
+    try{
+      const p = new URLSearchParams(location.search || "");
+      const fromUrl = cleanSid(p.get("session") || p.get("chatSession"));
+      if(fromUrl) return fromUrl;
+    }catch(e){}
+
+    const arr = [
+      window.followMeChatSessionId,
+      window.FOLLOWME_CHAT_SESSION_ID
+    ];
+
+    try{ arr.push(sessionStorage.getItem("followme_chat_session_id")); }catch(e){}
+    try{ arr.push(localStorage.getItem("followme_chat_session_id")); }catch(e){}
+
+    for(const v of arr){
+      const sid = cleanSid(v);
+      if(sid) return sid;
+    }
+
+    return "";
+  }
+
+  function removePauseStorage(){
+    try{
+      const sid = sessionId();
+
+      [
+        "followme_chat_user_paused_" + sid,
+        "followme_chat_user_paused_unknown"
+      ].forEach(function(k){
+        localStorage.removeItem(k);
+        sessionStorage.removeItem(k);
+      });
+
+      Object.keys(localStorage).forEach(function(k){
+        if(k.includes("followme_chat_user_paused")) localStorage.removeItem(k);
+      });
+
+      Object.keys(sessionStorage).forEach(function(k){
+        if(k.includes("followme_chat_user_paused")) sessionStorage.removeItem(k);
+      });
+    }catch(e){}
+  }
+
+  function findInput(){
+    return document.getElementById("messageInput") ||
+           document.querySelector("textarea") ||
+           document.querySelector("input[type='text']");
+  }
+
+  function findSend(){
+    return document.getElementById("sendBtn") ||
+           document.querySelector("button[type='submit']") ||
+           document.querySelector(".send-btn");
+  }
+
+  function hidePauseOverlays(){
+    [
+      "followmePublicPauseOverlay20260519"
+    ].forEach(function(id){
+      const el = document.getElementById(id);
+      if(el){
+        el.style.display = "none";
+        el.setAttribute("aria-hidden", "true");
+      }
+    });
+
+    document.body.classList.remove("followme-public-locally-paused");
+
+    const input = findInput();
+    const send = findSend();
+
+    if(input){
+      input.disabled = false;
+      input.placeholder = "Digita il testo qui e premi invio";
+    }
+
+    if(send){
+      send.disabled = false;
+    }
+  }
+
+  async function unpauseServer(){
+    const sid = sessionId();
+    if(!sid) return;
+
+    /*
+      Endpoint già usato dalla patch pausa:
+      /api/followme/chat/session/:id/pause
+    */
+    try{
+      await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/pause", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ is_user_paused:false })
+      });
+    }catch(e){}
+
+    /*
+      Fallback: se qualche endpoint usa set-user-control/state management.
+      Non blocca se fallisce.
+    */
+    try{
+      await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/set-user-control", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ is_user_paused:false })
+      });
+    }catch(e){}
+  }
+
+  async function forceResume(){
+    removePauseStorage();
+    hidePauseOverlays();
+
+    await unpauseServer();
+
+    removePauseStorage();
+    hidePauseOverlays();
+
+    try{
+      if(window.fmPublicPauseResume20260519 && typeof window.fmPublicPauseResume20260519.setPausedLocal === "function"){
+        window.fmPublicPauseResume20260519.setPausedLocal(false);
+      }
+    }catch(e){}
+
+    try{
+      if(window.fmPublicFastStateOnly20260519 && typeof window.fmPublicFastStateOnly20260519.fetchState === "function"){
+        setTimeout(window.fmPublicFastStateOnly20260519.fetchState, 80);
+      }
+    }catch(e){}
+
+    try{
+      if(typeof window.followMePublicLoadMessages === "function"){
+        setTimeout(window.followMePublicLoadMessages, 120);
+      }
+    }catch(e){}
+
+    try{
+      if(typeof window.loadMessages === "function"){
+        setTimeout(window.loadMessages, 120);
+      }
+    }catch(e){}
+
+    setTimeout(hidePauseOverlays, 150);
+    setTimeout(hidePauseOverlays, 500);
+    setTimeout(hidePauseOverlays, 1200);
+  }
+
+  function bindResumeButtons(){
+    document.querySelectorAll("button,a").forEach(function(el){
+      const t = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+
+      if(t !== "riprendi") return;
+
+      if(el.dataset.followmeForceResumeBound20260519) return;
+      el.dataset.followmeForceResumeBound20260519 = "1";
+
+      el.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        forceResume();
+        return false;
+      }, true);
+    });
+  }
+
+  function boot(){
+    bindResumeButtons();
+
+    /*
+      Se per errore il body non è in pausa ma l'overlay è visibile,
+      la nascondiamo.
+    */
+    if(!document.body.classList.contains("followme-public-locally-paused")){
+      hidePauseOverlays();
+    }
+
+    setTimeout(bindResumeButtons, 300);
+    setTimeout(bindResumeButtons, 900);
+  }
+
+  window.fmPublicResumePauseForce20260519 = {
+    boot,
+    forceResume,
+    hidePauseOverlays
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1000);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(bindResumeButtons, 1000);
+})();
+</script>
+
 </body>
 </html>
 
