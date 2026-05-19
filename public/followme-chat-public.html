@@ -5388,6 +5388,315 @@
 })();
 </script>
 
+
+
+<script id="followme-public-pause-resume-final-20260519">
+(function(){
+  if(window.__FollowMePublicPauseResumeFinal20260519) return;
+  window.__FollowMePublicPauseResumeFinal20260519 = true;
+
+  function cleanSid(v){
+    const s = String(v || "").trim();
+    return /^\d+$/.test(s) ? s : "";
+  }
+
+  function sessionId(){
+    try{
+      const p = new URLSearchParams(location.search || "");
+      const fromUrl = cleanSid(p.get("session") || p.get("chatSession"));
+      if(fromUrl) return fromUrl;
+    }catch(e){}
+
+    const arr = [
+      window.followMeChatSessionId,
+      window.FOLLOWME_CHAT_SESSION_ID
+    ];
+
+    try{ arr.push(sessionStorage.getItem("followme_chat_session_id")); }catch(e){}
+    try{ arr.push(localStorage.getItem("followme_chat_session_id")); }catch(e){}
+
+    for(const v of arr){
+      const sid = cleanSid(v);
+      if(sid) return sid;
+    }
+
+    return "";
+  }
+
+  function storageKey(){
+    return "followme_chat_user_paused_" + (sessionId() || "unknown");
+  }
+
+  function findInput(){
+    return document.getElementById("messageInput") ||
+           document.querySelector("textarea") ||
+           document.querySelector("input[type='text']");
+  }
+
+  function findSend(){
+    return document.getElementById("sendBtn") ||
+           document.querySelector("button[type='submit']") ||
+           document.querySelector(".send-btn");
+  }
+
+  function setPausedLocal(value){
+    try{
+      if(value) localStorage.setItem(storageKey(), "1");
+      else localStorage.removeItem(storageKey());
+    }catch(e){}
+
+    document.body.classList.toggle("followme-public-locally-paused", !!value);
+
+    const input = findInput();
+    const send = findSend();
+
+    if(input){
+      input.disabled = !!value;
+
+      if(value){
+        input.dataset.fmPauseOldPlaceholder = input.placeholder || "";
+        input.placeholder = "Chat in pausa";
+      }else{
+        input.placeholder = "Digita il testo qui e premi invio";
+      }
+    }
+
+    if(send){
+      send.disabled = !!value;
+    }
+
+    ensurePauseOverlay();
+  }
+
+  async function syncPauseServer(value){
+    const sid = sessionId();
+    if(!sid) return;
+
+    try{
+      await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/pause", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ is_user_paused: !!value })
+      });
+    }catch(e){}
+  }
+
+  function pauseChat(){
+    setPausedLocal(true);
+    syncPauseServer(true);
+  }
+
+  function resumeChat(){
+    setPausedLocal(false);
+    syncPauseServer(false);
+
+    /*
+      Dopo Riprendi ricarichiamo messaggi/stato se le funzioni esistono,
+      ma senza toccare la pipeline principale.
+    */
+    try{
+      if(typeof window.followMePublicLoadMessages === "function") {
+        setTimeout(window.followMePublicLoadMessages, 100);
+      }
+    }catch(e){}
+
+    try{
+      if(typeof window.loadMessages === "function") {
+        setTimeout(window.loadMessages, 100);
+      }
+    }catch(e){}
+
+    try{
+      if(window.fmPublicFastStateOnly20260519 && typeof window.fmPublicFastStateOnly20260519.fetchState === "function"){
+        setTimeout(window.fmPublicFastStateOnly20260519.fetchState, 100);
+      }
+    }catch(e){}
+  }
+
+  function ensurePauseOverlay(){
+    let overlay = document.getElementById("followmePublicPauseOverlay20260519");
+
+    if(!overlay){
+      overlay = document.createElement("div");
+      overlay.id = "followmePublicPauseOverlay20260519";
+      document.body.appendChild(overlay);
+    }
+
+    overlay.innerHTML = `
+      <div class="fm-pause-card">
+        <div class="fm-hourglass">⌛</div>
+        <h2>Chat messa in pausa</h2>
+        <p>Attendi…<br>Puoi riprendere la conversazione quando vuoi.</p>
+        <button type="button" id="followmePublicResumeBtn20260519">Riprendi</button>
+      </div>
+    `;
+
+    const btn = document.getElementById("followmePublicResumeBtn20260519");
+    if(btn && !btn.dataset.boundResume){
+      btn.dataset.boundResume = "1";
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        resumeChat();
+      }, true);
+    }
+
+    ensurePauseStyle();
+  }
+
+  function ensurePauseStyle(){
+    if(document.getElementById("followmePublicPauseResumeStyle20260519")) return;
+
+    const style = document.createElement("style");
+    style.id = "followmePublicPauseResumeStyle20260519";
+    style.textContent = `
+      body.followme-public-locally-paused #followmePublicPauseOverlay20260519{
+        display:flex !important;
+      }
+
+      body:not(.followme-public-locally-paused) #followmePublicPauseOverlay20260519{
+        display:none !important;
+      }
+
+      #followmePublicPauseOverlay20260519{
+        display:none;
+        position:fixed;
+        inset:0;
+        z-index:99997;
+        align-items:center;
+        justify-content:center;
+        padding:22px;
+        background:rgba(248,250,252,.94);
+        backdrop-filter:blur(16px);
+        color:#0f172a;
+      }
+
+      #followmePublicPauseOverlay20260519 .fm-pause-card{
+        width:min(420px, 94vw);
+        border-radius:30px;
+        background:rgba(255,255,255,.94);
+        border:1px solid rgba(15,23,42,.08);
+        box-shadow:0 24px 70px rgba(15,23,42,.16);
+        padding:28px 24px;
+        text-align:center;
+      }
+
+      #followmePublicPauseOverlay20260519 .fm-hourglass{
+        width:54px;
+        height:54px;
+        margin:0 auto 16px;
+        border-radius:18px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        background:#f8fafc;
+        font-size:30px;
+        animation:fmHourglassRotateResume20260519 1.6s ease-in-out infinite;
+      }
+
+      @keyframes fmHourglassRotateResume20260519{
+        0%, 100%{ transform:rotate(0deg); }
+        50%{ transform:rotate(180deg); }
+      }
+
+      #followmePublicPauseOverlay20260519 h2{
+        margin:0 0 8px;
+        font-size:1.35rem;
+        letter-spacing:-.03em;
+      }
+
+      #followmePublicPauseOverlay20260519 p{
+        margin:0 0 18px;
+        color:#475569;
+        line-height:1.45;
+        font-weight:650;
+      }
+
+      #followmePublicResumeBtn20260519{
+        border:0;
+        border-radius:999px;
+        padding:12px 18px;
+        background:#16a34a;
+        color:#fff;
+        font-weight:950;
+        cursor:pointer;
+        box-shadow:0 10px 24px rgba(22,163,74,.22);
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function renameCloseToPause(){
+    document.querySelectorAll("button,a").forEach(function(el){
+      const t = String(el.textContent || "").replace(/\s+/g, " ").trim();
+
+      if(t === "Chiudi") el.textContent = "Pausa";
+      if(t === "Chiudi chat") el.textContent = "Pausa chat";
+    });
+  }
+
+  function bindPauseButtons(){
+    document.querySelectorAll("button,a").forEach(function(el){
+      const t = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+
+      if(t !== "pausa" && t !== "pausa chat") return;
+      if(el.dataset.followmePauseBound20260519) return;
+
+      el.dataset.followmePauseBound20260519 = "1";
+
+      el.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        pauseChat();
+      }, true);
+    });
+  }
+
+  function restorePausedFromStorage(){
+    let paused = false;
+
+    try{
+      paused = localStorage.getItem(storageKey()) === "1";
+    }catch(e){}
+
+    setPausedLocal(paused);
+  }
+
+  function boot(){
+    renameCloseToPause();
+    ensurePauseOverlay();
+    bindPauseButtons();
+    restorePausedFromStorage();
+
+    setTimeout(renameCloseToPause, 300);
+    setTimeout(bindPauseButtons, 450);
+  }
+
+  window.fmPublicPauseResume20260519 = {
+    boot,
+    pauseChat,
+    resumeChat,
+    setPausedLocal
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1000);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(function(){
+    renameCloseToPause();
+    bindPauseButtons();
+  }, 1500);
+})();
+</script>
+
 </body>
 </html>
 
