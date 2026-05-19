@@ -20519,5 +20519,146 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+
+
+<script id="followme-admin-reopen-service-final-20260519">
+(function(){
+  if(window.__FollowMeAdminReopenServiceFinal20260519) return;
+  window.__FollowMeAdminReopenServiceFinal20260519 = true;
+
+  function projectCode(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("app");
+      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
+    }catch(e){}
+
+    try{
+      if(window.FOLLOWME_PROJECT_CODE) return String(window.FOLLOWME_PROJECT_CODE);
+      if(window.followMeProjectCode) return String(window.followMeProjectCode);
+    }catch(e){}
+
+    return "FM-DEMO";
+  }
+
+  async function reopenService(){
+    const ok = confirm(
+      "Riaprire il servizio chat?\n\n" +
+      "Le vecchie sessioni chiuse resteranno nello storico.\n" +
+      "I nuovi utenti ripartiranno da una nuova chat."
+    );
+
+    if(!ok) return;
+
+    const btn = document.getElementById("followmeAdminReopenServiceBtn20260519");
+
+    try{
+      if(btn){
+        btn.disabled = true;
+        btn.textContent = "Riapertura...";
+      }
+
+      const code = projectCode();
+
+      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/chat/reopen-service", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ confirm:"RIAPRI_SERVIZIO" })
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Riapertura servizio non riuscita.");
+      }
+
+      alert("Servizio chat riaperto. I nuovi accessi ripartiranno da una nuova conversazione.");
+
+      try{
+        if(typeof window.refreshFollowMeOwnerChatSessions === "function"){
+          window.refreshFollowMeOwnerChatSessions();
+        }
+      }catch(e){}
+
+    }catch(err){
+      alert(err.message || "Errore riapertura servizio.");
+    }finally{
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = "Riapri servizio chat";
+      }
+    }
+  }
+
+  function findToolbarTarget(){
+    return document.querySelector("#followmeOwnerChatTopActions") ||
+           document.querySelector(".followme-owner-chat-actions") ||
+           document.querySelector(".followme-admin-wa-actions") ||
+           document.querySelector("#followmeOwnerChatMessages")?.parentElement ||
+           document.body;
+  }
+
+  function ensureButton(){
+    if(document.getElementById("followmeAdminReopenServiceBtn20260519")) return;
+
+    const btn = document.createElement("button");
+    btn.id = "followmeAdminReopenServiceBtn20260519";
+    btn.type = "button";
+    btn.textContent = "Riapri servizio chat";
+    btn.style.border = "0";
+    btn.style.borderRadius = "999px";
+    btn.style.padding = "9px 13px";
+    btn.style.fontWeight = "950";
+    btn.style.cursor = "pointer";
+    btn.style.background = "#dcfce7";
+    btn.style.color = "#166534";
+    btn.style.margin = "4px";
+    btn.style.boxShadow = "0 8px 22px rgba(22,101,52,.14)";
+
+    btn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      reopenService();
+    }, true);
+
+    const target = findToolbarTarget();
+
+    if(target && target !== document.body){
+      target.insertBefore(btn, target.firstChild);
+    }else{
+      btn.style.position = "fixed";
+      btn.style.right = "14px";
+      btn.style.bottom = "272px";
+      btn.style.zIndex = "99999";
+      document.body.appendChild(btn);
+    }
+  }
+
+  function boot(){
+    ensureButton();
+  }
+
+  window.fmAdminReopenService20260519 = {
+    boot,
+    reopenService
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(ensureButton, 2000);
+})();
+</script>
+
 </body>
 </html>

@@ -5697,6 +5697,147 @@
 })();
 </script>
 
+
+
+
+
+<script id="followme-public-reset-closed-session-when-service-open-final-20260519">
+(function(){
+  if(window.__FollowMePublicResetClosedSessionWhenServiceOpen20260519) return;
+  window.__FollowMePublicResetClosedSessionWhenServiceOpen20260519 = true;
+
+  let checking = false;
+
+  function cleanSid(v){
+    const s = String(v || "").trim();
+    return /^\d+$/.test(s) ? s : "";
+  }
+
+  function sessionId(){
+    try{
+      const p = new URLSearchParams(location.search || "");
+      const fromUrl = cleanSid(p.get("session") || p.get("chatSession"));
+      if(fromUrl) return fromUrl;
+    }catch(e){}
+
+    const arr = [
+      window.followMeChatSessionId,
+      window.FOLLOWME_CHAT_SESSION_ID
+    ];
+
+    try{ arr.push(sessionStorage.getItem("followme_chat_session_id")); }catch(e){}
+    try{ arr.push(localStorage.getItem("followme_chat_session_id")); }catch(e){}
+
+    for(const v of arr){
+      const sid = cleanSid(v);
+      if(sid) return sid;
+    }
+
+    return "";
+  }
+
+  function clearStoredSession(){
+    const keys = [
+      "followme_chat_session_id",
+      "FOLLOWME_CHAT_SESSION_ID",
+      "followMeChatSessionId"
+    ];
+
+    keys.forEach(function(k){
+      try{ localStorage.removeItem(k); }catch(e){}
+      try{ sessionStorage.removeItem(k); }catch(e){}
+    });
+
+    try{
+      Object.keys(localStorage).forEach(function(k){
+        if(k.includes("followme") && k.includes("session")) localStorage.removeItem(k);
+        if(k.includes("followme_chat_user_paused_")) localStorage.removeItem(k);
+      });
+    }catch(e){}
+
+    try{
+      Object.keys(sessionStorage).forEach(function(k){
+        if(k.includes("followme") && k.includes("session")) sessionStorage.removeItem(k);
+      });
+    }catch(e){}
+  }
+
+  function reloadClean(){
+    /*
+      Ricarica la pagina senza parametri session/chatSession, così il QR riparte da capo.
+    */
+    try{
+      const url = new URL(location.href);
+      url.searchParams.delete("session");
+      url.searchParams.delete("chatSession");
+      url.searchParams.set("restart", String(Date.now()));
+      location.replace(url.toString());
+    }catch(e){
+      location.reload();
+    }
+  }
+
+  async function check(){
+    const sid = sessionId();
+    if(!sid || checking) return;
+
+    checking = true;
+
+    try{
+      const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/service-state?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(res.ok && data && data.success && data.session){
+        const serviceOpen = data.session.chat_mode_enabled === true;
+        const sessionClosed = String(data.session.status || "").toLowerCase() === "closed";
+
+        /*
+          Caso corretto dopo Riapri servizio:
+          progetto aperto, ma browser agganciato a vecchia sessione chiusa.
+          Reset locale e ripartenza da capo.
+        */
+        if(serviceOpen && sessionClosed){
+          clearStoredSession();
+          reloadClean();
+          return;
+        }
+      }
+    }catch(e){
+    }finally{
+      checking = false;
+    }
+  }
+
+  function boot(){
+    setTimeout(check, 200);
+    setTimeout(check, 900);
+  }
+
+  window.fmPublicResetClosedSessionWhenServiceOpen20260519 = {
+    boot,
+    check,
+    clearStoredSession
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(check, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(check, 1500);
+})();
+</script>
+
 </body>
 </html>
 

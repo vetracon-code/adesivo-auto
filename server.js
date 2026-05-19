@@ -10064,6 +10064,63 @@ app.post('/api/followme/:code/chat/close-all', express.json(), async (req, res) 
 });
 // end-followme-close-all-service-final-20260519
 
+// followme-reopen-service-final-20260519
+app.post('/api/followme/:code/chat/reopen-service', express.json(), async (req, res) => {
+  try {
+    if (typeof ensureFollowMeRuntimeFast === 'function') {
+      await ensureFollowMeRuntimeFast();
+    } else if (typeof ensureFollowMeChatSchema === 'function') {
+      await ensureFollowMeChatSchema();
+    }
+
+    const code = String(req.params.code || '').trim();
+
+    if (!code) {
+      return res.status(400).json({
+        success:false,
+        error:'Codice progetto mancante.'
+      });
+    }
+
+    const project = await pool.query(
+      `UPDATE followme_projects
+       SET chat_mode_enabled = TRUE,
+           updated_at = NOW()
+       WHERE code = $1 OR public_id = $1
+       RETURNING id, code, public_id, chat_mode_enabled, updated_at`,
+      [code]
+    );
+
+    if (!project.rows.length) {
+      return res.status(404).json({
+        success:false,
+        error:'Progetto non trovato.'
+      });
+    }
+
+    /*
+      Non cancelliamo lo storico.
+      Le sessioni closed restano chiuse; il QR creerà nuove sessioni.
+    */
+    return res.json({
+      success:true,
+      mode:'reopen_service',
+      project:project.rows[0],
+      message:'Servizio chat riaperto.'
+    });
+  } catch(err) {
+    console.error('followme reopen service error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore riapertura servizio chat.'
+    });
+  }
+});
+// end-followme-reopen-service-final-20260519
+
+
+
+
 app.get('/api/followme/chat/session/:session_id/messages', async (req, res) => {
   try {
     await ensureFollowMeRuntimeFast();
