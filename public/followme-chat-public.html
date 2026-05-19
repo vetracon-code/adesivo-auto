@@ -5574,34 +5574,42 @@
 
 
 
-<script id="followme-public-request-extra-final-20260519">
-(function(){
-  if(window.__FollowMePublicRequestExtraFinal20260519) return;
-  window.__FollowMePublicRequestExtraFinal20260519 = true;
 
-  let requestOpen = false;
-  let requestSent = false;
+
+<script id="followme-public-request-extra-clean-final-20260519">
+(function(){
+  if(window.__FollowMePublicRequestExtraCleanFinal20260519) return;
+  window.__FollowMePublicRequestExtraCleanFinal20260519 = true;
+
+  /*
+    RICHIEDI EXTRA - VERSIONE PULITA
+    - Non riusa il vecchio bottone Pausa.
+    - Non chiama endpoint /pause.
+    - Ogni richiesta contiene session_id e request_id.
+    - Conferma può essere ripetuta dopo rifiuto.
+  */
+
+  let sending = false;
 
   function cleanSid(v){
     const s = String(v || "").trim();
     return /^\d+$/.test(s) ? s : "";
   }
 
-  function sessionId(){
+  function currentSessionId(){
     try{
       const q = new URLSearchParams(location.search || "");
       const fromUrl = cleanSid(q.get("session") || q.get("chatSession"));
       if(fromUrl) return fromUrl;
     }catch(e){}
 
-    const arr = [
-      window.followMeChatSessionId,
-      window.FOLLOWME_CHAT_SESSION_ID
-    ];
+    const values = [];
 
-    try{ arr.push(sessionStorage.getItem("followme_chat_session_id")); }catch(e){}
+    try{ values.push(window.followMeChatSessionId); }catch(e){}
+    try{ values.push(window.FOLLOWME_CHAT_SESSION_ID); }catch(e){}
+    try{ values.push(sessionStorage.getItem("followme_chat_session_id")); }catch(e){}
 
-    for(const v of arr){
+    for(const v of values){
       const sid = cleanSid(v);
       if(sid) return sid;
     }
@@ -5626,7 +5634,7 @@
     }catch(e){}
   }
 
-  function addBotMessage(html){
+  function addBot(html){
     const box = findMessages();
 
     if(!box){
@@ -5634,72 +5642,25 @@
       return null;
     }
 
-    const wrap = document.createElement("div");
-    wrap.className = "bot message followme-extra-request-local";
-    wrap.style.margin = "10px 0";
-    wrap.style.padding = "12px 14px";
-    wrap.style.borderRadius = "18px";
-    wrap.style.background = "#f8fafc";
-    wrap.style.border = "1px solid rgba(15,23,42,.08)";
-    wrap.style.color = "#0f172a";
-    wrap.style.fontWeight = "700";
-    wrap.style.lineHeight = "1.42";
-    wrap.innerHTML = html;
+    const card = document.createElement("div");
+    card.className = "bot message fm-extra-clean-card";
+    card.style.margin = "10px 0";
+    card.style.padding = "12px 14px";
+    card.style.borderRadius = "18px";
+    card.style.background = "#f8fafc";
+    card.style.border = "1px solid rgba(15,23,42,.08)";
+    card.style.color = "#0f172a";
+    card.style.fontWeight = "700";
+    card.style.lineHeight = "1.42";
+    card.innerHTML = html;
 
-    box.appendChild(wrap);
+    box.appendChild(card);
     scrollBottom();
-
-    return wrap;
+    return card;
   }
 
-  function ensureStyle(){
-    if(document.getElementById("followmePublicRequestExtraStyle20260519")) return;
-
-    const style = document.createElement("style");
-    style.id = "followmePublicRequestExtraStyle20260519";
-    style.textContent = `
-      .followme-extra-request-actions{
-        display:flex;
-        gap:8px;
-        flex-wrap:wrap;
-        margin-top:12px;
-      }
-
-      .followme-extra-request-actions button{
-        border:0;
-        border-radius:999px;
-        padding:10px 14px;
-        font-weight:950;
-        cursor:pointer;
-      }
-
-      .followme-extra-request-confirm{
-        background:#111827;
-        color:#fff;
-      }
-
-      .followme-extra-request-cancel{
-        background:#e5e7eb;
-        color:#111827;
-      }
-
-      #followmePublicRequestExtraBtn20260519{
-        border:0 !important;
-        border-radius:999px !important;
-        padding:9px 13px !important;
-        font-weight:950 !important;
-        background:#111827 !important;
-        color:#ffffff !important;
-        cursor:pointer !important;
-        box-shadow:0 8px 22px rgba(17,24,39,.18) !important;
-      }
-    `;
-
-    document.head.appendChild(style);
-  }
-
-  async function sendOwnerMessage(message){
-    const sid = sessionId();
+  async function sendVisitorMessage(sessionId, message){
+    const sid = cleanSid(sessionId);
 
     if(!sid){
       throw new Error("Sessione chat non ancora pronta.");
@@ -5708,7 +5669,10 @@
     const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/message", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ sender:"visitor", message:String(message || "") })
+      body:JSON.stringify({
+        sender:"visitor",
+        message:String(message || "")
+      })
     });
 
     const data = await res.json().catch(function(){ return null; });
@@ -5720,33 +5684,37 @@
     return data;
   }
 
-  function showRequestConfirm(){
-    if(requestOpen) return;
-    requestOpen = true;
+  function openConfirm(){
+    const sid = currentSessionId();
 
-    const card = addBotMessage(
-      "<strong>Stai chiedendo la possibilità di inviare foto, messaggi audio, posizione e altri allegati.</strong><br><br>" +
-      "Vuoi inviare la richiesta al proprietario?" +
-      "<div class='followme-extra-request-actions'>" +
-        "<button type='button' class='followme-extra-request-confirm'>Conferma</button>" +
-        "<button type='button' class='followme-extra-request-cancel'>Annulla</button>" +
-      "</div>"
-    );
-
-    if(!card){
-      requestOpen = false;
+    if(!sid){
+      addBot("<strong>Chat non ancora pronta.</strong><br>Riprova tra un istante.");
       return;
     }
 
-    const confirm = card.querySelector(".followme-extra-request-confirm");
-    const cancel = card.querySelector(".followme-extra-request-cancel");
+    const requestId = "extra-" + sid + "-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
+
+    const card = addBot(
+      "<strong>Stai chiedendo la possibilità di inviare foto, messaggi audio, posizione e altri allegati.</strong><br><br>" +
+      "Vuoi inviare la richiesta al proprietario?" +
+      "<div class='fm-extra-clean-actions'>" +
+        "<button type='button' class='fm-extra-clean-confirm'>Conferma</button>" +
+        "<button type='button' class='fm-extra-clean-cancel'>Annulla</button>" +
+      "</div>"
+    );
+
+    if(!card) return;
+
+    const confirm = card.querySelector(".fm-extra-clean-confirm");
+    const cancel = card.querySelector(".fm-extra-clean-cancel");
 
     if(confirm){
       confirm.addEventListener("click", async function(ev){
         ev.preventDefault();
+        ev.stopPropagation();
 
-        if(requestSent) return;
-        requestSent = true;
+        if(sending) return;
+        sending = true;
 
         confirm.disabled = true;
         if(cancel) cancel.disabled = true;
@@ -5755,26 +5723,26 @@
         try{
           const payload = {
             __followme_extra_request:true,
+            request_id:requestId,
+            session_id:sid,
             kind:"extra_request",
             text:"Richiesta Extra ricevuta. L’utente chiede di poter inviare foto, audio, posizione e altri allegati.",
             created_at:new Date().toISOString()
           };
 
-          await sendOwnerMessage(JSON.stringify(payload));
+          await sendVisitorMessage(sid, JSON.stringify(payload));
 
           card.innerHTML =
             "<strong>Richiesta inviata.</strong><br>" +
             "Attendi la risposta del proprietario.";
 
         }catch(err){
-          requestSent = false;
           confirm.disabled = false;
           if(cancel) cancel.disabled = false;
           confirm.textContent = "Conferma";
-
-          addBotMessage("<strong>Non sono riuscito a inviare la richiesta.</strong><br>Riprova tra poco.");
+          addBot("<strong>Non sono riuscito a inviare la richiesta.</strong><br>Riprova tra poco.");
         }finally{
-          requestOpen = false;
+          sending = false;
         }
       }, true);
     }
@@ -5782,75 +5750,107 @@
     if(cancel){
       cancel.addEventListener("click", function(ev){
         ev.preventDefault();
+        ev.stopPropagation();
         card.innerHTML = "Richiesta annullata.";
-        requestOpen = false;
+        sending = false;
       }, true);
     }
   }
 
-  function findTopButtonCandidate(){
-    const buttons = Array.from(document.querySelectorAll("button,a"));
+  function ensureStyle(){
+    if(document.getElementById("fmExtraCleanStyle20260519")) return;
 
-    /*
-      Prima proviamo a riutilizzare il vecchio pulsante in alto a destra:
-      Chiudi/Pausa/Chiudi chat.
-    */
-    for(const el of buttons){
+    const style = document.createElement("style");
+    style.id = "fmExtraCleanStyle20260519";
+    style.textContent = `
+      #fmExtraCleanButton20260519{
+        position:fixed;
+        top:14px;
+        right:14px;
+        z-index:99990;
+        border:0;
+        border-radius:16px;
+        width:78px;
+        min-width:78px;
+        max-width:78px;
+        height:46px;
+        padding:5px 7px;
+        font-weight:950;
+        font-size:12px;
+        line-height:1.03;
+        letter-spacing:-.02em;
+        background:#111827;
+        color:#ffffff;
+        cursor:pointer;
+        box-shadow:0 8px 22px rgba(17,24,39,.18);
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        flex-direction:column;
+        text-align:center;
+        white-space:normal;
+      }
+
+      #fmExtraCleanButton20260519 span{
+        display:block;
+        width:100%;
+      }
+
+      .fm-extra-clean-actions{
+        display:flex;
+        gap:8px;
+        flex-wrap:wrap;
+        margin-top:12px;
+      }
+
+      .fm-extra-clean-actions button{
+        border:0;
+        border-radius:999px;
+        padding:10px 14px;
+        font-weight:950;
+        cursor:pointer;
+      }
+
+      .fm-extra-clean-confirm{
+        background:#111827;
+        color:#fff;
+      }
+
+      .fm-extra-clean-cancel{
+        background:#e5e7eb;
+        color:#111827;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function removeOldPauseAndExtraButtons(){
+    document.querySelectorAll("button,a").forEach(function(el){
+      if(el.id === "fmExtraCleanButton20260519") return;
+
       const t = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
 
-      if(t === "chiudi" || t === "chiudi chat" || t === "pausa" || t === "pausa chat"){
-        return el;
-      }
-    }
+      /*
+        Non tocchiamo i pulsanti Conferma/Annulla dentro la chat.
+      */
+      if(el.closest(".fm-extra-clean-card")) return;
 
-    return null;
+      if(
+        el.id === "followmePublicRequestExtraBtn20260519" ||
+        t === "pausa" ||
+        t === "pausa chat" ||
+        t === "chiudi" ||
+        t === "chiudi chat" ||
+        t === "richiedi extra" ||
+        t === "richiedi" ||
+        t === "extra"
+      ){
+        el.remove();
+      }
+    });
   }
 
-  function ensureRequestButton(){
-    ensureStyle();
-
-    let btn = document.getElementById("followmePublicRequestExtraBtn20260519");
-
-    if(!btn){
-      const candidate = findTopButtonCandidate();
-
-      if(candidate){
-        btn = candidate;
-        btn.id = "followmePublicRequestExtraBtn20260519";
-      }else{
-        btn = document.createElement("button");
-        btn.id = "followmePublicRequestExtraBtn20260519";
-        btn.type = "button";
-
-        btn.style.position = "fixed";
-        btn.style.top = "14px";
-        btn.style.right = "14px";
-        btn.style.zIndex = "99990";
-
-        document.body.appendChild(btn);
-      }
-    }
-
-    btn.textContent = "Richiedi Extra";
-    btn.style.display = "";
-    btn.style.visibility = "";
-    btn.disabled = false;
-    btn.setAttribute("aria-label", "Richiedi Extra");
-
-    if(!btn.dataset.followmeRequestExtraBound20260519){
-      btn.dataset.followmeRequestExtraBound20260519 = "1";
-
-      btn.addEventListener("click", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        showRequestConfirm();
-      }, true);
-    }
-  }
-
-  /*
-    Neutralizza vecchi stati pausa pubblici eventualmente rimasti.
-  */
   function removePauseResidues(){
     document.body.classList.remove(
       "followme-public-locally-paused",
@@ -5878,249 +5878,38 @@
     });
   }
 
-  function boot(){
-    removePauseResidues();
-    ensureRequestButton();
-
-    setTimeout(ensureRequestButton, 350);
-    setTimeout(ensureRequestButton, 1200);
-  }
-
-  window.fmPublicRequestExtra20260519 = {
-    boot,
-    showRequestConfirm
-  };
-
-  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
-  else boot();
-
-  window.addEventListener("load", function(){
-    setTimeout(boot, 250);
-    setTimeout(boot, 1200);
-  });
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 250);
-  });
-
-  setInterval(function(){
-    removePauseResidues();
-    ensureRequestButton();
-  }, 1500);
-})();
-</script>
-
-
-
-
-
-<script id="followme-public-request-extra-button-fix-final-20260519">
-(function(){
-  if(window.__FollowMePublicRequestExtraButtonFixFinal20260519) return;
-  window.__FollowMePublicRequestExtraButtonFixFinal20260519 = true;
-
-  /*
-    FIX:
-    Il pulsante Richiedi Extra non deve comportarsi come Pausa.
-    Non riusiamo il vecchio bottone con vecchi event listener:
-    lo sostituiamo fisicamente con un bottone nuovo.
-  */
-
-  function ensureStyle(){
-    if(document.getElementById("followmePublicRequestExtraButtonFixStyle20260519")) return;
-
-    const style = document.createElement("style");
-    style.id = "followmePublicRequestExtraButtonFixStyle20260519";
-    style.textContent = `
-      #followmePublicRequestExtraBtn20260519{
-        border:0 !important;
-        border-radius:16px !important;
-        width:78px !important;
-        min-width:78px !important;
-        max-width:78px !important;
-        height:46px !important;
-        padding:5px 7px !important;
-        font-weight:950 !important;
-        font-size:12px !important;
-        line-height:1.03 !important;
-        letter-spacing:-.02em !important;
-        background:#111827 !important;
-        color:#ffffff !important;
-        cursor:pointer !important;
-        box-shadow:0 8px 22px rgba(17,24,39,.18) !important;
-        display:inline-flex !important;
-        align-items:center !important;
-        justify-content:center !important;
-        flex-direction:column !important;
-        text-align:center !important;
-        white-space:normal !important;
-        z-index:99990 !important;
-      }
-
-      #followmePublicRequestExtraBtn20260519 .fm-extra-line{
-        display:block !important;
-        width:100% !important;
-      }
-
-      #followmePublicRequestExtraBtn20260519:hover{
-        background:#020617 !important;
-      }
-    `;
-
-    document.head.appendChild(style);
-  }
-
-  function cleanPauseResidues(){
-    document.body.classList.remove(
-      "followme-public-locally-paused",
-      "followme-public-paused",
-      "fm-public-paused",
-      "fm-public-user-paused",
-      "user-paused"
-    );
-
-    document.documentElement.classList.remove(
-      "followme-public-locally-paused",
-      "followme-public-paused",
-      "fm-public-paused",
-      "fm-public-user-paused",
-      "user-paused"
-    );
-
-    [
-      "followmePublicPauseOverlay20260519",
-      "followmePublicPausedOverlay20260519",
-      "followmePublicPausedBox20260519"
-    ].forEach(function(id){
-      const el = document.getElementById(id);
-      if(el) el.remove();
-    });
-  }
-
-  function findOldPauseOrExtraButton(){
-    const all = Array.from(document.querySelectorAll("button,a"));
-
-    for(const el of all){
-      const t = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
-
-      if(
-        el.id === "followmePublicRequestExtraBtn20260519" ||
-        t === "richiedi extra" ||
-        t === "richiedi" ||
-        t === "extra" ||
-        t === "pausa" ||
-        t === "pausa chat" ||
-        t === "chiudi" ||
-        t === "chiudi chat"
-      ){
-        return el;
-      }
-    }
-
-    return null;
-  }
-
-  function callRequestExtraFlow(){
-    cleanPauseResidues();
-
-    try{
-      if(window.fmPublicRequestExtra20260519 && typeof window.fmPublicRequestExtra20260519.showRequestConfirm === "function"){
-        window.fmPublicRequestExtra20260519.showRequestConfirm();
-        return;
-      }
-    }catch(e){}
-
-    /*
-      Fallback se la patch principale non fosse ancora pronta.
-    */
-    alert("Stai chiedendo la possibilità di inviare foto, messaggi audio, posizione e altri allegati.");
-  }
-
-  function replaceWithCleanButton(){
+  function ensureButton(){
     ensureStyle();
-    cleanPauseResidues();
+    removePauseResidues();
+    removeOldPauseAndExtraButtons();
 
-    let current = document.getElementById("followmePublicRequestExtraBtn20260519");
+    let btn = document.getElementById("fmExtraCleanButton20260519");
 
-    /*
-      Se il pulsante esiste ma può avere vecchi listener, lo sostituiamo una volta
-      con clone pulito. Usiamo data-clean per evitare sostituzioni continue.
-    */
-    if(current && current.dataset.cleanRequestExtra20260519 === "1"){
-      current.innerHTML = "<span class='fm-extra-line'>Richiedi</span><span class='fm-extra-line'>Extra</span>";
-      current.disabled = false;
-      current.style.display = "";
-      current.style.visibility = "";
-      return current;
-    }
+    if(!btn){
+      btn = document.createElement("button");
+      btn.id = "fmExtraCleanButton20260519";
+      btn.type = "button";
+      btn.innerHTML = "<span>Richiedi</span><span>Extra</span>";
+      btn.setAttribute("aria-label", "Richiedi Extra");
 
-    const old = current || findOldPauseOrExtraButton();
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        openConfirm();
+        return false;
+      }, true);
 
-    const btn = document.createElement("button");
-    btn.id = "followmePublicRequestExtraBtn20260519";
-    btn.type = "button";
-    btn.dataset.cleanRequestExtra20260519 = "1";
-    btn.innerHTML = "<span class='fm-extra-line'>Richiedi</span><span class='fm-extra-line'>Extra</span>";
-    btn.setAttribute("aria-label", "Richiedi Extra");
-
-    btn.addEventListener("click", function(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
-      ev.stopImmediatePropagation();
-      callRequestExtraFlow();
-      return false;
-    }, true);
-
-    if(old && old.parentElement){
-      old.parentElement.replaceChild(btn, old);
-    }else{
-      btn.style.position = "fixed";
-      btn.style.top = "14px";
-      btn.style.right = "14px";
       document.body.appendChild(btn);
     }
 
-    return btn;
+    btn.disabled = false;
+    btn.style.display = "inline-flex";
+    btn.style.visibility = "visible";
   }
 
-  /*
-    Intercetta eventuali vecchi click Pausa ancora presenti prima che facciano danni.
-  */
-  document.addEventListener("click", function(ev){
-    const target = ev.target && ev.target.closest ? ev.target.closest("button,a") : ev.target;
-    if(!target) return;
-
-    const t = String(target.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
-
-    if(
-      target.id === "followmePublicRequestExtraBtn20260519" ||
-      t === "richiedi extra" ||
-      t === "richiedi" ||
-      t === "extra"
-    ){
-      ev.preventDefault();
-      ev.stopPropagation();
-      ev.stopImmediatePropagation();
-      callRequestExtraFlow();
-      return false;
-    }
-
-    if(t === "pausa" || t === "pausa chat" || t === "chiudi" || t === "chiudi chat"){
-      ev.preventDefault();
-      ev.stopPropagation();
-      ev.stopImmediatePropagation();
-      replaceWithCleanButton();
-      callRequestExtraFlow();
-      return false;
-    }
-  }, true);
-
-  /*
-    Neutralizza qualsiasi vecchia chiamata /pause lato pubblico.
-  */
-  if(!window.__fmPublicRequestExtraBlockPauseFetch20260519){
-    window.__fmPublicRequestExtraBlockPauseFetch20260519 = true;
-
+  if(!window.__fmExtraCleanBlockPauseFetch20260519){
+    window.__fmExtraCleanBlockPauseFetch20260519 = true;
     const oldFetch = window.fetch.bind(window);
 
     window.fetch = function(input, init){
@@ -6131,7 +5920,7 @@
           return Promise.resolve(new Response(JSON.stringify({
             success:true,
             pause_removed:true,
-            request_extra_mode:true
+            clean_extra_flow:true
           }), {
             status:200,
             headers:{ "Content-Type":"application/json" }
@@ -6144,17 +5933,15 @@
   }
 
   function boot(){
-    cleanPauseResidues();
-    replaceWithCleanButton();
-
-    setTimeout(replaceWithCleanButton, 300);
-    setTimeout(replaceWithCleanButton, 1000);
+    ensureButton();
+    setTimeout(ensureButton, 300);
+    setTimeout(ensureButton, 1200);
   }
 
-  window.fmPublicRequestExtraButtonFix20260519 = {
+  window.fmExtraCleanRequest20260519 = {
     boot,
-    replaceWithCleanButton,
-    callRequestExtraFlow
+    openConfirm,
+    currentSessionId
   };
 
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
@@ -6169,10 +5956,7 @@
     setTimeout(boot, 250);
   });
 
-  setInterval(function(){
-    cleanPauseResidues();
-    replaceWithCleanButton();
-  }, 1500);
+  setInterval(ensureButton, 1500);
 })();
 </script>
 

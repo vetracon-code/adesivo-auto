@@ -21131,10 +21131,12 @@ document.addEventListener("visibilitychange", function(){
 
 
 
-<script id="followme-admin-handle-extra-request-final-20260519">
+
+
+<script id="followme-admin-handle-extra-request-clean-final-20260519">
 (function(){
-  if(window.__FollowMeAdminHandleExtraRequestFinal20260519) return;
-  window.__FollowMeAdminHandleExtraRequestFinal20260519 = true;
+  if(window.__FollowMeAdminHandleExtraRequestCleanFinal20260519) return;
+  window.__FollowMeAdminHandleExtraRequestCleanFinal20260519 = true;
 
   const handled = new Set();
 
@@ -21143,42 +21145,23 @@ document.addEventListener("visibilitychange", function(){
     return /^\d+$/.test(s) ? s : "";
   }
 
-  function activeSessionId(){
-    try{
-      const activeAlias = document.querySelector("#followmeStableAliasBar20260519 button.active, #followmeFixedAliasBar20260519 button.active, #followmeTopUserAliasBar20260519 button.active");
-      if(activeAlias){
-        const sid = cleanSid(activeAlias.dataset.sessionId || activeAlias.getAttribute("data-session-id"));
-        if(sid) return sid;
-      }
-    }catch(e){}
+  function parseJsonFromText(text){
+    const raw = String(text || "");
 
     try{
-      const active = document.querySelector("#followmeOwnerChatSessionStrip .active, .followme-owner-chat-session-strip .active, .followme-chat-session-strip .active, .fm-clean-session-strip .active");
-      if(active){
-        const sid = cleanSid(
-          active.dataset.sessionId ||
-          active.getAttribute("data-session-id") ||
-          active.dataset.id ||
-          active.getAttribute("data-id")
-        );
-        if(sid) return sid;
-      }
+      const obj = JSON.parse(raw);
+      if(obj && obj.__followme_extra_request) return obj;
     }catch(e){}
 
-    try{
-      if(window.currentOwnerSessionId) return cleanSid(window.currentOwnerSessionId);
-    }catch(e){}
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
 
-    return "";
-  }
-
-  function parseExtraRequest(text){
-    try{
-      const obj = JSON.parse(String(text || ""));
-      if(obj && obj.__followme_extra_request === true){
-        return obj;
-      }
-    }catch(e){}
+    if(start >= 0 && end > start){
+      try{
+        const obj = JSON.parse(raw.slice(start, end + 1));
+        if(obj && obj.__followme_extra_request) return obj;
+      }catch(e){}
+    }
 
     return null;
   }
@@ -21193,16 +21176,22 @@ document.addEventListener("visibilitychange", function(){
   }
 
   function findRequestNodes(){
-    return findMessageNodes().filter(function(el){
-      const text = String(el.textContent || "");
-      return text.includes("__followme_extra_request") ||
-             text.includes("Richiesta Extra ricevuta") ||
-             text.includes("foto, audio, posizione");
-    });
+    return findMessageNodes().map(function(node){
+      const payload = parseJsonFromText(node.textContent || "");
+      if(!payload) return null;
+
+      const sid = cleanSid(payload.session_id);
+      if(!sid) return null;
+
+      return { node, payload, sid };
+    }).filter(Boolean);
   }
 
   async function setExtra(sessionId, enabled){
-    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/set-user-control", {
+    const sid = cleanSid(sessionId);
+    if(!sid) throw new Error("Sessione richiesta non valida.");
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/set-user-control", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
       body:JSON.stringify({ uploads_enabled:!!enabled })
@@ -21218,10 +21207,16 @@ document.addEventListener("visibilitychange", function(){
   }
 
   async function sendOwnerMessage(sessionId, message){
-    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/message", {
+    const sid = cleanSid(sessionId);
+    if(!sid) throw new Error("Sessione richiesta non valida.");
+
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/message", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ sender:"owner", message:String(message || "") })
+      body:JSON.stringify({
+        sender:"owner",
+        message:String(message || "")
+      })
     });
 
     const data = await res.json().catch(function(){ return null; });
@@ -21233,29 +21228,23 @@ document.addEventListener("visibilitychange", function(){
     return data;
   }
 
-  function addActionsToNode(node){
-    if(!node || node.dataset.followmeExtraRequestActions20260519) return;
+  function decorateRequest(item){
+    const node = item.node;
+    const payload = item.payload;
+    const sid = item.sid;
+    const requestId = String(payload.request_id || ("sid-" + sid));
 
-    const sessionId = activeSessionId();
+    if(!node || node.dataset.fmExtraCleanDecorated === requestId) return;
 
-    if(!sessionId) return;
+    node.dataset.fmExtraCleanDecorated = requestId;
 
-    node.dataset.followmeExtraRequestActions20260519 = "1";
-
-    /*
-      Nasconde eventuale JSON grezzo, se visibile.
-    */
-    const raw = String(node.textContent || "");
-
-    if(raw.includes("__followme_extra_request")){
-      node.innerHTML = `
-        <div style="font-weight:900;margin-bottom:6px;">Richiesta Extra ricevuta.</div>
-        <div style="font-weight:650;line-height:1.35;">L’utente chiede di poter inviare foto, audio, posizione e altri allegati.</div>
-      `;
-    }
+    node.innerHTML = `
+      <div style="font-weight:900;margin-bottom:6px;">Richiesta Extra ricevuta.</div>
+      <div style="font-weight:650;line-height:1.35;">L’utente chiede di poter inviare foto, audio, posizione e altri allegati.</div>
+      <div style="font-size:11px;opacity:.55;margin-top:5px;">Sessione ${sid}</div>
+    `;
 
     const box = document.createElement("div");
-    box.className = "followme-admin-extra-request-actions";
     box.style.display = "flex";
     box.style.gap = "8px";
     box.style.flexWrap = "wrap";
@@ -21289,11 +21278,9 @@ document.addEventListener("visibilitychange", function(){
 
     accept.addEventListener("click", async function(ev){
       ev.preventDefault();
+      ev.stopPropagation();
 
-      const sid = activeSessionId() || sessionId;
-      if(!sid) return alert("Sessione utente non trovata.");
-
-      const key = "accept-" + sid + "-" + node.textContent.slice(0, 60);
+      const key = "accept-" + requestId + "-" + sid;
       if(handled.has(key)) return;
       handled.add(key);
 
@@ -21310,7 +21297,7 @@ document.addEventListener("visibilitychange", function(){
         );
 
         accept.textContent = "Extra abilitato";
-        box.style.opacity = "0.72";
+        box.style.opacity = ".72";
 
         try{
           if(typeof window.refreshFollowMeOwnerChatSessions === "function"){
@@ -21329,11 +21316,9 @@ document.addEventListener("visibilitychange", function(){
 
     reject.addEventListener("click", async function(ev){
       ev.preventDefault();
+      ev.stopPropagation();
 
-      const sid = activeSessionId() || sessionId;
-      if(!sid) return alert("Sessione utente non trovata.");
-
-      const key = "reject-" + sid + "-" + node.textContent.slice(0, 60);
+      const key = "reject-" + requestId + "-" + sid;
       if(handled.has(key)) return;
       handled.add(key);
 
@@ -21348,7 +21333,7 @@ document.addEventListener("visibilitychange", function(){
         );
 
         reject.textContent = "Rifiutato";
-        box.style.opacity = "0.72";
+        box.style.opacity = ".72";
 
       }catch(err){
         handled.delete(key);
@@ -21361,7 +21346,7 @@ document.addEventListener("visibilitychange", function(){
   }
 
   function scan(){
-    findRequestNodes().forEach(addActionsToNode);
+    findRequestNodes().forEach(decorateRequest);
   }
 
   function boot(){
@@ -21370,7 +21355,7 @@ document.addEventListener("visibilitychange", function(){
     setTimeout(scan, 1200);
   }
 
-  window.fmAdminHandleExtraRequest20260519 = {
+  window.fmAdminHandleExtraRequestClean20260519 = {
     boot,
     scan
   };
