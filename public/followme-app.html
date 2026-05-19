@@ -19610,5 +19610,236 @@ document.addEventListener("visibilitychange", function(){
 
 
 
+
+
+<script id="followme-admin-export-chat-final-20260519">
+(function(){
+  if(window.__FollowMeAdminExportChatFinal20260519) return;
+  window.__FollowMeAdminExportChatFinal20260519 = true;
+
+  function activeSessionId(){
+    try{
+      const active = document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active");
+      if(active){
+        const sid =
+          active.dataset.sessionId ||
+          active.getAttribute("data-session-id") ||
+          active.dataset.id ||
+          active.getAttribute("data-id") ||
+          "";
+        if(String(sid || "").trim()) return String(sid).trim();
+      }
+    }catch(e){}
+
+    try{
+      if(window.currentOwnerSessionId) return String(window.currentOwnerSessionId).trim();
+    }catch(e){}
+
+    try{
+      const selected = document.querySelector("[data-session-id].active, [data-id].active");
+      if(selected){
+        const sid =
+          selected.dataset.sessionId ||
+          selected.getAttribute("data-session-id") ||
+          selected.dataset.id ||
+          selected.getAttribute("data-id") ||
+          "";
+        if(String(sid || "").trim()) return String(sid).trim();
+      }
+    }catch(e){}
+
+    return "";
+  }
+
+  function formatDate(value){
+    try{
+      const d = new Date(value);
+      if(!isNaN(d.getTime())){
+        return d.toLocaleString("it-IT");
+      }
+    }catch(e){}
+    return String(value || "");
+  }
+
+  function parseAttachment(message){
+    try{
+      const obj = JSON.parse(message);
+      if(obj && obj.__followme_attachment){
+        return obj;
+      }
+    }catch(e){}
+    return null;
+  }
+
+  function cleanMessage(message){
+    const att = parseAttachment(message);
+
+    if(att){
+      const kind = att.kind || "allegato";
+      const label = att.label || att.filename || "file";
+      const url = att.url || "";
+      return "[ALLEGATO: " + kind + "] " + label + (url ? " - " + location.origin + url : "");
+    }
+
+    return String(message || "");
+  }
+
+  async function fetchAllMessages(sessionId){
+    const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/messages?after=0&limit=10000&v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    const data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || !data.success){
+      throw new Error((data && data.error) || "Impossibile leggere la chat.");
+    }
+
+    return data.messages || [];
+  }
+
+  function buildTxt(sessionId, messages){
+    const lines = [];
+
+    lines.push("FOLLOWME CHAT - ESPORTAZIONE");
+    lines.push("Sessione: " + sessionId);
+    lines.push("Data esportazione: " + new Date().toLocaleString("it-IT"));
+    lines.push("------------------------------------------------------------");
+    lines.push("");
+
+    messages.forEach(function(m){
+      const sender = String(m.sender || "").toLowerCase() === "owner"
+        ? "ADMIN"
+        : "UTENTE";
+
+      lines.push("[" + formatDate(m.created_at) + "] " + sender);
+      lines.push(cleanMessage(m.message));
+      lines.push("");
+    });
+
+    lines.push("------------------------------------------------------------");
+    lines.push("Fine esportazione.");
+
+    return lines.join("\n");
+  }
+
+  function downloadText(filename, text){
+    const blob = new Blob([text], { type:"text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+
+    setTimeout(function(){
+      URL.revokeObjectURL(url);
+      a.remove();
+    }, 800);
+  }
+
+  async function exportCurrentChat(){
+    const sessionId = activeSessionId();
+
+    if(!sessionId){
+      alert("Seleziona prima una chat da esportare.");
+      return;
+    }
+
+    const btn = document.getElementById("followmeAdminExportChatBtn20260519");
+
+    try{
+      if(btn){
+        btn.disabled = true;
+        btn.textContent = "Preparo...";
+      }
+
+      const messages = await fetchAllMessages(sessionId);
+      const txt = buildTxt(sessionId, messages);
+
+      const filename = "followme-chat-sessione-" + sessionId + "-" +
+        new Date().toISOString().slice(0,19).replace(/[:T]/g,"-") +
+        ".txt";
+
+      downloadText(filename, txt);
+
+    }catch(err){
+      alert(err.message || "Errore esportazione chat.");
+    }finally{
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = "Scarica chat";
+      }
+    }
+  }
+
+  function findToolbarTarget(){
+    return document.querySelector("#followmeOwnerChatTopActions") ||
+           document.querySelector(".followme-owner-chat-actions") ||
+           document.querySelector(".followme-admin-wa-actions") ||
+           document.querySelector("#followmeOwnerChatMessages")?.parentElement ||
+           document.body;
+  }
+
+  function ensureButton(){
+    if(document.getElementById("followmeAdminExportChatBtn20260519")) return;
+
+    const btn = document.createElement("button");
+    btn.id = "followmeAdminExportChatBtn20260519";
+    btn.type = "button";
+    btn.textContent = "Scarica chat";
+    btn.style.border = "0";
+    btn.style.borderRadius = "999px";
+    btn.style.padding = "9px 13px";
+    btn.style.fontWeight = "900";
+    btn.style.cursor = "pointer";
+    btn.style.background = "#eef2ff";
+    btn.style.color = "#1f2a44";
+    btn.style.margin = "4px";
+
+    btn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      exportCurrentChat();
+    }, true);
+
+    const target = findToolbarTarget();
+
+    if(target && target !== document.body){
+      target.insertBefore(btn, target.firstChild);
+    }else{
+      btn.style.position = "fixed";
+      btn.style.right = "14px";
+      btn.style.bottom = "80px";
+      btn.style.zIndex = "99999";
+      document.body.appendChild(btn);
+    }
+  }
+
+  function boot(){
+    ensureButton();
+  }
+
+  window.fmAdminExportChat20260519 = {
+    boot,
+    exportCurrentChat
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1000);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(ensureButton, 2000);
+})();
+</script>
+
 </body>
 </html>
