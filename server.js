@@ -9947,6 +9947,92 @@ app.get('/api/followme/chat/session/:session_id/service-state', async (req, res)
   }
 });
 
+
+// followme-close-selected-chat-final-20260519
+app.post('/api/followme/chat/session/:session_id/close-selected', express.json(), async (req, res) => {
+  try {
+    if (typeof ensureFollowMeRuntimeFast === 'function') {
+      await ensureFollowMeRuntimeFast();
+    } else if (typeof ensureFollowMeChatSchema === 'function') {
+      await ensureFollowMeChatSchema();
+    }
+
+    const sessionId = Number(req.params.session_id || 0);
+
+    if (!sessionId) {
+      return res.status(400).json({
+        success:false,
+        error:'Sessione non valida.'
+      });
+    }
+
+    const sessionRes = await pool.query(
+      `SELECT id, project_id, visitor_label, display_name, status
+       FROM followme_chat_sessions
+       WHERE id = $1
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!sessionRes.rows.length) {
+      return res.status(404).json({
+        success:false,
+        error:'Sessione non trovata.'
+      });
+    }
+
+    const session = sessionRes.rows[0];
+
+    await pool.query(
+      `UPDATE followme_chat_sessions
+       SET status = 'closed',
+           updated_at = NOW()
+       WHERE id = $1`,
+      [sessionId]
+    );
+
+    /*
+      Messaggio tecnico/visibile nella chat corretta.
+      Non spegne chat_mode_enabled del progetto.
+      Non tocca altre sessioni.
+    */
+    await pool.query(
+      `INSERT INTO followme_chat_messages
+       (session_id, project_id, sender, message, created_at)
+       VALUES ($1,$2,'owner',$3,NOW())`,
+      [
+        sessionId,
+        session.project_id,
+        JSON.stringify({
+          __followme_selected_chat_closed:true,
+          session_id:String(sessionId),
+          text:'Questa chat è stata chiusa dal proprietario.',
+          created_at:new Date().toISOString()
+        })
+      ]
+    );
+
+    return res.json({
+      success:true,
+      mode:'close_selected_chat',
+      session:{
+        id:sessionId,
+        project_id:session.project_id,
+        visitor_label:session.visitor_label,
+        display_name:session.display_name,
+        status:'closed'
+      }
+    });
+  } catch(err) {
+    console.error('followme close selected chat error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore chiusura chat selezionata.'
+    });
+  }
+});
+// end-followme-close-selected-chat-final-20260519
+
 app.post('/api/followme/:code/chat/close-all', express.json(), async (req, res) => {
   try {
     if (typeof ensureFollowMeRuntimeFast === 'function') {
