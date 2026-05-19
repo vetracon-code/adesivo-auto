@@ -9784,163 +9784,6 @@ app.get('/api/followme/debug/temp-attachments', async (req, res) => {
 
 
 
-
-// followme-attachment-server-dedupe-final-20260519
-function parseFollowMeAttachmentPayloadSafe(message) {
-  try {
-    const obj = typeof message === 'string' ? JSON.parse(message) : message;
-    if (obj && obj.__followme_attachment === true) return obj;
-  } catch (e) {}
-  return null;
-}
-
-function normalizeFollowMeAttachmentUrlForDedupe(url) {
-  return String(url || '')
-    .trim()
-    .replace(/^https?:\/\/[^\/]+/i, '')
-    .replace(/[#?].*$/, '');
-}
-
-function followMeUploadFileNameFromUrl(url) {
-  const clean = normalizeFollowMeAttachmentUrlForDedupe(url);
-  const m = clean.match(/\/uploads\/followme-chat\/([^\/?#]+)/i);
-  return m ? m[1] : '';
-}
-
-function getFollowMeAttachmentLocalSize(payload) {
-  try {
-    const fs = require('fs');
-    const path = require('path');
-
-    const file = followMeUploadFileNameFromUrl(payload && payload.url);
-    if (!file) return 0;
-
-    const fullPath = path.join(__dirname, 'public', 'uploads', 'followme-chat', file);
-    if (!fs.existsSync(fullPath)) return 0;
-
-    return fs.statSync(fullPath).size || 0;
-  } catch (e) {
-    return 0;
-  }
-}
-
-function deleteFollowMeAttachmentLocalFile(payload) {
-  try {
-    const fs = require('fs');
-    const path = require('path');
-
-    const file = followMeUploadFileNameFromUrl(payload && payload.url);
-    if (!file) return;
-
-    const fullPath = path.join(__dirname, 'public', 'uploads', 'followme-chat', file);
-
-    if (fs.existsSync(fullPath)) {
-      fs.unlinkSync(fullPath);
-    }
-  } catch (e) {
-    console.warn('deleteFollowMeAttachmentLocalFile warning:', e.message || e);
-  }
-}
-
-async function dedupeRecentFollowMeAttachmentMessage(opts) {
-  try {
-    const sessionId = Number(opts && opts.sessionId || 0);
-    const sender = String(opts && opts.sender || '').trim();
-    const newMessage = opts && opts.newMessage;
-    const newPayload = opts && opts.payload;
-
-    if (!sessionId || !sender || !newMessage || !newMessage.id || !newPayload || !newPayload.__followme_attachment) {
-      return newMessage;
-    }
-
-    const kind = String(newPayload.kind || '').trim() || 'attachment';
-
-    /*
-      Finestra stretta:
-      intercetta i doppi invii generati dallo stesso click,
-      senza penalizzare troppo chi invia due file volutamente.
-    */
-    const recent = await pool.query(
-      `SELECT id, message, created_at
-       FROM followme_chat_messages
-       WHERE session_id = $1
-         AND sender = $2
-         AND message LIKE '%__followme_attachment%'
-         AND created_at > NOW() - INTERVAL '3 seconds'
-       ORDER BY id DESC
-       LIMIT 12`,
-      [sessionId, sender]
-    );
-
-    const candidates = [];
-
-    for (const row of recent.rows || []) {
-      const payload = parseFollowMeAttachmentPayloadSafe(row.message);
-      if (!payload || payload.__followme_attachment !== true) continue;
-
-      const rowKind = String(payload.kind || '').trim() || 'attachment';
-      if (rowKind !== kind) continue;
-
-      candidates.push({
-        id: Number(row.id),
-        row,
-        payload,
-        size: Number(payload.size_bytes || getFollowMeAttachmentLocalSize(payload) || 0),
-        url: normalizeFollowMeAttachmentUrlForDedupe(payload.url || '')
-      });
-    }
-
-    if (candidates.length < 2) {
-      return newMessage;
-    }
-
-    /*
-      Se sono posizioni uguali o file dello stesso tipo arrivati insieme,
-      teniamo il più leggero. A parità, teniamo il più recente.
-    */
-    candidates.sort((a, b) => {
-      if (a.size !== b.size) return a.size - b.size;
-      return b.id - a.id;
-    });
-
-    const keep = candidates[0];
-    const remove = candidates.filter(x => x.id !== keep.id);
-
-    for (const item of remove) {
-      await pool.query(
-        `DELETE FROM followme_chat_messages
-         WHERE id = $1
-           AND session_id = $2
-           AND sender = $3`,
-        [item.id, sessionId, sender]
-      );
-
-      if (item.url && item.url !== keep.url) {
-        deleteFollowMeAttachmentLocalFile(item.payload);
-      }
-    }
-
-    if (keep.id === Number(newMessage.id)) {
-      return newMessage;
-    }
-
-    const kept = await pool.query(
-      `SELECT id, session_id, project_id, sender, message, created_at
-       FROM followme_chat_messages
-       WHERE id = $1
-       LIMIT 1`,
-      [keep.id]
-    );
-
-    return kept.rows[0] || newMessage;
-
-  } catch (err) {
-    console.warn('dedupeRecentFollowMeAttachmentMessage warning:', err.message || err);
-    return opts && opts.newMessage;
-  }
-}
-// end-followme-attachment-server-dedupe-final-20260519
-
 app.post('/api/followme/chat/session/:session_id/attachment-raw', express.raw({
   type: '*/*',
   limit: '25mb'
@@ -10048,8 +9891,7 @@ app.post('/api/followme/chat/session/:session_id/attachment-raw', express.raw({
       filename: safeFilename,
       mime: cleanMime,
       label: safeFilename,
-      created_at: new Date().toISOString(),
-      size_bytes: req.body.length
+      created_at: new Date().toISOString()
     };
 
     const inserted = await pool.query(
@@ -10060,19 +9902,11 @@ app.post('/api/followme/chat/session/:session_id/attachment-raw', express.raw({
       [sessionId, session.project_id, sender, JSON.stringify(payload)]
     );
 
-    const finalMessage = await dedupeRecentFollowMeAttachmentMessage({
-      sessionId,
-      sender,
-      newMessage: inserted.rows[0],
-      payload
-    });
-
     return res.json({
       success:true,
       mode:'raw_binary',
-      deduped: finalMessage && String(finalMessage.id) !== String(inserted.rows[0].id),
       size_bytes:req.body.length,
-      message: finalMessage || inserted.rows[0],
+      message: inserted.rows[0],
       attachment: payload
     });
   } catch (err) {
@@ -10201,8 +10035,7 @@ app.post('/api/followme/chat/session/:session_id/attachment', express.json({ lim
       filename: safeFilename,
       mime,
       label: label || safeFilename,
-      created_at: new Date().toISOString(),
-      size_bytes: dataUrl ? Buffer.from((dataUrl.match(/^data:[^;]+;base64,(.+)$/) || [null,''])[1] || '', 'base64').length : 0
+      created_at: new Date().toISOString()
     };
 
     const inserted = await pool.query(
@@ -10213,17 +10046,9 @@ app.post('/api/followme/chat/session/:session_id/attachment', express.json({ lim
       [sessionId, session.project_id, sender, JSON.stringify(payload)]
     );
 
-    const finalMessage = await dedupeRecentFollowMeAttachmentMessage({
-      sessionId,
-      sender,
-      newMessage: inserted.rows[0],
-      payload
-    });
-
     return res.json({
       success:true,
-      deduped: finalMessage && String(finalMessage.id) !== String(inserted.rows[0].id),
-      message: finalMessage || inserted.rows[0],
+      message: inserted.rows[0],
       attachment: payload
     });
   } catch (err) {
