@@ -24078,5 +24078,570 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-document-prepare-qr-preview-final-20260520">
+(function(){
+  if(window.__FollowMeDocumentPrepareQrPreviewFinal20260520) return;
+  window.__FollowMeDocumentPrepareQrPreviewFinal20260520 = true;
+
+  /*
+    FIX:
+    - sostituisce il pulsante Prepara documento con un clone pulito;
+    - evita conflitti tra vecchi listener;
+    - pubblica il PDF;
+    - abilita "Inquadra QR" solo dopo pubblicazione reale;
+    - mostra QR in overlay elegante.
+  */
+
+  let publishedDocumentUrl = "";
+  let publishedDocument = null;
+
+  function projectCode(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("app");
+      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
+    }catch(e){}
+
+    try{
+      if(window.FOLLOWME_PROJECT_CODE) return String(window.FOLLOWME_PROJECT_CODE);
+      if(window.followMeProjectCode) return String(window.followMeProjectCode);
+    }catch(e){}
+
+    return "FM-DEMO";
+  }
+
+  function absUrl(path){
+    try{
+      return new URL(path, location.origin).toString();
+    }catch(e){
+      return String(path || "");
+    }
+  }
+
+  function fmtBytes(n){
+    n = Number(n || 0);
+    if(n < 1024) return n + " B";
+    if(n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+    return (n / (1024 * 1024)).toFixed(2).replace(".00","") + " MB";
+  }
+
+  function setStatus(msg, type){
+    let box = document.getElementById("followmeDocumentUploadStatus20260520");
+
+    if(!box){
+      const uploadBox = document.querySelector("#followmeConsegnaDocumentoPage20260520 .fm-doc-upload-box");
+      if(uploadBox){
+        box = document.createElement("div");
+        box.id = "followmeDocumentUploadStatus20260520";
+        box.style.marginTop = "12px";
+        box.style.padding = "12px";
+        box.style.borderRadius = "16px";
+        box.style.background = "#f8fafc";
+        box.style.border = "1px solid rgba(15,23,42,.08)";
+        box.style.color = "#475569";
+        box.style.fontWeight = "750";
+        box.style.fontSize = "13px";
+        uploadBox.appendChild(box);
+      }
+    }
+
+    if(!box) return;
+
+    box.textContent = msg || "";
+
+    if(type === "ok"){
+      box.style.background = "#dcfce7";
+      box.style.color = "#166534";
+      box.style.borderColor = "rgba(22,101,52,.18)";
+    }else if(type === "err"){
+      box.style.background = "#fee2e2";
+      box.style.color = "#991b1b";
+      box.style.borderColor = "rgba(153,27,27,.18)";
+    }else{
+      box.style.background = "#f8fafc";
+      box.style.color = "#475569";
+      box.style.borderColor = "rgba(15,23,42,.08)";
+    }
+  }
+
+  function readFileAsBase64(file){
+    return new Promise(function(resolve, reject){
+      const reader = new FileReader();
+
+      reader.onload = function(){
+        const value = String(reader.result || "");
+        resolve(value.replace(/^data:.*?;base64,/, ""));
+      };
+
+      reader.onerror = function(){
+        reject(new Error("Impossibile leggere il file selezionato."));
+      };
+
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function updateCurrentInfo(doc, publicUrl){
+    const views = document.getElementById("followmeDocumentViews20260520");
+    const downloads = document.getElementById("followmeDocumentDownloads20260520");
+    const box = document.getElementById("followmeDocumentCurrentInfo20260520");
+
+    if(views) views.textContent = doc ? String(doc.views_count || 0) : "0";
+    if(downloads) downloads.textContent = doc ? String(doc.downloads_count || 0) : "0";
+
+    if(box){
+      if(doc){
+        box.innerHTML =
+          "<strong>Documento attivo:</strong> " + esc(doc.original_name || "Documento") + "<br>" +
+          "<span>Peso: " + fmtBytes(doc.size_bytes) + " · Pagine: " + (doc.page_count || "in lettura") + "</span><br>" +
+          "<a href='" + escAttr(publicUrl || "#") + "' target='_blank' rel='noopener'>Apri anteprima documento</a>";
+      }else{
+        box.innerHTML = "Nessun documento attivo.";
+      }
+    }
+  }
+
+  function esc(v){
+    return String(v == null ? "" : v)
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;");
+  }
+
+  function escAttr(v){
+    return esc(v).replace(/'/g, "&#39;");
+  }
+
+  function ensureCurrentInfoBox(){
+    const uploadBox = document.querySelector("#followmeConsegnaDocumentoPage20260520 .fm-doc-upload-box");
+    if(!uploadBox) return;
+
+    if(document.getElementById("followmeDocumentCurrentInfo20260520")) return;
+
+    const box = document.createElement("div");
+    box.id = "followmeDocumentCurrentInfo20260520";
+    box.style.marginTop = "14px";
+    box.style.padding = "13px";
+    box.style.borderRadius = "16px";
+    box.style.background = "#f8fafc";
+    box.style.border = "1px solid rgba(15,23,42,.08)";
+    box.style.fontWeight = "750";
+    box.style.color = "#334155";
+    box.innerHTML = "Nessun documento attivo.";
+
+    uploadBox.appendChild(box);
+  }
+
+  function ensureStyle(){
+    if(document.getElementById("followmeDocumentQrPreviewStyle20260520")) return;
+
+    const style = document.createElement("style");
+    style.id = "followmeDocumentQrPreviewStyle20260520";
+    style.textContent = `
+      #followmeDocumentQrPreviewBtn20260520{
+        transition:opacity .18s ease, transform .18s ease;
+      }
+
+      #followmeDocumentQrPreviewBtn20260520.disabled{
+        opacity:.38;
+        filter:grayscale(1);
+        cursor:not-allowed !important;
+      }
+
+      #followmeDocumentQrOverlay20260520{
+        display:none;
+        position:fixed;
+        inset:0;
+        z-index:100002;
+        align-items:center;
+        justify-content:center;
+        padding:24px;
+        box-sizing:border-box;
+        background:
+          radial-gradient(circle at top, rgba(59,130,246,.22), transparent 32%),
+          rgba(2,6,23,.72);
+        backdrop-filter:blur(18px);
+        -webkit-backdrop-filter:blur(18px);
+      }
+
+      #followmeDocumentQrOverlay20260520.open{
+        display:flex;
+      }
+
+      #followmeDocumentQrOverlay20260520 .qr-card{
+        width:min(410px,100%);
+        border-radius:32px;
+        padding:24px;
+        background:rgba(255,255,255,.94);
+        color:#0f172a;
+        border:1px solid rgba(255,255,255,.48);
+        box-shadow:0 30px 90px rgba(0,0,0,.38);
+        text-align:center;
+      }
+
+      #followmeDocumentQrOverlay20260520 .qr-kicker{
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        min-height:25px;
+        padding:0 12px;
+        border-radius:999px;
+        background:#f1f5f9;
+        color:#334155;
+        font-size:11px;
+        font-weight:950;
+        letter-spacing:.08em;
+        text-transform:uppercase;
+        margin-bottom:12px;
+      }
+
+      #followmeDocumentQrOverlay20260520 h3{
+        margin:0 0 8px;
+        font-size:27px;
+        line-height:1.04;
+        letter-spacing:-.045em;
+        font-weight:950;
+      }
+
+      #followmeDocumentQrOverlay20260520 p{
+        margin:0 0 17px;
+        color:#64748b;
+        line-height:1.35;
+        font-size:14px;
+        font-weight:700;
+      }
+
+      #followmeDocumentQrOverlay20260520 .qr-frame{
+        width:min(270px,76vw);
+        height:min(270px,76vw);
+        margin:0 auto 18px;
+        border-radius:28px;
+        padding:14px;
+        background:
+          linear-gradient(#fff,#fff) padding-box,
+          linear-gradient(135deg,#020617,#64748b,#bfdbfe) border-box;
+        border:2px solid transparent;
+        box-shadow:0 18px 54px rgba(15,23,42,.16);
+        display:flex;
+        align-items:center;
+        justify-content:center;
+      }
+
+      #followmeDocumentQrOverlay20260520 .qr-frame img{
+        width:100%;
+        height:100%;
+        object-fit:contain;
+        image-rendering:auto;
+      }
+
+      #followmeDocumentQrOverlay20260520 .qr-actions{
+        display:flex;
+        gap:8px;
+        flex-wrap:wrap;
+        justify-content:center;
+      }
+
+      #followmeDocumentQrOverlay20260520 .qr-actions button,
+      #followmeDocumentQrOverlay20260520 .qr-actions a{
+        border:0;
+        border-radius:999px;
+        padding:11px 14px;
+        font-weight:950;
+        cursor:pointer;
+        text-decoration:none;
+        font-size:13px;
+      }
+
+      #followmeDocumentQrOverlay20260520 .open-doc{
+        background:#111827;
+        color:#fff;
+      }
+
+      #followmeDocumentQrOverlay20260520 .close-qr{
+        background:#e5e7eb;
+        color:#111827;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function ensureQrOverlay(){
+    if(document.getElementById("followmeDocumentQrOverlay20260520")) return;
+
+    const overlay = document.createElement("div");
+    overlay.id = "followmeDocumentQrOverlay20260520";
+    overlay.innerHTML = `
+      <div class="qr-card" role="dialog" aria-modal="true" aria-label="QR Consegna Documento">
+        <div class="qr-kicker">Consegna Documento</div>
+        <h3>Inquadra il QR</h3>
+        <p>Questo QR apre il documento pubblicato.</p>
+        <div class="qr-frame">
+          <img id="followmeDocumentQrImage20260520" alt="QR documento">
+        </div>
+        <div class="qr-actions">
+          <a class="open-doc" id="followmeDocumentQrOpenLink20260520" href="#" target="_blank" rel="noopener">Apri documento</a>
+          <button class="close-qr" id="followmeDocumentQrClose20260520" type="button">Chiudi</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    overlay.querySelector("#followmeDocumentQrClose20260520").onclick = function(){
+      overlay.classList.remove("open");
+    };
+
+    overlay.addEventListener("click", function(ev){
+      if(ev.target === overlay) overlay.classList.remove("open");
+    });
+  }
+
+  function qrApiUrl(value){
+    /*
+      Usa servizio QR esterno semplice per preview admin.
+      Se preferisci, dopo lo sostituiamo con generazione interna.
+    */
+    return "https://api.qrserver.com/v1/create-qr-code/?size=560x560&margin=18&data=" + encodeURIComponent(value);
+  }
+
+  function showQr(){
+    if(!publishedDocumentUrl){
+      alert("Prima prepara e pubblica il documento.");
+      return;
+    }
+
+    ensureStyle();
+    ensureQrOverlay();
+
+    const full = absUrl(publishedDocumentUrl);
+    const img = document.getElementById("followmeDocumentQrImage20260520");
+    const link = document.getElementById("followmeDocumentQrOpenLink20260520");
+    const overlay = document.getElementById("followmeDocumentQrOverlay20260520");
+
+    if(img) img.src = qrApiUrl(full);
+    if(link) link.href = full;
+    if(overlay) overlay.classList.add("open");
+  }
+
+  function ensureQrButton(){
+    const actions = document.querySelector("#followmeConsegnaDocumentoPage20260520 .fm-doc-actions");
+    if(!actions) return;
+
+    let btn = document.getElementById("followmeDocumentQrPreviewBtn20260520");
+
+    if(!btn){
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.id = "followmeDocumentQrPreviewBtn20260520";
+      btn.className = "fm-doc-muted disabled";
+      btn.textContent = "Inquadra QR";
+      btn.disabled = true;
+
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        if(btn.disabled || !publishedDocumentUrl){
+          alert("Il QR si attiva dopo la pubblicazione del documento.");
+          return;
+        }
+
+        showQr();
+      }, true);
+
+      actions.insertBefore(btn, actions.firstChild);
+    }
+
+    refreshQrButton();
+  }
+
+  function refreshQrButton(){
+    const btn = document.getElementById("followmeDocumentQrPreviewBtn20260520");
+    if(!btn) return;
+
+    if(publishedDocumentUrl){
+      btn.disabled = false;
+      btn.classList.remove("disabled");
+      btn.textContent = "Inquadra QR";
+    }else{
+      btn.disabled = true;
+      btn.classList.add("disabled");
+      btn.textContent = "Inquadra QR";
+    }
+  }
+
+  async function loadCurrentDocument(){
+    try{
+      const code = projectCode();
+
+      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/current?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(res.ok && data && data.success && data.document){
+        publishedDocument = data.document;
+        publishedDocumentUrl = data.public_url || "";
+        updateCurrentInfo(data.document, data.public_url);
+      }else{
+        publishedDocument = null;
+        publishedDocumentUrl = "";
+      }
+
+      refreshQrButton();
+
+    }catch(e){}
+  }
+
+  async function prepareDocument(){
+    const input = document.getElementById("followmeDocumentUploadInput20260520");
+    const btn = document.getElementById("followmeDocumentUploadBtn20260520");
+
+    if(!input || !input.files || !input.files[0]){
+      setStatus("Seleziona prima un PDF.", "err");
+      return;
+    }
+
+    const file = input.files[0];
+    const name = String(file.name || "");
+
+    if(!name.toLowerCase().endsWith(".pdf")){
+      setStatus("Formato non supportato. Carica solo file PDF.", "err");
+      return;
+    }
+
+    const maxBytes = 18 * 1024 * 1024;
+    if(file.size > maxBytes){
+      setStatus("PDF troppo pesante. Limite attuale: 18 MB.", "err");
+      return;
+    }
+
+    try{
+      if(btn){
+        btn.disabled = true;
+        btn.textContent = "Pubblicazione...";
+      }
+
+      publishedDocumentUrl = "";
+      refreshQrButton();
+
+      setStatus("Sto caricando e pubblicando il PDF...", "");
+
+      const base64 = await readFileAsBase64(file);
+      const code = projectCode();
+
+      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/upload", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({
+          filename:name,
+          mime_type:file.type || "application/pdf",
+          size_bytes:file.size,
+          base64
+        })
+      });
+
+      const text = await res.text();
+      let data = null;
+
+      try{
+        data = JSON.parse(text);
+      }catch(e){}
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || text || "Pubblicazione non riuscita.");
+      }
+
+      publishedDocument = data.document;
+      publishedDocumentUrl = data.public_url || "";
+
+      updateCurrentInfo(data.document, data.public_url);
+      setStatus("Documento pubblicato correttamente. Ora puoi inquadrare il QR.", "ok");
+      refreshQrButton();
+
+    }catch(err){
+      publishedDocumentUrl = "";
+      refreshQrButton();
+      setStatus(err.message || "Errore durante la pubblicazione.", "err");
+    }finally{
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = "Prepara documento";
+      }
+    }
+  }
+
+  function replacePrepareButton(){
+    const old = document.getElementById("followmeDocumentUploadBtn20260520");
+    if(!old || old.dataset.cleanPrepare20260520 === "1") return;
+
+    const clone = old.cloneNode(true);
+    clone.dataset.cleanPrepare20260520 = "1";
+    clone.disabled = false;
+    clone.textContent = "Prepara documento";
+
+    clone.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      prepareDocument();
+      return false;
+    }, true);
+
+    old.replaceWith(clone);
+  }
+
+  function boot(){
+    ensureStyle();
+    ensureCurrentInfoBox();
+    ensureQrButton();
+    ensureQrOverlay();
+    replacePrepareButton();
+    loadCurrentDocument();
+
+    setTimeout(function(){
+      ensureCurrentInfoBox();
+      ensureQrButton();
+      replacePrepareButton();
+      loadCurrentDocument();
+    }, 600);
+
+    setTimeout(function(){
+      ensureCurrentInfoBox();
+      ensureQrButton();
+      replacePrepareButton();
+    }, 1600);
+  }
+
+  window.fmDocumentPrepareQrPreview20260520 = {
+    boot,
+    prepareDocument,
+    showQr,
+    loadCurrentDocument
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(function(){
+    ensureQrButton();
+    replacePrepareButton();
+  }, 1500);
+})();
+</script>
+
 </body>
 </html>
