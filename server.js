@@ -9879,6 +9879,102 @@ app.get('/api/followme/document/:document_id/download', async (req, res) => {
   }
 });
 
+
+// followme-document-closed-page-final-exact-20260520
+app.get('/fm/document-closed', (req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+
+  return res.send(`<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Grazie</title>
+  <style>
+    html,body{
+      margin:0;
+      min-height:100%;
+      background:#020202;
+      overflow:hidden;
+    }
+
+    body{
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:28px;
+      box-sizing:border-box;
+      color:#d8d8d8;
+      background:
+        radial-gradient(circle at 50% 18%, rgba(220,220,220,.16), transparent 32%),
+        radial-gradient(circle at 18% 82%, rgba(255,255,255,.07), transparent 34%),
+        linear-gradient(145deg,#000 0%,#111 48%,#030303 100%);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    }
+
+    .card{
+      width:min(520px,100%);
+      text-align:center;
+      border-radius:34px;
+      padding:46px 30px 42px;
+      background:rgba(255,255,255,.035);
+      border:1px solid rgba(220,220,220,.18);
+      box-shadow:
+        0 30px 90px rgba(0,0,0,.52),
+        inset 0 1px 0 rgba(255,255,255,.10);
+      backdrop-filter:blur(18px);
+      -webkit-backdrop-filter:blur(18px);
+    }
+
+    .line{
+      width:86px;
+      height:1px;
+      margin:0 auto 24px;
+      background:linear-gradient(90deg,transparent,#d9d9d9,transparent);
+    }
+
+    h1{
+      margin:0;
+      font-family:"Snell Roundhand","Apple Chancery","Segoe Script","Brush Script MT",cursive;
+      font-size:56px;
+      line-height:1;
+      font-weight:400;
+      color:#e4e4e4;
+      text-shadow:0 0 30px rgba(255,255,255,.14);
+    }
+
+    p{
+      margin:20px auto 0;
+      max-width:360px;
+      font-size:15px;
+      line-height:1.55;
+      color:#bdbdbd;
+      font-weight:600;
+    }
+
+    .saluto{
+      margin-top:28px;
+      font-family:"Snell Roundhand","Apple Chancery","Segoe Script","Brush Script MT",cursive;
+      font-size:33px;
+      color:#dcdcdc;
+    }
+  </style>
+</head>
+<body>
+  <section class="card">
+    <div class="line"></div>
+    <h1>Grazie</h1>
+    <p>Il documento è stato chiuso correttamente.</p>
+    <div class="saluto">A presto</div>
+  </section>
+</body>
+</html>`);
+});
+// end-followme-document-closed-page-final-exact-20260520
+
 app.get('/fm/document/:code', async (req, res) => {
   try {
     await ensureFollowMeDocumentTable20260520();
@@ -10394,7 +10490,7 @@ app.get('/fm/document/:code', async (req, res) => {
     closeDocBtn.onclick = function(){
       const ok = confirm("Vuoi chiudere il documento?");
       if(!ok) return;
-      location.replace("/fm/document/closed?t=" + Date.now());
+      location.replace("/fm/document-closed?t=" + Date.now());
     };
 
     viewer.addEventListener("touchstart", function(ev){
