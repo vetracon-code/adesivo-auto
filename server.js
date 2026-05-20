@@ -9603,7 +9603,7 @@ function followmeCleanBase64Image20260520(v) {
   const ext = m[1].toLowerCase() === 'jpg' ? 'jpeg' : m[1].toLowerCase();
   const base64 = m[2];
 
-  if (!base64 || base64.length > 900000) return null;
+  if (!base64 || base64.length > 1800000) return null;
 
   try {
     return {
@@ -10068,7 +10068,7 @@ app.get('/fm/document-closed', (req, res) => {
 
 
 // followme-document-thumbnail-endpoint-async-final-20260520
-app.post('/api/followme/document/:document_id/thumbnail', express.json({ limit:'2mb' }), async (req, res) => {
+app.post('/api/followme/document/:document_id/thumbnail', express.json({ limit:'3mb' }), async (req, res) => {
   try {
     await ensureFollowMeDocumentPreparedColumns20260520();
 
