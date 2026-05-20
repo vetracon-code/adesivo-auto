@@ -10970,6 +10970,47 @@ app.post('/api/followme/:code/document/publish', express.json(), async (req, res
     }
 
     /*
+      FOLLOWME DOCUMENT PRESERVE PREVIOUS ACTIVE FRAME 20260520
+      Prima di sostituire active_url con il Documento PDF, salvo la destinazione precedente
+      nello storico. Così nel carosello il documento crea un proprio frame e la vecchia
+      destinazione rimane subito accanto come frame riattivabile.
+    */
+    try {
+      const previousRes = await pool.query(
+        `SELECT active_url
+         FROM followme_projects
+         WHERE id = $1
+         LIMIT 1`,
+        [project.id]
+      );
+
+      const previousUrl = String(previousRes.rows[0]?.active_url || '').trim();
+      const nextUrl = String(publicUrl || '').trim();
+
+      if (
+        previousUrl &&
+        previousUrl !== nextUrl &&
+        !previousUrl.includes('/fm/document/')
+      ) {
+        await pool.query(
+          `INSERT INTO followme_url_history
+           (project_id, url, activated_at, last_used_at, scan_count)
+           VALUES ($1, $2, NOW(), NOW(), 0)
+           ON CONFLICT (project_id, url)
+           DO UPDATE SET
+             activated_at = COALESCE(followme_url_history.activated_at, NOW()),
+             last_used_at = NOW()`,
+          [project.id, previousUrl]
+        );
+      }
+    } catch(e) {
+      console.error('followme preserve previous active frame error:', e);
+    }
+    /*
+      END FOLLOWME DOCUMENT PRESERVE PREVIOUS ACTIVE FRAME 20260520
+    */
+
+    /*
       FOLLOWME DOCUMENT FORCE ACTIVE_URL FINAL 20260520
       La tabella reale followme_projects usa active_url.
       Quando pubblico o riattivo il documento, il QR deve trasmettere subito la pagina documento.
