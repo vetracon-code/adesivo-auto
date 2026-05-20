@@ -26363,5 +26363,321 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-document-async-thumbnail-client-final-20260520">
+(function(){
+  if(window.__FollowMeDocumentAsyncThumbnailClientFinal20260520) return;
+  window.__FollowMeDocumentAsyncThumbnailClientFinal20260520 = true;
+
+  /*
+    Thumbnail PDF asincrona:
+    - non blocca upload/prepara/pubblica;
+    - dopo upload genera JPG della prima pagina;
+    - invia a endpoint dedicato;
+    - aggiorna carosello e preview principale "Ora stai trasmettendo".
+  */
+
+  let lastSelectedPdfFile = null;
+  let lastDocumentId = null;
+  let lastThumbnailUrl = "";
+
+  function projectCode(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("app");
+      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function findPdfInput(){
+    return document.getElementById("followmeDocumentUploadInput20260520") ||
+           document.querySelector('input[type="file"][accept*="pdf"]') ||
+           document.querySelector('input[type="file"]');
+  }
+
+  function rememberSelectedPdf(){
+    const input = findPdfInput();
+    const file = input && input.files && input.files[0];
+
+    if(file && file.type === "application/pdf"){
+      lastSelectedPdfFile = file;
+    }
+  }
+
+  function bindPdfInput(){
+    const input = findPdfInput();
+    if(!input || input.dataset.fmAsyncThumbnailBound20260520 === "1") return;
+
+    input.dataset.fmAsyncThumbnailBound20260520 = "1";
+    input.addEventListener("change", rememberSelectedPdf);
+  }
+
+  function ensurePdfJs(){
+    return new Promise(function(resolve){
+      if(window.pdfjsLib){
+        resolve(true);
+        return;
+      }
+
+      const existing = document.querySelector('script[data-followme-pdfjs-async-thumb="1"]');
+
+      if(existing){
+        existing.addEventListener("load", function(){ resolve(!!window.pdfjsLib); }, { once:true });
+        existing.addEventListener("error", function(){ resolve(false); }, { once:true });
+        return;
+      }
+
+      const sc = document.createElement("script");
+      sc.src = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js";
+      sc.async = true;
+      sc.dataset.followmePdfjsAsyncThumb = "1";
+
+      sc.onload = function(){
+        try{
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+            "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+        }catch(e){}
+        resolve(!!window.pdfjsLib);
+      };
+
+      sc.onerror = function(){
+        resolve(false);
+      };
+
+      document.head.appendChild(sc);
+    });
+  }
+
+  async function generateThumbnailBase64(file){
+    if(!file || file.type !== "application/pdf") return "";
+
+    const ok = await ensurePdfJs();
+    if(!ok || !window.pdfjsLib) return "";
+
+    const buffer = await file.arrayBuffer();
+
+    const pdf = await window.pdfjsLib.getDocument({ data:buffer }).promise;
+    const page = await pdf.getPage(1);
+
+    const raw = page.getViewport({ scale:1 });
+
+    /*
+      Scaling leggero: sufficiente per preview, non pesante per server/db.
+    */
+    const targetWidth = 420;
+    const scale = targetWidth / raw.width;
+    const viewport = page.getViewport({ scale });
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { alpha:false });
+
+    canvas.width = Math.round(viewport.width);
+    canvas.height = Math.round(viewport.height);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    await page.render({
+      canvasContext:ctx,
+      viewport
+    }).promise;
+
+    return canvas.toDataURL("image/jpeg", 0.74);
+  }
+
+  async function uploadThumbnailForDocument(documentId){
+    try{
+      if(!documentId || !lastSelectedPdfFile) return false;
+
+      const thumbnailBase64 = await generateThumbnailBase64(lastSelectedPdfFile);
+      if(!thumbnailBase64) return false;
+
+      const res = await fetch("/api/followme/document/" + encodeURIComponent(documentId) + "/thumbnail", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ thumbnail_base64:thumbnailBase64 })
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        console.warn("Thumbnail non salvata:", data);
+        return false;
+      }
+
+      lastThumbnailUrl = data.thumbnail_url || (data.document && data.document.thumbnail_url) || "";
+
+      updateDocumentPreviews(lastThumbnailUrl, data.document || null);
+
+      try{
+        if(window.fmDocumentNativePremiumHistoryNoEmbed20260520 &&
+           typeof window.fmDocumentNativePremiumHistoryNoEmbed20260520.loadCurrentDocument === "function"){
+          window.fmDocumentNativePremiumHistoryNoEmbed20260520.loadCurrentDocument();
+        }
+      }catch(e){}
+
+      return true;
+
+    }catch(err){
+      console.warn("Errore thumbnail asincrona:", err);
+      return false;
+    }
+  }
+
+  function patchUploadResponse(){
+    if(window.__FollowMeAsyncThumbnailFetchPatch20260520) return;
+    window.__FollowMeAsyncThumbnailFetchPatch20260520 = true;
+
+    const originalFetch = window.fetch;
+
+    window.fetch = async function(input, init){
+      const res = await originalFetch.apply(this, arguments);
+
+      try{
+        const url = typeof input === "string" ? input : (input && input.url) || "";
+
+        if(url.includes("/document/upload")){
+          const clone = res.clone();
+
+          clone.json().then(function(data){
+            if(data && data.success && data.document && data.document.id){
+              lastDocumentId = data.document.id;
+
+              /*
+                Dopo upload, non blocchiamo il flusso.
+                Generiamo thumbnail in ritardo.
+              */
+              setTimeout(function(){
+                uploadThumbnailForDocument(lastDocumentId);
+              }, 350);
+            }
+          }).catch(function(){});
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  function updateDocumentPreviews(thumbnailUrl, doc){
+    if(!thumbnailUrl) return;
+
+    const name = doc && doc.original_name ? doc.original_name : "Documento PDF";
+
+    /*
+      1) Card carosello Documento PDF.
+    */
+    const card = document.getElementById("followmeDocumentPremiumHistoryCard20260520");
+    if(card){
+      const preview = card.querySelector(".premium-history-preview");
+      if(preview){
+        preview.innerHTML = `
+          <div class="fm-doc-static-preview">
+            <div class="fm-doc-paper">
+              <img src="${thumbnailUrl}" alt="Preview PDF">
+            </div>
+            <div class="fm-doc-preview-text">
+              <div class="fm-doc-preview-title">${name.replace(/[<>&"]/g, "")}</div>
+              <div class="fm-doc-preview-sub">Prima pagina documento</div>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    /*
+      2) Preview principale / frame "Ora stai trasmettendo".
+      Usiamo selettori larghi ma limitati a elementi preview.
+    */
+    const possibleFrames = Array.from(document.querySelectorAll(
+      ".simple-preview-square, .qr-frame-preview-overlay, .qr-preview-card, .preview-fallback, .qr-auto-preview-frame"
+    ));
+
+    possibleFrames.forEach(function(el){
+      const txt = String(el.textContent || "").toLowerCase();
+      const idc = String(el.id || "") + " " + String(el.className || "");
+
+      if(
+        idc.toLowerCase().includes("preview") ||
+        txt.includes("trasmettendo") ||
+        txt.includes("documento") ||
+        txt.includes("pdf")
+      ){
+        if(el.tagName === "IFRAME"){
+          el.style.display = "none";
+          return;
+        }
+
+        if(el.classList && el.classList.contains("qr-preview-card")){
+          el.classList.add("show");
+        }
+
+        if(!el.querySelector(".fm-doc-main-thumbnail-20260520")){
+          const box = document.createElement("div");
+          box.className = "fm-doc-main-thumbnail-20260520";
+          box.style.marginTop = "10px";
+          box.style.borderRadius = "18px";
+          box.style.overflow = "hidden";
+          box.style.background = "#fff";
+          box.style.border = "1px solid rgba(255,255,255,.14)";
+          box.style.boxShadow = "0 18px 38px rgba(0,0,0,.28)";
+          box.innerHTML = `<img src="${thumbnailUrl}" alt="Preview documento" style="display:block;width:100%;height:auto;max-height:260px;object-fit:contain;background:#fff;">`;
+          el.appendChild(box);
+        }else{
+          const img = el.querySelector(".fm-doc-main-thumbnail-20260520 img");
+          if(img) img.src = thumbnailUrl;
+        }
+      }
+    });
+  }
+
+  async function refreshThumbnailFromCurrent(){
+    try{
+      const code = projectCode();
+      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/current?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(data && data.success && data.document && data.document.thumbnail_url){
+        lastThumbnailUrl = data.document.thumbnail_url;
+        updateDocumentPreviews(lastThumbnailUrl, data.document);
+      }
+    }catch(e){}
+  }
+
+  function boot(){
+    bindPdfInput();
+    patchUploadResponse();
+
+    setTimeout(bindPdfInput, 600);
+    setTimeout(refreshThumbnailFromCurrent, 900);
+    setTimeout(refreshThumbnailFromCurrent, 2000);
+  }
+
+  window.fmDocumentAsyncThumbnail20260520 = {
+    boot,
+    generateThumbnailBase64,
+    uploadThumbnailForDocument,
+    refreshThumbnailFromCurrent,
+    updateDocumentPreviews
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 300);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 300);
+  });
+})();
+</script>
+
 </body>
 </html>

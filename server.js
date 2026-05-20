@@ -10056,6 +10056,79 @@ app.get('/fm/document-closed', (req, res) => {
 });
 // end-followme-document-closed-page-final-exact-20260520
 
+
+// followme-document-thumbnail-endpoint-async-final-20260520
+app.post('/api/followme/document/:document_id/thumbnail', express.json({ limit:'2mb' }), async (req, res) => {
+  try {
+    await ensureFollowMeDocumentPreparedColumns20260520();
+
+    const documentId = Number(req.params.document_id || 0);
+    if (!documentId) {
+      return res.status(400).json({ success:false, error:'Documento non valido.' });
+    }
+
+    const thumbnailBase64 = String((req.body && req.body.thumbnail_base64) || '').trim();
+
+    if (!thumbnailBase64) {
+      return res.status(400).json({ success:false, error:'Thumbnail mancante.' });
+    }
+
+    const docRes = await pool.query(
+      `SELECT id, project_id
+       FROM followme_documents
+       WHERE id = $1
+       LIMIT 1`,
+      [documentId]
+    );
+
+    if (!docRes.rows.length) {
+      return res.status(404).json({ success:false, error:'Documento non trovato.' });
+    }
+
+    const doc = docRes.rows[0];
+
+    const thumbnailPath = await saveFollowMeDocumentThumbnail20260520(
+      doc.project_id,
+      doc.id,
+      thumbnailBase64
+    );
+
+    if (!thumbnailPath) {
+      return res.status(400).json({ success:false, error:'Thumbnail non valida.' });
+    }
+
+    const upd = await pool.query(
+      `UPDATE followme_documents
+       SET thumbnail_path = $1,
+           updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, project_id, original_name, public_path, mime_type, size_bytes, page_count,
+                 status, is_published, published_at, views_count, downloads_count,
+                 thumbnail_path, created_at, updated_at`,
+      [thumbnailPath, documentId]
+    );
+
+    const updatedDoc = upd.rows[0];
+
+    return res.json({
+      success:true,
+      document:normalizeFollowMeDocumentForClient20260520(updatedDoc, {
+        prepared:true,
+        published:!!updatedDoc.is_published
+      }),
+      thumbnail_url:thumbnailPath
+    });
+
+  } catch(err) {
+    console.error('followme document thumbnail async error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore salvataggio thumbnail documento.'
+    });
+  }
+});
+// end-followme-document-thumbnail-endpoint-async-final-20260520
+
 app.get('/fm/document/:code', async (req, res) => {
   try {
     await ensureFollowMeDocumentTable20260520();
