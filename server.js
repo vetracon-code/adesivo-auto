@@ -10216,6 +10216,7 @@ app.get('/fm/document/:code', async (req, res) => {
     <footer class="bottom">
       <button class="pages-btn" id="pagesBtn" type="button" style="display:none">Pagine</button>
       <a class="download" id="downloadBtn" href="/api/followme/document/${doc.id}/download">Scarica documento</a>
+      <button class="pages-btn" id="closeDocBtn" type="button">Chiudi</button>
     </footer>
   </div>
 
@@ -10389,6 +10390,13 @@ app.get('/fm/document/:code', async (req, res) => {
       drawer.classList.toggle("open");
     };
 
+    const closeDocBtn = document.getElementById("closeDocBtn");
+    closeDocBtn.onclick = function(){
+      const ok = confirm("Vuoi chiudere il documento?");
+      if(!ok) return;
+      location.replace("/fm/document/closed?t=" + Date.now());
+    };
+
     viewer.addEventListener("touchstart", function(ev){
       const t = ev.touches && ev.touches[0];
       if(!t) return;
@@ -10518,6 +10526,225 @@ app.get('/fm/document/:code', async (req, res) => {
   }
 });
 // end-followme-consegna-documento-premium-final-20260520
+
+// followme-document-publish-flow-final-20260520
+async function ensureFollowMeDocumentPublishColumns20260520() {
+  await pool.query(`ALTER TABLE followme_documents ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE followme_documents ADD COLUMN IF NOT EXISTS is_published BOOLEAN DEFAULT FALSE`);
+}
+
+app.post('/api/followme/:code/document/publish', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeDocumentTable20260520();
+    await ensureFollowMeDocumentPublishColumns20260520();
+
+    const code = String(req.params.code || '').trim();
+    const project = await getFollowMeProjectByCode20260520(code);
+
+    if (!project) {
+      return res.status(404).json({ success:false, error:'Progetto non trovato.' });
+    }
+
+    const documentId = Number((req.body && req.body.document_id) || 0);
+
+    const docRes = await pool.query(
+      `SELECT id, project_id, original_name, public_path, size_bytes, page_count, views_count, downloads_count
+       FROM followme_documents
+       WHERE project_id = $1
+         AND status = 'active'
+         AND ($2::BIGINT = 0 OR id = $2::BIGINT)
+       ORDER BY id DESC
+       LIMIT 1`,
+      [project.id, documentId]
+    );
+
+    if (!docRes.rows.length) {
+      return res.status(404).json({
+        success:false,
+        error:'Prima carica un PDF valido.'
+      });
+    }
+
+    const doc = docRes.rows[0];
+    const publicUrl = `/fm/document/${project.public_id || project.code}`;
+
+    await pool.query(
+      `UPDATE followme_documents
+       SET is_published = FALSE,
+           updated_at = NOW()
+       WHERE project_id = $1`,
+      [project.id]
+    );
+
+    await pool.query(
+      `UPDATE followme_documents
+       SET is_published = TRUE,
+           published_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $1`,
+      [doc.id]
+    );
+
+    /*
+      Proviamo ad aggiornare la destinazione principale del QR in modo elastico,
+      perché nei prototipi FollowMe possono esistere nomi colonna diversi.
+      Se nessuna colonna compatibile esiste, il documento resta pubblicato
+      e la URL /fm/document/... è comunque disponibile.
+    */
+    const colsRes = await pool.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_name = 'followme_projects'`
+    );
+
+    const cols = new Set(colsRes.rows.map(r => r.column_name));
+    const candidates = [
+      'target_url',
+      'destination_url',
+      'current_url',
+      'redirect_url',
+      'url',
+      'link_url',
+      'active_url'
+    ];
+
+    let updatedDestinationColumn = null;
+
+    for (const col of candidates) {
+      if (!cols.has(col)) continue;
+
+      try {
+        await pool.query(
+          `UPDATE followme_projects SET ${col} = $1, updated_at = NOW() WHERE id = $2`,
+          [publicUrl, project.id]
+        );
+        updatedDestinationColumn = col;
+        break;
+      } catch(e) {}
+    }
+
+    /*
+      Spegne la chat se presente, perché ora il QR deve consegnare il PDF.
+    */
+    try {
+      await pool.query(
+        `UPDATE followme_projects
+         SET chat_mode_enabled = FALSE,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [project.id]
+      );
+    } catch(e) {}
+
+    return res.json({
+      success:true,
+      published:true,
+      document:doc,
+      public_url:publicUrl,
+      destination_column:updatedDestinationColumn,
+      warning: updatedDestinationColumn ? null : 'Documento pubblicato, ma non ho trovato automaticamente la colonna destinazione QR.'
+    });
+
+  } catch(err) {
+    console.error('followme document publish error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore pubblicazione documento.'
+    });
+  }
+});
+
+app.get('/fm/document/closed', (req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+
+  return res.send(`<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Grazie</title>
+  <style>
+    html,body{
+      margin:0;
+      min-height:100%;
+      background:#020202;
+      color:#d9d9d9;
+      font-family:"Snell Roundhand","Apple Chancery","Segoe Script","Brush Script MT",cursive;
+      overflow:hidden;
+    }
+
+    body{
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:30px;
+      box-sizing:border-box;
+      background:
+        radial-gradient(circle at 50% 18%, rgba(192,192,192,.16), transparent 30%),
+        radial-gradient(circle at 20% 82%, rgba(255,255,255,.08), transparent 32%),
+        linear-gradient(145deg,#000 0%,#111 48%,#020202 100%);
+    }
+
+    .card{
+      width:min(520px,100%);
+      text-align:center;
+      border-radius:34px;
+      padding:42px 30px;
+      background:rgba(255,255,255,.035);
+      border:1px solid rgba(220,220,220,.16);
+      box-shadow:0 30px 90px rgba(0,0,0,.50), inset 0 1px 0 rgba(255,255,255,.10);
+      backdrop-filter:blur(18px);
+      -webkit-backdrop-filter:blur(18px);
+    }
+
+    .line{
+      width:72px;
+      height:1px;
+      margin:0 auto 22px;
+      background:linear-gradient(90deg,transparent,#c0c0c0,transparent);
+    }
+
+    h1{
+      margin:0;
+      font-size:48px;
+      line-height:1;
+      font-weight:400;
+      color:#e7e7e7;
+      text-shadow:0 0 28px rgba(255,255,255,.14);
+    }
+
+    p{
+      margin:18px auto 0;
+      max-width:360px;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+      font-size:15px;
+      line-height:1.5;
+      color:#bdbdbd;
+      font-weight:600;
+    }
+
+    .silver{
+      margin-top:26px;
+      font-size:28px;
+      color:#d8d8d8;
+    }
+  </style>
+</head>
+<body>
+  <section class="card">
+    <div class="line"></div>
+    <h1>Grazie</h1>
+    <p>Il documento è stato chiuso. Puoi tornare alla pagina precedente o continuare la navigazione dal tuo dispositivo.</p>
+    <div class="silver">A presto</div>
+  </section>
+</body>
+</html>`);
+});
+// end-followme-document-publish-flow-final-20260520
+
 
 app.get('/fm/chat/c/:chat_token', async (req, res) => {
   try {
