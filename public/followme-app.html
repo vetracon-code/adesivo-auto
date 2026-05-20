@@ -26069,282 +26069,192 @@ document.addEventListener("visibilitychange", function(){
 
 
 <script id="followme-pdf-thumbnail-generator-final-20260520" type="module">
+/* disattivato: la thumbnail PDF ora viene integrata nella preview principale */
+</script>
+
+
+<script id="followme-pdf-preview-integrated-final-20260520">
 (function(){
-  if(window.__FollowMePdfThumbnailGeneratorFinal20260520) return;
-  window.__FollowMePdfThumbnailGeneratorFinal20260520 = true;
+  if(window.__FollowMePdfPreviewIntegrated20260520) return;
+  window.__FollowMePdfPreviewIntegrated20260520 = true;
 
-  const PDFJS_SRC = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.mjs";
-  const PDFJS_WORKER = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.worker.min.mjs";
-
-  let pdfjsPromise = null;
-  let lastThumbDocId = null;
-
-  function projectCode(){
+  function code(){
     try{
-      const parts = location.pathname.split("/").filter(Boolean);
-      const i = parts.indexOf("app");
-      if(i >= 0 && parts[i+1]) return parts[i+1];
+      const p = location.pathname.split("/").filter(Boolean);
+      const i = p.indexOf("app");
+      if(i >= 0 && p[i+1]) return p[i+1];
     }catch(e){}
     return "FM-DEMO";
   }
 
-  function absUrl(path){
-    return new URL(String(path || ""), location.origin).toString();
+  function clean(v){
+    return String(v || "").trim().replace(/\/+$/, "");
   }
 
-  async function loadPdfJs(){
-    if(!pdfjsPromise){
-      pdfjsPromise = import(PDFJS_SRC).then(mod => {
-        mod.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
-        return mod;
-      });
-    }
-    return pdfjsPromise;
+  function isDocumentUrl(v){
+    v = clean(v);
+    return v.includes("/fm/document/");
   }
 
-  async function generateThumbnailFromPdf(pdfPath){
-    if(!pdfPath) return null;
-
-    const pdfjsLib = await loadPdfJs();
-
-    const pdf = await pdfjsLib.getDocument({
-      url: absUrl(pdfPath),
-      disableAutoFetch:false,
-      disableStream:false
-    }).promise;
-
-    const page = await pdf.getPage(1);
-    const base = page.getViewport({ scale:1 });
-
-    /*
-      Thumbnail leggibile ma leggera:
-      - larghezza target 900px circa
-      - limite massimo 1200px
-      - jpeg compressa
-    */
-    const targetW = 520;
-    const cssScale = Math.min(Math.max(targetW / base.width, 0.65), 1.25);
-    const dpr = 1;
-    const renderScale = cssScale * dpr;
-    const viewport = page.getViewport({ scale:renderScale });
-
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d", { alpha:false });
-
-    canvas.width = Math.floor(viewport.width);
-    canvas.height = Math.floor(viewport.height);
-
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-
-    await page.render({
-      canvasContext:ctx,
-      viewport,
-      background:"white",
-      renderInteractiveForms:true
-    }).promise;
-
-    return canvas.toDataURL("image/jpeg", 0.64);
-  }
-
-  async function saveThumbnail(documentId, thumbnailBase64){
-    if(!documentId || !thumbnailBase64) return null;
-
-    const r = await fetch("/api/followme/document/" + encodeURIComponent(documentId) + "/thumbnail", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ thumbnail_base64:thumbnailBase64 })
+  function esc(v){
+    return String(v || "").replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
     });
-
-    const j = await r.json().catch(() => null);
-    if(!r.ok || !j || !j.success){
-      throw new Error((j && j.error) || "Salvataggio thumbnail non riuscito.");
-    }
-
-    return j.document || null;
   }
 
-  async function ensureThumbnailForDocument(doc){
-    if(!doc || !doc.id || !doc.public_path) return null;
-    if(doc.thumbnail_url || doc.thumbnail_path) return doc;
-    if(lastThumbDocId === String(doc.id)) return doc;
-
-    lastThumbDocId = String(doc.id);
-
-    const b64 = await generateThumbnailFromPdf(doc.public_path);
-    if(!b64){
-      console.warn("FollowMe thumbnail: base64 non generata", doc);
-      return doc;
-    }
-
-    console.warn("FollowMe thumbnail: base64 length", b64.length, "doc", doc.id);
-
-    const updated = await saveThumbnail(doc.id, b64);
-    return updated || doc;
+  async function getCurrentDocument(){
+    try{
+      const r = await fetch("/api/followme/" + encodeURIComponent(code()) + "/document/current?v=" + Date.now(), { cache:"no-store" });
+      const j = await r.json().catch(() => null);
+      if(j && j.success && j.document) return j.document;
+    }catch(e){}
+    return null;
   }
 
-  function ensureMainPreviewStyle(){
-    if(document.getElementById("followmePdfMainThumbStyle20260520")) return;
+  function ensureStyle(){
+    if(document.getElementById("followmePdfPreviewIntegratedStyle20260520")) return;
 
     const st = document.createElement("style");
-    st.id = "followmePdfMainThumbStyle20260520";
+    st.id = "followmePdfPreviewIntegratedStyle20260520";
     st.textContent = `
-      .followme-pdf-main-thumb-20260520{
-        margin-top:12px;
+      .followme-pdf-preview-inside-20260520{
         width:100%;
-        border-radius:18px;
+        min-height:220px;
+        border-radius:16px;
         overflow:hidden;
-        background:#fff;
+        display:grid;
+        place-items:center;
+        background:
+          radial-gradient(circle at 20% 8%, rgba(200,255,46,.18), transparent 34%),
+          radial-gradient(circle at 88% 0%, rgba(94,231,255,.14), transparent 32%),
+          linear-gradient(145deg, rgba(255,255,255,.10), rgba(255,255,255,.035));
         border:1px solid rgba(255,255,255,.12);
-        box-shadow:0 16px 40px rgba(0,0,0,.22);
       }
 
-      .followme-pdf-main-thumb-20260520 img{
-        display:block;
+      .followme-pdf-preview-inside-20260520 img{
         width:100%;
-        height:auto;
-        max-height:360px;
-        object-fit:contain;
-        background:#fff;
+        height:100%;
+        min-height:220px;
+        display:block;
+        object-fit:cover;
       }
 
-      .followme-pdf-main-thumb-caption-20260520{
-        padding:9px 11px;
-        background:rgba(2,6,23,.92);
-        color:rgba(255,255,255,.78);
-        font-size:.78rem;
-        font-weight:850;
+      .followme-pdf-preview-fallback-20260520{
+        color:#fff;
+        text-align:center;
+        padding:24px;
+        display:grid;
+        gap:8px;
       }
 
-      @media(max-width:560px){
-        .followme-pdf-main-thumb-20260520 img{
-          max-height:280px;
-        }
+      .followme-pdf-preview-fallback-20260520 strong{
+        font-size:1.25rem;
+        font-weight:950;
+      }
+
+      .followme-pdf-preview-fallback-20260520 span{
+        color:rgba(255,255,255,.68);
+        font-size:.9rem;
+        line-height:1.35;
+      }
+
+      #followmePdfMainThumb20260520{
+        display:none !important;
       }
     `;
     document.head.appendChild(st);
   }
 
-  function setMainPreviewThumbnail(doc){
-    const thumb = doc && (doc.thumbnail_url || doc.thumbnail_path);
-    if(!thumb) return;
+  async function integratePdfPreview(){
+    ensureStyle();
 
-    ensureMainPreviewStyle();
+    const activeUrl = window.__followMeActiveUrl ||
+      (document.getElementById("newUrl") && document.getElementById("newUrl").value) ||
+      "";
 
-    const activeUrl = String(window.__followMeActiveUrl || "").trim();
-    const isDocActive =
-      activeUrl.includes("/fm/document/") ||
-      (window.fmPdfSingleCard20260520 && typeof window.fmPdfSingleCard20260520.render === "function");
+    if(!isDocumentUrl(activeUrl)) return;
 
-    if(!isDocActive) return;
+    const doc = await getCurrentDocument();
+    if(!doc) return;
 
-    const containers = [
-      document.querySelector(".simple-preview-card"),
-      document.getElementById("qrPreviewCard"),
-      document.querySelector(".qr-preview-card")
-    ].filter(Boolean);
+    const thumb = doc.thumbnail_url || doc.thumbnail_path || "";
+    const name = doc.original_name || "Documento PDF";
 
-    const container = containers[0];
-    if(!container) return;
+    /*
+      Preview principale: usa il frame già esistente, non crea un nuovo blocco.
+      In base alle patch presenti può essere un iframe oppure una card preview.
+    */
+    const frame =
+      document.querySelector(".qr-auto-preview-frame") ||
+      document.getElementById("qrAutoPreviewFrame") ||
+      document.querySelector(".simple-preview-frame") ||
+      document.querySelector(".simple-preview-card");
 
-    let box = document.getElementById("followmePdfMainThumb20260520");
-    if(!box){
-      box = document.createElement("div");
-      box.id = "followmePdfMainThumb20260520";
-      box.className = "followme-pdf-main-thumb-20260520";
-      container.appendChild(box);
+    const previewCard =
+      document.querySelector(".qr-preview-card") ||
+      document.querySelector(".simple-preview-card");
+
+    if(previewCard){
+      previewCard.classList.add("show");
     }
 
-    box.innerHTML = `
-      <img src="${thumb}?v=${Date.now()}" alt="Anteprima documento PDF">
-      <div class="followme-pdf-main-thumb-caption-20260520">Anteprima documento attualmente trasmesso</div>
-    `;
-  }
+    if(frame){
+      if(frame.tagName && frame.tagName.toLowerCase() === "iframe"){
+        frame.style.display = "none";
 
-  async function refreshCurrentDocumentAndThumbnail(reason){
-    try{
-      const code = projectCode();
-      const r = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/current?v=" + Date.now(), { cache:"no-store" });
-      const j = await r.json().catch(() => null);
-      if(!j || !j.success || !j.document) return null;
-
-      let doc = j.document;
-      if(!doc.thumbnail_url && !doc.thumbnail_path){
-        doc = await ensureThumbnailForDocument(doc);
-      }
-
-      setMainPreviewThumbnail(doc);
-
-      if(window.fmPdfSingleCard20260520){
-        try{
-          if(typeof window.fmPdfSingleCard20260520.refresh === "function") await window.fmPdfSingleCard20260520.refresh();
-          if(typeof window.fmPdfSingleCard20260520.render === "function") window.fmPdfSingleCard20260520.render();
-        }catch(e){}
-      }
-
-      return doc;
-    }catch(e){
-      console.warn("followme thumbnail refresh failed:", reason, e);
-      return null;
-    }
-  }
-
-  function patchFetchUpload(){
-    if(window.__FollowMePdfThumbnailFetchPatched20260520) return;
-    window.__FollowMePdfThumbnailFetchPatched20260520 = true;
-
-    const originalFetch = window.fetch.bind(window);
-
-    window.fetch = async function(input, init){
-      const response = await originalFetch(input, init);
-
-      try{
-        const url = typeof input === "string" ? input : (input && input.url) || "";
-        const isUpload = /\/api\/followme\/[^\/]+\/document\/upload/i.test(url);
-
-        if(isUpload){
-          response.clone().json().then(async data => {
-            if(data && data.success && data.document && data.document.id){
-              let doc = data.document;
-              doc = await ensureThumbnailForDocument(doc);
-              setMainPreviewThumbnail(doc);
-
-              setTimeout(() => refreshCurrentDocumentAndThumbnail("after_upload"), 500);
-              setTimeout(() => refreshCurrentDocumentAndThumbnail("after_upload_late"), 1600);
-            }
-          }).catch(()=>{});
+        let holder = document.getElementById("followmePdfIntegratedPreviewHolder20260520");
+        if(!holder){
+          holder = document.createElement("div");
+          holder.id = "followmePdfIntegratedPreviewHolder20260520";
+          holder.className = "followme-pdf-preview-inside-20260520";
+          frame.parentNode.insertBefore(holder, frame);
         }
-      }catch(e){}
 
-      return response;
-    };
+        holder.innerHTML = thumb
+          ? `<img src="${esc(thumb)}?v=${Date.now()}" alt="${esc(name)}">`
+          : `<div class="followme-pdf-preview-fallback-20260520"><strong>PDF</strong><span>${esc(name)}</span></div>`;
+
+        return;
+      }
+
+      frame.innerHTML = thumb
+        ? `<div class="followme-pdf-preview-inside-20260520"><img src="${esc(thumb)}?v=${Date.now()}" alt="${esc(name)}"></div>`
+        : `<div class="followme-pdf-preview-inside-20260520"><div class="followme-pdf-preview-fallback-20260520"><strong>PDF</strong><span>${esc(name)}</span></div></div>`;
+    }
+  }
+
+  function removeExtraPreview(){
+    const extra = document.getElementById("followmePdfMainThumb20260520");
+    if(extra) extra.remove();
+
+    document.querySelectorAll("[id='followmePdfMainThumb20260520']").forEach(el => el.remove());
   }
 
   async function boot(){
-    patchFetchUpload();
-    setTimeout(() => refreshCurrentDocumentAndThumbnail("boot"), 700);
-    setTimeout(() => refreshCurrentDocumentAndThumbnail("boot_late"), 1800);
+    removeExtraPreview();
+    await integratePdfPreview();
+    setTimeout(removeExtraPreview, 300);
+    setTimeout(integratePdfPreview, 500);
+    setTimeout(removeExtraPreview, 1200);
+    setTimeout(integratePdfPreview, 1600);
   }
 
-  window.fmPdfThumbnailGenerator20260520 = {
+  window.fmPdfPreviewIntegrated20260520 = {
     boot,
-    refreshCurrentDocumentAndThumbnail,
-    generateThumbnailFromPdf,
-    ensureThumbnailForDocument,
-    setMainPreviewThumbnail
+    integratePdfPreview,
+    removeExtraPreview
   };
 
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 
   window.addEventListener("load", function(){
-    setTimeout(boot, 300);
+    setTimeout(boot, 250);
+    setTimeout(boot, 1000);
   });
 
   window.addEventListener("pageshow", function(){
-    setTimeout(() => refreshCurrentDocumentAndThumbnail("pageshow"), 300);
+    setTimeout(boot, 250);
   });
 })();
 </script>
