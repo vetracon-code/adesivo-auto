@@ -24766,5 +24766,377 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-home-doc-button-qr-preview-elegant-final-20260520">
+(function(){
+  if(window.__FollowMeHomeDocButtonQrPreviewElegantFinal20260520) return;
+  window.__FollowMeHomeDocButtonQrPreviewElegantFinal20260520 = true;
+
+  /*
+    FINALITÀ:
+    - Consegna Documento sempre sotto Importa con scansione QR.
+    - Apri anteprima QR in overlay elegante con sfondo sfocato.
+    - X di chiusura torna alla Home senza lasciare overlay aperti.
+  */
+
+  function txt(el){
+    return String(el && el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
+  function findImportQrButton(){
+    const candidates = Array.from(document.querySelectorAll("button,a,.btn,[role='button']"));
+
+    return candidates.find(function(el){
+      const t = txt(el);
+      return t.includes("importa con scansione qr") ||
+             t.includes("importa qr") ||
+             t.includes("scansione qr");
+    }) || null;
+  }
+
+  function findConsegnaDocumentoButton(){
+    return document.getElementById("followmeConsegnaDocumentoBtn20260520") ||
+           Array.from(document.querySelectorAll("button,a,.btn,[role='button']")).find(function(el){
+             return txt(el) === "consegna documento" || txt(el).includes("consegna documento");
+           }) ||
+           null;
+  }
+
+  function moveConsegnaDocumento(){
+    const btn = findConsegnaDocumentoButton();
+    const importBtn = findImportQrButton();
+
+    if(!btn || !importBtn || !importBtn.parentElement) return false;
+
+    /*
+      Inserisce subito dopo il pulsante Importa con scansione QR.
+      Se è già lì, non fa nulla.
+    */
+    if(importBtn.nextElementSibling !== btn){
+      importBtn.insertAdjacentElement("afterend", btn);
+    }
+
+    btn.style.marginTop = "10px";
+    btn.style.width = importBtn.offsetWidth ? importBtn.offsetWidth + "px" : "";
+    btn.style.maxWidth = "100%";
+
+    return true;
+  }
+
+  function ensureStyle(){
+    if(document.getElementById("followmeElegantQrPreviewStyle20260520")) return;
+
+    const style = document.createElement("style");
+    style.id = "followmeElegantQrPreviewStyle20260520";
+    style.textContent = `
+      #followmeElegantQrPreviewOverlay20260520{
+        display:none;
+        position:fixed;
+        inset:0;
+        z-index:100005;
+        align-items:center;
+        justify-content:center;
+        padding:24px;
+        box-sizing:border-box;
+        background:
+          radial-gradient(circle at top, rgba(255,255,255,.18), transparent 34%),
+          rgba(2,6,23,.72);
+        backdrop-filter:blur(20px);
+        -webkit-backdrop-filter:blur(20px);
+      }
+
+      #followmeElegantQrPreviewOverlay20260520.open{
+        display:flex;
+      }
+
+      #followmeElegantQrPreviewOverlay20260520 .qr-card{
+        position:relative;
+        width:min(430px,100%);
+        border-radius:34px;
+        padding:24px 22px 22px;
+        background:
+          linear-gradient(180deg, rgba(255,255,255,.96), rgba(248,250,252,.94));
+        border:1px solid rgba(255,255,255,.58);
+        box-shadow:
+          0 34px 100px rgba(0,0,0,.42),
+          inset 0 1px 0 rgba(255,255,255,.72);
+        color:#0f172a;
+        text-align:center;
+      }
+
+      #followmeElegantQrPreviewOverlay20260520 .qr-close{
+        position:absolute;
+        top:13px;
+        right:13px;
+        width:36px;
+        height:36px;
+        border:0;
+        border-radius:999px;
+        background:#111827;
+        color:#fff;
+        font-size:19px;
+        font-weight:950;
+        line-height:1;
+        cursor:pointer;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        box-shadow:0 12px 30px rgba(15,23,42,.20);
+      }
+
+      #followmeElegantQrPreviewOverlay20260520 .qr-kicker{
+        display:inline-flex;
+        min-height:25px;
+        align-items:center;
+        justify-content:center;
+        padding:0 12px;
+        margin-bottom:12px;
+        border-radius:999px;
+        background:#eef2ff;
+        color:#334155;
+        font-size:11px;
+        font-weight:950;
+        letter-spacing:.08em;
+        text-transform:uppercase;
+      }
+
+      #followmeElegantQrPreviewOverlay20260520 h3{
+        margin:0 42px 8px;
+        font-size:29px;
+        line-height:1.04;
+        letter-spacing:-.05em;
+        font-weight:950;
+        color:#020617;
+      }
+
+      #followmeElegantQrPreviewOverlay20260520 p{
+        margin:0 auto 18px;
+        max-width:320px;
+        font-size:14px;
+        line-height:1.38;
+        color:#64748b;
+        font-weight:700;
+      }
+
+      #followmeElegantQrPreviewOverlay20260520 .qr-frame{
+        width:min(286px,76vw);
+        height:min(286px,76vw);
+        margin:0 auto 18px;
+        padding:15px;
+        border-radius:30px;
+        background:
+          linear-gradient(#fff,#fff) padding-box,
+          linear-gradient(135deg,#020617,#64748b,#e2e8f0) border-box;
+        border:2px solid transparent;
+        box-shadow:
+          0 20px 58px rgba(15,23,42,.16),
+          0 0 0 8px rgba(15,23,42,.035);
+        display:flex;
+        align-items:center;
+        justify-content:center;
+      }
+
+      #followmeElegantQrPreviewOverlay20260520 .qr-frame img{
+        width:100%;
+        height:100%;
+        object-fit:contain;
+        border-radius:18px;
+      }
+
+      #followmeElegantQrPreviewOverlay20260520 .qr-actions{
+        display:flex;
+        justify-content:center;
+        gap:8px;
+        flex-wrap:wrap;
+      }
+
+      #followmeElegantQrPreviewOverlay20260520 .qr-actions a,
+      #followmeElegantQrPreviewOverlay20260520 .qr-actions button{
+        border:0;
+        border-radius:999px;
+        padding:11px 14px;
+        font-size:13px;
+        font-weight:950;
+        cursor:pointer;
+        text-decoration:none;
+      }
+
+      #followmeElegantQrPreviewOverlay20260520 .primary{
+        background:#111827;
+        color:#fff;
+      }
+
+      #followmeElegantQrPreviewOverlay20260520 .secondary{
+        background:#e5e7eb;
+        color:#111827;
+      }
+
+      @media(max-width:520px){
+        #followmeElegantQrPreviewOverlay20260520{
+          padding:16px;
+        }
+
+        #followmeElegantQrPreviewOverlay20260520 .qr-card{
+          border-radius:30px;
+          padding:23px 18px 20px;
+        }
+
+        #followmeElegantQrPreviewOverlay20260520 h3{
+          font-size:26px;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function ensureOverlay(){
+    if(document.getElementById("followmeElegantQrPreviewOverlay20260520")) return;
+
+    const overlay = document.createElement("div");
+    overlay.id = "followmeElegantQrPreviewOverlay20260520";
+    overlay.innerHTML = `
+      <div class="qr-card" role="dialog" aria-modal="true" aria-label="Anteprima QR FollowMe">
+        <button type="button" class="qr-close" id="followmeElegantQrPreviewClose20260520" aria-label="Chiudi">×</button>
+        <div class="qr-kicker">Anteprima QR</div>
+        <h3>Il tuo QR</h3>
+        <p>Inquadralo per verificare esattamente cosa sta trasmettendo FollowMe.</p>
+
+        <div class="qr-frame">
+          <img id="followmeElegantQrPreviewImg20260520" alt="QR FollowMe">
+        </div>
+
+        <div class="qr-actions">
+          <a class="primary" id="followmeElegantQrPreviewOpen20260520" href="#" target="_blank" rel="noopener">Apri QR</a>
+          <button type="button" class="secondary" id="followmeElegantQrPreviewCloseBottom20260520">Torna alla Home</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    function close(){
+      overlay.classList.remove("open");
+      window.scrollTo(0,0);
+    }
+
+    overlay.querySelector("#followmeElegantQrPreviewClose20260520").onclick = close;
+    overlay.querySelector("#followmeElegantQrPreviewCloseBottom20260520").onclick = close;
+
+    overlay.addEventListener("click", function(ev){
+      if(ev.target === overlay) close();
+    });
+  }
+
+  function currentQrUrl(){
+    /*
+      Cerca prima i link QR già presenti nella pagina.
+      Non inventa percorsi: usa quello che la Web App sta già mostrando.
+    */
+    const selectors = [
+      "#openQrPreview",
+      "#followmeOtherOpenQrPreview",
+      "#followmeWaitingQrBtn",
+      "#followmeOwnerQrBtn"
+    ];
+
+    for(const sel of selectors){
+      const el = document.querySelector(sel);
+      if(el){
+        const href = el.getAttribute("href");
+        if(href && href !== "#") return new URL(href, location.origin).toString();
+      }
+    }
+
+    const img = document.querySelector("img[src*='followme'][src*='qr'], img[src*='/qrs/'], img[src*='qr.png']");
+    if(img && img.src) return img.src;
+
+    /*
+      Fallback coerente con il progetto demo, solo se non troviamo altro.
+    */
+    return new URL("/followme/qrs/followme-FMDEMO-qr.png", location.origin).toString();
+  }
+
+  function openElegantQrPreview(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+    }
+
+    ensureStyle();
+    ensureOverlay();
+
+    const url = currentQrUrl();
+    const overlay = document.getElementById("followmeElegantQrPreviewOverlay20260520");
+    const img = document.getElementById("followmeElegantQrPreviewImg20260520");
+    const open = document.getElementById("followmeElegantQrPreviewOpen20260520");
+
+    if(img) img.src = url + (url.includes("?") ? "&" : "?") + "v=" + Date.now();
+    if(open) open.href = url;
+
+    if(overlay) overlay.classList.add("open");
+
+    return false;
+  }
+
+  function bindQrPreviewButtons(){
+    /*
+      Intercetta solo “Apri anteprima QR”, non tutti i pulsanti QR.
+    */
+    const all = Array.from(document.querySelectorAll("a,button,.btn,[role='button']"));
+
+    all.forEach(function(el){
+      const t = txt(el);
+
+      if(!t.includes("apri anteprima qr")) return;
+      if(el.dataset.elegantQrPreviewBound20260520 === "1") return;
+
+      el.dataset.elegantQrPreviewBound20260520 = "1";
+      el.addEventListener("click", openElegantQrPreview, true);
+    });
+  }
+
+  function boot(){
+    ensureStyle();
+    ensureOverlay();
+    moveConsegnaDocumento();
+    bindQrPreviewButtons();
+
+    setTimeout(function(){
+      moveConsegnaDocumento();
+      bindQrPreviewButtons();
+    }, 400);
+
+    setTimeout(function(){
+      moveConsegnaDocumento();
+      bindQrPreviewButtons();
+    }, 1200);
+
+    setTimeout(function(){
+      moveConsegnaDocumento();
+      bindQrPreviewButtons();
+    }, 2200);
+  }
+
+  window.fmHomeDocButtonQrPreviewElegant20260520 = {
+    boot,
+    moveConsegnaDocumento,
+    openElegantQrPreview
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+})();
+</script>
+
 </body>
 </html>
