@@ -9634,6 +9634,78 @@ async function saveFollowMeDocumentThumbnail20260520(projectId, documentId, thum
 
   return `/followme-documents/${filename}`;
 }
+
+function escapeFollowMeSvg20260520(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+async function createFollowMeDocumentFallbackThumbnail20260520(projectId, documentId, originalName, pageCount) {
+  const dir = path.join(__dirname, 'public', 'followme-documents');
+  await fs.promises.mkdir(dir, { recursive:true });
+
+  const cleanName = String(originalName || 'Documento PDF')
+    .replace(/\.pdf$/i, '')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+
+  const shortName = cleanName.length > 42 ? cleanName.slice(0, 39) + '…' : cleanName;
+  const pages = pageCount ? `${pageCount} pagine` : 'Documento PDF';
+
+  const filename = `followme-doc-${projectId}-${documentId}-thumb.svg`;
+  const full = path.join(dir, filename);
+
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="900" height="1200" viewBox="0 0 900 1200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#101018"/>
+      <stop offset="55%" stop-color="#172033"/>
+      <stop offset="100%" stop-color="#05070d"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#c8ff2e"/>
+      <stop offset="100%" stop-color="#5ee7ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="28" stdDeviation="32" flood-color="#000000" flood-opacity="0.38"/>
+    </filter>
+  </defs>
+
+  <rect width="900" height="1200" rx="70" fill="url(#bg)"/>
+  <circle cx="150" cy="120" r="190" fill="#c8ff2e" opacity="0.12"/>
+  <circle cx="760" cy="70" r="210" fill="#5ee7ff" opacity="0.10"/>
+
+  <rect x="115" y="145" width="670" height="910" rx="42" fill="#ffffff" filter="url(#shadow)"/>
+  <rect x="165" y="210" width="570" height="24" rx="12" fill="#e5e7eb"/>
+  <rect x="165" y="270" width="420" height="18" rx="9" fill="#d1d5db"/>
+  <rect x="165" y="326" width="540" height="14" rx="7" fill="#e5e7eb"/>
+  <rect x="165" y="370" width="510" height="14" rx="7" fill="#e5e7eb"/>
+  <rect x="165" y="414" width="545" height="14" rx="7" fill="#e5e7eb"/>
+  <rect x="165" y="458" width="390" height="14" rx="7" fill="#e5e7eb"/>
+
+  <rect x="165" y="560" width="570" height="260" rx="28" fill="#f3f4f6"/>
+  <path d="M300 715 L397 620 L480 705 L538 650 L650 775 H250 Z" fill="#d1d5db"/>
+  <circle cx="610" cy="625" r="34" fill="#cbd5e1"/>
+
+  <rect x="165" y="880" width="570" height="18" rx="9" fill="#e5e7eb"/>
+  <rect x="165" y="925" width="470" height="18" rx="9" fill="#e5e7eb"/>
+
+  <rect x="115" y="145" width="670" height="910" rx="42" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="2"/>
+
+  <rect x="95" y="70" width="260" height="54" rx="27" fill="url(#accent)"/>
+  <text x="225" y="105" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="900" fill="#101018">DOCUMENTO PDF</text>
+
+  <text x="450" y="1110" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="900" fill="#ffffff">${escapeFollowMeSvg20260520(shortName)}</text>
+  <text x="450" y="1154" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#94a3b8">${escapeFollowMeSvg20260520(pages)}</text>
+</svg>`;
+
+  await fs.promises.writeFile(full, svg, 'utf8');
+  return `/followme-documents/${filename}`;
+}
 // end-followme-document-thumbnail-server-final-20260520
 
 
@@ -9825,11 +9897,37 @@ app.post('/api/followme/:code/document/upload', followmeDocumentUploadMulter2026
       [project.id, originalName, storedName, publicPath, buffer.length, pageCount]
     );
 
+    let insertedDoc = inserted.rows[0];
+
+    if (!insertedDoc.thumbnail_path) {
+      try {
+        const fallbackThumb = await createFollowMeDocumentFallbackThumbnail20260520(
+          project.id,
+          insertedDoc.id,
+          insertedDoc.original_name,
+          insertedDoc.page_count
+        );
+
+        const updThumb = await pool.query(
+          `UPDATE followme_documents
+           SET thumbnail_path = $1,
+               updated_at = NOW()
+           WHERE id = $2
+           RETURNING id, project_id, original_name, public_path, mime_type, size_bytes, page_count, status, is_published, published_at, views_count, downloads_count, thumbnail_path, created_at, updated_at`,
+          [fallbackThumb, insertedDoc.id]
+        );
+
+        insertedDoc = updThumb.rows[0] || insertedDoc;
+      } catch(e) {
+        console.error('followme fallback thumbnail upload error:', e);
+      }
+    }
+
     return res.json({
       success:true,
       prepared:true,
       published:false,
-      document:normalizeFollowMeDocumentForClient20260520(inserted.rows[0], { prepared:true, published:false }),
+      document:normalizeFollowMeDocumentForClient20260520(insertedDoc, { prepared:true, published:false }),
       public_url:`/fm/document/${project.public_id || project.code}`
     });
 
@@ -9872,7 +9970,31 @@ app.get('/api/followme/:code/document/current', async (req, res) => {
       [project.id]
     );
 
-    const doc = r.rows[0] || null;
+    let doc = r.rows[0] || null;
+
+    if (doc && !doc.thumbnail_path) {
+      try {
+        const fallbackThumb = await createFollowMeDocumentFallbackThumbnail20260520(
+          project.id,
+          doc.id,
+          doc.original_name,
+          doc.page_count
+        );
+
+        const updThumb = await pool.query(
+          `UPDATE followme_documents
+           SET thumbnail_path = $1,
+               updated_at = NOW()
+           WHERE id = $2
+           RETURNING id, project_id, original_name, public_path, mime_type, size_bytes, page_count, status, is_published, published_at, views_count, downloads_count, thumbnail_path, created_at, updated_at`,
+          [fallbackThumb, doc.id]
+        );
+
+        doc = updThumb.rows[0] || doc;
+      } catch(e) {
+        console.error('followme fallback thumbnail current error:', e);
+      }
+    }
 
     return res.json({
       success:true,
