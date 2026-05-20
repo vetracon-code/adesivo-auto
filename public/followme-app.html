@@ -26547,5 +26547,281 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+<script id="followme-mobile-pdf-preview-guard-final-20260520">
+(function(){
+  if(window.__FollowMeMobilePdfPreviewGuard20260520) return;
+  window.__FollowMeMobilePdfPreviewGuard20260520 = true;
+
+  function qa(sel){
+    return Array.from(document.querySelectorAll(sel));
+  }
+
+  function textOf(el){
+    return String((el && el.textContent) || "").replace(/\s+/g, " ").trim();
+  }
+
+  function findByText(regex, selectors){
+    return qa(selectors || "button,a").find(el => regex.test(textOf(el)));
+  }
+
+  function previewButton(){
+    return findByText(/preview|anteprima/i, "button,a");
+  }
+
+  function publishButton(){
+    return document.getElementById("followmePublishDocumentBtn20260520") ||
+           document.getElementById("publishDocumentBtn") ||
+           findByText(/pubblica subito|pubblica/i, "button,a");
+  }
+
+  function prepareButton(){
+    return document.getElementById("followmePrepareDocumentBtn20260520") ||
+           document.getElementById("prepareDocumentBtn") ||
+           findByText(/prepara documento|prepara documenti|prepara/i, "button,a");
+  }
+
+  function getCode(){
+    try{
+      const p = location.pathname.split("/").filter(Boolean);
+      const i = p.indexOf("app");
+      if(i >= 0 && p[i+1]) return p[i+1];
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function ensureStyle(){
+    if(document.getElementById("followmeMobilePdfPreviewGuardStyle20260520")) return;
+
+    const st = document.createElement("style");
+    st.id = "followmeMobilePdfPreviewGuardStyle20260520";
+    st.textContent = `
+      .fm-preview-wait-toast-20260520{
+        position:fixed;
+        left:16px;
+        right:16px;
+        bottom:calc(env(safe-area-inset-bottom) + 18px);
+        z-index:999999;
+        max-width:520px;
+        margin:0 auto;
+        padding:14px 16px;
+        border-radius:18px;
+        background:#101018;
+        color:#fff;
+        border:1px solid rgba(155,214,30,.45);
+        box-shadow:0 18px 50px rgba(0,0,0,.40);
+        font-weight:850;
+        line-height:1.35;
+        text-align:center;
+        opacity:0;
+        transform:translateY(12px);
+        pointer-events:none;
+        transition:opacity .22s ease, transform .22s ease;
+      }
+
+      .fm-preview-wait-toast-20260520.show{
+        opacity:1;
+        transform:translateY(0);
+      }
+
+      .fm-preview-wait-toast-20260520 strong{
+        color:#9bd61e;
+      }
+
+      .fm-preview-disabled-visual-20260520{
+        opacity:.62 !important;
+        filter:saturate(.75);
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  function showWaitMessage(){
+    ensureStyle();
+
+    let box = document.getElementById("fmPreviewWaitToast20260520");
+    if(!box){
+      box = document.createElement("div");
+      box.id = "fmPreviewWaitToast20260520";
+      box.className = "fm-preview-wait-toast-20260520";
+      box.innerHTML = "<strong>Attendi il caricamento completo.</strong><br>Riprova tra poco.";
+      document.body.appendChild(box);
+    }
+
+    box.classList.add("show");
+
+    clearTimeout(box._hideTimer);
+    box._hideTimer = setTimeout(function(){
+      box.classList.remove("show");
+    }, 2400);
+  }
+
+  async function currentDocument(){
+    try{
+      const r = await fetch("/api/followme/" + encodeURIComponent(getCode()) + "/document/current?v=" + Date.now(), {
+        cache:"no-store"
+      });
+      const j = await r.json().catch(() => null);
+      if(j && j.success) return j.document || null;
+    }catch(e){}
+    return null;
+  }
+
+  function localPreparedSignal(){
+    const txt = qa("body *")
+      .map(el => textOf(el))
+      .filter(Boolean)
+      .slice(-280)
+      .join(" | ");
+
+    return /documento preparato correttamente|preparato correttamente|ora puoi pubblicarlo|pubblica subito|documento pronto/i.test(txt);
+  }
+
+  async function isPreviewReady(){
+    const doc = await currentDocument();
+
+    if(!doc || !doc.id) return false;
+
+    /*
+      Consideriamo la preview pronta se:
+      - il documento esiste;
+      - è preparato/pubblicato oppure è disponibile una thumbnail;
+      - oppure la UI ha già mostrato un messaggio di preparazione completata.
+    */
+    if(doc.thumbnail_url || doc.thumbnail_path) return true;
+    if(doc.prepared || doc.published || doc.is_published) return true;
+    if(localPreparedSignal()) return true;
+
+    return false;
+  }
+
+  function movePreviewBelowPublish(){
+    const preview = previewButton();
+    const publish = publishButton();
+
+    if(!preview || !publish || preview === publish) return;
+
+    const parent = publish.parentElement;
+
+    try{
+      if(parent && preview.parentElement === parent){
+        parent.appendChild(preview);
+      }else{
+        publish.insertAdjacentElement("afterend", preview);
+      }
+    }catch(e){}
+  }
+
+  async function autoMarkPreviewIfReady(){
+    const ready = await isPreviewReady();
+    const btn = previewButton();
+
+    if(btn){
+      btn.classList.toggle("fm-preview-disabled-visual-20260520", !ready);
+    }
+
+    if(ready && window.fmPdfStepProgress20260520?.setStepDone){
+      /*
+        Step 3 Preview si accende automaticamente:
+        l'utente non deve per forza aprirla prima di pubblicare.
+      */
+      window.fmPdfStepProgress20260520.setStepDone(3);
+
+      if(window.fmMobilePdfGuideRebuild20260520?.focusPublish){
+        setTimeout(window.fmMobilePdfGuideRebuild20260520.focusPublish, 350);
+      }
+    }
+  }
+
+  function bindPreviewGuard(){
+    const btn = previewButton();
+    if(!btn || btn.dataset.fmPreviewGuardBound20260520 === "1") return;
+
+    btn.dataset.fmPreviewGuardBound20260520 = "1";
+
+    btn.addEventListener("click", async function(ev){
+      const ready = await isPreviewReady();
+
+      if(!ready){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+
+        showWaitMessage();
+
+        if(window.fmMobilePdfGuideRebuild20260520?.focusPrepare){
+          setTimeout(window.fmMobilePdfGuideRebuild20260520.focusPrepare, 200);
+        }
+
+        return false;
+      }
+
+      if(window.fmPdfStepProgress20260520?.setStepDone){
+        window.fmPdfStepProgress20260520.setStepDone(3);
+      }
+    }, true);
+  }
+
+  function bindPrepareWatcher(){
+    const btn = prepareButton();
+    if(!btn || btn.dataset.fmPreviewGuardPrepareBound20260520 === "1") return;
+
+    btn.dataset.fmPreviewGuardPrepareBound20260520 = "1";
+
+    btn.addEventListener("click", function(){
+      /*
+        Dopo Prepara documento, appena la risposta è completata,
+        proviamo ad accendere automaticamente Preview.
+      */
+      setTimeout(autoMarkPreviewIfReady, 700);
+      setTimeout(autoMarkPreviewIfReady, 1500);
+      setTimeout(autoMarkPreviewIfReady, 2600);
+    }, true);
+  }
+
+  function boot(){
+    ensureStyle();
+    movePreviewBelowPublish();
+    bindPreviewGuard();
+    bindPrepareWatcher();
+
+    setTimeout(autoMarkPreviewIfReady, 900);
+  }
+
+  window.fmMobilePdfPreviewGuard20260520 = {
+    boot,
+    isPreviewReady,
+    autoMarkPreviewIfReady,
+    showWaitMessage,
+    movePreviewBelowPublish
+  };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 600);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 600);
+  });
+
+  try{
+    const obs = new MutationObserver(function(){
+      movePreviewBelowPublish();
+      bindPreviewGuard();
+      bindPrepareWatcher();
+      autoMarkPreviewIfReady();
+    });
+
+    obs.observe(document.body, { childList:true, subtree:true });
+  }catch(e){}
+})();
+</script>
+
 </body>
 </html>
