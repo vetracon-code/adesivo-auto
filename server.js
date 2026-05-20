@@ -9619,8 +9619,12 @@ function sanitizeFollowMeDocumentName20260520(name) {
 
 function isLikelyPdfBase6420260520(base64) {
   try {
-    const buf = Buffer.from(String(base64 || '').slice(0, 40), 'base64');
-    return buf.slice(0, 5).toString('utf8') === '%PDF-';
+    /*
+      Alcuni PDF reali possono avere pochi byte/BOM/spazi prima di %PDF-.
+      Controlliamo i primi 1KB decodificati.
+    */
+    const head = Buffer.from(String(base64 || '').slice(0, 2000), 'base64');
+    return head.indexOf(Buffer.from('%PDF-')) >= 0;
   } catch(e) {
     return false;
   }
@@ -9647,7 +9651,7 @@ async function getFollowMeProjectByCode20260520(code) {
   return r.rows[0] || null;
 }
 
-app.post('/api/followme/:code/document/upload', express.json({ limit:'28mb' }), async (req, res) => {
+app.post('/api/followme/:code/document/upload', express.json({ limit:'60mb' }), async (req, res) => {
   try {
     await ensureFollowMeDocumentDir20260520();
     await ensureFollowMeDocumentTable20260520();
@@ -9685,8 +9689,9 @@ app.post('/api/followme/:code/document/upload', express.json({ limit:'28mb' }), 
       });
     }
 
-    if (buffer.slice(0, 5).toString('utf8') !== '%PDF-') {
-      return res.status(415).json({ success:false, error:'Controllo sicurezza fallito: intestazione PDF non valida.' });
+    const pdfMarkerPosition = buffer.slice(0, 1024).indexOf(Buffer.from('%PDF-'));
+    if (pdfMarkerPosition < 0) {
+      return res.status(415).json({ success:false, error:'Controllo sicurezza fallito: il file non contiene una intestazione PDF valida.' });
     }
 
     const storedName = `followme-doc-${project.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.pdf`;
