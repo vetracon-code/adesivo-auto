@@ -19829,8 +19829,7 @@ document.addEventListener("visibilitychange", function(){
   else boot();
 
   window.addEventListener("load", function(){
-    setTimeout(boot, 250);
-    setTimeout(boot, 1000);
+    setTimeout(boot, 350);
   });
 
   window.addEventListener("pageshow", function(){
@@ -20215,8 +20214,7 @@ document.addEventListener("visibilitychange", function(){
   else boot();
 
   window.addEventListener("load", function(){
-    setTimeout(boot, 250);
-    setTimeout(boot, 1000);
+    setTimeout(boot, 350);
   });
 
   window.addEventListener("pageshow", function(){
@@ -20344,8 +20342,7 @@ document.addEventListener("visibilitychange", function(){
   else boot();
 
   window.addEventListener("load", function(){
-    setTimeout(boot, 250);
-    setTimeout(boot, 1000);
+    setTimeout(boot, 350);
   });
 
   window.addEventListener("pageshow", function(){
@@ -26210,16 +26207,30 @@ document.addEventListener("visibilitychange", function(){
           frame.parentNode.insertBefore(holder, frame);
         }
 
-        holder.innerHTML = thumb
-          ? `<img src="${esc(thumb)}?v=${Date.now()}" alt="${esc(name)}">`
-          : `<div class="followme-pdf-preview-fallback-20260520"><strong>PDF</strong><span>${esc(name)}</span></div>`;
+        const wantedSrc = thumb ? (thumb + "?v=stable") : "";
+        const existingImg = holder.querySelector("img");
+
+        if(thumb){
+          if(!existingImg || !existingImg.getAttribute("src") || !existingImg.getAttribute("src").includes(thumb)){
+            holder.innerHTML = `<img src="${esc(wantedSrc)}" alt="${esc(name)}">`;
+          }
+        }else if(!holder.querySelector(".followme-pdf-preview-fallback-20260520")){
+          holder.innerHTML = `<div class="followme-pdf-preview-fallback-20260520"><strong>PDF</strong><span>${esc(name)}</span></div>`;
+        }
 
         return;
       }
 
-      frame.innerHTML = thumb
-        ? `<div class="followme-pdf-preview-inside-20260520"><img src="${esc(thumb)}?v=${Date.now()}" alt="${esc(name)}"></div>`
-        : `<div class="followme-pdf-preview-inside-20260520"><div class="followme-pdf-preview-fallback-20260520"><strong>PDF</strong><span>${esc(name)}</span></div></div>`;
+      const wantedSrc = thumb ? (thumb + "?v=stable") : "";
+      const existingImg = frame.querySelector && frame.querySelector("img");
+
+      if(thumb){
+        if(!existingImg || !existingImg.getAttribute("src") || !existingImg.getAttribute("src").includes(thumb)){
+          frame.innerHTML = `<div class="followme-pdf-preview-inside-20260520"><img src="${esc(wantedSrc)}" alt="${esc(name)}"></div>`;
+        }
+      }else if(!frame.querySelector || !frame.querySelector(".followme-pdf-preview-fallback-20260520")){
+        frame.innerHTML = `<div class="followme-pdf-preview-inside-20260520"><div class="followme-pdf-preview-fallback-20260520"><strong>PDF</strong><span>${esc(name)}</span></div></div>`;
+      }
     }
   }
 
@@ -26233,10 +26244,16 @@ document.addEventListener("visibilitychange", function(){
   async function boot(){
     removeExtraPreview();
     await integratePdfPreview();
-    setTimeout(removeExtraPreview, 300);
-    setTimeout(integratePdfPreview, 500);
-    setTimeout(removeExtraPreview, 1200);
-    setTimeout(integratePdfPreview, 1600);
+
+    /*
+      FIX SFARFALLIO 20260520:
+      un solo controllo ritardato basta per assorbire il caricamento dati,
+      senza riscrivere la preview più volte.
+    */
+    setTimeout(async function(){
+      removeExtraPreview();
+      await integratePdfPreview();
+    }, 700);
   }
 
   window.fmPdfPreviewIntegrated20260520 = {
@@ -26249,8 +26266,7 @@ document.addEventListener("visibilitychange", function(){
   else boot();
 
   window.addEventListener("load", function(){
-    setTimeout(boot, 250);
-    setTimeout(boot, 1000);
+    setTimeout(boot, 350);
   });
 
   window.addEventListener("pageshow", function(){
