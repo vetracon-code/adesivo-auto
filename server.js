@@ -9709,6 +9709,103 @@ async function createFollowMeDocumentFallbackThumbnail20260520(projectId, docume
 // end-followme-document-thumbnail-server-final-20260520
 
 
+
+
+// followme-dynamic-svg-thumbnail-route-20260520
+app.get('/followme-documents/followme-doc-:projectId-:documentId-thumb.svg', async (req, res) => {
+  try {
+    await ensureFollowMeDocumentTable20260520();
+    await ensureFollowMeDocumentPreparedColumns20260520();
+
+    const projectId = Number(req.params.projectId || 0);
+    const documentId = Number(req.params.documentId || 0);
+
+    if (!projectId || !documentId) {
+      return res.status(404).send('Thumbnail non disponibile.');
+    }
+
+    const r = await pool.query(
+      `SELECT id, project_id, original_name, page_count
+       FROM followme_documents
+       WHERE id = $1
+         AND project_id = $2
+       LIMIT 1`,
+      [documentId, projectId]
+    );
+
+    if (!r.rows.length) {
+      return res.status(404).send('Thumbnail non disponibile.');
+    }
+
+    const doc = r.rows[0];
+
+    const cleanName = String(doc.original_name || 'Documento PDF')
+      .replace(/\.pdf$/i, '')
+      .replace(/[_-]+/g, ' ')
+      .trim();
+
+    const shortName = cleanName.length > 42 ? cleanName.slice(0, 39) + '…' : cleanName;
+    const pages = doc.page_count ? `${doc.page_count} pagine` : 'Documento PDF';
+
+    const safeName = escapeFollowMeSvg20260520(shortName);
+    const safePages = escapeFollowMeSvg20260520(pages);
+
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="900" height="1200" viewBox="0 0 900 1200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#101018"/>
+      <stop offset="55%" stop-color="#172033"/>
+      <stop offset="100%" stop-color="#05070d"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#c8ff2e"/>
+      <stop offset="100%" stop-color="#5ee7ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="28" stdDeviation="32" flood-color="#000000" flood-opacity="0.38"/>
+    </filter>
+  </defs>
+
+  <rect width="900" height="1200" rx="70" fill="url(#bg)"/>
+  <circle cx="150" cy="120" r="190" fill="#c8ff2e" opacity="0.12"/>
+  <circle cx="760" cy="70" r="210" fill="#5ee7ff" opacity="0.10"/>
+
+  <rect x="115" y="145" width="670" height="910" rx="42" fill="#ffffff" filter="url(#shadow)"/>
+  <rect x="165" y="210" width="570" height="24" rx="12" fill="#e5e7eb"/>
+  <rect x="165" y="270" width="420" height="18" rx="9" fill="#d1d5db"/>
+  <rect x="165" y="326" width="540" height="14" rx="7" fill="#e5e7eb"/>
+  <rect x="165" y="370" width="510" height="14" rx="7" fill="#e5e7eb"/>
+  <rect x="165" y="414" width="545" height="14" rx="7" fill="#e5e7eb"/>
+  <rect x="165" y="458" width="390" height="14" rx="7" fill="#e5e7eb"/>
+
+  <rect x="165" y="560" width="570" height="260" rx="28" fill="#f3f4f6"/>
+  <path d="M300 715 L397 620 L480 705 L538 650 L650 775 H250 Z" fill="#d1d5db"/>
+  <circle cx="610" cy="625" r="34" fill="#cbd5e1"/>
+
+  <rect x="165" y="880" width="570" height="18" rx="9" fill="#e5e7eb"/>
+  <rect x="165" y="925" width="470" height="18" rx="9" fill="#e5e7eb"/>
+
+  <rect x="115" y="145" width="670" height="910" rx="42" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="2"/>
+
+  <rect x="95" y="70" width="260" height="54" rx="27" fill="url(#accent)"/>
+  <text x="225" y="105" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="900" fill="#101018">DOCUMENTO PDF</text>
+
+  <text x="450" y="1110" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="900" fill="#ffffff">${safeName}</text>
+  <text x="450" y="1154" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#94a3b8">${safePages}</text>
+</svg>`;
+
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    return res.send(svg);
+  } catch (err) {
+    console.error('followme dynamic svg thumbnail error:', err);
+    return res.status(500).send('Errore thumbnail.');
+  }
+});
+// end-followme-dynamic-svg-thumbnail-route-20260520
+
+
 // followme-document-prepare-publish-definitive-final-20260520
 async function ensureFollowMeDocumentPreparedColumns20260520() {
   await ensureFollowMeDocumentTable20260520();
