@@ -9626,6 +9626,27 @@ async function saveFollowMeDocumentThumbnail20260520(projectId, documentId, thum
 }
 // end-followme-document-thumbnail-server-final-20260520
 
+
+// followme-document-prepare-publish-definitive-final-20260520
+async function ensureFollowMeDocumentPreparedColumns20260520() {
+  await ensureFollowMeDocumentTable20260520();
+  await pool.query(`ALTER TABLE followme_documents ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE followme_documents ADD COLUMN IF NOT EXISTS is_published BOOLEAN DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE followme_documents ADD COLUMN IF NOT EXISTS thumbnail_path TEXT`);
+}
+
+function normalizeFollowMeDocumentForClient20260520(doc, extra = {}) {
+  if (!doc) return null;
+  return {
+    ...doc,
+    thumbnail_url: doc.thumbnail_path || null,
+    prepared: !!extra.prepared,
+    published: !!extra.published,
+    is_published: !!doc.is_published
+  };
+}
+// end-followme-document-prepare-publish-definitive-final-20260520
+
 // followme-consegna-documento-premium-final-20260520
 const followmeDocumentPath = require('path');
 const followmeDocumentFs = require('fs');
@@ -9734,6 +9755,7 @@ app.post('/api/followme/:code/document/upload', followmeDocumentUploadMulter2026
   try {
     await ensureFollowMeDocumentDir20260520();
     await ensureFollowMeDocumentTable20260520();
+    await ensureFollowMeDocumentPreparedColumns20260520();
 
     const code = String(req.params.code || '').trim();
     const project = await getFollowMeProjectByCode20260520(code);
@@ -9787,15 +9809,17 @@ app.post('/api/followme/:code/document/upload', followmeDocumentUploadMulter2026
 
     const inserted = await pool.query(
       `INSERT INTO followme_documents
-       (project_id, original_name, stored_name, public_path, mime_type, size_bytes, page_count, status, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,'application/pdf',$5,$6,'active',NOW(),NOW())
-       RETURNING id, project_id, original_name, public_path, size_bytes, page_count, status, views_count, downloads_count, created_at, updated_at`,
+       (project_id, original_name, stored_name, public_path, mime_type, size_bytes, page_count, status, is_published, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,'application/pdf',$5,$6,'active',FALSE,NOW(),NOW())
+       RETURNING id, project_id, original_name, public_path, mime_type, size_bytes, page_count, status, is_published, published_at, views_count, downloads_count, thumbnail_path, created_at, updated_at`,
       [project.id, originalName, storedName, publicPath, buffer.length, pageCount]
     );
 
     return res.json({
       success:true,
-      document:inserted.rows[0],
+      prepared:true,
+      published:false,
+      document:normalizeFollowMeDocumentForClient20260520(inserted.rows[0], { prepared:true, published:false }),
       public_url:`/fm/document/${project.public_id || project.code}`
     });
 
@@ -9819,6 +9843,7 @@ app.post('/api/followme/:code/document/upload', followmeDocumentUploadMulter2026
 app.get('/api/followme/:code/document/current', async (req, res) => {
   try {
     await ensureFollowMeDocumentTable20260520();
+    await ensureFollowMeDocumentPreparedColumns20260520();
 
     const code = String(req.params.code || '').trim();
     const project = await getFollowMeProjectByCode20260520(code);
@@ -9828,7 +9853,7 @@ app.get('/api/followme/:code/document/current', async (req, res) => {
     }
 
     const r = await pool.query(
-      `SELECT id, project_id, original_name, public_path, mime_type, size_bytes, page_count, status, views_count, downloads_count, thumbnail_path, created_at, updated_at
+      `SELECT id, project_id, original_name, public_path, mime_type, size_bytes, page_count, status, is_published, published_at, views_count, downloads_count, thumbnail_path, created_at, updated_at
        FROM followme_documents
        WHERE project_id = $1
          AND status = 'active'
@@ -9837,9 +9862,14 @@ app.get('/api/followme/:code/document/current', async (req, res) => {
       [project.id]
     );
 
+    const doc = r.rows[0] || null;
+
     return res.json({
       success:true,
-      document:r.rows[0] || null,
+      document:normalizeFollowMeDocumentForClient20260520(doc, {
+        prepared: !!doc,
+        published: !!(doc && doc.is_published)
+      }),
       public_url:`/fm/document/${project.public_id || project.code}`
     });
 
@@ -10791,7 +10821,7 @@ app.post('/api/followme/:code/document/publish', express.json(), async (req, res
     const documentId = Number((req.body && req.body.document_id) || 0);
 
     const docRes = await pool.query(
-      `SELECT id, project_id, original_name, public_path, size_bytes, page_count, views_count, downloads_count
+      `SELECT id, project_id, original_name, public_path, mime_type, size_bytes, page_count, status, is_published, published_at, views_count, downloads_count, thumbnail_path
        FROM followme_documents
        WHERE project_id = $1
          AND status = 'active'
@@ -10882,7 +10912,7 @@ app.post('/api/followme/:code/document/publish', express.json(), async (req, res
     return res.json({
       success:true,
       published:true,
-      document:{ ...doc, thumbnail_url: doc.thumbnail_path || null },
+      document:normalizeFollowMeDocumentForClient20260520({ ...doc, is_published:true, published_at:new Date().toISOString() }, { prepared:true, published:true }),
       public_url:publicUrl,
       destination_column:updatedDestinationColumn,
       warning: updatedDestinationColumn ? null : 'Documento pubblicato, ma non ho trovato automaticamente la colonna destinazione QR.'
