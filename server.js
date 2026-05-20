@@ -10119,10 +10119,73 @@ app.get('/fm/document/:code', async (req, res) => {
       pointer-events:none;
     }
 
+    .viewer.zoomed{
+      cursor:grab;
+      touch-action:none;
+    }
+
+    .viewer.zoomed canvas{
+      cursor:grab;
+      max-width:none;
+      max-height:none;
+    }
+
+    .zoom-tools{
+      position:absolute;
+      top:12px;
+      right:12px;
+      display:flex;
+      gap:7px;
+      z-index:12;
+    }
+
+    .zoom-tools button{
+      width:38px;
+      height:38px;
+      border:0;
+      border-radius:999px;
+      background:rgba(255,255,255,.12);
+      color:#fff;
+      font-size:18px;
+      font-weight:950;
+      cursor:pointer;
+      backdrop-filter:blur(12px);
+      -webkit-backdrop-filter:blur(12px);
+    }
+
+    .bottom{
+      position:fixed;
+      left:14px;
+      right:14px;
+      bottom:calc(env(safe-area-inset-bottom) + 16px);
+      z-index:30;
+      padding:0;
+      background:rgba(2,6,23,.58);
+      border:1px solid rgba(255,255,255,.10);
+      border-radius:999px;
+      padding:8px;
+      backdrop-filter:blur(16px);
+      -webkit-backdrop-filter:blur(16px);
+      box-shadow:0 18px 60px rgba(0,0,0,.30);
+    }
+
+    .drawer{
+      bottom:calc(env(safe-area-inset-bottom) + 86px);
+    }
+
+    .app{
+      padding-bottom:calc(env(safe-area-inset-bottom) + 92px);
+    }
+
     @media(max-width:560px){
-      .app{ padding:10px; }
+      .app{ padding:10px 10px calc(env(safe-area-inset-bottom) + 96px); }
       .nav{ display:none; }
       h1{ max-width:55vw; }
+      .bottom{
+        left:10px;
+        right:10px;
+        bottom:calc(env(safe-area-inset-bottom) + 14px);
+      }
       .bottom button,.bottom a{ padding:10px 12px; }
     }
   </style>
@@ -10141,7 +10204,11 @@ app.get('/fm/document/:code', async (req, res) => {
       <canvas id="pdfCanvas"></canvas>
       <button class="nav prev" id="prevBtn" type="button">‹</button>
       <button class="nav next" id="nextBtn" type="button">›</button>
-      <div class="hint" id="hint">Sfoglia con un gesto</div>
+      <div class="zoom-tools">
+        <button type="button" id="zoomOutBtn" aria-label="Riduci zoom">−</button>
+        <button type="button" id="zoomInBtn" aria-label="Aumenta zoom">+</button>
+      </div>
+      <div class="hint" id="hint">Sfoglia con un gesto · doppio tap per zoom</div>
     </main>
 
     <div class="drawer" id="pagesDrawer"></div>
@@ -10168,6 +10235,8 @@ app.get('/fm/document/:code', async (req, res) => {
     const pagesBtn = document.getElementById("pagesBtn");
     const drawer = document.getElementById("pagesDrawer");
     const hint = document.getElementById("hint");
+    const zoomInBtn = document.getElementById("zoomInBtn");
+    const zoomOutBtn = document.getElementById("zoomOutBtn");
 
     let pdf = null;
     let pageNum = 1;
@@ -10176,6 +10245,12 @@ app.get('/fm/document/:code', async (req, res) => {
     let startX = 0;
     let startY = 0;
     let tracking = false;
+    let zoom = 1;
+    let panX = 0;
+    let panY = 0;
+    let draggingPan = false;
+    let lastTapAt = 0;
+    let lastMouseClickAt = 0;
 
     try {
       fetch("/api/followme/document/" + DOCUMENT_ID + "/view", {
@@ -10212,6 +10287,38 @@ app.get('/fm/document/:code', async (req, res) => {
       }
     }
 
+    function applyTransform(){
+      canvas.style.transform = "translate(" + panX + "px," + panY + "px) scale(" + zoom + ")";
+      viewer.classList.toggle("zoomed", zoom > 1.01);
+    }
+
+    function setZoom(nextZoom, cx, cy){
+      const old = zoom;
+      zoom = Math.max(1, Math.min(3, nextZoom));
+
+      if(zoom <= 1.01){
+        zoom = 1;
+        panX = 0;
+        panY = 0;
+      }else if(cx != null && cy != null && old !== zoom){
+        /*
+          Piccolo aggiustamento: mantiene il punto più o meno sotto il dito/click.
+        */
+        const rect = viewer.getBoundingClientRect();
+        const dx = cx - rect.left - rect.width / 2;
+        const dy = cy - rect.top - rect.height / 2;
+        panX -= dx * (zoom - old) / zoom;
+        panY -= dy * (zoom - old) / zoom;
+      }
+
+      applyTransform();
+    }
+
+    function toggleZoom(cx, cy){
+      if(zoom > 1.01) setZoom(1);
+      else setZoom(2, cx, cy);
+    }
+
     async function renderPage(num, direction){
       if(rendering || !pdf) return;
       rendering = true;
@@ -10230,6 +10337,10 @@ app.get('/fm/document/:code', async (req, res) => {
         canvas.width = Math.floor(viewport.width);
         canvas.height = Math.floor(viewport.height);
 
+        zoom = 1;
+        panX = 0;
+        panY = 0;
+        viewer.classList.remove("zoomed");
         canvas.style.transform = direction === "next" ? "translateX(22px)" : direction === "prev" ? "translateX(-22px)" : "translateX(0)";
 
         await page.render({ canvasContext:ctx, viewport }).promise;
@@ -10281,10 +10392,36 @@ app.get('/fm/document/:code', async (req, res) => {
     viewer.addEventListener("touchstart", function(ev){
       const t = ev.touches && ev.touches[0];
       if(!t) return;
+
       tracking = true;
+      draggingPan = zoom > 1.01;
       startX = t.clientX;
       startY = t.clientY;
-    }, { passive:true });
+
+      const now = Date.now();
+      if(now - lastTapAt < 310){
+        ev.preventDefault();
+        toggleZoom(t.clientX, t.clientY);
+        tracking = false;
+      }
+      lastTapAt = now;
+    }, { passive:false });
+
+    viewer.addEventListener("touchmove", function(ev){
+      if(!tracking || zoom <= 1.01) return;
+      const t = ev.touches && ev.touches[0];
+      if(!t) return;
+
+      ev.preventDefault();
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      startX = t.clientX;
+      startY = t.clientY;
+
+      panX += dx;
+      panY += dy;
+      applyTransform();
+    }, { passive:false });
 
     viewer.addEventListener("touchend", function(ev){
       if(!tracking) return;
@@ -10296,6 +10433,11 @@ app.get('/fm/document/:code', async (req, res) => {
       const dx = t.clientX - startX;
       const dy = t.clientY - startY;
 
+      /*
+        Se siamo zoomati, il gesto serve a spostare il documento, non a cambiare pagina.
+      */
+      if(zoom > 1.01 || draggingPan) return;
+
       if(Math.abs(dx) < 42 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
 
       if(dx < 0) nextPage();
@@ -10304,8 +10446,29 @@ app.get('/fm/document/:code', async (req, res) => {
 
     viewer.addEventListener("mousedown", function(ev){
       tracking = true;
+      draggingPan = zoom > 1.01;
       startX = ev.clientX;
       startY = ev.clientY;
+
+      const now = Date.now();
+      if(now - lastMouseClickAt < 320){
+        toggleZoom(ev.clientX, ev.clientY);
+        tracking = false;
+      }
+      lastMouseClickAt = now;
+    });
+
+    viewer.addEventListener("mousemove", function(ev){
+      if(!tracking || zoom <= 1.01) return;
+
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      startX = ev.clientX;
+      startY = ev.clientY;
+
+      panX += dx;
+      panY += dy;
+      applyTransform();
     });
 
     viewer.addEventListener("mouseup", function(ev){
@@ -10315,11 +10478,21 @@ app.get('/fm/document/:code', async (req, res) => {
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
 
+      if(zoom > 1.01 || draggingPan) return;
+
       if(Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
 
       if(dx < 0) nextPage();
       else prevPage();
     });
+
+    zoomInBtn.onclick = function(){
+      setZoom(zoom + .4);
+    };
+
+    zoomOutBtn.onclick = function(){
+      setZoom(zoom - .4);
+    };
 
     window.addEventListener("keydown", function(ev){
       if(ev.key === "ArrowRight") nextPage();
