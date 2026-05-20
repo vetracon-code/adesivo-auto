@@ -24643,5 +24643,261 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-document-upload-multipart-client-final-20260520">
+(function(){
+  if(window.__FollowMeDocumentUploadMultipartClientFinal20260520) return;
+  window.__FollowMeDocumentUploadMultipartClientFinal20260520 = true;
+
+  /*
+    FIX DEFINITIVO UPLOAD:
+    invia il PDF come multipart/form-data, non più come base64 JSON.
+    Evita Payload Too Large.
+  */
+
+  let publishedDocumentUrl = "";
+  let publishedDocument = null;
+
+  function projectCode(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("app");
+      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
+    }catch(e){}
+
+    try{
+      if(window.FOLLOWME_PROJECT_CODE) return String(window.FOLLOWME_PROJECT_CODE);
+      if(window.followMeProjectCode) return String(window.followMeProjectCode);
+    }catch(e){}
+
+    return "FM-DEMO";
+  }
+
+  function setStatus(msg, type){
+    let box = document.getElementById("followmeDocumentUploadStatus20260520");
+
+    if(!box){
+      const uploadBox = document.querySelector("#followmeConsegnaDocumentoPage20260520 .fm-doc-upload-box");
+      if(uploadBox){
+        box = document.createElement("div");
+        box.id = "followmeDocumentUploadStatus20260520";
+        box.style.marginTop = "12px";
+        box.style.padding = "12px";
+        box.style.borderRadius = "16px";
+        box.style.background = "#f8fafc";
+        box.style.border = "1px solid rgba(15,23,42,.08)";
+        box.style.color = "#475569";
+        box.style.fontWeight = "750";
+        box.style.fontSize = "13px";
+        uploadBox.appendChild(box);
+      }
+    }
+
+    if(!box) return;
+
+    box.textContent = msg || "";
+
+    if(type === "ok"){
+      box.style.background = "#dcfce7";
+      box.style.color = "#166534";
+      box.style.borderColor = "rgba(22,101,52,.18)";
+    }else if(type === "err"){
+      box.style.background = "#fee2e2";
+      box.style.color = "#991b1b";
+      box.style.borderColor = "rgba(153,27,27,.18)";
+    }else{
+      box.style.background = "#f8fafc";
+      box.style.color = "#475569";
+      box.style.borderColor = "rgba(15,23,42,.08)";
+    }
+  }
+
+  function formatBytes(n){
+    n = Number(n || 0);
+    if(n < 1024) return n + " B";
+    if(n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+    return (n / (1024 * 1024)).toFixed(2).replace(".00","") + " MB";
+  }
+
+  function escapeHtml(v){
+    return String(v == null ? "" : v)
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;");
+  }
+
+  function escapeAttr(v){
+    return escapeHtml(v).replace(/'/g, "&#39;");
+  }
+
+  function updateInfo(doc, publicUrl){
+    const views = document.getElementById("followmeDocumentViews20260520");
+    const downloads = document.getElementById("followmeDocumentDownloads20260520");
+
+    if(views) views.textContent = doc ? String(doc.views_count || 0) : "0";
+    if(downloads) downloads.textContent = doc ? String(doc.downloads_count || 0) : "0";
+
+    const box = document.getElementById("followmeDocumentCurrentInfo20260520");
+
+    if(box && doc){
+      box.innerHTML =
+        "<strong>Documento attivo:</strong> " + escapeHtml(doc.original_name || "Documento") + "<br>" +
+        "<span>Peso: " + formatBytes(doc.size_bytes) + " · Pagine: " + (doc.page_count || "in lettura") + "</span><br>" +
+        "<a href='" + escapeAttr(publicUrl || "#") + "' target='_blank' rel='noopener'>Apri anteprima documento</a>";
+    }
+  }
+
+  function updateQrState(url, doc){
+    publishedDocumentUrl = url || "";
+    publishedDocument = doc || null;
+
+    const btn = document.getElementById("followmeDocumentQrPreviewBtn20260520");
+
+    if(btn){
+      if(publishedDocumentUrl){
+        btn.disabled = false;
+        btn.classList.remove("disabled");
+      }else{
+        btn.disabled = true;
+        btn.classList.add("disabled");
+      }
+    }
+
+    /*
+      Aggiorna anche il modulo QR preview precedente, usando una proprietà globale.
+    */
+    try{
+      window.__FOLLOWME_DOCUMENT_PUBLIC_URL_20260520 = publishedDocumentUrl;
+      window.__FOLLOWME_DOCUMENT_OBJECT_20260520 = publishedDocument;
+    }catch(e){}
+  }
+
+  async function prepareDocumentMultipart(){
+    const input = document.getElementById("followmeDocumentUploadInput20260520");
+    const btn = document.getElementById("followmeDocumentUploadBtn20260520");
+
+    if(!input || !input.files || !input.files[0]){
+      setStatus("Seleziona prima un PDF.", "err");
+      return;
+    }
+
+    const file = input.files[0];
+    const name = String(file.name || "");
+
+    if(!name.toLowerCase().endsWith(".pdf")){
+      setStatus("Formato non supportato. Carica solo file PDF.", "err");
+      return;
+    }
+
+    const maxBytes = 18 * 1024 * 1024;
+    if(file.size > maxBytes){
+      setStatus("PDF troppo pesante. Limite attuale: 18 MB.", "err");
+      return;
+    }
+
+    try{
+      if(btn){
+        btn.disabled = true;
+        btn.textContent = "Pubblicazione...";
+      }
+
+      updateQrState("", null);
+      setStatus("Sto caricando il PDF...", "");
+
+      const fd = new FormData();
+      fd.append("document", file, name);
+
+      const code = projectCode();
+
+      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/upload", {
+        method:"POST",
+        body:fd
+      });
+
+      const text = await res.text();
+      let data = null;
+
+      try{
+        data = JSON.parse(text);
+      }catch(e){}
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || text || "Pubblicazione non riuscita.");
+      }
+
+      const publicUrl = data.public_url || "";
+
+      updateInfo(data.document, publicUrl);
+      updateQrState(publicUrl, data.document);
+
+      setStatus("Documento pubblicato correttamente. Ora puoi inquadrare il QR.", "ok");
+
+      try{
+        if(window.fmDocumentPrepareQrPreview20260520 &&
+           typeof window.fmDocumentPrepareQrPreview20260520.loadCurrentDocument === "function"){
+          window.fmDocumentPrepareQrPreview20260520.loadCurrentDocument();
+        }
+      }catch(e){}
+
+    }catch(err){
+      updateQrState("", null);
+      setStatus(err.message || "Errore durante la pubblicazione.", "err");
+    }finally{
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = "Prepara documento";
+      }
+    }
+  }
+
+  function replacePrepareButton(){
+    const old = document.getElementById("followmeDocumentUploadBtn20260520");
+    if(!old || old.dataset.multipartPrepare20260520 === "1") return;
+
+    const clone = old.cloneNode(true);
+    clone.dataset.multipartPrepare20260520 = "1";
+    clone.disabled = false;
+    clone.textContent = "Prepara documento";
+
+    clone.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      prepareDocumentMultipart();
+      return false;
+    }, true);
+
+    old.replaceWith(clone);
+  }
+
+  function boot(){
+    replacePrepareButton();
+    setTimeout(replacePrepareButton, 300);
+    setTimeout(replacePrepareButton, 1200);
+  }
+
+  window.fmDocumentUploadMultipartClient20260520 = {
+    boot,
+    prepareDocumentMultipart
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(replacePrepareButton, 1200);
+})();
+</script>
+
 </body>
 </html>

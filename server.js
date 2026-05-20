@@ -1,6 +1,7 @@
 
 require('dotenv').config();
-const express = require('express');
+const express = require('express')
+const multer = require('multer');
 const Stripe = require('stripe');
 const cors = require('cors');
 const path = require('path');
@@ -9581,6 +9582,33 @@ const followmeDocumentFsp = followmeDocumentFs.promises;
 
 const FOLLOWME_DOCUMENT_UPLOAD_DIR = followmeDocumentPath.join(__dirname, 'public', 'followme-documents');
 
+const followmeDocumentUploadMulter20260520 = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 18 * 1024 * 1024,
+    files: 1
+  },
+  fileFilter: (req, file, cb) => {
+    const name = String(file.originalname || '').toLowerCase();
+    const mime = String(file.mimetype || '').toLowerCase();
+
+    if (!name.endsWith('.pdf')) {
+      return cb(new Error('Formato non supportato. Carica solo PDF.'));
+    }
+
+    /*
+      Alcuni browser inviano application/octet-stream.
+      Accettiamo il file se l'estensione è PDF, poi verifichiamo i magic bytes.
+    */
+    if (mime && mime !== 'application/pdf' && mime !== 'application/octet-stream') {
+      return cb(new Error('Formato non supportato. Carica solo PDF.'));
+    }
+
+    cb(null, true);
+  }
+});
+
+
 async function ensureFollowMeDocumentDir20260520() {
   await followmeDocumentFsp.mkdir(FOLLOWME_DOCUMENT_UPLOAD_DIR, { recursive:true });
 }
@@ -9651,7 +9679,7 @@ async function getFollowMeProjectByCode20260520(code) {
   return r.rows[0] || null;
 }
 
-app.post('/api/followme/:code/document/upload', express.json({ limit:'60mb' }), async (req, res) => {
+app.post('/api/followme/:code/document/upload', followmeDocumentUploadMulter20260520.single('document'), async (req, res) => {
   try {
     await ensureFollowMeDocumentDir20260520();
     await ensureFollowMeDocumentTable20260520();
@@ -9663,23 +9691,14 @@ app.post('/api/followme/:code/document/upload', express.json({ limit:'60mb' }), 
       return res.status(404).json({ success:false, error:'Progetto non trovato.' });
     }
 
-    const originalName = sanitizeFollowMeDocumentName20260520(req.body && req.body.filename);
-    const mimeType = String((req.body && req.body.mime_type) || '').trim().toLowerCase();
-    const rawBase64 = String((req.body && req.body.base64) || '').replace(/^data:.*?;base64,/, '');
+    const file = req.file;
 
-    if (!rawBase64) {
+    if (!file || !file.buffer) {
       return res.status(400).json({ success:false, error:'File mancante.' });
     }
 
-    if (!originalName.toLowerCase().endsWith('.pdf')) {
-      return res.status(415).json({ success:false, error:'Formato non supportato. Per ora puoi caricare solo documenti PDF.' });
-    }
-
-    if (!isLikelyPdfBase6420260520(rawBase64)) {
-      return res.status(415).json({ success:false, error:'Il file non sembra un PDF valido.' });
-    }
-
-    const buffer = Buffer.from(rawBase64, 'base64');
+    const originalName = sanitizeFollowMeDocumentName20260520(file.originalname || 'documento.pdf');
+    const buffer = file.buffer;
 
     const maxBytes = 18 * 1024 * 1024;
     if (buffer.length > maxBytes) {
@@ -9690,8 +9709,12 @@ app.post('/api/followme/:code/document/upload', express.json({ limit:'60mb' }), 
     }
 
     const pdfMarkerPosition = buffer.slice(0, 1024).indexOf(Buffer.from('%PDF-'));
+
     if (pdfMarkerPosition < 0) {
-      return res.status(415).json({ success:false, error:'Controllo sicurezza fallito: il file non contiene una intestazione PDF valida.' });
+      return res.status(415).json({
+        success:false,
+        error:'Controllo sicurezza fallito: il file non contiene una intestazione PDF valida.'
+      });
     }
 
     const storedName = `followme-doc-${project.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.pdf`;
@@ -9726,8 +9749,19 @@ app.post('/api/followme/:code/document/upload', express.json({ limit:'60mb' }), 
     });
 
   } catch(err) {
-    console.error('followme document upload error:', err);
-    return res.status(500).json({ success:false, error:'Errore caricamento documento.' });
+    console.error('followme document upload multipart error:', err);
+
+    if (err && err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({
+        success:false,
+        error:'PDF troppo pesante. Limite attuale: 18 MB.'
+      });
+    }
+
+    return res.status(500).json({
+      success:false,
+      error: err.message || 'Errore caricamento documento.'
+    });
   }
 });
 
