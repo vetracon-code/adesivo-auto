@@ -26116,5 +26116,142 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-other-options-qr-preview-fixed-final-20260520">
+(function(){
+  if(window.__FollowMeOtherOptionsQrPreviewFixedFinal20260520) return;
+  window.__FollowMeOtherOptionsQrPreviewFixedFinal20260520 = true;
+
+  /*
+    FIX:
+    Apri anteprima QR deve mostrare sempre l'immagine QR del progetto,
+    non active_url, non /fm/document/..., non "#".
+  */
+
+  function qrPngPath(){
+    return "/followme/qrs/followme-FMDEMO-qr.png";
+  }
+
+  function qrSvgPath(){
+    return "/followme/qrs/followme-FMDEMO-qr.svg";
+  }
+
+  function absolute(path){
+    try{
+      return new URL(path, location.origin).toString();
+    }catch(e){
+      return path;
+    }
+  }
+
+  function fixLinks(){
+    const png = qrPngPath();
+    const svg = qrSvgPath();
+
+    const openMain = document.getElementById("openQrPreview");
+    const openOther = document.getElementById("followmeOtherOpenQrPreview");
+    const dlPng = document.getElementById("downloadQrPng");
+    const dlSvg = document.getElementById("downloadQrSvg");
+    const otherPng = document.getElementById("followmeOtherDownloadQrPng");
+    const otherSvg = document.getElementById("followmeOtherDownloadQrSvg");
+
+    [openMain, openOther].forEach(function(el){
+      if(!el) return;
+      el.setAttribute("href", png);
+      el.setAttribute("target", "_blank");
+      el.setAttribute("rel", "noopener");
+    });
+
+    [dlPng, otherPng].forEach(function(el){
+      if(!el) return;
+      el.setAttribute("href", png);
+      el.setAttribute("download", "followme-FMDEMO-qr.png");
+    });
+
+    [dlSvg, otherSvg].forEach(function(el){
+      if(!el) return;
+      el.setAttribute("href", svg);
+      el.setAttribute("download", "followme-FMDEMO-qr.svg");
+    });
+  }
+
+  function ensureElegantPreviewOverride(){
+    const other = document.getElementById("followmeOtherOpenQrPreview");
+    const main = document.getElementById("openQrPreview");
+
+    [main, other].forEach(function(btn){
+      if(!btn || btn.dataset.fmQrPreviewFixed20260520 === "1") return;
+
+      btn.dataset.fmQrPreviewFixed20260520 = "1";
+
+      btn.addEventListener("click", function(ev){
+        /*
+          Se esiste l'overlay elegante già creato, usiamolo.
+          Altrimenti lasciamo aprire normalmente il PNG.
+        */
+        try{
+          const overlay = document.getElementById("followmeElegantQrPreviewOverlay20260520");
+          const img = document.getElementById("followmeElegantQrPreviewImg20260520");
+          const open = document.getElementById("followmeElegantQrPreviewOpen20260520");
+
+          if(overlay && img){
+            ev.preventDefault();
+            ev.stopPropagation();
+            ev.stopImmediatePropagation();
+
+            const url = absolute(qrPngPath());
+            img.src = url + "?v=" + Date.now();
+            if(open) open.href = url;
+
+            overlay.classList.add("open");
+            return false;
+          }
+        }catch(e){}
+
+        btn.setAttribute("href", qrPngPath());
+      }, true);
+    });
+  }
+
+  function patchCurrentQrUrl(){
+    /*
+      Se qualche script elegante chiama ancora currentQrUrl interno non lo possiamo
+      sovrascrivere perché è in closure. Però possiamo mantenere gli href sempre corretti,
+      così la sua ricerca trova il PNG valido.
+    */
+    fixLinks();
+  }
+
+  function boot(){
+    fixLinks();
+    ensureElegantPreviewOverride();
+    patchCurrentQrUrl();
+
+    setTimeout(fixLinks, 300);
+    setTimeout(ensureElegantPreviewOverride, 600);
+    setTimeout(fixLinks, 1200);
+  }
+
+  window.fmOtherOptionsQrPreviewFixed20260520 = {
+    boot,
+    fixLinks,
+    qrPngPath,
+    qrSvgPath
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+})();
+</script>
+
 </body>
 </html>
