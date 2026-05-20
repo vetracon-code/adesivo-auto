@@ -26619,6 +26619,297 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 </script>
 
 
+
+<script id="followme-real-thumb-from-selected-file-final-20260520" type="module">
+import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.mjs";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.worker.min.mjs";
+
+(function(){
+  if(window.__FollowMeRealThumbFromSelectedFile20260520) return;
+  window.__FollowMeRealThumbFromSelectedFile20260520 = true;
+
+  let lastGenerated = null;
+  let generating = false;
+  let saving = false;
+
+  function log(){
+    try{ console.log.apply(console, ["[FollowMe Selected PDF Thumb]"].concat(Array.from(arguments))); }catch(e){}
+  }
+
+  function warn(){
+    try{ console.warn.apply(console, ["[FollowMe Selected PDF Thumb]"].concat(Array.from(arguments))); }catch(e){}
+  }
+
+  function fileInput(){
+    return document.getElementById("followmeDocumentUploadInput20260520");
+  }
+
+  function selectedFile(){
+    const input = fileInput();
+    return input && input.files && input.files[0] ? input.files[0] : null;
+  }
+
+  function canvasToDataUrl(canvas){
+    try{
+      return canvas.toDataURL("image/jpeg", 0.82);
+    }catch(e){
+      warn("canvasToDataUrl fallita", e);
+      return "";
+    }
+  }
+
+  async function fileToArrayBuffer(file){
+    if(!file) throw new Error("PDF non selezionato.");
+    return await file.arrayBuffer();
+  }
+
+  async function generateThumbnailFromSelectedFile(){
+    const file = selectedFile();
+
+    if(!file){
+      warn("nessun file selezionato");
+      return null;
+    }
+
+    const fileName = String(file.name || "");
+    if(!/\.pdf$/i.test(fileName)){
+      warn("file non PDF", fileName);
+      return null;
+    }
+
+    if(generating){
+      warn("generazione già in corso");
+      return lastGenerated;
+    }
+
+    generating = true;
+
+    try{
+      log("genero miniatura da file locale", fileName, file.size);
+
+      const data = await fileToArrayBuffer(file);
+
+      const loadingTask = pdfjsLib.getDocument({
+        data,
+        disableAutoFetch:true,
+        disableStream:true
+      });
+
+      const pdf = await loadingTask.promise;
+      const page = await pdf.getPage(1);
+      const base = page.getViewport({ scale:1 });
+
+      /*
+        Miniatura quadrata stabile per Destinazioni recenti.
+        520x520 è sufficiente per qualità visiva e resta sotto il limite payload.
+      */
+      const target = 520;
+      const scale = target / Math.min(base.width, base.height);
+      const viewport = page.getViewport({ scale });
+
+      const pageCanvas = document.createElement("canvas");
+      pageCanvas.width = Math.ceil(viewport.width);
+      pageCanvas.height = Math.ceil(viewport.height);
+
+      const ctx = pageCanvas.getContext("2d", { alpha:false });
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+
+      await page.render({
+        canvasContext:ctx,
+        viewport,
+        renderInteractiveForms:false
+      }).promise;
+
+      const out = document.createElement("canvas");
+      out.width = target;
+      out.height = target;
+
+      const outCtx = out.getContext("2d", { alpha:false });
+      outCtx.imageSmoothingEnabled = true;
+      outCtx.imageSmoothingQuality = "high";
+      outCtx.fillStyle = "#ffffff";
+      outCtx.fillRect(0, 0, target, target);
+
+      const cropX = Math.max(0, Math.floor((pageCanvas.width - target) / 2));
+      const cropY = pageCanvas.height > target ? 0 : Math.max(0, Math.floor((pageCanvas.height - target) / 2));
+
+      outCtx.drawImage(
+        pageCanvas,
+        cropX,
+        cropY,
+        Math.min(target, pageCanvas.width),
+        Math.min(target, pageCanvas.height),
+        0,
+        0,
+        target,
+        target
+      );
+
+      const dataUrl = canvasToDataUrl(out);
+
+      if(!dataUrl || dataUrl.length < 3000){
+        throw new Error("Miniatura generata non valida o troppo piccola.");
+      }
+
+      lastGenerated = {
+        fileName,
+        size:file.size,
+        dataUrl,
+        generatedAt:Date.now()
+      };
+
+      log("miniatura generata", {
+        length:dataUrl.length,
+        fileName
+      });
+
+      return lastGenerated;
+
+    }catch(e){
+      warn("errore generazione miniatura", e);
+      return null;
+    }finally{
+      generating = false;
+    }
+  }
+
+  async function saveThumbnailForDocument(documentId, dataUrl){
+    if(!documentId || !dataUrl) return false;
+
+    if(saving){
+      warn("salvataggio già in corso");
+      return false;
+    }
+
+    saving = true;
+
+    try{
+      log("salvo miniatura su documento", documentId, "length", dataUrl.length);
+
+      const r = await fetch("/api/followme/document/" + encodeURIComponent(documentId) + "/thumbnail", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ thumbnail_base64:dataUrl })
+      });
+
+      const j = await r.json().catch(() => null);
+
+      if(!r.ok || !j || !j.success){
+        throw new Error((j && j.error) || "Salvataggio miniatura non riuscito.");
+      }
+
+      log("miniatura salvata", j.document && j.document.id);
+
+      try{
+        await window.fmPdfSingleCard20260520?.refresh?.();
+        await window.fmPdfSingleCard20260520?.render?.();
+      }catch(e){}
+
+      try{
+        window.fmPdfSingleCard20260520?.boot?.();
+      }catch(e){}
+
+      return true;
+
+    }catch(e){
+      warn("errore salvataggio miniatura", e);
+      return false;
+    }finally{
+      saving = false;
+    }
+  }
+
+  async function generateAndSaveForDocument(documentId){
+    const thumb = await generateThumbnailFromSelectedFile();
+
+    if(!thumb || !thumb.dataUrl){
+      warn("nessuna miniatura da salvare");
+      return false;
+    }
+
+    return await saveThumbnailForDocument(documentId, thumb.dataUrl);
+  }
+
+  function patchFetch(){
+    if(window.__FollowMeSelectedThumbFetchPatch20260520) return;
+    window.__FollowMeSelectedThumbFetchPatch20260520 = true;
+
+    const originalFetch = window.fetch.bind(window);
+
+    window.fetch = async function(input, init){
+      const res = await originalFetch(input, init);
+
+      try{
+        const url = typeof input === "string" ? input : String(input && input.url || "");
+
+        /*
+          Dopo upload riuscito il server restituisce document.id.
+          A quel punto salviamo la miniatura reale generata dal file locale selezionato.
+        */
+        if(url.includes("/document/upload")){
+          res.clone().json().then(data => {
+            const doc = data && data.document;
+            if(doc && doc.id){
+              setTimeout(() => generateAndSaveForDocument(doc.id), 250);
+            }
+          }).catch(()=>{});
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  function bindInput(){
+    const input = fileInput();
+    if(!input || input.dataset.realThumbSelectedBound20260520 === "1") return;
+
+    input.dataset.realThumbSelectedBound20260520 = "1";
+
+    input.addEventListener("change", function(){
+      lastGenerated = null;
+
+      /*
+        Generazione anticipata ma non obbligatoria:
+        se riesce, quando arriva document.id la salviamo subito.
+        se fallisce, verrà riprovata dopo upload.
+      */
+      setTimeout(generateThumbnailFromSelectedFile, 350);
+    });
+  }
+
+  function boot(){
+    patchFetch();
+    bindInput();
+
+    setTimeout(bindInput, 600);
+    setTimeout(bindInput, 1600);
+  }
+
+  window.fmRealThumbFromSelectedFile20260520 = {
+    boot,
+    generateThumbnailFromSelectedFile,
+    saveThumbnailForDocument,
+    generateAndSaveForDocument,
+    getLastGenerated:function(){ return lastGenerated; }
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 350);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 350);
+  });
+})();
+</script>
+
+
 <script id="followme-pdf-preview-integrated-final-20260520">
 (function(){
   if(window.__FollowMePdfPreviewIntegrated20260520) return;
