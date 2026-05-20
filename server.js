@@ -9590,7 +9590,6 @@ app.get('/fm/chat/closed', (req, res) => {
 // followme-document-thumbnail-server-final-20260520
 async function ensureFollowMeDocumentThumbnailColumn20260520() {
   await ensureFollowMeDocumentTable20260520();
-    await ensureFollowMeDocumentThumbnailColumn20260520();
   await pool.query(`ALTER TABLE followme_documents ADD COLUMN IF NOT EXISTS thumbnail_path TEXT`);
 }
 
