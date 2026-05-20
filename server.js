@@ -10527,6 +10527,102 @@ app.get('/fm/document/:code', async (req, res) => {
 });
 // end-followme-consegna-documento-premium-final-20260520
 
+// followme-document-user-close-elegant-final-20260520
+app.get('/fm/document/closed', (req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+
+  return res.send(`<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Grazie</title>
+  <style>
+    html,body{
+      margin:0;
+      min-height:100%;
+      background:#020202;
+      color:#d7d7d7;
+      overflow:hidden;
+    }
+
+    body{
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:28px;
+      box-sizing:border-box;
+      background:
+        radial-gradient(circle at 50% 18%, rgba(210,210,210,.16), transparent 32%),
+        radial-gradient(circle at 18% 82%, rgba(255,255,255,.07), transparent 34%),
+        linear-gradient(145deg,#000 0%,#111 48%,#030303 100%);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    }
+
+    .card{
+      width:min(520px,100%);
+      text-align:center;
+      border-radius:34px;
+      padding:44px 30px 40px;
+      background:rgba(255,255,255,.035);
+      border:1px solid rgba(220,220,220,.18);
+      box-shadow:
+        0 30px 90px rgba(0,0,0,.52),
+        inset 0 1px 0 rgba(255,255,255,.10);
+      backdrop-filter:blur(18px);
+      -webkit-backdrop-filter:blur(18px);
+    }
+
+    .line{
+      width:82px;
+      height:1px;
+      margin:0 auto 24px;
+      background:linear-gradient(90deg,transparent,#d4d4d4,transparent);
+    }
+
+    h1{
+      margin:0;
+      font-family:"Snell Roundhand","Apple Chancery","Segoe Script","Brush Script MT",cursive;
+      font-size:54px;
+      line-height:1;
+      font-weight:400;
+      color:#e3e3e3;
+      text-shadow:0 0 30px rgba(255,255,255,.14);
+    }
+
+    p{
+      margin:20px auto 0;
+      max-width:360px;
+      font-size:15px;
+      line-height:1.55;
+      color:#bdbdbd;
+      font-weight:600;
+    }
+
+    .saluto{
+      margin-top:28px;
+      font-family:"Snell Roundhand","Apple Chancery","Segoe Script","Brush Script MT",cursive;
+      font-size:32px;
+      color:#d9d9d9;
+    }
+  </style>
+</head>
+<body>
+  <section class="card">
+    <div class="line"></div>
+    <h1>Grazie</h1>
+    <p>Il documento è stato chiuso correttamente.</p>
+    <div class="saluto">A presto</div>
+  </section>
+</body>
+</html>`);
+});
+// end-followme-document-user-close-elegant-final-20260520
+
+
 // followme-document-publish-flow-final-20260520
 async function ensureFollowMeDocumentPublishColumns20260520() {
   await pool.query(`ALTER TABLE followme_documents ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ`);
