@@ -22950,5 +22950,276 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-consegna-documento-premium-admin-final-20260520">
+(function(){
+  if(window.__FollowMeConsegnaDocumentoPremiumAdminFinal20260520) return;
+  window.__FollowMeConsegnaDocumentoPremiumAdminFinal20260520 = true;
+
+  function projectCode(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("app");
+      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
+    }catch(e){}
+
+    try{
+      if(window.FOLLOWME_PROJECT_CODE) return String(window.FOLLOWME_PROJECT_CODE);
+      if(window.followMeProjectCode) return String(window.followMeProjectCode);
+    }catch(e){}
+
+    return "FM-DEMO";
+  }
+
+  function fmtBytes(n){
+    n = Number(n || 0);
+    if(n < 1024) return n + " B";
+    if(n < 1024*1024) return Math.round(n/1024) + " KB";
+    return (n/(1024*1024)).toFixed(1).replace(".0","") + " MB";
+  }
+
+  function readFileAsBase64(file){
+    return new Promise(function(resolve, reject){
+      const r = new FileReader();
+      r.onload = function(){
+        const v = String(r.result || "");
+        resolve(v.replace(/^data:.*?;base64,/, ""));
+      };
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+  }
+
+  async function loadCurrentDocument(){
+    const code = projectCode();
+
+    const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/current?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    const data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || !data.success) return null;
+
+    updateStats(data.document, data.public_url);
+
+    return data.document;
+  }
+
+  function updateStats(doc, publicUrl){
+    const views = document.getElementById("followmeDocumentViews20260520");
+    const downloads = document.getElementById("followmeDocumentDownloads20260520");
+    const box = document.getElementById("followmeDocumentCurrentInfo20260520");
+
+    if(views) views.textContent = doc ? String(doc.views_count || 0) : "0";
+    if(downloads) downloads.textContent = doc ? String(doc.downloads_count || 0) : "0";
+
+    if(box){
+      if(doc){
+        box.innerHTML =
+          "<strong>Documento attivo:</strong> " + escapeHtml(doc.original_name || "Documento") + "<br>" +
+          "<span>Peso: " + fmtBytes(doc.size_bytes) + " · Pagine: " + (doc.page_count || "in lettura") + "</span><br>" +
+          "<a href='" + escapeAttr(publicUrl || "#") + "' target='_blank' rel='noopener'>Apri anteprima documento</a>";
+      }else{
+        box.innerHTML = "Nessun documento attivo.";
+      }
+    }
+  }
+
+  function escapeHtml(v){
+    return String(v == null ? "" : v)
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;");
+  }
+
+  function escapeAttr(v){
+    return escapeHtml(v).replace(/'/g, "&#39;");
+  }
+
+  async function uploadDocument(){
+    const input = document.getElementById("followmeDocumentUploadInput20260520");
+    if(!input || !input.files || !input.files[0]){
+      alert("Seleziona prima un PDF.");
+      return;
+    }
+
+    const file = input.files[0];
+
+    if(file.type && file.type !== "application/pdf"){
+      alert("Per ora sono consentiti solo file PDF.");
+      return;
+    }
+
+    if(!String(file.name || "").toLowerCase().endsWith(".pdf")){
+      alert("Il file deve essere un PDF.");
+      return;
+    }
+
+    const maxBytes = 18 * 1024 * 1024;
+    if(file.size > maxBytes){
+      alert("PDF troppo pesante. Limite attuale: 18 MB.");
+      return;
+    }
+
+    const btn = document.getElementById("followmeDocumentUploadBtn20260520");
+
+    try{
+      if(btn){
+        btn.disabled = true;
+        btn.textContent = "Preparazione...";
+      }
+
+      const base64 = await readFileAsBase64(file);
+      const code = projectCode();
+
+      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/upload", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({
+          filename:file.name,
+          mime_type:file.type || "application/pdf",
+          size_bytes:file.size,
+          base64
+        })
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Caricamento non riuscito.");
+      }
+
+      updateStats(data.document, data.public_url);
+
+      alert("Documento caricato. Ora è pronto per essere sfogliato e scaricato.");
+
+    }catch(err){
+      alert(err.message || "Errore caricamento documento.");
+    }finally{
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = "Prepara documento";
+      }
+    }
+  }
+
+  async function disableDocument(){
+    const ok = confirm("Vuoi spegnere Consegna Documento e tornare alla Home per scegliere un altro utilizzo del QR?");
+    if(!ok) return;
+
+    try{
+      const code = projectCode();
+
+      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/disable", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ confirm:"SPEGNI_CONSEGNA_DOCUMENTO" })
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Spegnimento non riuscito.");
+      }
+
+      updateStats(null, null);
+
+      if(document.body.classList.contains("fm-consegna-documento-open-20260520")){
+        document.body.classList.remove("fm-consegna-documento-open-20260520");
+      }
+
+      alert("Consegna Documento spenta.");
+
+    }catch(err){
+      alert(err.message || "Errore spegnimento documento.");
+    }
+  }
+
+  function ensureCurrentInfoBox(){
+    const uploadBox = document.querySelector("#followmeConsegnaDocumentoPage20260520 .fm-doc-upload-box");
+    if(!uploadBox) return;
+
+    if(document.getElementById("followmeDocumentCurrentInfo20260520")) return;
+
+    const box = document.createElement("div");
+    box.id = "followmeDocumentCurrentInfo20260520";
+    box.style.marginTop = "14px";
+    box.style.padding = "13px";
+    box.style.borderRadius = "16px";
+    box.style.background = "#f8fafc";
+    box.style.border = "1px solid rgba(15,23,42,.08)";
+    box.style.fontWeight = "750";
+    box.style.color = "#334155";
+    box.innerHTML = "Carico stato documento...";
+
+    uploadBox.appendChild(box);
+  }
+
+  function bind(){
+    ensureCurrentInfoBox();
+
+    const upload = document.getElementById("followmeDocumentUploadBtn20260520");
+    const disable = document.getElementById("followmeDocumentDisableBtn20260520");
+
+    if(upload && upload.dataset.premiumBound20260520 !== "1"){
+      upload.dataset.premiumBound20260520 = "1";
+      upload.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        uploadDocument();
+      }, true);
+    }
+
+    if(disable && disable.dataset.premiumBound20260520 !== "1"){
+      disable.dataset.premiumBound20260520 = "1";
+      disable.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        disableDocument();
+      }, true);
+    }
+  }
+
+  function boot(){
+    bind();
+    loadCurrentDocument();
+
+    setTimeout(function(){
+      bind();
+      loadCurrentDocument();
+    }, 600);
+
+    setTimeout(function(){
+      bind();
+      loadCurrentDocument();
+    }, 1600);
+  }
+
+  window.fmConsegnaDocumentoPremiumAdmin20260520 = {
+    boot,
+    uploadDocument,
+    disableDocument,
+    loadCurrentDocument
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(bind, 2000);
+})();
+</script>
+
 </body>
 </html>

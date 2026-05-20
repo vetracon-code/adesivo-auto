@@ -9573,6 +9573,740 @@ app.get('/fm/chat/closed', (req, res) => {
 });
 // end-followme-selected-closed-static-page-final-20260519
 
+
+// followme-consegna-documento-premium-final-20260520
+const followmeDocumentPath = require('path');
+const followmeDocumentFs = require('fs');
+const followmeDocumentFsp = followmeDocumentFs.promises;
+
+const FOLLOWME_DOCUMENT_UPLOAD_DIR = followmeDocumentPath.join(__dirname, 'public', 'followme-documents');
+
+async function ensureFollowMeDocumentDir20260520() {
+  await followmeDocumentFsp.mkdir(FOLLOWME_DOCUMENT_UPLOAD_DIR, { recursive:true });
+}
+
+async function ensureFollowMeDocumentTable20260520() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS followme_documents (
+      id BIGSERIAL PRIMARY KEY,
+      project_id BIGINT NOT NULL,
+      original_name TEXT NOT NULL,
+      stored_name TEXT NOT NULL,
+      public_path TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      size_bytes BIGINT NOT NULL,
+      page_count INTEGER,
+      status TEXT NOT NULL DEFAULT 'active',
+      views_count BIGINT NOT NULL DEFAULT 0,
+      downloads_count BIGINT NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS followme_documents_project_status_idx
+    ON followme_documents(project_id, status, id DESC)
+  `);
+}
+
+function sanitizeFollowMeDocumentName20260520(name) {
+  return String(name || 'documento.pdf')
+    .replace(/[^\w.\-]+/g, '_')
+    .replace(/_+/g, '_')
+    .slice(0, 120) || 'documento.pdf';
+}
+
+function isLikelyPdfBase6420260520(base64) {
+  try {
+    const buf = Buffer.from(String(base64 || '').slice(0, 40), 'base64');
+    return buf.slice(0, 5).toString('utf8') === '%PDF-';
+  } catch(e) {
+    return false;
+  }
+}
+
+function countPdfPagesRough20260520(buffer) {
+  try {
+    const txt = buffer.toString('latin1');
+    const matches = txt.match(/\/Type\s*\/Page\b/g);
+    return matches ? matches.length : null;
+  } catch(e) {
+    return null;
+  }
+}
+
+async function getFollowMeProjectByCode20260520(code) {
+  const r = await pool.query(
+    `SELECT id, code, public_id
+     FROM followme_projects
+     WHERE code = $1 OR public_id = $1
+     LIMIT 1`,
+    [code]
+  );
+  return r.rows[0] || null;
+}
+
+app.post('/api/followme/:code/document/upload', express.json({ limit:'28mb' }), async (req, res) => {
+  try {
+    await ensureFollowMeDocumentDir20260520();
+    await ensureFollowMeDocumentTable20260520();
+
+    const code = String(req.params.code || '').trim();
+    const project = await getFollowMeProjectByCode20260520(code);
+
+    if (!project) {
+      return res.status(404).json({ success:false, error:'Progetto non trovato.' });
+    }
+
+    const originalName = sanitizeFollowMeDocumentName20260520(req.body && req.body.filename);
+    const mimeType = String((req.body && req.body.mime_type) || '').trim().toLowerCase();
+    const rawBase64 = String((req.body && req.body.base64) || '').replace(/^data:.*?;base64,/, '');
+
+    if (!rawBase64) {
+      return res.status(400).json({ success:false, error:'File mancante.' });
+    }
+
+    if (mimeType !== 'application/pdf' && !originalName.toLowerCase().endsWith('.pdf')) {
+      return res.status(415).json({ success:false, error:'Per ora sono consentiti solo file PDF.' });
+    }
+
+    if (!isLikelyPdfBase6420260520(rawBase64)) {
+      return res.status(415).json({ success:false, error:'Il file non sembra un PDF valido.' });
+    }
+
+    const buffer = Buffer.from(rawBase64, 'base64');
+
+    const maxBytes = 18 * 1024 * 1024;
+    if (buffer.length > maxBytes) {
+      return res.status(413).json({
+        success:false,
+        error:'PDF troppo pesante. Limite attuale: 18 MB. Nel prossimo step aggiungiamo ottimizzazione automatica.'
+      });
+    }
+
+    if (buffer.slice(0, 5).toString('utf8') !== '%PDF-') {
+      return res.status(415).json({ success:false, error:'Controllo sicurezza fallito: intestazione PDF non valida.' });
+    }
+
+    const storedName = `followme-doc-${project.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.pdf`;
+    const diskPath = followmeDocumentPath.join(FOLLOWME_DOCUMENT_UPLOAD_DIR, storedName);
+    const publicPath = `/followme-documents/${storedName}`;
+
+    await followmeDocumentFsp.writeFile(diskPath, buffer);
+
+    const pageCount = countPdfPagesRough20260520(buffer);
+
+    await pool.query(
+      `UPDATE followme_documents
+       SET status = 'replaced',
+           updated_at = NOW()
+       WHERE project_id = $1
+         AND status = 'active'`,
+      [project.id]
+    );
+
+    const inserted = await pool.query(
+      `INSERT INTO followme_documents
+       (project_id, original_name, stored_name, public_path, mime_type, size_bytes, page_count, status, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,'application/pdf',$5,$6,'active',NOW(),NOW())
+       RETURNING id, project_id, original_name, public_path, size_bytes, page_count, status, views_count, downloads_count, created_at, updated_at`,
+      [project.id, originalName, storedName, publicPath, buffer.length, pageCount]
+    );
+
+    return res.json({
+      success:true,
+      document:inserted.rows[0],
+      public_url:`/fm/document/${project.public_id || project.code}`
+    });
+
+  } catch(err) {
+    console.error('followme document upload error:', err);
+    return res.status(500).json({ success:false, error:'Errore caricamento documento.' });
+  }
+});
+
+app.get('/api/followme/:code/document/current', async (req, res) => {
+  try {
+    await ensureFollowMeDocumentTable20260520();
+
+    const code = String(req.params.code || '').trim();
+    const project = await getFollowMeProjectByCode20260520(code);
+
+    if (!project) {
+      return res.status(404).json({ success:false, error:'Progetto non trovato.' });
+    }
+
+    const r = await pool.query(
+      `SELECT id, project_id, original_name, public_path, mime_type, size_bytes, page_count, status, views_count, downloads_count, created_at, updated_at
+       FROM followme_documents
+       WHERE project_id = $1
+         AND status = 'active'
+       ORDER BY id DESC
+       LIMIT 1`,
+      [project.id]
+    );
+
+    return res.json({
+      success:true,
+      document:r.rows[0] || null,
+      public_url:`/fm/document/${project.public_id || project.code}`
+    });
+
+  } catch(err) {
+    console.error('followme document current error:', err);
+    return res.status(500).json({ success:false, error:'Errore lettura documento.' });
+  }
+});
+
+app.post('/api/followme/:code/document/disable', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeDocumentTable20260520();
+
+    const code = String(req.params.code || '').trim();
+    const project = await getFollowMeProjectByCode20260520(code);
+
+    if (!project) {
+      return res.status(404).json({ success:false, error:'Progetto non trovato.' });
+    }
+
+    await pool.query(
+      `UPDATE followme_documents
+       SET status = 'disabled',
+           updated_at = NOW()
+       WHERE project_id = $1
+         AND status = 'active'`,
+      [project.id]
+    );
+
+    return res.json({ success:true });
+
+  } catch(err) {
+    console.error('followme document disable error:', err);
+    return res.status(500).json({ success:false, error:'Errore spegnimento documento.' });
+  }
+});
+
+app.post('/api/followme/document/:document_id/view', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeDocumentTable20260520();
+
+    const id = Number(req.params.document_id || 0);
+    if (!id) return res.status(400).json({ success:false });
+
+    const r = await pool.query(
+      `UPDATE followme_documents
+       SET views_count = views_count + 1,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING views_count`,
+      [id]
+    );
+
+    return res.json({ success:true, views_count:r.rows[0]?.views_count || 0 });
+  } catch(err) {
+    return res.status(500).json({ success:false });
+  }
+});
+
+app.get('/api/followme/document/:document_id/download', async (req, res) => {
+  try {
+    await ensureFollowMeDocumentTable20260520();
+
+    const id = Number(req.params.document_id || 0);
+    if (!id) return res.status(400).send('Documento non valido.');
+
+    const r = await pool.query(
+      `UPDATE followme_documents
+       SET downloads_count = downloads_count + 1,
+           updated_at = NOW()
+       WHERE id = $1
+         AND status = 'active'
+       RETURNING original_name, public_path`,
+      [id]
+    );
+
+    if (!r.rows.length) {
+      return res.status(404).send('Documento non disponibile.');
+    }
+
+    const row = r.rows[0];
+    const filePath = followmeDocumentPath.join(__dirname, 'public', String(row.public_path || '').replace(/^\//, ''));
+
+    return res.download(filePath, row.original_name || 'documento.pdf');
+  } catch(err) {
+    console.error('followme document download error:', err);
+    return res.status(500).send('Errore download documento.');
+  }
+});
+
+app.get('/fm/document/:code', async (req, res) => {
+  try {
+    await ensureFollowMeDocumentTable20260520();
+
+    const code = String(req.params.code || '').trim();
+    const project = await getFollowMeProjectByCode20260520(code);
+
+    if (!project) {
+      return res.status(404).send('Documento non disponibile.');
+    }
+
+    const r = await pool.query(
+      `SELECT id, original_name, public_path, size_bytes, page_count, views_count, downloads_count
+       FROM followme_documents
+       WHERE project_id = $1
+         AND status = 'active'
+       ORDER BY id DESC
+       LIMIT 1`,
+      [project.id]
+    );
+
+    if (!r.rows.length) {
+      return res.status(404).send('Documento non disponibile.');
+    }
+
+    const doc = r.rows[0];
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+
+    return res.send(`<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow">
+  <title>${String(doc.original_name || 'Documento').replace(/[<>&"]/g, '')}</title>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.mjs" type="module"></script>
+  <style>
+    html,body{
+      margin:0;
+      padding:0;
+      min-height:100%;
+      background:#020617;
+      color:#f8fafc;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+      overflow:hidden;
+    }
+
+    body{
+      min-height:100vh;
+      background:
+        radial-gradient(circle at 50% 12%, rgba(59,130,246,.22), transparent 30%),
+        linear-gradient(145deg,#020617,#0f172a 48%,#020617);
+    }
+
+    .app{
+      height:100vh;
+      display:flex;
+      flex-direction:column;
+      box-sizing:border-box;
+      padding:14px;
+    }
+
+    .top{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:4px 2px 12px;
+    }
+
+    .brand{
+      min-width:0;
+    }
+
+    .kicker{
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      color:#93c5fd;
+      font-weight:950;
+    }
+
+    h1{
+      margin:3px 0 0;
+      font-size:17px;
+      line-height:1.1;
+      max-width:62vw;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      letter-spacing:-.035em;
+    }
+
+    .page-indicator{
+      flex:0 0 auto;
+      border-radius:999px;
+      padding:8px 11px;
+      background:rgba(255,255,255,.09);
+      border:1px solid rgba(255,255,255,.12);
+      color:#e5e7eb;
+      font-size:12px;
+      font-weight:950;
+    }
+
+    .viewer{
+      position:relative;
+      flex:1;
+      min-height:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      overflow:hidden;
+      border-radius:26px;
+      background:rgba(15,23,42,.76);
+      border:1px solid rgba(255,255,255,.10);
+      box-shadow:0 24px 80px rgba(0,0,0,.34);
+      touch-action:pan-y;
+    }
+
+    canvas{
+      max-width:100%;
+      max-height:100%;
+      border-radius:14px;
+      background:white;
+      box-shadow:0 18px 50px rgba(0,0,0,.34);
+      transition:transform .22s ease, opacity .22s ease;
+    }
+
+    .viewer.loading canvas{
+      opacity:.35;
+      transform:scale(.985);
+    }
+
+    .nav{
+      position:absolute;
+      top:50%;
+      transform:translateY(-50%);
+      width:42px;
+      height:42px;
+      border:0;
+      border-radius:999px;
+      background:rgba(255,255,255,.11);
+      color:#fff;
+      font-size:26px;
+      font-weight:800;
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      backdrop-filter:blur(12px);
+    }
+
+    .nav.prev{ left:10px; }
+    .nav.next{ right:10px; }
+
+    .bottom{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:12px 2px 0;
+    }
+
+    .bottom button,
+    .bottom a{
+      border:0;
+      border-radius:999px;
+      padding:11px 14px;
+      font-weight:950;
+      font-size:13px;
+      cursor:pointer;
+      text-decoration:none;
+      white-space:nowrap;
+    }
+
+    .pages-btn{
+      background:rgba(255,255,255,.10);
+      color:#fff;
+      border:1px solid rgba(255,255,255,.12) !important;
+    }
+
+    .download{
+      background:#ffffff;
+      color:#020617;
+      box-shadow:0 12px 34px rgba(255,255,255,.12);
+    }
+
+    .drawer{
+      display:none;
+      position:fixed;
+      left:14px;
+      right:14px;
+      bottom:72px;
+      z-index:20;
+      max-height:45vh;
+      overflow:auto;
+      border-radius:22px;
+      padding:10px;
+      background:rgba(15,23,42,.96);
+      border:1px solid rgba(255,255,255,.12);
+      box-shadow:0 24px 80px rgba(0,0,0,.42);
+    }
+
+    .drawer.open{
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(70px,1fr));
+      gap:8px;
+    }
+
+    .drawer button{
+      border:0;
+      border-radius:14px;
+      min-height:44px;
+      background:rgba(255,255,255,.08);
+      color:#fff;
+      font-weight:950;
+      cursor:pointer;
+    }
+
+    .drawer button.active{
+      background:#fff;
+      color:#020617;
+    }
+
+    .hint{
+      position:absolute;
+      left:50%;
+      bottom:14px;
+      transform:translateX(-50%);
+      padding:8px 11px;
+      border-radius:999px;
+      background:rgba(2,6,23,.62);
+      color:#cbd5e1;
+      font-size:12px;
+      font-weight:800;
+      pointer-events:none;
+    }
+
+    @media(max-width:560px){
+      .app{ padding:10px; }
+      .nav{ display:none; }
+      h1{ max-width:55vw; }
+      .bottom button,.bottom a{ padding:10px 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div class="brand">
+        <div class="kicker">Consegna Documento</div>
+        <h1>${String(doc.original_name || 'Documento').replace(/[<>&"]/g, '')}</h1>
+      </div>
+      <div class="page-indicator" id="pageIndicator">1 / …</div>
+    </header>
+
+    <main class="viewer loading" id="viewer">
+      <canvas id="pdfCanvas"></canvas>
+      <button class="nav prev" id="prevBtn" type="button">‹</button>
+      <button class="nav next" id="nextBtn" type="button">›</button>
+      <div class="hint" id="hint">Sfoglia con un gesto</div>
+    </main>
+
+    <div class="drawer" id="pagesDrawer"></div>
+
+    <footer class="bottom">
+      <button class="pages-btn" id="pagesBtn" type="button" style="display:none">Pagine</button>
+      <a class="download" id="downloadBtn" href="/api/followme/document/${doc.id}/download">Scarica documento</a>
+    </footer>
+  </div>
+
+  <script type="module">
+    import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.mjs";
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.worker.min.mjs";
+
+    const DOCUMENT_ID = ${doc.id};
+    const PDF_URL = ${JSON.stringify(doc.public_path)};
+    const viewer = document.getElementById("viewer");
+    const canvas = document.getElementById("pdfCanvas");
+    const ctx = canvas.getContext("2d");
+    const indicator = document.getElementById("pageIndicator");
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+    const pagesBtn = document.getElementById("pagesBtn");
+    const drawer = document.getElementById("pagesDrawer");
+    const hint = document.getElementById("hint");
+
+    let pdf = null;
+    let pageNum = 1;
+    let totalPages = 1;
+    let rendering = false;
+    let startX = 0;
+    let startY = 0;
+    let tracking = false;
+
+    try {
+      fetch("/api/followme/document/" + DOCUMENT_ID + "/view", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ source:"document_viewer" })
+      }).catch(()=>{});
+    } catch(e){}
+
+    function renderIndicator(){
+      indicator.textContent = pageNum + " / " + totalPages;
+    }
+
+    function buildDrawer(){
+      drawer.innerHTML = "";
+
+      if(totalPages <= 6){
+        pagesBtn.style.display = "none";
+        return;
+      }
+
+      pagesBtn.style.display = "";
+
+      for(let i=1;i<=totalPages;i++){
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = "Pag. " + i;
+        if(i === pageNum) b.classList.add("active");
+        b.onclick = function(){
+          drawer.classList.remove("open");
+          goToPage(i);
+        };
+        drawer.appendChild(b);
+      }
+    }
+
+    async function renderPage(num, direction){
+      if(rendering || !pdf) return;
+      rendering = true;
+      viewer.classList.add("loading");
+
+      try{
+        const page = await pdf.getPage(num);
+        const baseViewport = page.getViewport({ scale:1 });
+
+        const maxW = viewer.clientWidth * 0.94;
+        const maxH = viewer.clientHeight * 0.94;
+        const scale = Math.min(maxW / baseViewport.width, maxH / baseViewport.height, 2.2);
+
+        const viewport = page.getViewport({ scale });
+
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+
+        canvas.style.transform = direction === "next" ? "translateX(22px)" : direction === "prev" ? "translateX(-22px)" : "translateX(0)";
+
+        await page.render({ canvasContext:ctx, viewport }).promise;
+
+        requestAnimationFrame(() => {
+          canvas.style.transform = "translateX(0)";
+          canvas.style.opacity = "1";
+          viewer.classList.remove("loading");
+        });
+
+        renderIndicator();
+        buildDrawer();
+
+        setTimeout(() => {
+          if(hint) hint.style.opacity = "0";
+        }, 1800);
+
+      }catch(e){
+        console.error(e);
+        viewer.classList.remove("loading");
+      }finally{
+        rendering = false;
+      }
+    }
+
+    function goToPage(n, direction){
+      const next = Math.max(1, Math.min(totalPages, n));
+      if(next === pageNum && pdf) return;
+      const dir = direction || (next > pageNum ? "next" : "prev");
+      pageNum = next;
+      renderPage(pageNum, dir);
+    }
+
+    function nextPage(){
+      if(pageNum < totalPages) goToPage(pageNum + 1, "next");
+    }
+
+    function prevPage(){
+      if(pageNum > 1) goToPage(pageNum - 1, "prev");
+    }
+
+    prevBtn.onclick = prevPage;
+    nextBtn.onclick = nextPage;
+
+    pagesBtn.onclick = function(){
+      drawer.classList.toggle("open");
+    };
+
+    viewer.addEventListener("touchstart", function(ev){
+      const t = ev.touches && ev.touches[0];
+      if(!t) return;
+      tracking = true;
+      startX = t.clientX;
+      startY = t.clientY;
+    }, { passive:true });
+
+    viewer.addEventListener("touchend", function(ev){
+      if(!tracking) return;
+      tracking = false;
+
+      const t = ev.changedTouches && ev.changedTouches[0];
+      if(!t) return;
+
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+
+      if(Math.abs(dx) < 42 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+
+      if(dx < 0) nextPage();
+      else prevPage();
+    }, { passive:true });
+
+    viewer.addEventListener("mousedown", function(ev){
+      tracking = true;
+      startX = ev.clientX;
+      startY = ev.clientY;
+    });
+
+    viewer.addEventListener("mouseup", function(ev){
+      if(!tracking) return;
+      tracking = false;
+
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+
+      if(Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+
+      if(dx < 0) nextPage();
+      else prevPage();
+    });
+
+    window.addEventListener("keydown", function(ev){
+      if(ev.key === "ArrowRight") nextPage();
+      if(ev.key === "ArrowLeft") prevPage();
+    });
+
+    window.addEventListener("resize", function(){
+      clearTimeout(window.__fmDocResize);
+      window.__fmDocResize = setTimeout(() => renderPage(pageNum), 200);
+    });
+
+    pdf = await pdfjsLib.getDocument(PDF_URL).promise;
+    totalPages = pdf.numPages || 1;
+    renderIndicator();
+    buildDrawer();
+    renderPage(1);
+  </script>
+</body>
+</html>`);
+  } catch(err) {
+    console.error('followme document public page error:', err);
+    return res.status(500).send('Errore apertura documento.');
+  }
+});
+// end-followme-consegna-documento-premium-final-20260520
+
 app.get('/fm/chat/c/:chat_token', async (req, res) => {
   try {
     await ensureFollowMeChatSchemaFast();
