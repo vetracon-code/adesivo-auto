@@ -9575,6 +9575,57 @@ app.get('/fm/chat/closed', (req, res) => {
 // end-followme-selected-closed-static-page-final-20260519
 
 
+
+// followme-document-thumbnail-server-final-20260520
+async function ensureFollowMeDocumentThumbnailColumn20260520() {
+  await ensureFollowMeDocumentTable20260520();
+    await ensureFollowMeDocumentThumbnailColumn20260520();
+  await pool.query(`ALTER TABLE followme_documents ADD COLUMN IF NOT EXISTS thumbnail_path TEXT`);
+}
+
+function followmeCleanBase64Image20260520(v) {
+  v = String(v || '').trim();
+  if (!v) return null;
+
+  const m = v.match(/^data:image\/(png|jpeg|jpg|webp);base64,(.+)$/i);
+  if (!m) return null;
+
+  const ext = m[1].toLowerCase() === 'jpg' ? 'jpeg' : m[1].toLowerCase();
+  const base64 = m[2];
+
+  if (!base64 || base64.length > 900000) return null;
+
+  try {
+    return {
+      ext: ext === 'jpeg' ? 'jpg' : ext,
+      buffer: Buffer.from(base64, 'base64')
+    };
+  } catch(e) {
+    return null;
+  }
+}
+
+async function saveFollowMeDocumentThumbnail20260520(projectId, documentId, thumbnailBase64) {
+  const img = followmeCleanBase64Image20260520(thumbnailBase64);
+  if (!img || !img.buffer || !img.buffer.length) return null;
+
+  const dir = path.join(__dirname, 'public', 'followme-documents');
+  await fs.promises.mkdir(dir, { recursive:true });
+
+  /*
+    Nome prevedibile per sostituzione ordinata:
+    stesso documento = stessa miniatura.
+    Nuovo PDF = nuovo record documento = nuovo file.
+  */
+  const filename = `followme-doc-${projectId}-${documentId}-thumb.${img.ext}`;
+  const full = path.join(dir, filename);
+
+  await fs.promises.writeFile(full, img.buffer);
+
+  return `/followme-documents/${filename}`;
+}
+// end-followme-document-thumbnail-server-final-20260520
+
 // followme-consegna-documento-premium-final-20260520
 const followmeDocumentPath = require('path');
 const followmeDocumentFs = require('fs');
@@ -9777,7 +9828,7 @@ app.get('/api/followme/:code/document/current', async (req, res) => {
     }
 
     const r = await pool.query(
-      `SELECT id, project_id, original_name, public_path, mime_type, size_bytes, page_count, status, views_count, downloads_count, created_at, updated_at
+      `SELECT id, project_id, original_name, public_path, mime_type, size_bytes, page_count, status, views_count, downloads_count, thumbnail_path, created_at, updated_at
        FROM followme_documents
        WHERE project_id = $1
          AND status = 'active'
@@ -10831,7 +10882,7 @@ app.post('/api/followme/:code/document/publish', express.json(), async (req, res
     return res.json({
       success:true,
       published:true,
-      document:doc,
+      document:{ ...doc, thumbnail_url: doc.thumbnail_path || null },
       public_url:publicUrl,
       destination_column:updatedDestinationColumn,
       warning: updatedDestinationColumn ? null : 'Documento pubblicato, ma non ho trovato automaticamente la colonna destinazione QR.'
