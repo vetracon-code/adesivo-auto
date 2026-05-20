@@ -26246,6 +26246,37 @@ document.addEventListener("visibilitychange", function(){
     location.href = "/fm/app/" + encodeURIComponent(code()) + "#consegna-documento";
   }
 
+  function findWorkingPdfHistoryReactivateButton20260521(){
+    const cards = Array.from(document.querySelectorAll(".premium-history-card"));
+
+    for(const card of cards){
+      if(!card || card.id === "followmePdfSingleCard20260520") continue;
+
+      const txt = String(card.textContent || "").replace(/\s+/g, " ").toLowerCase();
+
+      const looksPdfHistory =
+        txt.includes("/fm/document/") ||
+        txt.includes("fm/document") ||
+        (
+          txt.includes("destinazione") &&
+          txt.includes("precedente") &&
+          (txt.includes("scansioni") || txt.includes("ultimo uso"))
+        );
+
+      if(!looksPdfHistory) continue;
+
+      const buttons = Array.from(card.querySelectorAll("button,a"));
+      const btn = buttons.find(function(el){
+        const t = String(el.textContent || "").toLowerCase();
+        return t.includes("riattiva") || t.includes("attiva");
+      });
+
+      if(btn) return btn;
+    }
+
+    return null;
+  }
+
   async function publishDoc(){
     if(!docData?.id){
       alert("Prima carica un PDF valido.");
@@ -26339,10 +26370,39 @@ document.addEventListener("visibilitychange", function(){
     if(react){
       react.onclick = async function(ev){
         ev.preventDefault();
+
+        /*
+          followme-pdf-official-reactivate-bridge-20260521
+          La card storico "fantasma" contiene già la logica corretta di riattivazione
+          e aggiorna bene anche le preview. Prima provo quindi a pilotare quella.
+          Se non la trovo, uso il fallback diretto publishDoc().
+        */
+        try{
+          const ghostBtn = findWorkingPdfHistoryReactivateButton20260521();
+
+          if(ghostBtn){
+            react.disabled = true;
+            react.textContent = "Attivo...";
+
+            ghostBtn.click();
+
+            setTimeout(function(){
+              try{ window.fmCarouselSwitchPreviewSync20260521?.syncNow?.("official-pdf-reactivate-bridge"); }catch(_){}
+              try{ window.fmPdfSingleCard20260520?.boot?.(); }catch(_){}
+              react.disabled = false;
+              react.textContent = "Riattiva";
+            }, 1600);
+
+            return;
+          }
+        }catch(e){}
+
         try{
           react.disabled = true;
           react.textContent = "Attivo...";
           await publishDoc();
+
+          try{ window.fmCarouselSwitchPreviewSync20260521?.syncNow?.("official-pdf-reactivate-fallback"); }catch(_){}
         }catch(e){
           alert(e.message || "Errore riattivazione.");
           react.disabled = false;
