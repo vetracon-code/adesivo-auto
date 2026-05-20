@@ -27125,5 +27125,270 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 
 
+
+<script id="followme-carousel-switch-preview-sync-final-20260521">
+(function(){
+  if(window.__FollowMeCarouselSwitchPreviewSyncFinal20260521) return;
+  window.__FollowMeCarouselSwitchPreviewSyncFinal20260521 = true;
+
+  let syncing = false;
+  let lastActiveUrl = "";
+
+  function log(){
+    try{ console.log.apply(console, ["[FollowMe Switch Sync]"].concat(Array.from(arguments))); }catch(e){}
+  }
+
+  function code(){
+    try{
+      const p = location.pathname.split("/").filter(Boolean);
+      const i = p.indexOf("app");
+      if(i >= 0 && p[i+1]) return decodeURIComponent(p[i+1]);
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function clean(v){
+    return String(v || "").trim().replace(/\/+$/, "");
+  }
+
+  function isPdfUrl(v){
+    return clean(v).includes("/fm/document/");
+  }
+
+  async function getStatus(){
+    try{
+      const r = await fetch("/api/followme/" + encodeURIComponent(code()) + "/status?v=" + Date.now(), {
+        cache:"no-store"
+      });
+      const j = await r.json().catch(() => null);
+      if(j && j.success) return j;
+    }catch(e){}
+    return null;
+  }
+
+  function removePdfPreviewHolders(){
+    [
+      "followmePdfIntegratedPreviewHolder20260520",
+      "followmePdfMainThumb20260520"
+    ].forEach(function(id){
+      const el = document.getElementById(id);
+      if(el) el.remove();
+    });
+
+    document.querySelectorAll("[id='followmePdfIntegratedPreviewHolder20260520'],[id='followmePdfMainThumb20260520']").forEach(function(el){
+      el.remove();
+    });
+  }
+
+  function resetMainPreviewFrame(){
+    /*
+      Non distruggiamo la struttura della pagina.
+      Puliamo solo eventuali contenuti PDF iniettati, così lo script corretto può ricostruire.
+    */
+    removePdfPreviewHolders();
+
+    const frame =
+      document.querySelector(".qr-auto-preview-frame") ||
+      document.getElementById("qrAutoPreviewFrame") ||
+      document.querySelector(".simple-preview-frame") ||
+      document.getElementById("simpleDestinationPreviewFrame");
+
+    if(frame){
+      try{
+        frame.style.display = "";
+      }catch(e){}
+    }
+
+    const simpleCard = document.querySelector(".simple-preview-card");
+    if(simpleCard){
+      simpleCard.classList.remove("preview-loading", "preview-loaded");
+    }
+  }
+
+  async function refreshPdfCard(){
+    try{
+      if(window.fmPdfSingleCard20260520?.refresh){
+        await window.fmPdfSingleCard20260520.refresh();
+      }
+      if(window.fmPdfSingleCard20260520?.render){
+        window.fmPdfSingleCard20260520.render();
+      }else if(window.fmPdfSingleCard20260520?.boot){
+        window.fmPdfSingleCard20260520.boot();
+      }
+    }catch(e){}
+  }
+
+  async function refreshMainPdfPreview(){
+    try{
+      if(window.fmPdfPreviewIntegrated20260520?.removeExtraPreview){
+        window.fmPdfPreviewIntegrated20260520.removeExtraPreview();
+      }
+      if(window.fmPdfPreviewIntegrated20260520?.integratePdfPreview){
+        await window.fmPdfPreviewIntegrated20260520.integratePdfPreview();
+      }else if(window.fmPdfPreviewIntegrated20260520?.boot){
+        await window.fmPdfPreviewIntegrated20260520.boot();
+      }
+    }catch(e){}
+  }
+
+  function refreshGenericPreview(){
+    /*
+      Qui rilanciamo gli script già esistenti senza inventare nuova logica URL.
+      Se la destinazione attiva è un URL normale, saranno loro a rigenerare favicon/frame.
+    */
+    try{ window.fmOtherOptionsQrPreviewFixed20260520?.boot?.(); }catch(e){}
+    try{ window.fmSimplePreviewFinal20260513?.boot?.(); }catch(e){}
+    try{ window.fmSimpleDestinationPreviewFinal20260513?.boot?.(); }catch(e){}
+    try{ window.refreshSimpleDestinationPreview?.(); }catch(e){}
+  }
+
+  async function syncNow(reason){
+    if(syncing) return;
+    syncing = true;
+
+    try{
+      const status = await getStatus();
+      const activeUrl = clean(status?.project?.active_url || "");
+      const changed = activeUrl !== lastActiveUrl;
+
+      if(activeUrl) lastActiveUrl = activeUrl;
+
+      log("sync", { reason, activeUrl, changed });
+
+      resetMainPreviewFrame();
+
+      /*
+        Doppio refresh leggero:
+        - subito dopo il cambio
+        - poco dopo, quando eventuali fetch/DOM asincroni hanno finito
+      */
+      await refreshPdfCard();
+
+      if(isPdfUrl(activeUrl)){
+        await refreshMainPdfPreview();
+      }else{
+        refreshGenericPreview();
+      }
+
+      setTimeout(async function(){
+        await refreshPdfCard();
+
+        if(isPdfUrl(activeUrl)){
+          await refreshMainPdfPreview();
+        }else{
+          resetMainPreviewFrame();
+          refreshGenericPreview();
+        }
+      }, 650);
+
+      setTimeout(async function(){
+        await refreshPdfCard();
+
+        if(isPdfUrl(activeUrl)){
+          await refreshMainPdfPreview();
+        }else{
+          refreshGenericPreview();
+        }
+      }, 1500);
+
+    }catch(e){
+      log("errore sync", e);
+    }finally{
+      setTimeout(function(){ syncing = false; }, 250);
+    }
+  }
+
+  function patchFetch(){
+    if(window.__FollowMeCarouselSwitchFetchPatch20260521) return;
+    window.__FollowMeCarouselSwitchFetchPatch20260521 = true;
+
+    const originalFetch = window.fetch.bind(window);
+
+    window.fetch = async function(input, init){
+      const res = await originalFetch(input, init);
+
+      try{
+        const url = typeof input === "string" ? input : String(input && input.url || "");
+
+        /*
+          Intercettiamo tutte le azioni che possono cambiare destinazione attiva:
+          - publish PDF
+          - riattiva PDF
+          - update URL / activate / redirect history
+          I nomi endpoint possono variare, quindi restiamo larghi ma solo su /api/followme/.
+        */
+        if(
+          url.includes("/api/followme/") &&
+          (
+            url.includes("/document/publish") ||
+            url.includes("/document/disable") ||
+            url.includes("/url") ||
+            url.includes("/activate") ||
+            url.includes("/reactivate") ||
+            url.includes("/redirect") ||
+            url.includes("/destination") ||
+            url.includes("/history")
+          )
+        ){
+          setTimeout(function(){ syncNow("fetch:" + url); }, 180);
+          setTimeout(function(){ syncNow("fetch-late:" + url); }, 1100);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  function bindCarouselClicks(){
+    document.addEventListener("click", function(ev){
+      const target = ev.target && ev.target.closest ? ev.target.closest("button,a") : null;
+      if(!target) return;
+
+      const txt = String(target.textContent || "").toLowerCase();
+      const insideHistory = !!target.closest(".premium-history-card,.premium-history-track,#premiumHistoryTrack");
+
+      if(!insideHistory) return;
+
+      if(
+        txt.includes("riattiva") ||
+        txt.includes("attiva") ||
+        txt.includes("pubblica") ||
+        txt.includes("modifica")
+      ){
+        setTimeout(function(){ syncNow("carousel-click"); }, 350);
+        setTimeout(function(){ syncNow("carousel-click-late"); }, 1400);
+      }
+    }, true);
+  }
+
+  function boot(){
+    patchFetch();
+    bindCarouselClicks();
+
+    setTimeout(function(){ syncNow("boot"); }, 700);
+  }
+
+  window.fmCarouselSwitchPreviewSync20260521 = {
+    boot,
+    syncNow,
+    resetMainPreviewFrame,
+    refreshPdfCard,
+    refreshMainPdfPreview
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 350);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(function(){ syncNow("pageshow"); }, 350);
+  });
+})();
+</script>
+
+
 </body>
 </html>
