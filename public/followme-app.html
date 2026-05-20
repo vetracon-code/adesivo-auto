@@ -23691,5 +23691,289 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-consegna-documento-ui-refine-final-20260520">
+(function(){
+  if(window.__FollowMeConsegnaDocumentoUiRefineFinal20260520) return;
+  window.__FollowMeConsegnaDocumentoUiRefineFinal20260520 = true;
+
+  /*
+    Refinement Consegna Documento:
+    - pulsante sotto Importa con scansione QR;
+    - pagina più breve e diretta;
+    - formato dichiarato: solo PDF;
+    - stato upload visibile;
+    - upload più robusto lato UI.
+  */
+
+  function norm(v){
+    return String(v || "").replace(/\s+/g, " ").trim();
+  }
+
+  function findImportaQrButton(){
+    const all = Array.from(document.querySelectorAll("button,a,.btn"));
+    return all.find(function(el){
+      return norm(el.textContent).toLowerCase().includes("importa con scansione qr");
+    }) || document.getElementById("qrScanBtn") || null;
+  }
+
+  function moveButtonBelowImportaQr(){
+    const btn = document.getElementById("followmeConsegnaDocumentoBtn20260520");
+    if(!btn) return;
+
+    const importa = findImportaQrButton();
+    if(importa && importa.parentElement){
+      importa.insertAdjacentElement("afterend", btn);
+    }
+  }
+
+  function ensureStatusBox(){
+    const uploadBox = document.querySelector("#followmeConsegnaDocumentoPage20260520 .fm-doc-upload-box");
+    if(!uploadBox) return null;
+
+    let box = document.getElementById("followmeDocumentUploadStatus20260520");
+    if(box) return box;
+
+    box = document.createElement("div");
+    box.id = "followmeDocumentUploadStatus20260520";
+    box.style.marginTop = "12px";
+    box.style.padding = "12px";
+    box.style.borderRadius = "16px";
+    box.style.background = "#f8fafc";
+    box.style.border = "1px solid rgba(15,23,42,.08)";
+    box.style.color = "#475569";
+    box.style.fontWeight = "750";
+    box.style.fontSize = "13px";
+    box.textContent = "Nessun documento caricato.";
+
+    uploadBox.appendChild(box);
+    return box;
+  }
+
+  function setStatus(msg, type){
+    const box = ensureStatusBox();
+    if(!box) return;
+
+    box.textContent = msg || "";
+
+    if(type === "ok"){
+      box.style.background = "#dcfce7";
+      box.style.color = "#166534";
+      box.style.borderColor = "rgba(22,101,52,.18)";
+    }else if(type === "err"){
+      box.style.background = "#fee2e2";
+      box.style.color = "#991b1b";
+      box.style.borderColor = "rgba(153,27,27,.18)";
+    }else{
+      box.style.background = "#f8fafc";
+      box.style.color = "#475569";
+      box.style.borderColor = "rgba(15,23,42,.08)";
+    }
+  }
+
+  function simplifyPageCopy(){
+    const page = document.getElementById("followmeConsegnaDocumentoPage20260520");
+    if(!page) return;
+
+    const lead = page.querySelector(".fm-doc-lead");
+    if(lead){
+      lead.textContent = "Carica un PDF: il QR mostrerà il documento in modalità sfogliabile e permetterà il download immediato.";
+    }
+
+    const explain = page.querySelector(".fm-doc-explain");
+    if(explain){
+      explain.innerHTML = `
+        <div class="fm-doc-row">
+          <div class="fm-doc-dot">1</div>
+          <div>
+            <strong>Un solo PDF alla volta.</strong>
+            <span>Ogni nuovo caricamento sostituisce il documento precedente.</span>
+          </div>
+        </div>
+
+        <div class="fm-doc-row">
+          <div class="fm-doc-dot">2</div>
+          <div>
+            <strong>Sfogliabile da smartphone e PC.</strong>
+            <span>Il documento viene aperto come una piccola rivista digitale.</span>
+          </div>
+        </div>
+
+        <div class="fm-doc-row">
+          <div class="fm-doc-dot">3</div>
+          <div>
+            <strong>Statistiche incluse.</strong>
+            <span>Visualizzazioni e download vengono conteggiati automaticamente.</span>
+          </div>
+        </div>
+      `;
+    }
+
+    const help = page.querySelector(".fm-doc-upload-help");
+    if(help){
+      help.textContent = "Formato accettato: PDF. Dimensione massima attuale: 18 MB.";
+    }
+
+    const input = document.getElementById("followmeDocumentUploadInput20260520");
+    if(input){
+      input.setAttribute("accept", "application/pdf,.pdf");
+    }
+
+    ensureStatusBox();
+  }
+
+  function fileToBase64(file){
+    return new Promise(function(resolve, reject){
+      const reader = new FileReader();
+      reader.onload = function(){
+        const value = String(reader.result || "");
+        resolve(value.replace(/^data:.*?;base64,/, ""));
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function projectCode(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("app");
+      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
+    }catch(e){}
+
+    try{
+      if(window.FOLLOWME_PROJECT_CODE) return String(window.FOLLOWME_PROJECT_CODE);
+      if(window.followMeProjectCode) return String(window.followMeProjectCode);
+    }catch(e){}
+
+    return "FM-DEMO";
+  }
+
+  async function uploadPdfDirect(){
+    const input = document.getElementById("followmeDocumentUploadInput20260520");
+    const btn = document.getElementById("followmeDocumentUploadBtn20260520");
+
+    if(!input || !input.files || !input.files[0]){
+      setStatus("Seleziona prima un PDF.", "err");
+      return;
+    }
+
+    const file = input.files[0];
+    const name = String(file.name || "");
+
+    if(!name.toLowerCase().endsWith(".pdf")){
+      setStatus("Formato non supportato. Carica solo file PDF.", "err");
+      return;
+    }
+
+    const maxBytes = 18 * 1024 * 1024;
+    if(file.size > maxBytes){
+      setStatus("PDF troppo pesante. Limite attuale: 18 MB.", "err");
+      return;
+    }
+
+    try{
+      if(btn){
+        btn.disabled = true;
+        btn.textContent = "Caricamento...";
+      }
+
+      setStatus("Caricamento e controllo del PDF in corso...", "");
+
+      const base64 = await fileToBase64(file);
+      const code = projectCode();
+
+      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/upload", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({
+          filename:name,
+          mime_type:file.type || "application/pdf",
+          size_bytes:file.size,
+          base64:base64
+        })
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Upload non riuscito.");
+      }
+
+      setStatus("Documento caricato correttamente. Ora puoi aprire l’anteprima o consegnarlo dal QR.", "ok");
+
+      try{
+        if(window.fmConsegnaDocumentoPremiumAdmin20260520 &&
+           typeof window.fmConsegnaDocumentoPremiumAdmin20260520.loadCurrentDocument === "function"){
+          window.fmConsegnaDocumentoPremiumAdmin20260520.loadCurrentDocument();
+        }
+      }catch(e){}
+
+    }catch(err){
+      setStatus(err.message || "Errore durante il caricamento.", "err");
+    }finally{
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = "Prepara documento";
+      }
+    }
+  }
+
+  function bindUploadOverride(){
+    const btn = document.getElementById("followmeDocumentUploadBtn20260520");
+    if(!btn || btn.dataset.refinedUploadBound20260520 === "1") return;
+
+    btn.dataset.refinedUploadBound20260520 = "1";
+    btn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      uploadPdfDirect();
+      return false;
+    }, true);
+  }
+
+  function boot(){
+    moveButtonBelowImportaQr();
+    simplifyPageCopy();
+    bindUploadOverride();
+
+    setTimeout(function(){
+      moveButtonBelowImportaQr();
+      simplifyPageCopy();
+      bindUploadOverride();
+    }, 500);
+
+    setTimeout(function(){
+      moveButtonBelowImportaQr();
+      simplifyPageCopy();
+      bindUploadOverride();
+    }, 1500);
+  }
+
+  window.fmConsegnaDocumentoUiRefine20260520 = {
+    boot,
+    moveButtonBelowImportaQr,
+    simplifyPageCopy,
+    uploadPdfDirect
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 250);
+    setTimeout(boot, 1200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(boot, 2000);
+})();
+</script>
+
 </body>
 </html>

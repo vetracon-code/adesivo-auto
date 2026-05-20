@@ -9667,8 +9667,8 @@ app.post('/api/followme/:code/document/upload', express.json({ limit:'28mb' }), 
       return res.status(400).json({ success:false, error:'File mancante.' });
     }
 
-    if (mimeType !== 'application/pdf' && !originalName.toLowerCase().endsWith('.pdf')) {
-      return res.status(415).json({ success:false, error:'Per ora sono consentiti solo file PDF.' });
+    if (!originalName.toLowerCase().endsWith('.pdf')) {
+      return res.status(415).json({ success:false, error:'Formato non supportato. Per ora puoi caricare solo documenti PDF.' });
     }
 
     if (!isLikelyPdfBase6420260520(rawBase64)) {
@@ -9681,7 +9681,7 @@ app.post('/api/followme/:code/document/upload', express.json({ limit:'28mb' }), 
     if (buffer.length > maxBytes) {
       return res.status(413).json({
         success:false,
-        error:'PDF troppo pesante. Limite attuale: 18 MB. Nel prossimo step aggiungiamo ottimizzazione automatica.'
+        error:'PDF troppo pesante. Limite attuale: 18 MB.'
       });
     }
 
