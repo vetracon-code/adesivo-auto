@@ -25144,564 +25144,30 @@ document.addEventListener("visibilitychange", function(){
 
 
 
-<script id="followme-document-carousel-card-real-container-final-20260520">
+
+
+<script id="followme-document-native-premium-history-final-20260520">
 (function(){
-  if(window.__FollowMeDocumentCarouselCardRealContainerFinal20260520) return;
-  window.__FollowMeDocumentCarouselCardRealContainerFinal20260520 = true;
+  if(window.__FollowMeDocumentNativePremiumHistoryFinal20260520) return;
+  window.__FollowMeDocumentNativePremiumHistoryFinal20260520 = true;
 
   /*
-    Inserisce Documento PDF nel vero carosello "Destinazioni recenti".
-    Strategia:
-    - trova il titolo "Destinazioni recenti";
-    - cerca il contenitore reale delle card subito dopo o nel suo blocco;
-    - se il contenitore non è chiaramente orizzontale, crea un rail dedicato dentro lo stesso blocco;
-    - inserisce la card come terzo elemento;
-    - nasconde il vecchio frame verticale.
+    Documento PDF nel carosello Destinazioni recenti usando SOLO classi native:
+    - premium-history-card
+    - premium-history-badge
+    - premium-history-domain
+    - premium-history-url
+    - premium-history-preview
+    - premium-history-meta
+    - premium-history-pill
+    - premium-history-actions
+    - premium-history-reactivate
+
+    Quindi dimensioni e pulsanti sono uguali agli altri frame.
   */
 
   let currentDocument = null;
   let currentDocumentPublicUrl = "";
-
-  function projectCode(){
-    try{
-      const parts = location.pathname.split("/").filter(Boolean);
-      const idx = parts.indexOf("app");
-      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
-    }catch(e){}
-
-    try{
-      if(window.FOLLOWME_PROJECT_CODE) return String(window.FOLLOWME_PROJECT_CODE);
-      if(window.followMeProjectCode) return String(window.followMeProjectCode);
-    }catch(e){}
-
-    return "FM-DEMO";
-  }
-
-  function escapeHtml(v){
-    return String(v == null ? "" : v)
-      .replace(/&/g,"&amp;")
-      .replace(/</g,"&lt;")
-      .replace(/>/g,"&gt;")
-      .replace(/"/g,"&quot;");
-  }
-
-  function fmtBytes(n){
-    n = Number(n || 0);
-    if(!n) return "";
-    if(n < 1024) return n + " B";
-    if(n < 1024 * 1024) return Math.round(n / 1024) + " KB";
-    return (n / (1024 * 1024)).toFixed(1).replace(".0","") + " MB";
-  }
-
-  function ensureStyle(){
-    if(document.getElementById("followmeDocumentCarouselRealStyle20260520")) return;
-
-    const style = document.createElement("style");
-    style.id = "followmeDocumentCarouselRealStyle20260520";
-    style.textContent = `
-      #followmeDocumentDestinationFrame20260520{
-        display:none !important;
-      }
-
-      .followme-document-real-carousel-host-20260520{
-        display:flex !important;
-        flex-direction:row !important;
-        gap:12px !important;
-        overflow-x:auto !important;
-        overflow-y:hidden !important;
-        scroll-snap-type:x mandatory;
-        -webkit-overflow-scrolling:touch;
-        padding:4px 2px 10px !important;
-      }
-
-      .followme-document-real-carousel-host-20260520 > *{
-        flex:0 0 auto;
-        scroll-snap-align:start;
-      }
-
-      #followmeDocumentCarouselCard20260520{
-        flex:0 0 220px !important;
-        width:220px !important;
-        min-width:220px !important;
-        max-width:220px !important;
-        min-height:245px;
-        box-sizing:border-box;
-        position:relative;
-        overflow:hidden;
-        border-radius:24px;
-        padding:14px;
-        background:
-          radial-gradient(circle at 20% 0%, rgba(148,163,184,.24), transparent 34%),
-          linear-gradient(145deg,#0f172a,#111827 62%,#020617);
-        color:#fff;
-        border:1px solid rgba(255,255,255,.16);
-        box-shadow:0 18px 50px rgba(15,23,42,.18);
-        scroll-snap-align:start;
-      }
-
-      #followmeDocumentCarouselCard20260520::before{
-        content:"";
-        position:absolute;
-        top:-70px;
-        right:-70px;
-        width:150px;
-        height:150px;
-        border-radius:999px;
-        background:rgba(255,255,255,.08);
-        filter:blur(3px);
-        pointer-events:none;
-      }
-
-      #followmeDocumentCarouselCard20260520 .doc-badge{
-        position:relative;
-        z-index:1;
-        display:inline-flex;
-        align-items:center;
-        min-height:23px;
-        padding:0 9px;
-        border-radius:999px;
-        background:rgba(255,255,255,.12);
-        border:1px solid rgba(255,255,255,.12);
-        color:#e5e7eb;
-        font-size:10px;
-        font-weight:950;
-        letter-spacing:.08em;
-        text-transform:uppercase;
-        margin-bottom:10px;
-      }
-
-      #followmeDocumentCarouselCard20260520 h4{
-        position:relative;
-        z-index:1;
-        margin:0 0 4px;
-        font-size:18px;
-        line-height:1.05;
-        letter-spacing:-.04em;
-        font-weight:950;
-        color:#fff;
-      }
-
-      #followmeDocumentCarouselCard20260520 .doc-sub{
-        position:relative;
-        z-index:1;
-        margin:0 0 11px;
-        color:#cbd5e1;
-        font-size:12px;
-        line-height:1.25;
-        font-weight:700;
-      }
-
-      #followmeDocumentCarouselCard20260520 .doc-preview-row{
-        position:relative;
-        z-index:1;
-        display:grid;
-        grid-template-columns:56px minmax(0,1fr);
-        gap:10px;
-        align-items:center;
-      }
-
-      #followmeDocumentCarouselCard20260520 .doc-preview{
-        width:56px;
-        height:74px;
-        border-radius:14px;
-        background:linear-gradient(180deg,#fff,#e5e7eb);
-        box-shadow:0 12px 30px rgba(0,0,0,.24);
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        color:#111827;
-        font-weight:950;
-        font-size:15px;
-        letter-spacing:-.04em;
-        border:1px solid rgba(255,255,255,.58);
-        overflow:hidden;
-      }
-
-      #followmeDocumentCarouselCard20260520 .doc-preview img{
-        width:100%;
-        height:100%;
-        object-fit:cover;
-        display:block;
-      }
-
-      #followmeDocumentCarouselCard20260520 .doc-name{
-        font-size:12.5px;
-        line-height:1.25;
-        font-weight:950;
-        color:#fff;
-        word-break:break-word;
-        display:-webkit-box;
-        -webkit-line-clamp:3;
-        -webkit-box-orient:vertical;
-        overflow:hidden;
-      }
-
-      #followmeDocumentCarouselCard20260520 .doc-meta{
-        margin-top:4px;
-        font-size:11px;
-        line-height:1.25;
-        color:#cbd5e1;
-        font-weight:700;
-      }
-
-      #followmeDocumentCarouselCard20260520 .doc-stats{
-        position:relative;
-        z-index:1;
-        display:grid;
-        grid-template-columns:repeat(2,minmax(0,1fr));
-        gap:7px;
-        margin-top:12px;
-      }
-
-      #followmeDocumentCarouselCard20260520 .doc-stat{
-        border-radius:14px;
-        padding:9px 8px;
-        background:rgba(255,255,255,.10);
-        border:1px solid rgba(255,255,255,.10);
-      }
-
-      #followmeDocumentCarouselCard20260520 .doc-stat .num{
-        font-size:18px;
-        line-height:1;
-        font-weight:950;
-        letter-spacing:-.04em;
-      }
-
-      #followmeDocumentCarouselCard20260520 .doc-stat .lab{
-        margin-top:4px;
-        color:#cbd5e1;
-        font-size:10.5px;
-        font-weight:850;
-      }
-
-      #followmeDocumentCarouselCard20260520 .doc-actions{
-        position:relative;
-        z-index:1;
-        display:flex;
-        gap:7px;
-        flex-wrap:wrap;
-        margin-top:12px;
-      }
-
-      #followmeDocumentCarouselCard20260520 .doc-actions button,
-      #followmeDocumentCarouselCard20260520 .doc-actions a{
-        border:0;
-        border-radius:999px;
-        padding:9px 11px;
-        font-size:12px;
-        font-weight:950;
-        cursor:pointer;
-        text-decoration:none;
-      }
-
-      #followmeDocumentCarouselCard20260520 .primary{
-        background:#fff;
-        color:#020617;
-      }
-
-      #followmeDocumentCarouselCard20260520 .secondary{
-        background:rgba(255,255,255,.10);
-        color:#fff;
-        border:1px solid rgba(255,255,255,.14);
-      }
-    `;
-
-    document.head.appendChild(style);
-  }
-
-  function textOf(el){
-    return String(el && el.textContent || "").replace(/\s+/g," ").trim().toLowerCase();
-  }
-
-  function findRecentTitle(){
-    const els = Array.from(document.querySelectorAll("h1,h2,h3,h4,div,span,p,strong"));
-    return els.find(function(el){
-      const t = textOf(el);
-      return t === "destinazioni recenti" || t.includes("destinazioni recenti");
-    }) || null;
-  }
-
-  function scoreCarouselCandidate(el){
-    if(!el || el.id === "followmeDocumentCarouselCard20260520") return -1;
-
-    const children = Array.from(el.children || []).filter(function(ch){
-      if(ch.id === "followmeDocumentCarouselCard20260520") return false;
-      return String(ch.textContent || "").trim().length > 0;
-    });
-
-    if(children.length < 2) return -1;
-
-    const st = getComputedStyle(el);
-    let score = 0;
-
-    if((st.display || "").includes("flex")) score += 4;
-    if((st.overflowX || "") === "auto" || (st.overflowX || "") === "scroll") score += 4;
-    if(el.scrollWidth > el.clientWidth + 20) score += 4;
-    if(children.length >= 3) score += 2;
-
-    const cls = String(el.className || "").toLowerCase();
-    const id = String(el.id || "").toLowerCase();
-
-    if(cls.includes("carousel") || id.includes("carousel")) score += 5;
-    if(cls.includes("history") || id.includes("history")) score += 3;
-    if(cls.includes("recent") || id.includes("recent")) score += 3;
-    if(cls.includes("list") || id.includes("list")) score += 2;
-
-    return score;
-  }
-
-  function findCarouselContainer(){
-    const title = findRecentTitle();
-
-    if(!title) return null;
-
-    /*
-      1) Prima cerca tra fratelli successivi: spesso il titolo è sopra il rail.
-    */
-    let sib = title.nextElementSibling;
-    for(let i=0; i<5 && sib; i++, sib=sib.nextElementSibling){
-      if(scoreCarouselCandidate(sib) >= 3) return sib;
-
-      const inside = Array.from(sib.querySelectorAll("div,section,ul"))
-        .map(el => ({ el, score:scoreCarouselCandidate(el) }))
-        .filter(x => x.score >= 3)
-        .sort((a,b) => b.score - a.score);
-
-      if(inside.length) return inside[0].el;
-    }
-
-    /*
-      2) Cerca nel contenitore padre del titolo.
-    */
-    let p = title.parentElement;
-    for(let depth=0; depth<6 && p; depth++, p=p.parentElement){
-      const candidates = Array.from(p.querySelectorAll("div,section,ul"))
-        .map(el => ({ el, score:scoreCarouselCandidate(el) }))
-        .filter(x => x.score >= 3)
-        .sort((a,b) => b.score - a.score);
-
-      if(candidates.length) return candidates[0].el;
-    }
-
-    /*
-      3) Fallback: crea un rail subito dopo il titolo dentro il suo parent.
-      Questo garantisce che sia realmente sotto “Destinazioni recenti”.
-    */
-    let rail = document.getElementById("followmeDocumentForcedRecentRail20260520");
-    if(!rail && title.parentElement){
-      rail = document.createElement("div");
-      rail.id = "followmeDocumentForcedRecentRail20260520";
-      rail.className = "followme-document-real-carousel-host-20260520";
-      title.insertAdjacentElement("afterend", rail);
-    }
-
-    return rail;
-  }
-
-  async function loadCurrentDocument(){
-    try{
-      const code = projectCode();
-
-      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/current?v=" + Date.now(), {
-        cache:"no-store"
-      });
-
-      const data = await res.json().catch(function(){ return null; });
-
-      if(res.ok && data && data.success && data.document){
-        currentDocument = data.document;
-        currentDocumentPublicUrl = data.public_url || "";
-      }else{
-        currentDocument = null;
-        currentDocumentPublicUrl = "";
-      }
-
-      renderCard();
-
-    }catch(e){
-      currentDocument = null;
-      currentDocumentPublicUrl = "";
-      renderCard();
-    }
-  }
-
-  function findThirdPositionRef(container){
-    const cards = Array.from(container.children || [])
-      .filter(function(el){
-        if(el.id === "followmeDocumentCarouselCard20260520") return false;
-        const t = String(el.textContent || "").trim();
-        return t.length > 0 && getComputedStyle(el).display !== "none";
-      });
-
-    return cards[2] || null;
-  }
-
-  function limitTo20(container){
-    const items = Array.from(container.children || [])
-      .filter(function(el){
-        const t = String(el.textContent || "").trim();
-        return t.length > 0;
-      });
-
-    items.forEach(function(el, idx){
-      if(idx >= 20 && el.id !== "followmeDocumentCarouselCard20260520"){
-        el.style.display = "none";
-      }
-    });
-  }
-
-  function openConsegnaDocumento(){
-    try{
-      if(window.fmConsegnaDocumentoUi20260520 &&
-         typeof window.fmConsegnaDocumentoUi20260520.openPage === "function"){
-        window.fmConsegnaDocumentoUi20260520.openPage();
-        return;
-      }
-    }catch(e){}
-
-    const btn = document.getElementById("followmeConsegnaDocumentoBtn20260520");
-    if(btn){
-      btn.click();
-      return;
-    }
-
-    alert("Apri Consegna Documento dalla Home.");
-  }
-
-  function renderCard(){
-    ensureStyle();
-
-    const container = findCarouselContainer();
-    if(!container) return false;
-
-    container.classList.add("followme-document-real-carousel-host-20260520");
-
-    const oldFrame = document.getElementById("followmeDocumentDestinationFrame20260520");
-    if(oldFrame) oldFrame.style.display = "none";
-
-    let card = document.getElementById("followmeDocumentCarouselCard20260520");
-
-    if(!card){
-      card = document.createElement("section");
-      card.id = "followmeDocumentCarouselCard20260520";
-    }
-
-    const hasDoc = !!currentDocument;
-    const views = hasDoc ? Number(currentDocument.views_count || 0) : 0;
-    const downloads = hasDoc ? Number(currentDocument.downloads_count || 0) : 0;
-    const name = hasDoc ? (currentDocument.original_name || "Documento PDF") : "Nessun PDF caricato";
-    const size = hasDoc ? fmtBytes(currentDocument.size_bytes) : "";
-    const pages = hasDoc ? (currentDocument.page_count || "in lettura") : "";
-    const thumb = hasDoc && currentDocument.thumbnail_url ? String(currentDocument.thumbnail_url) : "";
-
-    card.innerHTML = `
-      <div class="doc-badge">Documento PDF</div>
-      <h4>Consegna diretta</h4>
-      <p class="doc-sub">Sfogliabile e scaricabile</p>
-
-      <div class="doc-preview-row">
-        <div class="doc-preview">
-          ${thumb ? `<img src="${escapeHtml(thumb)}" alt="Preview PDF">` : `PDF`}
-        </div>
-        <div>
-          <div class="doc-name">${escapeHtml(name)}</div>
-          <div class="doc-meta">
-            ${hasDoc ? `${escapeHtml(size)} · ${escapeHtml(pages)} pagine` : `Carica un PDF per attivare.`}
-          </div>
-        </div>
-      </div>
-
-      <div class="doc-stats">
-        <div class="doc-stat">
-          <div class="num">${views}</div>
-          <div class="lab">Visualizzazioni</div>
-        </div>
-        <div class="doc-stat">
-          <div class="num">${downloads}</div>
-          <div class="lab">Download</div>
-        </div>
-      </div>
-
-      <div class="doc-actions">
-        <button type="button" class="primary" id="followmeDocCarouselManage20260520">
-          ${hasDoc ? "Aggiorna" : "Aggiungi"}
-        </button>
-        ${hasDoc && currentDocumentPublicUrl ? `<a class="secondary" href="${escapeHtml(currentDocumentPublicUrl)}" target="_blank" rel="noopener">Apri</a>` : ``}
-      </div>
-    `;
-
-    const ref = findThirdPositionRef(container);
-
-    if(ref && ref !== card){
-      container.insertBefore(card, ref);
-    }else if(!card.parentElement){
-      container.appendChild(card);
-    }
-
-    const manage = document.getElementById("followmeDocCarouselManage20260520");
-    if(manage && manage.dataset.bound20260520 !== "1"){
-      manage.dataset.bound20260520 = "1";
-      manage.onclick = openConsegnaDocumento;
-    }
-
-    limitTo20(container);
-
-    return true;
-  }
-
-  function boot(){
-    ensureStyle();
-    renderCard();
-    loadCurrentDocument();
-
-    setTimeout(renderCard, 500);
-    setTimeout(loadCurrentDocument, 900);
-    setTimeout(renderCard, 1600);
-    setTimeout(renderCard, 2600);
-  }
-
-  window.fmDocumentCarouselRealContainer20260520 = {
-    boot,
-    renderCard,
-    loadCurrentDocument,
-    findCarouselContainer
-  };
-
-  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
-  else boot();
-
-  window.addEventListener("load", function(){
-    setTimeout(boot, 300);
-  });
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 300);
-  });
-})();
-</script>
-
-
-
-
-
-<script id="followme-document-carousel-clone-native-final-20260520">
-(function(){
-  if(window.__FollowMeDocumentCarouselCloneNativeFinal20260520) return;
-  window.__FollowMeDocumentCarouselCloneNativeFinal20260520 = true;
-
-  /*
-    FINALITÀ:
-    La card Documento PDF deve essere IDENTICA agli altri frame del carosello.
-    Strategia:
-    - usa una card reale del carosello come modello;
-    - copia classi e misure;
-    - forza identica larghezza/altezza/flex;
-    - inserisce contenuto PDF;
-    - mostra SEMPRE Riattiva e Aggiorna quando esiste un documento.
-  */
-
-  let lastDoc = null;
-  let lastPublicUrl = "";
 
   function projectCode(){
     try{
@@ -25738,7 +25204,7 @@ document.addEventListener("visibilitychange", function(){
       .replace(/\s+/g, " ")
       .trim();
 
-    max = max || 18;
+    max = max || 28;
 
     if(base.length > max){
       base = base.slice(0, max - 1).trim() + "…";
@@ -25760,301 +25226,67 @@ document.addEventListener("visibilitychange", function(){
     return (n / (1024 * 1024)).toFixed(1).replace(".0","") + " MB";
   }
 
-  function textOf(el){
-    return String(el && el.textContent || "").replace(/\s+/g," ").trim().toLowerCase();
-  }
-
   function ensureStyle(){
-    if(document.getElementById("followmeDocumentCloneNativeStyle20260520")) return;
+    if(document.getElementById("followmeDocumentNativePremiumHistoryStyle20260520")) return;
 
     const style = document.createElement("style");
-    style.id = "followmeDocumentCloneNativeStyle20260520";
+    style.id = "followmeDocumentNativePremiumHistoryStyle20260520";
     style.textContent = `
-      #followmeDocumentCarouselCard20260520{
-        box-sizing:border-box !important;
-        overflow:hidden !important;
-      }
+      /*
+        Nessuna dimensione custom.
+        La card Documento PDF usa premium-history-card come tutte le altre.
+      */
 
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-inner{
-        height:100%;
-        width:100%;
-        box-sizing:border-box;
-        display:flex;
-        flex-direction:column;
-        gap:8px;
-      }
-
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-badge{
-        display:inline-flex;
-        align-self:flex-start;
-        align-items:center;
-        justify-content:center;
-        min-height:20px;
-        padding:0 8px;
-        border-radius:999px;
-        background:rgba(15,23,42,.08);
-        color:inherit;
-        font-size:9px;
-        line-height:1;
-        font-weight:950;
-        letter-spacing:.07em;
-        text-transform:uppercase;
-      }
-
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-title{
-        margin:0;
-        font-size:15px;
-        line-height:1.08;
-        font-weight:950;
-        letter-spacing:-.035em;
-      }
-
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-sub{
-        margin:0;
-        font-size:11px;
-        line-height:1.2;
-        opacity:.72;
-        font-weight:750;
-      }
-
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-preview-row{
-        display:grid;
-        grid-template-columns:44px minmax(0,1fr);
-        gap:8px;
-        align-items:center;
-      }
-
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-preview{
-        width:44px;
-        height:56px;
-        border-radius:10px;
-        background:linear-gradient(180deg,#fff,#e5e7eb);
-        border:1px solid rgba(15,23,42,.10);
-        overflow:hidden;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        color:#111827;
-        font-size:12px;
-        font-weight:950;
-        box-shadow:0 8px 20px rgba(15,23,42,.14);
-      }
-
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-preview iframe,
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-preview object,
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-preview img{
+      #followmeDocumentPremiumHistoryCard20260520 .premium-history-preview object,
+      #followmeDocumentPremiumHistoryCard20260520 .premium-history-preview iframe,
+      #followmeDocumentPremiumHistoryCard20260520 .premium-history-preview img{
         width:100%;
         height:100%;
         border:0;
         display:block;
         object-fit:cover;
         pointer-events:none;
+        background:#fff;
       }
 
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-name{
-        font-size:11.5px;
-        line-height:1.15;
-        font-weight:950;
-        display:-webkit-box;
-        -webkit-line-clamp:2;
-        -webkit-box-orient:vertical;
-        overflow:hidden;
-        word-break:break-word;
+      #followmeDocumentPremiumHistoryCard20260520 .premium-history-preview{
+        padding:0 !important;
       }
 
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-meta{
-        margin-top:3px;
-        font-size:10px;
-        line-height:1.15;
-        opacity:.70;
-        font-weight:700;
-      }
-
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-stats{
-        display:grid;
-        grid-template-columns:1fr 1fr;
-        gap:6px;
-        margin-top:auto;
-      }
-
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-stat{
-        border-radius:11px;
-        padding:6px;
-        background:rgba(15,23,42,.06);
-        border:1px solid rgba(15,23,42,.07);
-      }
-
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-stat .num{
-        font-size:14px;
-        line-height:1;
-        font-weight:950;
-      }
-
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-stat .lab{
-        margin-top:3px;
-        font-size:8.8px;
-        line-height:1;
-        opacity:.72;
-        font-weight:850;
-      }
-
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-actions{
-        display:grid;
-        grid-template-columns:1fr 1fr;
-        gap:6px;
-        margin-top:7px;
-      }
-
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-actions button{
-        border-radius:999px;
-        min-height:30px;
-        padding:7px 6px;
-        font-size:10.8px;
-        font-weight:950;
-        cursor:pointer;
-        white-space:nowrap;
+      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-preview-fallback{
+        width:100%;
+        height:100%;
         display:flex;
         align-items:center;
         justify-content:center;
+        padding:14px;
         box-sizing:border-box;
+        text-align:center;
+        color:rgba(255,255,255,.84);
+        font-weight:950;
+        letter-spacing:.06em;
       }
 
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-actions .reactivate{
-        background:transparent;
-        color:inherit;
-        border:1px solid currentColor;
-        opacity:.88;
+      #followmeDocumentPremiumHistoryCard20260520 .premium-history-actions .premium-history-edit-document{
+        color:#fff !important;
+        background:rgba(255,255,255,.10) !important;
+        border:1px solid rgba(255,255,255,.20) !important;
+        box-shadow:none !important;
       }
 
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-actions .update{
-        border:0;
-        background:#111827;
-        color:#fff;
-      }
-
-      #followmeDocumentCarouselCard20260520.fm-doc-dark-card-20260520 .fm-doc-clone-actions .update{
-        background:#fff;
-        color:#020617;
-      }
-
-      #followmeDocumentCarouselCard20260520 .fm-doc-clone-actions .full{
-        grid-column:1 / -1;
+      #followmeDocumentPremiumHistoryCard20260520 .premium-history-actions button:disabled{
+        opacity:.45 !important;
+        cursor:not-allowed !important;
+        filter:grayscale(1);
       }
     `;
 
     document.head.appendChild(style);
   }
 
-  function findCarouselContainer(){
-    if(window.fmDocumentCarouselRealContainer20260520 &&
-       typeof window.fmDocumentCarouselRealContainer20260520.findCarouselContainer === "function"){
-      try{
-        const c = window.fmDocumentCarouselRealContainer20260520.findCarouselContainer();
-        if(c) return c;
-      }catch(e){}
-    }
-
-    const card = document.getElementById("followmeDocumentCarouselCard20260520");
-    return card ? card.parentElement : null;
-  }
-
-  function visibleRealCards(container){
-    if(!container) return [];
-
-    return Array.from(container.children || []).filter(function(el){
-      if(!el || el.nodeType !== 1) return false;
-      if(el.id === "followmeDocumentCarouselCard20260520") return false;
-      if(getComputedStyle(el).display === "none") return false;
-      if(String(el.textContent || "").trim().length < 1) return false;
-      return true;
-    });
-  }
-
-  function findCurrentTransmitCard(cards){
-    const markers = [
-      "stiamo trasmettendo",
-      "trasmettendo ora",
-      "destinazione attuale",
-      "attualmente",
-      "in uso",
-      "attivo",
-      "ora apre"
-    ];
-
-    return cards.find(function(card){
-      const t = textOf(card);
-      return markers.some(function(m){ return t.includes(m); });
-    }) || cards[0] || null;
-  }
-
-  function getMetric(model){
-    const st = getComputedStyle(model);
-    const rect = model.getBoundingClientRect();
-
-    return {
-      className: model.className || "",
-      width: Math.round(rect.width || parseFloat(st.width) || 0),
-      height: Math.round(rect.height || parseFloat(st.height) || parseFloat(st.minHeight) || 0),
-      flexBasis: st.flexBasis,
-      padding: st.padding,
-      borderRadius: st.borderRadius,
-      backgroundColor: st.backgroundColor,
-      color: st.color
-    };
-  }
-
-  function applyNativeShape(card, model){
-    if(!card || !model) return;
-
-    const m = getMetric(model);
-
-    /*
-      Copia classi reali della card modello, poi aggiunge id-specific hooks.
-    */
-    if(m.className){
-      card.className = m.className;
-    }
-
-    card.classList.add("fm-doc-cloned-native-card-20260520");
-
-    if(m.width){
-      card.style.flex = "0 0 " + m.width + "px";
-      card.style.flexBasis = m.width + "px";
-      card.style.width = m.width + "px";
-      card.style.minWidth = m.width + "px";
-      card.style.maxWidth = m.width + "px";
-    }
-
-    if(m.height){
-      card.style.height = m.height + "px";
-      card.style.minHeight = m.height + "px";
-      card.style.maxHeight = m.height + "px";
-    }
-
-    if(m.padding) card.style.padding = m.padding;
-    if(m.borderRadius) card.style.borderRadius = m.borderRadius;
-
-    /*
-      Rileva se modello scuro per pulsante Aggiorna.
-    */
-    const color = m.color || "";
-    const bg = m.backgroundColor || "";
-    const dark = color.includes("255") || bg.includes("15, 23, 42") || bg.includes("17, 24, 39") || bg.includes("2, 6, 23");
-
-    card.classList.toggle("fm-doc-dark-card-20260520", dark);
-  }
-
-  function previewMarkup(){
-    if(!lastDoc || !lastPublicUrl){
-      return "PDF";
-    }
-
-    if(lastDoc.thumbnail_url){
-      return `<img src="${escapeHtml(lastDoc.thumbnail_url)}" alt="Preview PDF">`;
-    }
-
-    const src = new URL(lastPublicUrl, location.origin).toString() + "#page=1&toolbar=0&navpanes=0&scrollbar=0";
-    return `<object data="${escapeHtml(src)}" type="application/pdf">PDF</object>`;
+  function findTrack(){
+    return document.getElementById("premiumHistoryTrack") ||
+           document.querySelector(".premium-history-track");
   }
 
   async function loadCurrentDocument(){
@@ -26068,18 +25300,36 @@ document.addEventListener("visibilitychange", function(){
       const data = await res.json().catch(function(){ return null; });
 
       if(res.ok && data && data.success && data.document){
-        lastDoc = data.document;
-        lastPublicUrl = data.public_url || "";
+        currentDocument = data.document;
+        currentDocumentPublicUrl = data.public_url || "";
       }else{
-        lastDoc = null;
-        lastPublicUrl = "";
+        currentDocument = null;
+        currentDocumentPublicUrl = "";
       }
 
-      render();
+      renderDocumentCard();
 
     }catch(e){
-      render();
+      currentDocument = null;
+      currentDocumentPublicUrl = "";
+      renderDocumentCard();
     }
+  }
+
+  function previewHtml(){
+    if(!currentDocument || !currentDocumentPublicUrl){
+      return `<div class="fm-doc-preview-fallback">PDF</div>`;
+    }
+
+    if(currentDocument.thumbnail_url){
+      return `<img src="${escapeHtml(currentDocument.thumbnail_url)}" alt="Preview PDF">`;
+    }
+
+    const src = new URL(currentDocumentPublicUrl, location.origin).toString() + "#page=1&toolbar=0&navpanes=0&scrollbar=0";
+
+    return `<object data="${escapeHtml(src)}" type="application/pdf">
+      <div class="fm-doc-preview-fallback">PDF</div>
+    </object>`;
   }
 
   function openConsegnaDocumento(){
@@ -26100,13 +25350,14 @@ document.addEventListener("visibilitychange", function(){
     alert("Apri Consegna Documento dalla Home.");
   }
 
-  async function publishCurrentAgain(){
-    if(!lastDoc || !lastDoc.id){
+  async function reactivateDocument(){
+    if(!currentDocument || !currentDocument.id){
+      alert("Prima carica un documento PDF.");
       openConsegnaDocumento();
       return;
     }
 
-    const ok = confirm("Vuoi riattivare questo documento PDF sul QR?");
+    const ok = confirm("Vuoi riattivare subito questo Documento PDF sul QR?");
     if(!ok) return;
 
     try{
@@ -26115,7 +25366,7 @@ document.addEventListener("visibilitychange", function(){
       const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/publish", {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ document_id:lastDoc.id })
+        body:JSON.stringify({ document_id:currentDocument.id })
       });
 
       const data = await res.json().catch(function(){ return null; });
@@ -26128,127 +25379,118 @@ document.addEventListener("visibilitychange", function(){
       await loadCurrentDocument();
 
     }catch(err){
-      alert(err.message || "Errore riattivazione.");
+      alert(err.message || "Errore riattivazione documento.");
     }
   }
 
-  function ensureBaseCard(container, model){
-    let card = document.getElementById("followmeDocumentCarouselCard20260520");
+  function renderDocumentCard(){
+    ensureStyle();
+
+    const track = findTrack();
+    if(!track) return false;
+
+    let card = document.getElementById("followmeDocumentPremiumHistoryCard20260520");
 
     if(!card){
-      card = document.createElement(model ? model.tagName.toLowerCase() : "section");
-      card.id = "followmeDocumentCarouselCard20260520";
+      card = document.createElement("div");
+      card.id = "followmeDocumentPremiumHistoryCard20260520";
+      card.className = "premium-history-card";
     }
 
     /*
-      Terza posizione nel carosello.
+      Classe nativa: nessuna classe custom per dimensioni.
     */
-    const realCards = visibleRealCards(container);
-    const ref = realCards[2] || null;
+    card.className = "premium-history-card";
 
-    if(ref && ref !== card){
-      container.insertBefore(card, ref);
-    }else if(!card.parentElement){
-      container.appendChild(card);
-    }
-
-    return card;
-  }
-
-  function render(){
-    ensureStyle();
-
-    const container = findCarouselContainer();
-    if(!container) return false;
-
-    const realCards = visibleRealCards(container);
-    const model = findCurrentTransmitCard(realCards);
-
-    if(!model) return false;
-
-    const card = ensureBaseCard(container, model);
-
-    applyNativeShape(card, model);
-
-    const hasDoc = !!lastDoc;
-    const views = hasDoc ? Number(lastDoc.views_count || 0) : 0;
-    const downloads = hasDoc ? Number(lastDoc.downloads_count || 0) : 0;
-    const name = hasDoc ? shortFileName(lastDoc.original_name || "Documento PDF", 18) : "Nessun PDF";
-    const size = hasDoc ? fmtBytes(lastDoc.size_bytes) : "";
-    const pages = hasDoc ? (lastDoc.page_count || "") : "";
+    const hasDoc = !!currentDocument;
+    const name = hasDoc ? shortFileName(currentDocument.original_name || "Documento PDF", 28) : "Nessun PDF caricato";
+    const size = hasDoc ? fmtBytes(currentDocument.size_bytes) : "";
+    const pages = hasDoc && currentDocument.page_count ? String(currentDocument.page_count) : "";
+    const views = hasDoc ? fmtSmall(currentDocument.views_count || 0) : "0";
+    const downloads = hasDoc ? fmtSmall(currentDocument.downloads_count || 0) : "0";
 
     card.innerHTML = `
-      <div class="fm-doc-clone-inner">
-        <div class="fm-doc-clone-badge">Documento PDF</div>
+      <div>
+        <div class="premium-history-badge">Documento PDF</div>
+        <div class="premium-history-domain">Consegna diretta</div>
+        <div class="premium-history-url">${escapeHtml(name)}</div>
+      </div>
 
-        <h4 class="fm-doc-clone-title">Consegna diretta</h4>
-        <p class="fm-doc-clone-sub">Sfogliabile e scaricabile</p>
+      <div class="premium-history-preview">
+        ${previewHtml()}
+      </div>
 
-        <div class="fm-doc-clone-preview-row">
-          <div class="fm-doc-clone-preview">
-            ${previewMarkup()}
-          </div>
-
-          <div>
-            <div class="fm-doc-clone-name">${escapeHtml(name)}</div>
-            <div class="fm-doc-clone-meta">
-              ${hasDoc ? `${escapeHtml(size)}${pages ? " · " + escapeHtml(pages) + " pag." : ""}` : `Da caricare`}
-            </div>
-          </div>
+      <div class="premium-history-meta">
+        <div class="premium-history-pill">
+          <strong>${views}</strong>
+          <span>Visualizzazioni</span>
         </div>
-
-        <div class="fm-doc-clone-stats">
-          <div class="fm-doc-clone-stat">
-            <div class="num">${fmtSmall(views)}</div>
-            <div class="lab">Visite</div>
-          </div>
-          <div class="fm-doc-clone-stat">
-            <div class="num">${fmtSmall(downloads)}</div>
-            <div class="lab">Download</div>
-          </div>
+        <div class="premium-history-pill">
+          <strong>${downloads}</strong>
+          <span>Download</span>
         </div>
+      </div>
 
-        <div class="fm-doc-clone-actions">
-          <button type="button" class="reactivate" id="followmeDocCloneReactivate20260520">Riattiva</button>
-          <button type="button" class="update" id="followmeDocCloneUpdate20260520">Aggiorna</button>
-        </div>
+      <div class="premium-history-actions">
+        <button type="button" class="premium-history-reactivate" id="followmeDocHistoryReactivate20260520" ${hasDoc ? "" : "disabled"}>Riattiva</button>
+        <button type="button" class="premium-history-edit-document" id="followmeDocHistoryEdit20260520">Modifica</button>
       </div>
     `;
 
-    const reactivate = document.getElementById("followmeDocCloneReactivate20260520");
-    const update = document.getElementById("followmeDocCloneUpdate20260520");
+    /*
+      Terza card del carosello.
+    */
+    const cards = Array.from(track.children || []).filter(function(el){
+      if(el.id === "followmeDocumentPremiumHistoryCard20260520") return false;
+      return String(el.textContent || "").trim().length > 0;
+    });
+
+    const ref = cards[2] || null;
+
+    if(ref && ref !== card){
+      track.insertBefore(card, ref);
+    }else if(!card.parentElement){
+      track.appendChild(card);
+    }
+
+    const reactivate = document.getElementById("followmeDocHistoryReactivate20260520");
+    const edit = document.getElementById("followmeDocHistoryEdit20260520");
 
     if(reactivate){
-      reactivate.disabled = !hasDoc;
-      reactivate.style.opacity = hasDoc ? "" : ".38";
-      reactivate.onclick = hasDoc ? publishCurrentAgain : openConsegnaDocumento;
+      reactivate.onclick = reactivateDocument;
     }
 
-    if(update){
-      update.onclick = openConsegnaDocumento;
+    if(edit){
+      edit.onclick = openConsegnaDocumento;
     }
+
+    /*
+      Massimo 20 card totali.
+    */
+    Array.from(track.children || []).forEach(function(el, idx){
+      if(idx >= 20 && el.id !== "followmeDocumentPremiumHistoryCard20260520"){
+        el.style.display = "none";
+      }
+    });
 
     return true;
   }
 
   function boot(){
-    try{
-      if(window.fmDocumentCarouselRealContainer20260520 &&
-         typeof window.fmDocumentCarouselRealContainer20260520.renderCard === "function"){
-        window.fmDocumentCarouselRealContainer20260520.renderCard();
-      }
-    }catch(e){}
+    ensureStyle();
 
-    loadCurrentDocument();
-
-    setTimeout(render, 400);
-    setTimeout(loadCurrentDocument, 1000);
-    setTimeout(render, 2000);
+    /*
+      Se lo storico viene rigenerato, poi reinseriamo la card Documento.
+    */
+    setTimeout(loadCurrentDocument, 300);
+    setTimeout(loadCurrentDocument, 900);
+    setTimeout(loadCurrentDocument, 1800);
+    setTimeout(loadCurrentDocument, 3000);
   }
 
-  window.fmDocumentCarouselCloneNative20260520 = {
+  window.fmDocumentNativePremiumHistory20260520 = {
     boot,
-    render,
+    renderDocumentCard,
     loadCurrentDocument
   };
 
@@ -26262,6 +25504,20 @@ document.addEventListener("visibilitychange", function(){
   window.addEventListener("pageshow", function(){
     setTimeout(boot, 300);
   });
+
+  /*
+    Quando il carosello nativo viene ridisegnato da renderPremiumHistoryFromApi,
+    reinseriamo la card Documento senza cambiarne dimensioni.
+  */
+  try{
+    const track = findTrack();
+    if(track){
+      const obs = new MutationObserver(function(){
+        setTimeout(renderDocumentCard, 120);
+      });
+      obs.observe(track, { childList:true });
+    }
+  }catch(e){}
 })();
 </script>
 
