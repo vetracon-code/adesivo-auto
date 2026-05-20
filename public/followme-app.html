@@ -25735,636 +25735,6 @@ document.addEventListener("visibilitychange", function(){
 
 
 
-<script id="followme-document-prepare-preview-publish-definitive-final-20260520">
-(function(){
-  if(window.__FollowMeDocumentPreparePreviewPublishDefinitiveFinal20260520) return;
-  window.__FollowMeDocumentPreparePreviewPublishDefinitiveFinal20260520 = true;
-
-  let preparedDocument = null;
-  let preparedUrl = "";
-  let publishedDone = false;
-
-  function projectCode(){
-    try{
-      const parts = location.pathname.split("/").filter(Boolean);
-      const idx = parts.indexOf("app");
-      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
-    }catch(e){}
-    return "FM-DEMO";
-  }
-
-  function page(){
-    return document.getElementById("followmeConsegnaDocumentoPage20260520");
-  }
-
-  function findStatus(){
-    const p = page();
-    if(!p) return null;
-    return p.querySelector("#followmeDocumentStatus20260520") ||
-           p.querySelector(".fm-doc-status") ||
-           p.querySelector("[id*='Document'][id*='Status']");
-  }
-
-  function setStatus(msg){
-    const box = findStatus();
-    if(box){
-      box.textContent = msg;
-      box.style.display = "";
-      return;
-    }
-
-    const p = page();
-    if(!p) return;
-
-    let fallback = document.getElementById("followmeDocumentDefinitiveStatus20260520");
-    if(!fallback){
-      fallback = document.createElement("div");
-      fallback.id = "followmeDocumentDefinitiveStatus20260520";
-      fallback.style.margin = "12px 0";
-      fallback.style.padding = "12px 14px";
-      fallback.style.borderRadius = "16px";
-      fallback.style.fontWeight = "850";
-      fallback.style.background = "rgba(15,23,42,.06)";
-      fallback.style.border = "1px solid rgba(15,23,42,.10)";
-      const target = document.getElementById("followmeDocument5StepActions20260520") ||
-                     document.getElementById("followmeDocumentStableActions20260520") ||
-                     p.querySelector("button");
-      if(target) target.insertAdjacentElement("beforebegin", fallback);
-      else p.appendChild(fallback);
-    }
-    fallback.textContent = msg;
-  }
-
-  function findButtons(){
-    const p = page() || document;
-    const buttons = Array.from(p.querySelectorAll("button,a"));
-
-    const preview = document.getElementById("followme5PreviewDoc20260520") ||
-                    document.getElementById("followmeStablePreviewDoc20260520") ||
-                    document.getElementById("followmeDocumentPreviewBtn20260520") ||
-                    buttons.find(el => /preview/i.test(String(el.textContent || "")));
-
-    const publish = document.getElementById("followme5PublishDoc20260520") ||
-                    document.getElementById("followmeStablePublishDoc20260520") ||
-                    document.getElementById("followmeDocumentPublishBtn20260520") ||
-                    buttons.find(el => /pubblica/i.test(String(el.textContent || "")));
-
-    return { preview, publish };
-  }
-
-  function setEnabled(btn, enabled){
-    if(!btn) return;
-    btn.disabled = !enabled;
-    if(enabled){
-      btn.removeAttribute("disabled");
-      btn.classList.remove("disabled");
-      btn.style.opacity = "";
-      btn.style.pointerEvents = "auto";
-      btn.style.filter = "";
-      btn.style.cursor = "pointer";
-    }else{
-      btn.classList.add("disabled");
-      btn.style.opacity = ".38";
-      btn.style.pointerEvents = "none";
-      btn.style.filter = "grayscale(1)";
-      btn.style.cursor = "not-allowed";
-    }
-  }
-
-  function updateButtons(){
-    const ready = !!(preparedDocument && preparedDocument.id);
-    const b = findButtons();
-    setEnabled(b.preview, ready);
-    setEnabled(b.publish, ready);
-
-    if(ready && !publishedDone){
-      if(b.preview){
-        b.preview.style.border = "1.5px solid rgba(22,101,52,.55)";
-        b.preview.style.boxShadow = "0 0 0 3px rgba(22,101,52,.10)";
-      }
-      if(b.publish){
-        b.publish.style.border = "1.5px solid rgba(22,101,52,.55)";
-        b.publish.style.boxShadow = "0 0 0 3px rgba(22,101,52,.10)";
-      }
-    }
-  }
-
-  async function loadCurrentPrepared(){
-    try{
-      const code = projectCode();
-      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/current?v=" + Date.now(), { cache:"no-store" });
-      const data = await res.json().catch(() => null);
-
-      if(res.ok && data && data.success && data.document){
-        preparedDocument = data.document;
-        preparedUrl = data.public_url || "/fm/document/" + code;
-        publishedDone = !!data.document.is_published;
-
-        if(!publishedDone){
-          setStatus("Documento preparato correttamente. Ora guarda la Preview oppure clicca Pubblica subito.");
-        }
-
-        updateButtons();
-        return true;
-      }
-
-      updateButtons();
-      return false;
-    }catch(e){
-      updateButtons();
-      return false;
-    }
-  }
-
-  function patchFetch(){
-    if(window.__FollowMeDocumentDefinitiveFetchPatch20260520) return;
-    window.__FollowMeDocumentDefinitiveFetchPatch20260520 = true;
-
-    const originalFetch = window.fetch;
-
-    window.fetch = async function(input, init){
-      const res = await originalFetch.apply(this, arguments);
-
-      try{
-        const url = typeof input === "string" ? input : (input && input.url) || "";
-
-        if(url.includes("/document/upload")){
-          res.clone().json().then(data => {
-            if(data && data.success && data.document){
-              preparedDocument = data.document;
-              preparedUrl = data.public_url || "/fm/document/" + projectCode();
-              publishedDone = false;
-
-              setTimeout(() => {
-                setStatus("Documento preparato correttamente. Ora guarda la Preview oppure clicca Pubblica subito.");
-                updateButtons();
-              }, 80);
-
-              setTimeout(updateButtons, 500);
-              setTimeout(updateButtons, 1200);
-            }
-          }).catch(()=>{});
-        }
-
-        if(url.includes("/document/publish")){
-          res.clone().json().then(data => {
-            if(data && data.success && data.published){
-              publishedDone = true;
-              preparedDocument = data.document || preparedDocument;
-              preparedUrl = data.public_url || preparedUrl;
-
-              setTimeout(() => {
-                setStatus("Documento pubblicato correttamente. Ora puoi inquadrare il QR.");
-                updateButtons();
-              }, 80);
-            }
-          }).catch(()=>{});
-        }
-      }catch(e){}
-
-      return res;
-    };
-  }
-
-  function openPreview(){
-    if(!preparedUrl){
-      loadCurrentPrepared();
-      return;
-    }
-    window.open(preparedUrl, "_blank", "noopener");
-  }
-
-  async function publishNow(){
-    if(!preparedDocument || !preparedDocument.id){
-      const ok = await loadCurrentPrepared();
-      if(!ok){
-        alert("Prima carica correttamente un PDF.");
-        return;
-      }
-    }
-
-    const confirmPublish = confirm("Vuoi pubblicare subito questo PDF sul QR?");
-    if(!confirmPublish) return;
-
-    try{
-      const code = projectCode();
-      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/publish", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ document_id:preparedDocument.id })
-      });
-
-      const data = await res.json().catch(() => null);
-
-      if(!res.ok || !data || !data.success){
-        throw new Error((data && data.error) || "Pubblicazione non riuscita.");
-      }
-
-      publishedDone = true;
-      preparedDocument = data.document || preparedDocument;
-      preparedUrl = data.public_url || preparedUrl;
-
-      setStatus("Documento pubblicato correttamente. Ora puoi inquadrare il QR.");
-      updateButtons();
-
-      try{
-        if(window.fmDocumentNativePremiumHistoryNoEmbed20260520?.loadCurrentDocument){
-          window.fmDocumentNativePremiumHistoryNoEmbed20260520.loadCurrentDocument();
-        }
-      }catch(e){}
-
-    }catch(err){
-      alert(err.message || "Errore pubblicazione documento.");
-    }
-  }
-
-  function bind(){
-    const b = findButtons();
-
-    if(b.preview && b.preview.dataset.definitivePreviewBound20260520 !== "1"){
-      b.preview.dataset.definitivePreviewBound20260520 = "1";
-      b.preview.addEventListener("click", function(ev){
-        if(!preparedDocument) return;
-        ev.preventDefault();
-        ev.stopPropagation();
-        openPreview();
-      }, true);
-    }
-
-    if(b.publish && b.publish.dataset.definitivePublishBound20260520 !== "1"){
-      b.publish.dataset.definitivePublishBound20260520 = "1";
-      b.publish.addEventListener("click", function(ev){
-        if(!preparedDocument) return;
-        ev.preventDefault();
-        ev.stopPropagation();
-        publishNow();
-      }, true);
-    }
-
-    updateButtons();
-  }
-
-  function boot(){
-    patchFetch();
-    bind();
-    setTimeout(bind, 500);
-    setTimeout(loadCurrentPrepared, 1000);
-    setTimeout(bind, 1800);
-  }
-
-  window.fmDocumentPreparePreviewPublishDefinitive20260520 = {
-    boot,
-    loadCurrentPrepared,
-    updateButtons,
-    openPreview,
-    publishNow
-  };
-
-  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
-  else boot();
-
-  window.addEventListener("load", () => setTimeout(boot, 300));
-  window.addEventListener("pageshow", () => setTimeout(boot, 300));
-})();
-</script>
-
-
-
-<script id="followme-document-ui-publish-buttons-final-20260520">
-(function(){
-  if(window.__FollowMeDocumentUiPublishButtonsFinal20260520) return;
-  window.__FollowMeDocumentUiPublishButtonsFinal20260520 = true;
-
-  /*
-    FIX DEFINITIVO PULSANTI UI DOCUMENTO:
-    - Riattiva nel carosello pubblica l'ultimo documento active.
-    - Pubblica subito nella pagina Consegna Documento pubblica l'ultimo documento active.
-    - Modifica riapre Consegna Documento.
-    - Dopo pubblicazione aggiorna card/stato e mostra messaggio corretto.
-  */
-
-  let currentDocument = null;
-  let currentPublicUrl = "";
-
-  function projectCode(){
-    try{
-      const parts = location.pathname.split("/").filter(Boolean);
-      const idx = parts.indexOf("app");
-      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
-    }catch(e){}
-
-    try{
-      if(window.FOLLOWME_PROJECT_CODE) return String(window.FOLLOWME_PROJECT_CODE);
-      if(window.followMeProjectCode) return String(window.followMeProjectCode);
-    }catch(e){}
-
-    return "FM-DEMO";
-  }
-
-  async function loadCurrentDocument(){
-    const code = projectCode();
-
-    const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/current?v=" + Date.now(), {
-      cache:"no-store"
-    });
-
-    const data = await res.json().catch(function(){ return null; });
-
-    if(!res.ok || !data || !data.success || !data.document){
-      currentDocument = null;
-      currentPublicUrl = "";
-      return null;
-    }
-
-    currentDocument = data.document;
-    currentPublicUrl = data.public_url || "/fm/document/" + code;
-
-    return currentDocument;
-  }
-
-  function findDocumentPage(){
-    return document.getElementById("followmeConsegnaDocumentoPage20260520");
-  }
-
-  function setDocumentStatus(message){
-    const page = findDocumentPage();
-    if(!page) return;
-
-    const existing =
-      page.querySelector("#followmeDocumentStatus20260520") ||
-      page.querySelector(".fm-doc-status") ||
-      page.querySelector("[id*='Document'][id*='Status']");
-
-    if(existing){
-      existing.textContent = message;
-      existing.style.display = "";
-      return;
-    }
-
-    let box = document.getElementById("followmeDocumentUiPublishStatus20260520");
-
-    if(!box){
-      box = document.createElement("div");
-      box.id = "followmeDocumentUiPublishStatus20260520";
-      box.style.margin = "12px 0";
-      box.style.padding = "12px 14px";
-      box.style.borderRadius = "16px";
-      box.style.fontWeight = "850";
-      box.style.lineHeight = "1.35";
-      box.style.background = "rgba(15,23,42,.06)";
-      box.style.border = "1px solid rgba(15,23,42,.10)";
-
-      const anchor =
-        document.getElementById("followmeDocument5StepActions20260520") ||
-        document.getElementById("followmeDocumentStableActions20260520") ||
-        page.querySelector("button");
-
-      if(anchor) anchor.insertAdjacentElement("beforebegin", box);
-      else page.appendChild(box);
-    }
-
-    box.textContent = message;
-  }
-
-  function openConsegnaDocumento(){
-    try{
-      if(window.fmConsegnaDocumentoUi20260520 &&
-         typeof window.fmConsegnaDocumentoUi20260520.openPage === "function"){
-        window.fmConsegnaDocumentoUi20260520.openPage();
-        return;
-      }
-    }catch(e){}
-
-    const btn = document.getElementById("followmeConsegnaDocumentoBtn20260520");
-    if(btn){
-      btn.click();
-      return;
-    }
-
-    const page = findDocumentPage();
-    if(page){
-      document.body.classList.add("fm-consegna-documento-open-20260520");
-      page.style.display = "";
-      page.scrollIntoView({ behavior:"smooth", block:"start" });
-      return;
-    }
-
-    alert("Apri Consegna Documento dalla Home.");
-  }
-
-  function findPublishButton(){
-    const page = findDocumentPage() || document;
-    const buttons = Array.from(page.querySelectorAll("button,a"));
-
-    return document.getElementById("followme5PublishDoc20260520") ||
-           document.getElementById("followmeStablePublishDoc20260520") ||
-           document.getElementById("followmeDocumentPublishBtn20260520") ||
-           buttons.find(function(el){
-             return /pubblica/i.test(String(el.textContent || ""));
-           });
-  }
-
-  function findPreviewButton(){
-    const page = findDocumentPage() || document;
-    const buttons = Array.from(page.querySelectorAll("button,a"));
-
-    return document.getElementById("followme5PreviewDoc20260520") ||
-           document.getElementById("followmeStablePreviewDoc20260520") ||
-           document.getElementById("followmeDocumentPreviewBtn20260520") ||
-           buttons.find(function(el){
-             return /preview/i.test(String(el.textContent || ""));
-           });
-  }
-
-  function setButtonActive(btn, active){
-    if(!btn) return;
-
-    if(active){
-      btn.disabled = false;
-      btn.removeAttribute("disabled");
-      btn.classList.remove("disabled");
-      btn.style.pointerEvents = "auto";
-      btn.style.opacity = "";
-      btn.style.filter = "";
-      btn.style.cursor = "pointer";
-    }else{
-      btn.disabled = true;
-      btn.classList.add("disabled");
-      btn.style.pointerEvents = "none";
-      btn.style.opacity = ".38";
-      btn.style.filter = "grayscale(1)";
-      btn.style.cursor = "not-allowed";
-    }
-  }
-
-  async function refreshDocumentUi(){
-    const doc = await loadCurrentDocument().catch(function(){ return null; });
-    const ready = !!(doc && doc.id);
-
-    setButtonActive(findPreviewButton(), ready);
-    setButtonActive(findPublishButton(), ready);
-
-    try{
-      if(window.fmDocumentNativePremiumHistoryNoEmbed20260520 &&
-         typeof window.fmDocumentNativePremiumHistoryNoEmbed20260520.loadCurrentDocument === "function"){
-        window.fmDocumentNativePremiumHistoryNoEmbed20260520.loadCurrentDocument();
-      }
-    }catch(e){}
-
-    return doc;
-  }
-
-  async function publishLatestDocument(source){
-    try{
-      let doc = currentDocument;
-
-      if(!doc || !doc.id){
-        doc = await loadCurrentDocument();
-      }
-
-      if(!doc || !doc.id){
-        alert("Prima carica un Documento PDF.");
-        openConsegnaDocumento();
-        return false;
-      }
-
-      const ok = confirm(
-        source === "reactivate"
-          ? "Vuoi riattivare subito questo Documento PDF sul QR?"
-          : "Vuoi pubblicare subito questo Documento PDF sul QR?"
-      );
-
-      if(!ok) return false;
-
-      const code = projectCode();
-
-      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/publish", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ document_id:doc.id })
-      });
-
-      const data = await res.json().catch(function(){ return null; });
-
-      if(!res.ok || !data || !data.success || !data.published){
-        throw new Error((data && data.error) || "Pubblicazione non riuscita.");
-      }
-
-      currentDocument = data.document || doc;
-      currentPublicUrl = data.public_url || currentPublicUrl || "/fm/document/" + code;
-
-      setDocumentStatus("Documento pubblicato correttamente. Ora puoi inquadrare il QR.");
-      alert("Documento PDF attivato sul QR.");
-
-      await refreshDocumentUi();
-
-      return true;
-
-    }catch(err){
-      alert(err.message || "Errore pubblicazione documento.");
-      return false;
-    }
-  }
-
-  function openPreview(){
-    if(!currentPublicUrl){
-      loadCurrentDocument().then(function(){
-        if(currentPublicUrl) window.open(currentPublicUrl, "_blank", "noopener");
-      });
-      return;
-    }
-
-    window.open(currentPublicUrl, "_blank", "noopener");
-  }
-
-  function bindCarouselButtons(){
-    const reactivate = document.getElementById("followmeDocHistoryReactivate20260520");
-    const edit = document.getElementById("followmeDocHistoryEdit20260520");
-
-    if(reactivate){
-      reactivate.disabled = false;
-      reactivate.removeAttribute("disabled");
-      reactivate.style.pointerEvents = "auto";
-      reactivate.onclick = function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        publishLatestDocument("reactivate");
-      };
-    }
-
-    if(edit){
-      edit.style.pointerEvents = "auto";
-      edit.onclick = function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        openConsegnaDocumento();
-      };
-    }
-  }
-
-  function bindDocumentPageButtons(){
-    const publish = findPublishButton();
-    const preview = findPreviewButton();
-
-    if(publish && publish.dataset.uiPublishFinalBound20260520 !== "1"){
-      publish.dataset.uiPublishFinalBound20260520 = "1";
-      publish.addEventListener("click", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        publishLatestDocument("publish");
-      }, true);
-    }
-
-    if(preview && preview.dataset.uiPreviewFinalBound20260520 !== "1"){
-      preview.dataset.uiPreviewFinalBound20260520 = "1";
-      preview.addEventListener("click", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        openPreview();
-      }, true);
-    }
-  }
-
-  function bindAll(){
-    bindCarouselButtons();
-    bindDocumentPageButtons();
-  }
-
-  function boot(){
-    bindAll();
-
-    refreshDocumentUi();
-
-    setTimeout(bindAll, 500);
-    setTimeout(bindAll, 1200);
-    setTimeout(refreshDocumentUi, 1600);
-    setTimeout(bindAll, 2600);
-  }
-
-  window.fmDocumentUiPublishButtons20260520 = {
-    boot,
-    refreshDocumentUi,
-    publishLatestDocument,
-    openConsegnaDocumento,
-    openPreview,
-    bindAll
-  };
-
-  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
-  else boot();
-
-  window.addEventListener("load", function(){
-    setTimeout(boot, 300);
-  });
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 300);
-  });
-})();
-</script>
-
-
-
 <script id="followme-document-async-thumbnail-client-final-20260520">
 (function(){
   if(window.__FollowMeDocumentAsyncThumbnailClientFinal20260520) return;
@@ -26676,6 +26046,541 @@ document.addEventListener("visibilitychange", function(){
   window.addEventListener("pageshow", function(){
     setTimeout(boot, 300);
   });
+})();
+</script>
+
+
+
+<script id="followme-document-single-flow-final-20260520">
+(function(){
+  if(window.__FollowMeDocumentSingleFlowFinal20260520) return;
+  window.__FollowMeDocumentSingleFlowFinal20260520 = true;
+
+  /*
+    FLOW UNICO CONSEGNA DOCUMENTO.
+    Risolve:
+    - doppio confirm;
+    - "Prima carica un PDF valido" dopo upload;
+    - pulsanti spenti;
+    - ordine pulsanti non logico;
+    - guida visiva mancante.
+  */
+
+  let preparedDocument = null;
+  let preparedPublicUrl = "";
+  let lastUploadAt = 0;
+
+  function projectCode(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("app");
+      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function page(){
+    return document.getElementById("followmeConsegnaDocumentoPage20260520");
+  }
+
+  function txt(el){
+    return String(el && el.textContent || "").replace(/\s+/g," ").trim();
+  }
+
+  function findButtons(){
+    const p = page() || document;
+    const all = Array.from(p.querySelectorAll("button,a"));
+
+    const prepare =
+      document.getElementById("followme5PrepareDoc20260520") ||
+      document.getElementById("followmeStablePrepareDoc20260520") ||
+      document.getElementById("followmeDocumentPrepareBtn20260520") ||
+      all.find(el => /prepara/i.test(txt(el)));
+
+    const publish =
+      document.getElementById("followme5PublishDoc20260520") ||
+      document.getElementById("followmeStablePublishDoc20260520") ||
+      document.getElementById("followmeDocumentPublishBtn20260520") ||
+      all.find(el => /pubblica/i.test(txt(el)));
+
+    const preview =
+      document.getElementById("followme5PreviewDoc20260520") ||
+      document.getElementById("followmeStablePreviewDoc20260520") ||
+      document.getElementById("followmeDocumentPreviewBtn20260520") ||
+      all.find(el => /preview/i.test(txt(el)));
+
+    return { prepare, publish, preview };
+  }
+
+  function findUploadFrame(){
+    const p = page();
+    if(!p) return null;
+
+    const input = findFileInput();
+    if(input){
+      return input.closest(".card, section, div") || input.parentElement;
+    }
+
+    return Array.from(p.querySelectorAll("section,div")).find(el => {
+      const t = txt(el).toLowerCase();
+      return t.includes("carica") && (t.includes("pdf") || t.includes("documento"));
+    }) || null;
+  }
+
+  function findFileInput(){
+    const p = page() || document;
+    return document.getElementById("followmeDocumentUploadInput20260520") ||
+           p.querySelector('input[type="file"][accept*="pdf"]') ||
+           p.querySelector('input[type="file"]');
+  }
+
+  function ensureStyle(){
+    if(document.getElementById("followmeDocumentSingleFlowStyle20260520")) return;
+
+    const style = document.createElement("style");
+    style.id = "followmeDocumentSingleFlowStyle20260520";
+    style.textContent = `
+      @keyframes fmDocGreenPulse20260520{
+        0%,100%{
+          box-shadow:0 0 0 0 rgba(22,163,74,.18);
+          border-color:rgba(22,163,74,.42);
+        }
+        50%{
+          box-shadow:0 0 0 6px rgba(22,163,74,.13);
+          border-color:rgba(22,163,74,.76);
+        }
+      }
+
+      .fm-doc-next-step-20260520{
+        border:1.5px solid rgba(22,163,74,.62) !important;
+        box-shadow:0 0 0 3px rgba(22,163,74,.12) !important;
+      }
+
+      .fm-doc-pulse-20260520{
+        border:1.5px solid rgba(22,163,74,.70) !important;
+        animation:fmDocGreenPulse20260520 1.05s ease-in-out infinite !important;
+      }
+
+      .fm-doc-disabled-20260520{
+        opacity:.38 !important;
+        filter:grayscale(1) !important;
+        pointer-events:none !important;
+        cursor:not-allowed !important;
+      }
+
+      .fm-doc-single-status-20260520{
+        margin:12px 0;
+        padding:12px 14px;
+        border-radius:16px;
+        font-weight:850;
+        line-height:1.35;
+        background:rgba(15,23,42,.06);
+        border:1px solid rgba(15,23,42,.10);
+      }
+
+      .fm-doc-single-status-20260520.ok{
+        background:rgba(22,163,74,.08);
+        border-color:rgba(22,163,74,.24);
+      }
+
+      .fm-doc-single-status-20260520.warn{
+        background:rgba(245,158,11,.10);
+        border-color:rgba(245,158,11,.25);
+      }
+
+      #followmeDocumentSingleActionsOrder20260520{
+        display:grid !important;
+        grid-template-columns:1fr;
+        gap:10px !important;
+        margin-top:12px;
+      }
+
+      #followmeDocumentSingleActionsOrder20260520 button,
+      #followmeDocumentSingleActionsOrder20260520 a{
+        width:100% !important;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function setStatus(message, cls){
+    const p = page();
+    if(!p) return;
+
+    const old =
+      p.querySelector("#followmeDocumentStatus20260520") ||
+      p.querySelector(".fm-doc-status") ||
+      p.querySelector("[id*='Document'][id*='Status']");
+
+    if(old){
+      old.textContent = message;
+      old.style.display = "";
+      old.classList.toggle("ok", cls === "ok");
+      old.classList.toggle("warn", cls === "warn");
+      return;
+    }
+
+    let box = document.getElementById("followmeDocumentSingleStatus20260520");
+
+    if(!box){
+      box = document.createElement("div");
+      box.id = "followmeDocumentSingleStatus20260520";
+      box.className = "fm-doc-single-status-20260520";
+
+      const anchor =
+        document.getElementById("followmeDocumentSingleActionsOrder20260520") ||
+        document.getElementById("followmeDocument5StepActions20260520") ||
+        document.getElementById("followmeDocumentStableActions20260520") ||
+        findUploadFrame();
+
+      if(anchor) anchor.insertAdjacentElement("afterend", box);
+      else p.appendChild(box);
+    }
+
+    box.textContent = message;
+    box.className = "fm-doc-single-status-20260520 " + (cls || "");
+  }
+
+  function setEnabled(el, enabled){
+    if(!el) return;
+
+    if(enabled){
+      el.disabled = false;
+      el.removeAttribute("disabled");
+      el.classList.remove("disabled");
+      el.classList.remove("fm-doc-disabled-20260520");
+      el.style.pointerEvents = "auto";
+      el.style.opacity = "";
+      el.style.filter = "";
+      el.style.cursor = "pointer";
+    }else{
+      el.disabled = true;
+      el.classList.add("disabled");
+      el.classList.add("fm-doc-disabled-20260520");
+      el.style.pointerEvents = "none";
+      el.style.opacity = ".38";
+      el.style.filter = "grayscale(1)";
+      el.style.cursor = "not-allowed";
+    }
+  }
+
+  function clearHighlights(){
+    const p = page() || document;
+    p.querySelectorAll(".fm-doc-next-step-20260520,.fm-doc-pulse-20260520").forEach(el => {
+      el.classList.remove("fm-doc-next-step-20260520");
+      el.classList.remove("fm-doc-pulse-20260520");
+    });
+  }
+
+  function selectedPdfReady(){
+    const input = findFileInput();
+    const file = input && input.files && input.files[0];
+    return !!(file && (file.type === "application/pdf" || /\.pdf$/i.test(file.name || "")));
+  }
+
+  function updateGuide(stage){
+    ensureStyle();
+
+    const b = findButtons();
+    const uploadFrame = findUploadFrame();
+
+    clearHighlights();
+
+    if(stage === "open"){
+      if(uploadFrame) uploadFrame.classList.add("fm-doc-pulse-20260520");
+      setEnabled(b.publish, false);
+      setEnabled(b.preview, false);
+      return;
+    }
+
+    if(stage === "file-selected"){
+      if(uploadFrame) uploadFrame.classList.add("fm-doc-next-step-20260520");
+      if(b.prepare) b.prepare.classList.add("fm-doc-pulse-20260520");
+      setEnabled(b.publish, false);
+      setEnabled(b.preview, false);
+      return;
+    }
+
+    if(stage === "prepared"){
+      if(b.publish) b.publish.classList.add("fm-doc-pulse-20260520");
+      setEnabled(b.publish, true);
+      setEnabled(b.preview, true);
+      return;
+    }
+
+    if(stage === "published"){
+      setEnabled(b.publish, true);
+      setEnabled(b.preview, true);
+    }
+  }
+
+  function reorderButtons(){
+    const b = findButtons();
+    const p = page();
+
+    if(!p || (!b.prepare && !b.publish && !b.preview)) return;
+
+    let wrap = document.getElementById("followmeDocumentSingleActionsOrder20260520");
+
+    if(!wrap){
+      wrap = document.createElement("div");
+      wrap.id = "followmeDocumentSingleActionsOrder20260520";
+
+      const anchor =
+        document.getElementById("followmeDocument5StepActions20260520") ||
+        document.getElementById("followmeDocumentStableActions20260520") ||
+        b.prepare?.parentElement ||
+        b.publish?.parentElement ||
+        b.preview?.parentElement ||
+        findUploadFrame();
+
+      if(anchor && anchor.parentElement){
+        anchor.insertAdjacentElement("afterend", wrap);
+      }else{
+        p.appendChild(wrap);
+      }
+    }
+
+    /*
+      Ordine richiesto:
+      1) Prepara Documento
+      2) Pubblica subito
+      3) Preview sotto
+    */
+    [b.prepare, b.publish, b.preview].forEach(btn => {
+      if(btn && btn.parentElement !== wrap){
+        wrap.appendChild(btn);
+      }
+    });
+  }
+
+  async function loadCurrentDocument(){
+    const code = projectCode();
+
+    const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/current?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if(res.ok && data && data.success && data.document){
+      preparedDocument = data.document;
+      preparedPublicUrl = data.public_url || "/fm/document/" + code;
+      return preparedDocument;
+    }
+
+    return null;
+  }
+
+  function patchFetchUpload(){
+    if(window.__FollowMeDocumentSingleFlowFetchPatch20260520) return;
+    window.__FollowMeDocumentSingleFlowFetchPatch20260520 = true;
+
+    const originalFetch = window.fetch;
+
+    window.fetch = async function(input, init){
+      const res = await originalFetch.apply(this, arguments);
+
+      try{
+        const url = typeof input === "string" ? input : (input && input.url) || "";
+
+        if(url.includes("/document/upload")){
+          lastUploadAt = Date.now();
+
+          res.clone().json().then(data => {
+            if(data && data.success && data.document && data.document.id){
+              preparedDocument = data.document;
+              preparedPublicUrl = data.public_url || "/fm/document/" + projectCode();
+
+              setTimeout(() => {
+                setStatus("Documento preparato correttamente. Ora puoi pubblicarlo subito oppure guardare la Preview.", "ok");
+                reorderButtons();
+                updateGuide("prepared");
+              }, 100);
+
+              setTimeout(() => {
+                bindButtons();
+                updateGuide("prepared");
+              }, 800);
+            }
+          }).catch(()=>{});
+        }
+
+        if(url.includes("/document/publish")){
+          res.clone().json().then(data => {
+            if(data && data.success && data.published){
+              preparedDocument = data.document || preparedDocument;
+              preparedPublicUrl = data.public_url || preparedPublicUrl;
+
+              setTimeout(() => {
+                setStatus("Documento pubblicato correttamente. Ora il QR consegna questo PDF.", "ok");
+                updateGuide("published");
+                refreshRelatedViews();
+              }, 100);
+            }
+          }).catch(()=>{});
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  async function publishNow(){
+    let doc = preparedDocument;
+
+    if(!doc || !doc.id){
+      doc = await loadCurrentDocument();
+    }
+
+    if(!doc || !doc.id){
+      alert("Prima carica un PDF valido.");
+      updateGuide(selectedPdfReady() ? "file-selected" : "open");
+      return false;
+    }
+
+    const ok = confirm("Vuoi pubblicare subito questo PDF sul QR?");
+    if(!ok) return false;
+
+    const code = projectCode();
+
+    const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/publish", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ document_id:doc.id })
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if(!res.ok || !data || !data.success || !data.published){
+      alert((data && data.error) || "Pubblicazione non riuscita.");
+      return false;
+    }
+
+    preparedDocument = data.document || doc;
+    preparedPublicUrl = data.public_url || preparedPublicUrl || "/fm/document/" + code;
+
+    setStatus("Documento pubblicato correttamente. Ora il QR consegna questo PDF.", "ok");
+    updateGuide("published");
+    refreshRelatedViews();
+
+    return true;
+  }
+
+  async function openPreview(){
+    let url = preparedPublicUrl;
+
+    if(!url){
+      const doc = await loadCurrentDocument();
+      if(doc) url = preparedPublicUrl;
+    }
+
+    if(!url){
+      alert("Prima carica un PDF valido.");
+      return;
+    }
+
+    window.open(url, "_blank", "noopener");
+  }
+
+  function refreshRelatedViews(){
+    try{
+      if(window.fmDocumentNativePremiumHistoryNoEmbed20260520?.loadCurrentDocument){
+        window.fmDocumentNativePremiumHistoryNoEmbed20260520.loadCurrentDocument();
+      }
+    }catch(e){}
+
+    try{
+      if(window.fmDocumentAsyncThumbnail20260520?.refreshThumbnailFromCurrent){
+        window.fmDocumentAsyncThumbnail20260520.refreshThumbnailFromCurrent();
+      }
+    }catch(e){}
+  }
+
+  function bindButtons(){
+    reorderButtons();
+
+    const b = findButtons();
+
+    if(b.publish){
+      b.publish.onclick = null;
+      b.publish.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        publishNow();
+      }, true);
+    }
+
+    if(b.preview){
+      b.preview.onclick = null;
+      b.preview.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        openPreview();
+      }, true);
+    }
+
+    const input = findFileInput();
+    if(input && input.dataset.fmSingleFlowInputBound20260520 !== "1"){
+      input.dataset.fmSingleFlowInputBound20260520 = "1";
+      input.addEventListener("change", function(){
+        preparedDocument = null;
+        preparedPublicUrl = "";
+        if(selectedPdfReady()){
+          setStatus("PDF selezionato. Ora clicca Prepara Documento.", "warn");
+          updateGuide("file-selected");
+        }else{
+          setStatus("Carica un PDF valido per procedere.", "warn");
+          updateGuide("open");
+        }
+      });
+    }
+
+    if(preparedDocument && preparedDocument.id){
+      updateGuide("prepared");
+    }else if(selectedPdfReady()){
+      updateGuide("file-selected");
+    }else{
+      updateGuide("open");
+    }
+  }
+
+  function boot(){
+    ensureStyle();
+    reorderButtons();
+    bindButtons();
+
+    setTimeout(bindButtons, 500);
+    setTimeout(bindButtons, 1200);
+    setTimeout(() => {
+      loadCurrentDocument().then(doc => {
+        if(doc && doc.id){
+          setEnabled(findButtons().publish, true);
+          setEnabled(findButtons().preview, true);
+        }
+      }).catch(()=>{});
+    }, 1600);
+  }
+
+  window.fmDocumentSingleFlow20260520 = {
+    boot,
+    bindButtons,
+    publishNow,
+    openPreview,
+    loadCurrentDocument,
+    updateGuide
+  };
+
+  patchFetchUpload();
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", () => setTimeout(boot, 300));
+  window.addEventListener("pageshow", () => setTimeout(boot, 300));
 })();
 </script>
 
