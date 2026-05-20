@@ -10895,7 +10895,14 @@ app.get('/fm/document/:code', async (req, res) => {
     closeDocBtn.onclick = function(){
       const ok = confirm("Vuoi chiudere il documento?");
       if(!ok) return;
-      location.replace("/fm/document-closed?t=" + Date.now());
+
+      /*
+        FIX FOLLOWME MOBILE PDF EXIT 20260520:
+        se il documento è stato aperto dalla Web App FollowMe, torna alla Home dell'App.
+        Evitiamo di bloccare l'utente sulla pagina saluti.
+      */
+      const appUrl = "/fm/app/${String(project.code || code).replace(/"/g, '\"')}?from=document&v=" + Date.now();
+      location.replace(appUrl);
     };
 
     viewer.addEventListener("touchstart", function(ev){
