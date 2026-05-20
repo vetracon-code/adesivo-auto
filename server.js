@@ -10518,7 +10518,7 @@ app.get('/fm/document/:code', async (req, res) => {
       fetch("/api/followme/document/" + DOCUMENT_ID + "/view", {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ source:"document_viewer" })
+        body:JSON.stringify({ source:"document_viewer_sharp_20260520" })
       }).catch(()=>{});
     } catch(e){}
 
@@ -10592,12 +10592,29 @@ app.get('/fm/document/:code', async (req, res) => {
 
         const maxW = viewer.clientWidth * 0.94;
         const maxH = viewer.clientHeight * 0.94;
-        const scale = Math.min(maxW / baseViewport.width, maxH / baseViewport.height, 2.2);
 
-        const viewport = page.getViewport({ scale });
+        /*
+          FIX QUALITÀ REALE 20260520:
+          Manteniamo lo stesso viewer e lo stesso sfoglio,
+          ma renderizziamo il canvas in alta definizione usando devicePixelRatio.
+          Prima il PDF veniva disegnato a risoluzione CSS, poi lo zoom ingrandiva pixel già poveri.
+        */
+        const cssScale = Math.min(maxW / baseViewport.width, maxH / baseViewport.height, 2.2);
+        const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
+        const renderScale = cssScale * dpr;
 
-        canvas.width = Math.floor(viewport.width);
-        canvas.height = Math.floor(viewport.height);
+        const renderViewport = page.getViewport({ scale:renderScale });
+        const cssViewport = page.getViewport({ scale:cssScale });
+
+        canvas.width = Math.floor(renderViewport.width);
+        canvas.height = Math.floor(renderViewport.height);
+
+        canvas.style.width = Math.floor(cssViewport.width) + "px";
+        canvas.style.height = Math.floor(cssViewport.height) + "px";
+
+        ctx.setTransform(1,0,0,1,0,0);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
 
         zoom = 1;
         panX = 0;
@@ -10605,7 +10622,12 @@ app.get('/fm/document/:code', async (req, res) => {
         viewer.classList.remove("zoomed");
         canvas.style.transform = direction === "next" ? "translateX(22px)" : direction === "prev" ? "translateX(-22px)" : "translateX(0)";
 
-        await page.render({ canvasContext:ctx, viewport }).promise;
+        await page.render({
+          canvasContext:ctx,
+          viewport:renderViewport,
+          intent:"display",
+          renderInteractiveForms:true
+        }).promise;
 
         requestAnimationFrame(() => {
           canvas.style.transform = "translateX(0)";
