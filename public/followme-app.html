@@ -26379,6 +26379,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   if(window.__FollowMeRealPdfThumbnailCarousel20260520) return;
   window.__FollowMeRealPdfThumbnailCarousel20260520 = true;
 
+  console.log("[FollowMe PDF Thumb] script avviato", {
+    hasPdfJs: !!pdfjsLib,
+    location: location.href
+  });
+
   const generating = new Set();
 
   function code(){
@@ -26499,27 +26504,42 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   }
 
   async function generateForDoc(doc){
-    if(!doc || !doc.id || !doc.public_path) return false;
+    console.log("[FollowMe PDF Thumb] generateForDoc input", doc);
+
+    if(!doc || !doc.id || !doc.public_path){
+      console.warn("[FollowMe PDF Thumb] documento non valido");
+      return false;
+    }
 
     const id = String(doc.id);
-    if(generating.has(id)) return false;
+    if(generating.has(id)){
+      console.warn("[FollowMe PDF Thumb] generazione già in corso", id);
+      return false;
+    }
 
     /*
       Genero solo se manca thumbnail reale oppure se è ancora il fallback SVG.
       Non sovrascrivo PNG/JPG/WebP già salvati.
     */
-    if(!isSvgThumb(doc)) return false;
+    if(!isSvgThumb(doc)){
+      console.warn("[FollowMe PDF Thumb] thumbnail già reale, salto", doc.thumbnail_url || doc.thumbnail_path);
+      return false;
+    }
 
     generating.add(id);
 
     try{
+      console.log("[FollowMe PDF Thumb] render prima pagina", doc.public_path);
       const b64 = await generateSquareThumbFromPdf(doc.public_path);
+      console.log("[FollowMe PDF Thumb] base64 generato", b64 ? b64.length : 0);
 
       if(!b64 || b64.length < 1000){
         throw new Error("Thumbnail PDF troppo piccola o non valida.");
       }
 
+      console.log("[FollowMe PDF Thumb] salvo thumbnail", id);
       await saveThumb(id, b64);
+      console.log("[FollowMe PDF Thumb] thumbnail salvata", id);
 
       try{
         await window.fmPdfSingleCard20260520?.refresh?.();
@@ -26540,7 +26560,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   }
 
   async function generateCurrent(){
+    console.log("[FollowMe PDF Thumb] generateCurrent avviato");
     const doc = await getCurrentDocument();
+    console.log("[FollowMe PDF Thumb] documento corrente", doc);
     return generateForDoc(doc);
   }
 
