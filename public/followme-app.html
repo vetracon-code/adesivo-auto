@@ -25138,5 +25138,478 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-document-destination-frame-final-20260520">
+(function(){
+  if(window.__FollowMeDocumentDestinationFrameFinal20260520) return;
+  window.__FollowMeDocumentDestinationFrameFinal20260520 = true;
+
+  /*
+    Frame speciale nelle destinazioni:
+    - sempre visibile come terzo frame;
+    - distingue Consegna Documento dai redirect URL;
+    - mostra documento corrente se presente;
+    - mostra visualizzazioni e download, non ultimo uso;
+    - pulsante Aggiorna/Aggiungi apre Consegna Documento;
+    - massimo 20 frame complessivi.
+  */
+
+  let currentDocument = null;
+  let currentDocumentPublicUrl = "";
+
+  function projectCode(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("app");
+      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
+    }catch(e){}
+
+    try{
+      if(window.FOLLOWME_PROJECT_CODE) return String(window.FOLLOWME_PROJECT_CODE);
+      if(window.followMeProjectCode) return String(window.followMeProjectCode);
+    }catch(e){}
+
+    return "FM-DEMO";
+  }
+
+  function escapeHtml(v){
+    return String(v == null ? "" : v)
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;");
+  }
+
+  function fmtBytes(n){
+    n = Number(n || 0);
+    if(!n) return "";
+    if(n < 1024) return n + " B";
+    if(n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+    return (n / (1024 * 1024)).toFixed(1).replace(".0","") + " MB";
+  }
+
+  function ensureStyle(){
+    if(document.getElementById("followmeDocumentDestinationFrameStyle20260520")) return;
+
+    const style = document.createElement("style");
+    style.id = "followmeDocumentDestinationFrameStyle20260520";
+    style.textContent = `
+      #followmeDocumentDestinationFrame20260520{
+        position:relative;
+        overflow:hidden;
+        border-radius:24px;
+        padding:18px;
+        margin:12px 0;
+        background:
+          radial-gradient(circle at 20% 0%, rgba(148,163,184,.22), transparent 34%),
+          linear-gradient(145deg,#0f172a,#111827 62%,#020617);
+        color:#fff;
+        border:1px solid rgba(255,255,255,.16);
+        box-shadow:0 22px 70px rgba(15,23,42,.22);
+      }
+
+      #followmeDocumentDestinationFrame20260520::before{
+        content:"";
+        position:absolute;
+        inset:-80px -80px auto auto;
+        width:180px;
+        height:180px;
+        border-radius:999px;
+        background:rgba(255,255,255,.08);
+        filter:blur(4px);
+        pointer-events:none;
+      }
+
+      #followmeDocumentDestinationFrame20260520 .fm-doc-dest-top{
+        position:relative;
+        z-index:1;
+        display:flex;
+        align-items:flex-start;
+        justify-content:space-between;
+        gap:12px;
+        margin-bottom:14px;
+      }
+
+      #followmeDocumentDestinationFrame20260520 .fm-doc-dest-kicker{
+        display:inline-flex;
+        align-items:center;
+        min-height:24px;
+        padding:0 10px;
+        border-radius:999px;
+        background:rgba(255,255,255,.12);
+        border:1px solid rgba(255,255,255,.12);
+        color:#e5e7eb;
+        font-size:10.5px;
+        font-weight:950;
+        letter-spacing:.08em;
+        text-transform:uppercase;
+      }
+
+      #followmeDocumentDestinationFrame20260520 h3{
+        position:relative;
+        z-index:1;
+        margin:0 0 6px;
+        font-size:22px;
+        line-height:1.05;
+        letter-spacing:-.045em;
+        font-weight:950;
+      }
+
+      #followmeDocumentDestinationFrame20260520 .fm-doc-dest-sub{
+        position:relative;
+        z-index:1;
+        margin:0;
+        color:#cbd5e1;
+        font-size:13px;
+        line-height:1.35;
+        font-weight:700;
+      }
+
+      #followmeDocumentDestinationFrame20260520 .fm-doc-dest-body{
+        position:relative;
+        z-index:1;
+        display:grid;
+        grid-template-columns:92px minmax(0,1fr);
+        gap:13px;
+        align-items:center;
+        margin-top:14px;
+      }
+
+      #followmeDocumentDestinationFrame20260520 .fm-doc-preview{
+        width:92px;
+        height:118px;
+        border-radius:18px;
+        background:
+          linear-gradient(180deg,#fff,#e5e7eb);
+        box-shadow:0 16px 40px rgba(0,0,0,.24);
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        color:#111827;
+        font-weight:950;
+        font-size:21px;
+        letter-spacing:-.04em;
+        border:1px solid rgba(255,255,255,.58);
+      }
+
+      #followmeDocumentDestinationFrame20260520 .fm-doc-name{
+        font-size:14px;
+        line-height:1.28;
+        font-weight:950;
+        color:#fff;
+        word-break:break-word;
+      }
+
+      #followmeDocumentDestinationFrame20260520 .fm-doc-meta{
+        margin-top:5px;
+        font-size:12px;
+        line-height:1.35;
+        color:#cbd5e1;
+        font-weight:700;
+      }
+
+      #followmeDocumentDestinationFrame20260520 .fm-doc-stats{
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:8px;
+        margin-top:12px;
+      }
+
+      #followmeDocumentDestinationFrame20260520 .fm-doc-stat{
+        border-radius:16px;
+        padding:10px;
+        background:rgba(255,255,255,.10);
+        border:1px solid rgba(255,255,255,.10);
+      }
+
+      #followmeDocumentDestinationFrame20260520 .fm-doc-stat .num{
+        font-size:21px;
+        line-height:1;
+        font-weight:950;
+        letter-spacing:-.04em;
+      }
+
+      #followmeDocumentDestinationFrame20260520 .fm-doc-stat .lab{
+        margin-top:4px;
+        color:#cbd5e1;
+        font-size:11px;
+        font-weight:850;
+      }
+
+      #followmeDocumentDestinationFrame20260520 .fm-doc-actions{
+        position:relative;
+        z-index:1;
+        display:flex;
+        gap:8px;
+        flex-wrap:wrap;
+        margin-top:14px;
+      }
+
+      #followmeDocumentDestinationFrame20260520 .fm-doc-actions button,
+      #followmeDocumentDestinationFrame20260520 .fm-doc-actions a{
+        border:0;
+        border-radius:999px;
+        padding:10px 13px;
+        font-size:13px;
+        font-weight:950;
+        cursor:pointer;
+        text-decoration:none;
+      }
+
+      #followmeDocumentDestinationFrame20260520 .primary{
+        background:#fff;
+        color:#020617;
+      }
+
+      #followmeDocumentDestinationFrame20260520 .secondary{
+        background:rgba(255,255,255,.10);
+        color:#fff;
+        border:1px solid rgba(255,255,255,.14);
+      }
+
+      @media(max-width:520px){
+        #followmeDocumentDestinationFrame20260520 .fm-doc-dest-body{
+          grid-template-columns:78px minmax(0,1fr);
+        }
+
+        #followmeDocumentDestinationFrame20260520 .fm-doc-preview{
+          width:78px;
+          height:104px;
+          border-radius:16px;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  async function loadCurrentDocument(){
+    try{
+      const code = projectCode();
+
+      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/current?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(res.ok && data && data.success && data.document){
+        currentDocument = data.document;
+        currentDocumentPublicUrl = data.public_url || "";
+      }else{
+        currentDocument = null;
+        currentDocumentPublicUrl = "";
+      }
+
+      renderFrame();
+
+    }catch(e){
+      currentDocument = null;
+      currentDocumentPublicUrl = "";
+      renderFrame();
+    }
+  }
+
+  function findDestinationsContainer(){
+    /*
+      Cerca il blocco storico destinazioni/link trasmessi.
+      Preferiamo contenitori vicini al testo “I link già trasmessi dal tuo QR”.
+    */
+    const title = Array.from(document.querySelectorAll("*")).find(function(el){
+      const t = String(el.textContent || "").replace(/\s+/g," ").trim().toLowerCase();
+      return t.includes("i link già trasmessi dal tuo qr") ||
+             t.includes("i link gia trasmessi dal tuo qr") ||
+             t.includes("link già trasmessi") ||
+             t.includes("link gia trasmessi");
+    });
+
+    if(title){
+      let p = title.parentElement;
+      for(let i=0; i<4 && p; i++, p=p.parentElement){
+        const buttons = p.querySelectorAll("button,a");
+        const children = Array.from(p.children || []);
+        if(buttons.length >= 1 && children.length >= 2){
+          return p;
+        }
+      }
+
+      if(title.parentElement) return title.parentElement;
+    }
+
+    return document.querySelector(".premium-history") ||
+           document.querySelector("[class*='history']") ||
+           document.querySelector("#linkHistory") ||
+           document.querySelector(".premium-history-list") ||
+           null;
+  }
+
+  function findInsertionReference(container){
+    if(!container) return null;
+
+    const children = Array.from(container.children || [])
+      .filter(function(el){
+        if(el.id === "followmeDocumentDestinationFrame20260520") return false;
+        const t = String(el.textContent || "").trim();
+        return t.length > 0;
+      });
+
+    /*
+      Terzo frame: inseriamo prima del terzo elemento utile.
+      Se ci sono meno di due elementi, append.
+    */
+    return children[2] || null;
+  }
+
+  function manageMaxFrames(container){
+    if(!container) return;
+
+    const children = Array.from(container.children || [])
+      .filter(function(el){
+        const t = String(el.textContent || "").trim();
+        return t.length > 0;
+      });
+
+    /*
+      Massimo 20 frame complessivi nel contenitore.
+      Non rimuove il frame documento.
+    */
+    if(children.length <= 20) return;
+
+    children.slice(20).forEach(function(el){
+      if(el.id !== "followmeDocumentDestinationFrame20260520"){
+        el.style.display = "none";
+      }
+    });
+  }
+
+  function openConsegnaDocumento(){
+    const ui = window.fmConsegnaDocumentoUi20260520 ||
+               window.fmConsegnaDocumentoPremiumAdmin20260520;
+
+    try{
+      if(window.fmConsegnaDocumentoUi20260520 &&
+         typeof window.fmConsegnaDocumentoUi20260520.openPage === "function"){
+        window.fmConsegnaDocumentoUi20260520.openPage();
+        return;
+      }
+    }catch(e){}
+
+    const btn = document.getElementById("followmeConsegnaDocumentoBtn20260520");
+    if(btn){
+      btn.click();
+      return;
+    }
+
+    alert("Apri Consegna Documento dalla Home.");
+  }
+
+  function renderFrame(){
+    ensureStyle();
+
+    const container = findDestinationsContainer();
+    if(!container) return false;
+
+    let frame = document.getElementById("followmeDocumentDestinationFrame20260520");
+
+    if(!frame){
+      frame = document.createElement("section");
+      frame.id = "followmeDocumentDestinationFrame20260520";
+    }
+
+    const hasDoc = !!currentDocument;
+    const views = hasDoc ? Number(currentDocument.views_count || 0) : 0;
+    const downloads = hasDoc ? Number(currentDocument.downloads_count || 0) : 0;
+    const name = hasDoc ? (currentDocument.original_name || "Documento PDF") : "Nessun documento caricato";
+    const size = hasDoc ? fmtBytes(currentDocument.size_bytes) : "";
+    const pages = hasDoc ? (currentDocument.page_count || "in lettura") : "";
+
+    frame.innerHTML = `
+      <div class="fm-doc-dest-top">
+        <div class="fm-doc-dest-kicker">Non è un redirect URL</div>
+      </div>
+
+      <h3>Consegna Documento</h3>
+      <p class="fm-doc-dest-sub">
+        Il QR consegna un PDF sfogliabile e scaricabile, diverso da una normale destinazione URL.
+      </p>
+
+      <div class="fm-doc-dest-body">
+        <div class="fm-doc-preview">PDF</div>
+        <div>
+          <div class="fm-doc-name">${escapeHtml(name)}</div>
+          <div class="fm-doc-meta">
+            ${hasDoc ? `Stato: documento pronto · ${escapeHtml(size)} · Pagine: ${escapeHtml(pages)}` : `Carica un PDF per attivare questa modalità.`}
+          </div>
+
+          <div class="fm-doc-stats">
+            <div class="fm-doc-stat">
+              <div class="num">${views}</div>
+              <div class="lab">Visualizzazioni</div>
+            </div>
+            <div class="fm-doc-stat">
+              <div class="num">${downloads}</div>
+              <div class="lab">Download</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fm-doc-actions">
+        <button type="button" class="primary" id="followmeDocDestinationManage20260520">
+          ${hasDoc ? "Aggiorna" : "Aggiungi documento"}
+        </button>
+        ${hasDoc && currentDocumentPublicUrl ? `<a class="secondary" href="${escapeHtml(currentDocumentPublicUrl)}" target="_blank" rel="noopener">Apri</a>` : ``}
+      </div>
+    `;
+
+    const ref = findInsertionReference(container);
+
+    if(ref && ref !== frame){
+      container.insertBefore(frame, ref);
+    }else if(!frame.parentElement){
+      container.appendChild(frame);
+    }
+
+    const manage = document.getElementById("followmeDocDestinationManage20260520");
+    if(manage && manage.dataset.bound20260520 !== "1"){
+      manage.dataset.bound20260520 = "1";
+      manage.onclick = openConsegnaDocumento;
+    }
+
+    manageMaxFrames(container);
+
+    return true;
+  }
+
+  function boot(){
+    ensureStyle();
+    renderFrame();
+    loadCurrentDocument();
+
+    setTimeout(renderFrame, 500);
+    setTimeout(loadCurrentDocument, 900);
+    setTimeout(renderFrame, 1600);
+  }
+
+  window.fmDocumentDestinationFrame20260520 = {
+    boot,
+    renderFrame,
+    loadCurrentDocument
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 300);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 300);
+  });
+})();
+</script>
+
 </body>
 </html>
