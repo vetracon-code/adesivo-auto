@@ -26247,7 +26247,18 @@ document.addEventListener("visibilitychange", function(){
   }
 
   function findWorkingPdfHistoryReactivateButton20260521(){
-    const cards = Array.from(document.querySelectorAll(".premium-history-card"));
+    /*
+      followme-fix-official-pdf-reactivate-after-move-ghost-20260521
+      Dopo lo spostamento della card fantasma in fondo, questa può risultare
+      fuori dalle prime 20 card o temporaneamente display:none.
+      La cerco comunque in tutto il carosello, la rendo cliccabile per un istante
+      e uso il suo pulsante Riattiva, che è la logica già funzionante.
+    */
+    const track = document.getElementById("premiumHistoryTrack") ||
+                  document.querySelector(".premium-history-track") ||
+                  document;
+
+    const cards = Array.from(track.querySelectorAll(".premium-history-card"));
 
     for(const card of cards){
       if(!card || card.id === "followmePdfSingleCard20260520") continue;
@@ -26257,9 +26268,9 @@ document.addEventListener("visibilitychange", function(){
       const looksPdfHistory =
         txt.includes("/fm/document/") ||
         txt.includes("fm/document") ||
+        txt.includes("documento pdf") ||
         (
-          txt.includes("destinazione") &&
-          txt.includes("precedente") &&
+          (txt.includes("destinazione") || txt.includes("precedente")) &&
           (txt.includes("scansioni") || txt.includes("ultimo uso"))
         );
 
@@ -26271,7 +26282,17 @@ document.addEventListener("visibilitychange", function(){
         return t.includes("riattiva") || t.includes("attiva");
       });
 
-      if(btn) return btn;
+      if(btn){
+        card.dataset.followmePdfGhostBridgeUsed20260521 = "1";
+        card.style.display = "";
+        card.style.pointerEvents = "";
+
+        btn.disabled = false;
+        btn.removeAttribute("disabled");
+        btn.style.pointerEvents = "auto";
+
+        return btn;
+      }
     }
 
     return null;
