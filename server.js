@@ -8815,6 +8815,17 @@ function normalizeFollowMePublicId(value) {
 function normalizeUrlForFollowMe(value) {
   let url = String(value || '').trim();
   if (!url) return '';
+
+  /*
+    FIX FOLLOWME 20260520:
+    Se la destinazione è una rotta interna, deve restare relativa.
+    Esempio:
+      /fm/document/FMDEMO
+    NON deve diventare:
+      https:///fm/document/FMDEMO
+  */
+  if (url.startsWith('/')) return url;
+
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
   return url;
 }
