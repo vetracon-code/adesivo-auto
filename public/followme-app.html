@@ -25573,20 +25573,19 @@ document.addEventListener("visibilitychange", function(){
 
 
 
-<script id="followme-document-thumbnail-client-buttons-final-20260520">
+
+
+<script id="followme-document-buttons-only-fix-final-20260520">
 (function(){
-  if(window.__FollowMeDocumentThumbnailClientButtonsFinal20260520) return;
-  window.__FollowMeDocumentThumbnailClientButtonsFinal20260520 = true;
+  if(window.__FollowMeDocumentButtonsOnlyFixFinal20260520) return;
+  window.__FollowMeDocumentButtonsOnlyFixFinal20260520 = true;
 
   /*
-    - Genera JPG miniatura prima pagina PDF lato browser.
-    - La invia insieme al PDF come thumbnail_base64.
-    - Sistema i pulsanti della card carosello Documento:
-      Riattiva = publish document
-      Modifica = apre pagina Consegna Documento
+    Fix temporaneo:
+    - niente generazione thumbnail durante upload;
+    - mantiene funzionanti Riattiva e Modifica;
+    - non intercetta fetch /document/upload.
   */
-
-  let lastThumbnailBase64 = "";
 
   function projectCode(){
     try{
@@ -25594,136 +25593,7 @@ document.addEventListener("visibilitychange", function(){
       const idx = parts.indexOf("app");
       if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
     }catch(e){}
-
-    try{
-      if(window.FOLLOWME_PROJECT_CODE) return String(window.FOLLOWME_PROJECT_CODE);
-      if(window.followMeProjectCode) return String(window.followMeProjectCode);
-    }catch(e){}
-
     return "FM-DEMO";
-  }
-
-  function ensurePdfJs(){
-    return new Promise(function(resolve){
-      if(window.pdfjsLib){
-        try{
-          window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
-        }catch(e){}
-        resolve(true);
-        return;
-      }
-
-      const existing = document.querySelector('script[data-followme-pdfjs="1"]');
-      if(existing){
-        existing.addEventListener("load", function(){ resolve(!!window.pdfjsLib); }, { once:true });
-        existing.addEventListener("error", function(){ resolve(false); }, { once:true });
-        return;
-      }
-
-      const script = document.createElement("script");
-      script.src = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js";
-      script.async = true;
-      script.dataset.followmePdfjs = "1";
-
-      script.onload = function(){
-        try{
-          window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
-        }catch(e){}
-        resolve(!!window.pdfjsLib);
-      };
-
-      script.onerror = function(){
-        resolve(false);
-      };
-
-      document.head.appendChild(script);
-    });
-  }
-
-  async function generatePdfThumbnailBase64(file){
-    try{
-      if(!file || file.type !== "application/pdf") return "";
-
-      const ok = await ensurePdfJs();
-      if(!ok || !window.pdfjsLib) return "";
-
-      const buffer = await file.arrayBuffer();
-      const pdf = await window.pdfjsLib.getDocument({ data:buffer }).promise;
-      const page = await pdf.getPage(1);
-
-      const rawViewport = page.getViewport({ scale:1 });
-      const targetWidth = 420;
-      const scale = targetWidth / rawViewport.width;
-      const viewport = page.getViewport({ scale });
-
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d", { alpha:false });
-
-      canvas.width = Math.round(viewport.width);
-      canvas.height = Math.round(viewport.height);
-
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0,0,canvas.width,canvas.height);
-
-      await page.render({
-        canvasContext:ctx,
-        viewport
-      }).promise;
-
-      return canvas.toDataURL("image/jpeg", 0.74);
-
-    }catch(err){
-      console.warn("FollowMe thumbnail PDF non generata:", err);
-      return "";
-    }
-  }
-
-  function findUploadInput(){
-    return document.getElementById("followmeDocumentUploadInput20260520") ||
-           document.querySelector('input[type="file"][accept*="pdf"]') ||
-           document.querySelector('input[type="file"]');
-  }
-
-  async function prepareThumbnailFromSelectedFile(){
-    const input = findUploadInput();
-    const file = input && input.files && input.files[0];
-
-    if(!file || file.type !== "application/pdf"){
-      lastThumbnailBase64 = "";
-      return "";
-    }
-
-    lastThumbnailBase64 = await generatePdfThumbnailBase64(file);
-    return lastThumbnailBase64;
-  }
-
-  function patchFormDataAppend(){
-    if(window.__FollowMeThumbnailFormDataPatched20260520) return;
-    window.__FollowMeThumbnailFormDataPatched20260520 = true;
-
-    const originalFetch = window.fetch;
-
-    window.fetch = async function(input, init){
-      try{
-        const url = typeof input === "string" ? input : (input && input.url) || "";
-
-        if(url.includes("/document/upload") && init && init.body instanceof FormData){
-          const fd = init.body;
-
-          if(!fd.has("thumbnail_base64")){
-            if(!lastThumbnailBase64){
-              await prepareThumbnailFromSelectedFile();
-            }
-
-            if(lastThumbnailBase64){
-              fd.append("thumbnail_base64", lastThumbnailBase64);
-            }
-          }
-        }
-      }catch(e){}
-
-      return originalFetch.apply(this, arguments);
-    };
   }
 
   function openConsegnaDocumento(){
@@ -25736,15 +25606,11 @@ document.addEventListener("visibilitychange", function(){
     }catch(e){}
 
     const btn = document.getElementById("followmeConsegnaDocumentoBtn20260520");
-
     if(btn){
       btn.click();
       return;
     }
 
-    /*
-      Fallback robusto: apre direttamente il layer se presente.
-    */
     const page = document.getElementById("followmeConsegnaDocumentoPage20260520");
     if(page){
       document.body.classList.add("fm-consegna-documento-open-20260520");
@@ -25813,7 +25679,7 @@ document.addEventListener("visibilitychange", function(){
     }
   }
 
-  function bindDocumentCardButtons(){
+  function bindButtons(){
     const reactivate = document.getElementById("followmeDocHistoryReactivate20260520");
     const edit = document.getElementById("followmeDocHistoryEdit20260520");
 
@@ -25838,33 +25704,16 @@ document.addEventListener("visibilitychange", function(){
     }
   }
 
-  function bindUploadInput(){
-    const input = findUploadInput();
-
-    if(input && input.dataset.followmeThumbnailBound20260520 !== "1"){
-      input.dataset.followmeThumbnailBound20260520 = "1";
-      input.addEventListener("change", function(){
-        lastThumbnailBase64 = "";
-        prepareThumbnailFromSelectedFile();
-      });
-    }
-  }
-
   function boot(){
-    patchFormDataAppend();
-    bindUploadInput();
-    bindDocumentCardButtons();
-
-    setTimeout(bindUploadInput, 600);
-    setTimeout(bindDocumentCardButtons, 700);
-    setTimeout(bindDocumentCardButtons, 1600);
-    setTimeout(bindDocumentCardButtons, 2800);
+    bindButtons();
+    setTimeout(bindButtons, 700);
+    setTimeout(bindButtons, 1600);
+    setTimeout(bindButtons, 2800);
   }
 
-  window.fmDocumentThumbnailButtons20260520 = {
+  window.fmDocumentButtonsOnlyFix20260520 = {
     boot,
-    prepareThumbnailFromSelectedFile,
-    bindDocumentCardButtons,
+    bindButtons,
     reactivateLatestDocument,
     openConsegnaDocumento
   };
