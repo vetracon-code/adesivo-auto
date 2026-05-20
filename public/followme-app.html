@@ -25148,433 +25148,6 @@ document.addEventListener("visibilitychange", function(){
 
 
 
-<script id="followme-document-native-premium-history-no-embed-final-20260520">
-(function(){
-  if(window.__FollowMeDocumentNativePremiumHistoryNoEmbedFinal20260520) return;
-  window.__FollowMeDocumentNativePremiumHistoryNoEmbedFinal20260520 = true;
-
-  /*
-    Documento PDF nel carosello con card nativa premium-history-card.
-    FIX:
-    - niente <object> / <iframe> PDF nella preview;
-    - niente toolbar PDF, niente refresh continuo;
-    - pulsanti Riattiva e Modifica sempre gestiti dopo il render;
-    - preview statica fino a quando non sarà disponibile thumbnail_url server-side.
-  */
-
-  let currentDocument = null;
-  let currentDocumentPublicUrl = "";
-  let renderLock = false;
-
-  function projectCode(){
-    try{
-      const parts = location.pathname.split("/").filter(Boolean);
-      const idx = parts.indexOf("app");
-      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
-    }catch(e){}
-
-    try{
-      if(window.FOLLOWME_PROJECT_CODE) return String(window.FOLLOWME_PROJECT_CODE);
-      if(window.followMeProjectCode) return String(window.followMeProjectCode);
-    }catch(e){}
-
-    return "FM-DEMO";
-  }
-
-  function escapeHtml(v){
-    return String(v == null ? "" : v)
-      .replace(/&/g,"&amp;")
-      .replace(/</g,"&lt;")
-      .replace(/>/g,"&gt;")
-      .replace(/"/g,"&quot;");
-  }
-
-  function shortFileName(name, max){
-    name = String(name || "Documento PDF").trim();
-
-    const extMatch = name.match(/(\.[a-z0-9]{2,6})$/i);
-    const ext = extMatch ? extMatch[1].toLowerCase() : "";
-    let base = ext ? name.slice(0, -ext.length) : name;
-
-    base = base
-      .replace(/[_-]+/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    max = max || 28;
-
-    if(base.length > max){
-      base = base.slice(0, max - 1).trim() + "…";
-    }
-
-    return base + (ext || "");
-  }
-
-  function fmtSmall(n){
-    n = Number(n || 0);
-    if(n > 9999) return Math.round(n / 1000) + "k";
-    return String(n);
-  }
-
-  function fmtBytes(n){
-    n = Number(n || 0);
-    if(!n) return "";
-    if(n < 1024 * 1024) return Math.round(n / 1024) + " KB";
-    return (n / (1024 * 1024)).toFixed(1).replace(".0","") + " MB";
-  }
-
-  function ensureStyle(){
-    if(document.getElementById("followmeDocumentNativePremiumNoEmbedStyle20260520")) return;
-
-    const style = document.createElement("style");
-    style.id = "followmeDocumentNativePremiumNoEmbedStyle20260520";
-    style.textContent = `
-      #followmeDocumentPremiumHistoryCard20260520 .premium-history-preview{
-        padding:0 !important;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-static-preview{
-        width:100%;
-        height:100%;
-        min-height:100%;
-        display:grid;
-        grid-template-columns:76px minmax(0,1fr);
-        gap:12px;
-        align-items:center;
-        padding:14px;
-        box-sizing:border-box;
-        background:
-          radial-gradient(circle at 20% 12%, rgba(200,255,46,.16), transparent 34%),
-          radial-gradient(circle at 88% 0%, rgba(94,231,255,.15), transparent 30%),
-          #101018;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-paper{
-        width:64px;
-        height:84px;
-        border-radius:13px;
-        background:
-          linear-gradient(180deg,#ffffff,#e9eef5);
-        color:#111827;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        font-weight:950;
-        letter-spacing:.06em;
-        font-size:.86rem;
-        box-shadow:
-          0 14px 28px rgba(0,0,0,.28),
-          inset 0 0 0 1px rgba(15,23,42,.08);
-        overflow:hidden;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-paper img{
-        width:100%;
-        height:100%;
-        object-fit:cover;
-        display:block;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-preview-text{
-        min-width:0;
-        text-align:left;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-preview-title{
-        color:#fff;
-        font-weight:950;
-        font-size:.9rem;
-        line-height:1.12;
-        display:-webkit-box;
-        -webkit-line-clamp:2;
-        -webkit-box-orient:vertical;
-        overflow:hidden;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-preview-sub{
-        margin-top:6px;
-        color:rgba(255,255,255,.62);
-        font-size:.72rem;
-        line-height:1.25;
-        font-weight:800;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .premium-history-actions{
-        position:relative;
-        z-index:3;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .premium-history-actions button{
-        pointer-events:auto !important;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .premium-history-edit-document{
-        color:#fff !important;
-        background:rgba(255,255,255,.10) !important;
-        border:1px solid rgba(255,255,255,.20) !important;
-        box-shadow:none !important;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .premium-history-actions button:disabled{
-        opacity:.45 !important;
-        cursor:not-allowed !important;
-        filter:grayscale(1);
-      }
-
-      @media(max-width:520px){
-        #followmeDocumentPremiumHistoryCard20260520 .fm-doc-static-preview{
-          grid-template-columns:64px minmax(0,1fr);
-          gap:10px;
-          padding:12px;
-        }
-
-        #followmeDocumentPremiumHistoryCard20260520 .fm-doc-paper{
-          width:54px;
-          height:72px;
-        }
-      }
-    `;
-
-    document.head.appendChild(style);
-  }
-
-  function findTrack(){
-    return document.getElementById("premiumHistoryTrack") ||
-           document.querySelector(".premium-history-track");
-  }
-
-  async function loadCurrentDocument(){
-    try{
-      const code = projectCode();
-
-      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/current?v=" + Date.now(), {
-        cache:"no-store"
-      });
-
-      const data = await res.json().catch(function(){ return null; });
-
-      if(res.ok && data && data.success && data.document){
-        currentDocument = data.document;
-        currentDocumentPublicUrl = data.public_url || "";
-      }else{
-        currentDocument = null;
-        currentDocumentPublicUrl = "";
-      }
-
-      renderDocumentCard();
-
-    }catch(e){
-      currentDocument = null;
-      currentDocumentPublicUrl = "";
-      renderDocumentCard();
-    }
-  }
-
-  function previewHtml(){
-    const hasDoc = !!currentDocument;
-    const name = hasDoc ? shortFileName(currentDocument.original_name || "Documento PDF", 26) : "Documento PDF";
-    const pages = hasDoc && currentDocument.page_count ? String(currentDocument.page_count) + " pagine" : "PDF consegnabile";
-
-    /*
-      Se in futuro il server fornisce thumbnail_url, la mostriamo.
-      Altrimenti niente embed PDF: solo preview statica senza refresh.
-    */
-    const thumb = hasDoc && currentDocument.thumbnail_url ? String(currentDocument.thumbnail_url) : "";
-
-    return `
-      <div class="fm-doc-static-preview">
-        <div class="fm-doc-paper">
-          ${thumb ? `<img src="${escapeHtml(thumb)}" alt="Preview PDF">` : `PDF`}
-        </div>
-        <div class="fm-doc-preview-text">
-          <div class="fm-doc-preview-title">${escapeHtml(name)}</div>
-          <div class="fm-doc-preview-sub">${escapeHtml(pages)}</div>
-        </div>
-      </div>
-    `;
-  }
-
-  function openConsegnaDocumento(){
-    try{
-      if(window.fmConsegnaDocumentoUi20260520 &&
-         typeof window.fmConsegnaDocumentoUi20260520.openPage === "function"){
-        window.fmConsegnaDocumentoUi20260520.openPage();
-        return;
-      }
-    }catch(e){}
-
-    const btn = document.getElementById("followmeConsegnaDocumentoBtn20260520");
-    if(btn){
-      btn.click();
-      return;
-    }
-
-    alert("Apri Consegna Documento dalla Home.");
-  }
-
-  async function reactivateDocument(){
-    if(!currentDocument || !currentDocument.id){
-      alert("Prima carica un documento PDF.");
-      openConsegnaDocumento();
-      return;
-    }
-
-    const ok = confirm("Vuoi riattivare subito questo Documento PDF sul QR?");
-    if(!ok) return;
-
-    try{
-      const code = projectCode();
-
-      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/publish", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ document_id:currentDocument.id })
-      });
-
-      const data = await res.json().catch(function(){ return null; });
-
-      if(!res.ok || !data || !data.success){
-        throw new Error((data && data.error) || "Riattivazione non riuscita.");
-      }
-
-      alert("Documento PDF riattivato sul QR.");
-      await loadCurrentDocument();
-
-    }catch(err){
-      alert(err.message || "Errore riattivazione documento.");
-    }
-  }
-
-  function bindButtons(){
-    const reactivate = document.getElementById("followmeDocHistoryReactivate20260520");
-    const edit = document.getElementById("followmeDocHistoryEdit20260520");
-
-    if(reactivate){
-      reactivate.onclick = reactivateDocument;
-    }
-
-    if(edit){
-      edit.onclick = openConsegnaDocumento;
-    }
-  }
-
-  function renderDocumentCard(){
-    if(renderLock) return false;
-    renderLock = true;
-
-    try{
-      ensureStyle();
-
-      const track = findTrack();
-      if(!track) return false;
-
-      let card = document.getElementById("followmeDocumentPremiumHistoryCard20260520");
-
-      if(!card){
-        card = document.createElement("div");
-        card.id = "followmeDocumentPremiumHistoryCard20260520";
-      }
-
-      card.className = "premium-history-card";
-
-      const hasDoc = !!currentDocument;
-      const name = hasDoc ? shortFileName(currentDocument.original_name || "Documento PDF", 28) : "Nessun PDF caricato";
-      const size = hasDoc ? fmtBytes(currentDocument.size_bytes) : "";
-      const views = hasDoc ? fmtSmall(currentDocument.views_count || 0) : "0";
-      const downloads = hasDoc ? fmtSmall(currentDocument.downloads_count || 0) : "0";
-
-      card.innerHTML = `
-        <div>
-          <div class="premium-history-badge">Documento PDF</div>
-          <div class="premium-history-domain">Consegna diretta</div>
-          <div class="premium-history-url">${escapeHtml(name)}${size ? " · " + escapeHtml(size) : ""}</div>
-        </div>
-
-        <div class="premium-history-preview">
-          ${previewHtml()}
-        </div>
-
-        <div class="premium-history-meta">
-          <div class="premium-history-pill">
-            <strong>${views}</strong>
-            <span>Visualizzazioni</span>
-          </div>
-          <div class="premium-history-pill">
-            <strong>${downloads}</strong>
-            <span>Download</span>
-          </div>
-        </div>
-
-        <div class="premium-history-actions">
-          <button type="button" class="premium-history-reactivate" id="followmeDocHistoryReactivate20260520" ${hasDoc ? "" : "disabled"}>Riattiva</button>
-          <button type="button" class="premium-history-edit-document" id="followmeDocHistoryEdit20260520">Modifica</button>
-        </div>
-      `;
-
-      const cards = Array.from(track.children || []).filter(function(el){
-        if(el.id === "followmeDocumentPremiumHistoryCard20260520") return false;
-        return String(el.textContent || "").trim().length > 0;
-      });
-
-      const ref = cards[2] || null;
-
-      if(ref && ref !== card){
-        track.insertBefore(card, ref);
-      }else if(!card.parentElement){
-        track.appendChild(card);
-      }
-
-      bindButtons();
-
-      Array.from(track.children || []).forEach(function(el, idx){
-        if(idx >= 20 && el.id !== "followmeDocumentPremiumHistoryCard20260520"){
-          el.style.display = "none";
-        }
-      });
-
-      return true;
-
-    }finally{
-      renderLock = false;
-    }
-  }
-
-  function boot(){
-    ensureStyle();
-
-    /*
-      Pochi retry iniziali: niente MutationObserver continuo,
-      così la preview non refresha continuamente.
-    */
-    setTimeout(loadCurrentDocument, 300);
-    setTimeout(loadCurrentDocument, 1000);
-    setTimeout(bindButtons, 1600);
-    setTimeout(renderDocumentCard, 2500);
-  }
-
-  window.fmDocumentNativePremiumHistoryNoEmbed20260520 = {
-    boot,
-    renderDocumentCard,
-    loadCurrentDocument
-  };
-
-  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
-  else boot();
-
-  window.addEventListener("load", function(){
-    setTimeout(boot, 300);
-  });
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 300);
-  });
-})();
-</script>
-
-
-
-
-
 <script id="followme-document-buttons-only-fix-final-20260520">
 (function(){
   if(window.__FollowMeDocumentButtonsOnlyFixFinal20260520) return;
@@ -26030,94 +25603,6 @@ document.addEventListener("visibilitychange", function(){
 
 
 
-<script id="followme-document-carousel-preserve-frame-final-20260520">
-(function(){
-  if(window.__FollowMeDocumentCarouselPreserveFrameFinal20260520) return;
-  window.__FollowMeDocumentCarouselPreserveFrameFinal20260520 = true;
-
-  /*
-    Card Documento PDF autonoma:
-    - non sostituisce il frame attivo precedente;
-    - viene tenuta come primo frame documento;
-    - gli altri frame restano a destra;
-    - massimo 20 frame complessivi.
-  */
-
-  function findTrack(){
-    return document.getElementById("premiumHistoryTrack") ||
-           document.querySelector(".premium-history-track");
-  }
-
-  function isDocCard(el){
-    return !!el && (
-      el.id === "followmeDocumentPremiumHistoryCard20260520" ||
-      el.dataset.followmeDocumentCard === "1"
-    );
-  }
-
-  function normalizeCarouselOrder(){
-    const track = findTrack();
-    if(!track) return;
-
-    const docCard =
-      document.getElementById("followmeDocumentPremiumHistoryCard20260520") ||
-      Array.from(track.children || []).find(isDocCard);
-
-    if(!docCard) return;
-
-    docCard.dataset.followmeDocumentCard = "1";
-
-    /*
-      Il documento deve stare come card autonoma, davanti.
-      Non rimuoviamo la card successiva: la lasciamo come secondo frame.
-    */
-    if(track.firstElementChild !== docCard){
-      track.insertBefore(docCard, track.firstElementChild);
-    }
-
-    /*
-      Evita duplicati documento.
-    */
-    Array.from(track.children || []).forEach(function(el){
-      if(el !== docCard && isDocCard(el)){
-        el.remove();
-      }
-    });
-
-    /*
-      Massimo 20 frame visibili.
-    */
-    Array.from(track.children || []).forEach(function(el, idx){
-      el.style.display = idx < 20 ? "" : "none";
-    });
-  }
-
-  function boot(){
-    setTimeout(normalizeCarouselOrder, 300);
-    setTimeout(normalizeCarouselOrder, 900);
-    setTimeout(normalizeCarouselOrder, 1800);
-  }
-
-  window.fmDocumentCarouselPreserveFrame20260520 = {
-    boot,
-    normalizeCarouselOrder
-  };
-
-  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
-  else boot();
-
-  window.addEventListener("load", function(){
-    setTimeout(boot, 300);
-  });
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 300);
-  });
-})();
-</script>
-
-
-
 <script id="followme-other-options-qr-preview-fixed-final-20260520">
 (function(){
   if(window.__FollowMeOtherOptionsQrPreviewFixedFinal20260520) return;
@@ -26255,416 +25740,40 @@ document.addEventListener("visibilitychange", function(){
 
 
 
-<script id="followme-document-active-carousel-fix-final-20260520">
+
+<script id="followme-pdf-single-card-final-20260520">
 (function(){
-  if(window.__FollowMeDocumentActiveCarouselFixFinal20260520) return;
-  window.__FollowMeDocumentActiveCarouselFixFinal20260520 = true;
+  if(window.__FollowMePdfSingleCardFinal20260520) return;
+  window.__FollowMePdfSingleCardFinal20260520 = true;
 
-  /*
-    FIX Documento PDF attivo nel carosello:
-    - se active_url punta a /fm/document/..., la card Documento PDF diventa la prima;
-    - mostra Attivo ora;
-    - toglie lo stato attivo dai vecchi URL;
-    - il vecchio URL rimane nel carosello come secondo/seguente riattivabile.
-  */
-
-  let lastStatus = null;
-  let lastDocument = null;
+  let statusData = null;
+  let docData = null;
   let busy = false;
 
-  function projectCode(){
+  function code(){
     try{
-      const parts = location.pathname.split("/").filter(Boolean);
-      const idx = parts.indexOf("app");
-      if(idx >= 0 && parts[idx + 1]) return parts[idx + 1];
+      const p = location.pathname.split("/").filter(Boolean);
+      const i = p.indexOf("app");
+      if(i >= 0 && p[i+1]) return p[i+1];
     }catch(e){}
     return "FM-DEMO";
-  }
-
-  function publicIdFromStatus(){
-    return (
-      lastStatus &&
-      lastStatus.project &&
-      (lastStatus.project.public_id || lastStatus.project.code)
-    ) || "FMDEMO";
-  }
-
-  function expectedDocumentUrl(){
-    return "/fm/document/" + publicIdFromStatus();
   }
 
   function clean(v){
     return String(v || "").trim().replace(/\/+$/, "");
-  }
-
-  function isDocumentActive(){
-    const active = clean(lastStatus?.project?.active_url || "");
-    return active === clean(expectedDocumentUrl()) || active.includes("/fm/document/");
-  }
-
-  function track(){
-    return document.getElementById("premiumHistoryTrack") ||
-           document.querySelector(".premium-history-track");
-  }
-
-  function existingDocCard(){
-    return document.getElementById("followmeDocumentPremiumHistoryCard20260520") ||
-           document.getElementById("followmeDocumentCarouselCard20260520") ||
-           document.querySelector("[data-followme-document-card='1']");
-  }
-
-  function shortName(name){
-    name = String(name || "Documento PDF").trim();
-    name = name.replace(/\.pdf$/i, "");
-    if(name.length <= 24) return name;
-    return name.slice(0, 21) + "…";
-  }
-
-  function openDocumentPage(){
-    const btn = document.getElementById("followmeConsegnaDocumentoBtn20260520") ||
-                document.querySelector("[data-followme-document-open='1']") ||
-                Array.from(document.querySelectorAll("button,a")).find(function(el){
-                  return /consegna documento/i.test(el.textContent || "");
-                });
-
-    if(btn){
-      btn.click();
-      return;
-    }
-
-    location.href = "/fm/app/" + encodeURIComponent(projectCode()) + "#consegna-documento";
-  }
-
-  async function publishDocument(){
-    if(!lastDocument || !lastDocument.id){
-      alert("Prima carica un PDF valido.");
-      openDocumentPage();
-      return;
-    }
-
-    const code = projectCode();
-
-    const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/publish", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ document_id:lastDocument.id })
-    });
-
-    const data = await res.json().catch(() => null);
-
-    if(!res.ok || !data || !data.success){
-      throw new Error((data && data.error) || "Riattivazione documento non riuscita.");
-    }
-
-    await refresh();
-    render();
-  }
-
-  function makeCard(){
-    const card = document.createElement("section");
-    card.id = "followmeDocumentPremiumHistoryCard20260520";
-    card.dataset.followmeDocumentCard = "1";
-    card.className = "premium-history-card";
-    return card;
-  }
-
-  function ensureStyle(){
-    if(document.getElementById("followmeDocumentActiveCarouselFixStyle20260520")) return;
-
-    const st = document.createElement("style");
-    st.id = "followmeDocumentActiveCarouselFixStyle20260520";
-    st.textContent = `
-      #followmeDocumentPremiumHistoryCard20260520 .premium-history-preview{
-        min-height:118px;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-preview-inner{
-        width:100%;
-        height:100%;
-        min-height:88px;
-        border-radius:16px;
-        display:grid;
-        place-items:center;
-        overflow:hidden;
-        background:
-          radial-gradient(circle at 20% 8%, rgba(200,255,46,.18), transparent 34%),
-          radial-gradient(circle at 88% 0%, rgba(94,231,255,.14), transparent 32%),
-          linear-gradient(145deg, rgba(255,255,255,.10), rgba(255,255,255,.035));
-        border:1px solid rgba(255,255,255,.10);
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-preview-inner img{
-        width:100%;
-        height:100%;
-        object-fit:cover;
-        display:block;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-preview-fallback{
-        display:grid;
-        gap:5px;
-        text-align:center;
-        padding:10px;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-preview-fallback strong{
-        color:#fff;
-        font-size:1.02rem;
-        line-height:1.05;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-preview-fallback span{
-        color:rgba(255,255,255,.62);
-        font-size:.74rem;
-        line-height:1.2;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .premium-history-edit-document{
-        color:#101018 !important;
-        background:linear-gradient(135deg,#c8ff2e,#5ee7ff) !important;
-        border:0 !important;
-        box-shadow:0 10px 24px rgba(200,255,46,.18) !important;
-      }
-    `;
-    document.head.appendChild(st);
-  }
-
-  function deactivateWrongActiveCards(){
-    if(!isDocumentActive()) return;
-
-    const t = track();
-    if(!t) return;
-
-    Array.from(t.querySelectorAll(".premium-history-card.is-active")).forEach(function(card){
-      if(card.id !== "followmeDocumentPremiumHistoryCard20260520"){
-        card.classList.remove("is-active");
-      }
-    });
-
-    Array.from(t.querySelectorAll(".premium-history-active")).forEach(function(btn){
-      const card = btn.closest(".premium-history-card");
-      if(card && card.id !== "followmeDocumentPremiumHistoryCard20260520"){
-        btn.textContent = "Riattiva";
-        btn.disabled = false;
-        btn.classList.remove("premium-history-active");
-        btn.classList.add("premium-history-reactivate");
-      }
-    });
-  }
-
-  function render(){
-    ensureStyle();
-
-    const t = track();
-    if(!t) return;
-
-    const hasDoc = !!(lastDocument && lastDocument.id);
-    const activeDoc = hasDoc && isDocumentActive();
-
-    let card = existingDocCard();
-    if(!card){
-      card = makeCard();
-    }
-
-    card.id = "followmeDocumentPremiumHistoryCard20260520";
-    card.dataset.followmeDocumentCard = "1";
-    card.className = "premium-history-card" + (activeDoc ? " is-active" : "");
-
-    const views = Number(lastDocument?.views_count || 0);
-    const downloads = Number(lastDocument?.downloads_count || 0);
-    const name = hasDoc ? shortName(lastDocument.original_name || "Documento PDF") : "Nessun PDF";
-    const thumb = lastDocument?.thumbnail_url || lastDocument?.thumbnail_path || "";
-
-    const preview = thumb
-      ? `<div class="fm-doc-preview-inner"><img src="${String(thumb).replace(/"/g, "&quot;")}?v=${Date.now()}" alt="Preview documento PDF"></div>`
-      : `<div class="fm-doc-preview-inner">
-           <div class="fm-doc-preview-fallback">
-             <strong>PDF</strong>
-             <span>Documento consegnabile</span>
-           </div>
-         </div>`;
-
-    card.innerHTML = `
-      <div>
-        <div class="premium-history-badge">Documento PDF</div>
-        <div class="premium-history-domain">Consegna diretta</div>
-        <div class="premium-history-url">${name}</div>
-      </div>
-
-      <div class="premium-history-preview">
-        ${preview}
-      </div>
-
-      <div class="premium-history-meta">
-        <div class="premium-history-pill">
-          <strong>${views}</strong>
-          <span>Visualizzazioni</span>
-        </div>
-        <div class="premium-history-pill">
-          <strong>${downloads}</strong>
-          <span>Download</span>
-        </div>
-      </div>
-
-      <div class="premium-history-actions">
-        ${
-          activeDoc
-            ? `<button type="button" class="premium-history-active" disabled>Attivo ora</button>`
-            : `<button type="button" class="premium-history-reactivate" id="followmeDocHistoryReactivate20260520" ${hasDoc ? "" : "disabled"}>Riattiva</button>`
-        }
-        <button type="button" class="premium-history-edit-document" id="followmeDocHistoryEdit20260520">Modifica</button>
-      </div>
-    `;
-
-    /*
-      Se il documento è attivo deve essere il primo frame.
-      Se non è attivo lo lasciamo comunque visibile, ma non forziamo l'ordine.
-    */
-    if(activeDoc){
-      if(t.firstElementChild !== card){
-        t.insertBefore(card, t.firstElementChild);
-      }
-    }else if(!card.parentNode){
-      t.insertBefore(card, t.firstElementChild);
-    }
-
-    deactivateWrongActiveCards();
-
-    const reactivate = document.getElementById("followmeDocHistoryReactivate20260520");
-    if(reactivate && !reactivate.dataset.bound20260520){
-      reactivate.dataset.bound20260520 = "1";
-      reactivate.addEventListener("click", async function(ev){
-        ev.preventDefault();
-        try{
-          reactivate.disabled = true;
-          reactivate.textContent = "Attivo...";
-          await publishDocument();
-        }catch(e){
-          alert(e.message || "Errore riattivazione documento.");
-          reactivate.disabled = false;
-          reactivate.textContent = "Riattiva";
-        }
-      });
-    }
-
-    const edit = document.getElementById("followmeDocHistoryEdit20260520");
-    if(edit && !edit.dataset.bound20260520){
-      edit.dataset.bound20260520 = "1";
-      edit.addEventListener("click", function(ev){
-        ev.preventDefault();
-        openDocumentPage();
-      });
-    }
-
-    /*
-      Massimo 20 frame.
-    */
-    Array.from(t.children || []).forEach(function(el, idx){
-      el.style.display = idx < 20 ? "" : "none";
-    });
-  }
-
-  async function refresh(){
-    if(busy) return;
-    busy = true;
-
-    const code = projectCode();
-
-    try{
-      const st = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
-        cache:"no-store"
-      });
-      const sj = await st.json().catch(() => null);
-      if(sj && sj.success) lastStatus = sj;
-    }catch(e){}
-
-    try{
-      const dc = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/current?v=" + Date.now(), {
-        cache:"no-store"
-      });
-      const dj = await dc.json().catch(() => null);
-      if(dj && dj.success) lastDocument = dj.document || null;
-    }catch(e){}
-
-    busy = false;
-  }
-
-  async function boot(){
-    await refresh();
-    render();
-
-    setTimeout(async function(){ await refresh(); render(); }, 700);
-    setTimeout(async function(){ await refresh(); render(); }, 1800);
-  }
-
-  window.fmDocumentActiveCarouselFix20260520 = {
-    boot,
-    refresh,
-    render,
-    publishDocument
-  };
-
-  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
-  else boot();
-
-  window.addEventListener("load", function(){
-    setTimeout(boot, 400);
-  });
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 400);
-  });
-})();
-</script>
-
-
-
-<script id="followme-document-single-card-active-button-final-20260520">
-(function(){
-  if(window.__FollowMeDocumentSingleCardActiveButtonFinal20260520) return;
-  window.__FollowMeDocumentSingleCardActiveButtonFinal20260520 = true;
-
-  /*
-    FIX definitivo:
-    - una sola card Documento PDF nel carosello;
-    - se il documento è active_url, la card va al primo posto;
-    - "Attivo ora" deve essere acceso/evidenziato;
-    - "Modifica" resta visibile ma disabilitato quando il documento è attivo.
-  */
-
-  let lastStatus = null;
-  let lastDocument = null;
-  let busy = false;
-
-  function projectCode(){
-    try{
-      const parts = location.pathname.split("/").filter(Boolean);
-      const idx = parts.indexOf("app");
-      if(idx >= 0 && parts[idx + 1]) return parts[idx + 1];
-    }catch(e){}
-    return "FM-DEMO";
   }
 
   function publicId(){
-    return (
-      lastStatus &&
-      lastStatus.project &&
-      (lastStatus.project.public_id || lastStatus.project.code)
-    ) || "FMDEMO";
+    return statusData?.project?.public_id || "FMDEMO";
   }
 
-  function expectedDocUrl(){
+  function documentUrl(){
     return "/fm/document/" + publicId();
   }
 
-  function clean(v){
-    return String(v || "").trim().replace(/\/+$/, "");
-  }
-
-  function isDocActive(){
-    const active = clean(lastStatus?.project?.active_url || "");
-    const expected = clean(expectedDocUrl());
-    return active === expected || active.includes("/fm/document/");
+  function isPdfActive(){
+    const active = clean(statusData?.project?.active_url || "");
+    return active === clean(documentUrl()) || active.includes("/fm/document/");
   }
 
   function track(){
@@ -26672,140 +25781,42 @@ document.addEventListener("visibilitychange", function(){
            document.querySelector(".premium-history-track");
   }
 
-  function allDocCards(){
-    return Array.from(document.querySelectorAll(
-      "#followmeDocumentPremiumHistoryCard20260520, " +
-      "#followmeDocumentCarouselCard20260520, " +
-      "[data-followme-document-card='1'], " +
-      ".followme-document-real-carousel-host-20260520 #followmeDocumentCarouselCard20260520"
-    ));
+  function esc(v){
+    return String(v || "").replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
   }
 
-  function canonicalCard(){
-    let card = document.getElementById("followmeDocumentPremiumHistoryCard20260520");
-
-    if(!card){
-      const candidates = allDocCards();
-      card = candidates[0] || document.createElement("section");
-    }
-
-    card.id = "followmeDocumentPremiumHistoryCard20260520";
-    card.dataset.followmeDocumentCard = "1";
-    return card;
+  function shortName(v){
+    v = String(v || "Documento PDF").replace(/\.pdf$/i, "").trim();
+    return v.length > 24 ? v.slice(0, 21) + "…" : v;
   }
 
-  function removeDuplicateDocCards(keep){
-    allDocCards().forEach(function(card){
-      if(card !== keep){
+  function removePdfCards(){
+    document.querySelectorAll(
+      "#followmeDocumentPremiumHistoryCard20260520," +
+      "#followmeDocumentCarouselCard20260520," +
+      "#followmeDocumentOneTrueCard20260520," +
+      "#followmePdfSingleCard20260520," +
+      "[data-followme-document-card='1']," +
+      "[data-followme-doc-card='1']"
+    ).forEach(el => el.remove());
+
+    document.querySelectorAll(".premium-history-card").forEach(card => {
+      const txt = (card.textContent || "").replace(/\s+/g, " ").trim();
+      if(txt.includes("Documento PDF") || txt.includes("Consegna diretta")){
         card.remove();
       }
     });
-
-    /*
-      Rimuove anche eventuali host vuoti creati da patch precedenti.
-    */
-    document.querySelectorAll(".followme-document-real-carousel-host-20260520").forEach(function(host){
-      if(!host.querySelector("#followmeDocumentPremiumHistoryCard20260520")){
-        if(!host.children.length) host.remove();
-      }
-    });
-  }
-
-  function shortName(name){
-    name = String(name || "Documento PDF").trim().replace(/\.pdf$/i, "");
-    if(name.length <= 24) return name;
-    return name.slice(0, 21) + "…";
-  }
-
-  function openDocumentPage(){
-    const btn = document.getElementById("followmeConsegnaDocumentoBtn20260520") ||
-                Array.from(document.querySelectorAll("button,a")).find(function(el){
-                  return /consegna documento/i.test(el.textContent || "");
-                });
-
-    if(btn){
-      btn.click();
-      return;
-    }
-
-    location.href = "/fm/app/" + encodeURIComponent(projectCode()) + "#consegna-documento";
-  }
-
-  async function publishDocument(){
-    if(!lastDocument || !lastDocument.id){
-      alert("Prima carica un PDF valido.");
-      openDocumentPage();
-      return;
-    }
-
-    const res = await fetch("/api/followme/" + encodeURIComponent(projectCode()) + "/document/publish", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ document_id:lastDocument.id })
-    });
-
-    const data = await res.json().catch(() => null);
-
-    if(!res.ok || !data || !data.success){
-      throw new Error((data && data.error) || "Riattivazione documento non riuscita.");
-    }
-
-    await refresh();
-    render();
   }
 
   function ensureStyle(){
-    if(document.getElementById("followmeDocumentSingleCardActiveButtonStyle20260520")) return;
+    if(document.getElementById("followmePdfSingleCardStyle20260520")) return;
 
     const st = document.createElement("style");
-    st.id = "followmeDocumentSingleCardActiveButtonStyle20260520";
+    st.id = "followmePdfSingleCardStyle20260520";
     st.textContent = `
-      #followmeDocumentPremiumHistoryCard20260520 .premium-history-preview{
-        min-height:118px;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-preview-inner{
-        width:100%;
-        height:100%;
-        min-height:88px;
-        border-radius:16px;
-        display:grid;
-        place-items:center;
-        overflow:hidden;
-        background:
-          radial-gradient(circle at 20% 8%, rgba(200,255,46,.18), transparent 34%),
-          radial-gradient(circle at 88% 0%, rgba(94,231,255,.14), transparent 32%),
-          linear-gradient(145deg, rgba(255,255,255,.10), rgba(255,255,255,.035));
-        border:1px solid rgba(255,255,255,.10);
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-preview-inner img{
-        width:100%;
-        height:100%;
-        object-fit:cover;
-        display:block;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-preview-fallback{
-        display:grid;
-        gap:5px;
-        text-align:center;
-        padding:10px;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-preview-fallback strong{
-        color:#fff;
-        font-size:1.02rem;
-        line-height:1.05;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-preview-fallback span{
-        color:rgba(255,255,255,.62);
-        font-size:.74rem;
-        line-height:1.2;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520.is-active{
+      #followmePdfSingleCard20260520.is-active{
         border-color:rgba(200,255,46,.72) !important;
         box-shadow:
           0 0 0 1px rgba(200,255,46,.18) inset,
@@ -26813,27 +25824,54 @@ document.addEventListener("visibilitychange", function(){
           0 16px 34px rgba(0,0,0,.24) !important;
       }
 
-      #followmeDocumentPremiumHistoryCard20260520 .premium-history-active{
+      #followmePdfSingleCard20260520 .fm-pdf-mini{
+        width:100%;
+        min-height:118px;
+        border-radius:18px;
+        display:grid;
+        place-items:center;
+        overflow:hidden;
+        background:
+          radial-gradient(circle at 20% 8%, rgba(200,255,46,.18), transparent 34%),
+          radial-gradient(circle at 88% 0%, rgba(94,231,255,.14), transparent 32%),
+          linear-gradient(145deg, rgba(255,255,255,.10), rgba(255,255,255,.035));
+        border:1px solid rgba(255,255,255,.10);
+      }
+
+      #followmePdfSingleCard20260520 .fm-pdf-mini img{
+        width:100%;
+        height:100%;
+        object-fit:cover;
+        display:block;
+      }
+
+      #followmePdfSingleCard20260520 .fm-pdf-fallback{
+        display:grid;
+        gap:5px;
+        text-align:center;
+        padding:10px;
+      }
+
+      #followmePdfSingleCard20260520 .fm-pdf-fallback strong{
+        color:#fff;
+        font-size:1.05rem;
+      }
+
+      #followmePdfSingleCard20260520 .fm-pdf-fallback span{
+        color:rgba(255,255,255,.62);
+        font-size:.74rem;
+      }
+
+      #followmePdfSingleCard20260520 .premium-history-active{
         color:#101018 !important;
         background:linear-gradient(135deg,#c8ff2e,#5ee7ff) !important;
         border:0 !important;
-        box-shadow:
-          0 0 0 0 rgba(200,255,46,.45),
-          0 10px 24px rgba(200,255,46,.22) !important;
-        animation:followmeDocActiveGlow20260520 1.4s ease-in-out infinite;
-        cursor:default !important;
         opacity:1 !important;
+        cursor:default !important;
+        animation:fmPdfActiveGlow20260520 1.4s ease-in-out infinite;
       }
 
-      #followmeDocumentPremiumHistoryCard20260520 .premium-history-edit-document{
-        color:#101018 !important;
-        background:linear-gradient(135deg,#c8ff2e,#5ee7ff) !important;
-        border:0 !important;
-        box-shadow:0 10px 24px rgba(200,255,46,.18) !important;
-      }
-
-      #followmeDocumentPremiumHistoryCard20260520 .premium-history-edit-document:disabled,
-      #followmeDocumentPremiumHistoryCard20260520 .premium-history-edit-document.is-disabled{
+      #followmePdfSingleCard20260520 .fm-pdf-edit-disabled{
         color:rgba(255,255,255,.42) !important;
         background:rgba(255,255,255,.055) !important;
         border:1px solid rgba(255,255,255,.09) !important;
@@ -26842,45 +25880,90 @@ document.addEventListener("visibilitychange", function(){
         opacity:.58 !important;
       }
 
-      @keyframes followmeDocActiveGlow20260520{
-        0%,100%{
-          box-shadow:
-            0 0 0 0 rgba(200,255,46,.35),
-            0 10px 24px rgba(200,255,46,.22);
-          transform:translateY(0);
-        }
-        50%{
-          box-shadow:
-            0 0 0 7px rgba(200,255,46,.08),
-            0 15px 30px rgba(200,255,46,.28);
-          transform:translateY(-1px);
-        }
+      #followmePdfSingleCard20260520 .fm-pdf-edit-enabled{
+        color:#101018 !important;
+        background:linear-gradient(135deg,#c8ff2e,#5ee7ff) !important;
+        border:0 !important;
+      }
+
+      @keyframes fmPdfActiveGlow20260520{
+        0%,100%{transform:translateY(0);box-shadow:0 0 0 0 rgba(200,255,46,.35),0 10px 24px rgba(200,255,46,.22);}
+        50%{transform:translateY(-1px);box-shadow:0 0 0 7px rgba(200,255,46,.08),0 15px 30px rgba(200,255,46,.28);}
       }
     `;
     document.head.appendChild(st);
   }
 
+  async function refresh(){
+    if(busy) return;
+    busy = true;
+    const c = code();
+
+    try{
+      const r = await fetch("/api/followme/" + encodeURIComponent(c) + "/status?v=" + Date.now(), { cache:"no-store" });
+      const j = await r.json().catch(() => null);
+      if(j && j.success) statusData = j;
+    }catch(e){}
+
+    try{
+      const r = await fetch("/api/followme/" + encodeURIComponent(c) + "/document/current?v=" + Date.now(), { cache:"no-store" });
+      const j = await r.json().catch(() => null);
+      if(j && j.success) docData = j.document || null;
+    }catch(e){}
+
+    busy = false;
+  }
+
   function deactivateOtherActiveCards(){
-    if(!isDocActive()) return;
+    if(!isPdfActive()) return;
 
     const t = track();
     if(!t) return;
 
-    Array.from(t.querySelectorAll(".premium-history-card.is-active")).forEach(function(card){
-      if(card.id !== "followmeDocumentPremiumHistoryCard20260520"){
+    t.querySelectorAll(".premium-history-card.is-active").forEach(card => {
+      if(card.id !== "followmePdfSingleCard20260520"){
         card.classList.remove("is-active");
       }
     });
 
-    Array.from(t.querySelectorAll(".premium-history-active")).forEach(function(btn){
+    t.querySelectorAll(".premium-history-active").forEach(btn => {
       const card = btn.closest(".premium-history-card");
-      if(card && card.id !== "followmeDocumentPremiumHistoryCard20260520"){
+      if(card && card.id !== "followmePdfSingleCard20260520"){
         btn.textContent = "Riattiva";
         btn.disabled = false;
-        btn.classList.remove("premium-history-active");
-        btn.classList.add("premium-history-reactivate");
+        btn.className = "premium-history-reactivate";
       }
     });
+  }
+
+  function openDocPage(){
+    const btn = document.getElementById("followmeConsegnaDocumentoBtn20260520") ||
+      Array.from(document.querySelectorAll("button,a")).find(el => /consegna documento/i.test(el.textContent || ""));
+    if(btn) return btn.click();
+
+    location.href = "/fm/app/" + encodeURIComponent(code()) + "#consegna-documento";
+  }
+
+  async function publishDoc(){
+    if(!docData?.id){
+      alert("Prima carica un PDF valido.");
+      openDocPage();
+      return;
+    }
+
+    const r = await fetch("/api/followme/" + encodeURIComponent(code()) + "/document/publish", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ document_id:docData.id })
+    });
+
+    const j = await r.json().catch(() => null);
+    if(!r.ok || !j || !j.success){
+      throw new Error((j && j.error) || "Riattivazione documento non riuscita.");
+    }
+
+    await refresh();
+    render();
   }
 
   function render(){
@@ -26889,159 +25972,98 @@ document.addEventListener("visibilitychange", function(){
     const t = track();
     if(!t) return;
 
-    const hasDoc = !!(lastDocument && lastDocument.id);
-    const activeDoc = hasDoc && isDocActive();
+    const hasDoc = !!docData?.id;
+    const active = hasDoc && isPdfActive();
 
-    const card = canonicalCard();
-    removeDuplicateDocCards(card);
+    removePdfCards();
 
-    card.className = "premium-history-card" + (activeDoc ? " is-active" : "");
+    const card = document.createElement("section");
+    card.id = "followmePdfSingleCard20260520";
+    card.dataset.followmeDocumentCard = "1";
+    card.className = "premium-history-card" + (active ? " is-active" : "");
 
-    const views = Number(lastDocument?.views_count || 0);
-    const downloads = Number(lastDocument?.downloads_count || 0);
-    const name = hasDoc ? shortName(lastDocument.original_name || "Documento PDF") : "Nessun PDF";
-    const thumb = lastDocument?.thumbnail_url || lastDocument?.thumbnail_path || "";
-
+    const thumb = docData?.thumbnail_url || docData?.thumbnail_path || "";
     const preview = thumb
-      ? `<div class="fm-doc-preview-inner"><img src="${String(thumb).replace(/"/g, "&quot;")}?v=${Date.now()}" alt="Preview documento PDF"></div>`
-      : `<div class="fm-doc-preview-inner">
-           <div class="fm-doc-preview-fallback">
-             <strong>PDF</strong>
-             <span>Documento consegnabile</span>
-           </div>
-         </div>`;
+      ? `<div class="fm-pdf-mini"><img src="${esc(thumb)}?v=${Date.now()}" alt="Preview PDF"></div>`
+      : `<div class="fm-pdf-mini"><div class="fm-pdf-fallback"><strong>PDF</strong><span>Documento consegnabile</span></div></div>`;
 
     card.innerHTML = `
       <div>
-        <div class="premium-history-badge">${activeDoc ? "Attivo ora" : "Documento PDF"}</div>
+        <div class="premium-history-badge">${active ? "Attivo ora" : "Documento PDF"}</div>
         <div class="premium-history-domain">Consegna diretta</div>
-        <div class="premium-history-url">${name}</div>
+        <div class="premium-history-url">${esc(hasDoc ? shortName(docData.original_name) : "Nessun PDF")}</div>
       </div>
 
-      <div class="premium-history-preview">
-        ${preview}
-      </div>
+      <div class="premium-history-preview">${preview}</div>
 
       <div class="premium-history-meta">
         <div class="premium-history-pill">
-          <strong>${views}</strong>
+          <strong>${Number(docData?.views_count || 0)}</strong>
           <span>Visualizzazioni</span>
         </div>
         <div class="premium-history-pill">
-          <strong>${downloads}</strong>
+          <strong>${Number(docData?.downloads_count || 0)}</strong>
           <span>Download</span>
         </div>
       </div>
 
       <div class="premium-history-actions">
         ${
-          activeDoc
+          active
             ? `<button type="button" class="premium-history-active" disabled>Attivo ora</button>`
-            : `<button type="button" class="premium-history-reactivate" id="followmeDocHistoryReactivate20260520" ${hasDoc ? "" : "disabled"}>Riattiva</button>`
+            : `<button type="button" class="premium-history-reactivate" id="followmePdfReactivate20260520" ${hasDoc ? "" : "disabled"}>Riattiva</button>`
         }
-        <button type="button" class="premium-history-edit-document ${activeDoc ? "is-disabled" : ""}" id="followmeDocHistoryEdit20260520" ${activeDoc ? "disabled" : ""}>Modifica</button>
+        <button type="button" class="${active ? "fm-pdf-edit-disabled" : "fm-pdf-edit-enabled"}" id="followmePdfEdit20260520" ${active ? "disabled" : ""}>Modifica</button>
       </div>
     `;
 
-    if(activeDoc){
-      if(t.firstElementChild !== card){
-        t.insertBefore(card, t.firstElementChild);
-      }
-    }else if(!card.parentNode){
-      t.insertBefore(card, t.firstElementChild);
-    }
+    t.insertBefore(card, t.firstElementChild);
 
     deactivateOtherActiveCards();
 
-    const reactivate = document.getElementById("followmeDocHistoryReactivate20260520");
-    if(reactivate && !reactivate.dataset.boundSingleCard20260520){
-      reactivate.dataset.boundSingleCard20260520 = "1";
-      reactivate.addEventListener("click", async function(ev){
+    const react = document.getElementById("followmePdfReactivate20260520");
+    if(react){
+      react.onclick = async function(ev){
         ev.preventDefault();
-
         try{
-          reactivate.disabled = true;
-          reactivate.textContent = "Attivo...";
-          await publishDocument();
+          react.disabled = true;
+          react.textContent = "Attivo...";
+          await publishDoc();
         }catch(e){
-          alert(e.message || "Errore riattivazione documento.");
-          reactivate.disabled = false;
-          reactivate.textContent = "Riattiva";
+          alert(e.message || "Errore riattivazione.");
+          react.disabled = false;
+          react.textContent = "Riattiva";
         }
-      });
+      };
     }
 
-    const edit = document.getElementById("followmeDocHistoryEdit20260520");
-    if(edit && !activeDoc && !edit.dataset.boundSingleCard20260520){
-      edit.dataset.boundSingleCard20260520 = "1";
-      edit.addEventListener("click", function(ev){
+    const edit = document.getElementById("followmePdfEdit20260520");
+    if(edit && !active){
+      edit.onclick = function(ev){
         ev.preventDefault();
-        openDocumentPage();
-      });
+        openDocPage();
+      };
     }
 
-    Array.from(t.children || []).forEach(function(el, idx){
+    Array.from(t.children).forEach((el, idx) => {
       el.style.display = idx < 20 ? "" : "none";
     });
-  }
-
-  async function refresh(){
-    if(busy) return;
-    busy = true;
-
-    const code = projectCode();
-
-    try{
-      const st = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
-        cache:"no-store"
-      });
-      const sj = await st.json().catch(() => null);
-      if(sj && sj.success) lastStatus = sj;
-    }catch(e){}
-
-    try{
-      const dc = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/current?v=" + Date.now(), {
-        cache:"no-store"
-      });
-      const dj = await dc.json().catch(() => null);
-      if(dj && dj.success) lastDocument = dj.document || null;
-    }catch(e){}
-
-    busy = false;
   }
 
   async function boot(){
     await refresh();
     render();
-
-    setTimeout(async function(){ await refresh(); render(); }, 700);
-    setTimeout(async function(){ await refresh(); render(); }, 1800);
+    setTimeout(async()=>{ await refresh(); render(); }, 700);
+    setTimeout(async()=>{ await refresh(); render(); }, 1800);
   }
 
-  window.fmDocumentSingleCardActiveButton20260520 = {
-    boot,
-    refresh,
-    render,
-    publishDocument
-  };
+  window.fmPdfSingleCard20260520 = { boot, refresh, render, publishDoc };
 
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 
-  window.addEventListener("load", function(){
-    setTimeout(boot, 350);
-  });
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 350);
-  });
-
-  try{
-    const observer = new MutationObserver(function(){
-      setTimeout(render, 80);
-    });
-    observer.observe(document.body, { childList:true, subtree:true });
-  }catch(e){}
+  window.addEventListener("load", () => setTimeout(boot, 350));
+  window.addEventListener("pageshow", () => setTimeout(boot, 350));
 })();
 </script>
 
