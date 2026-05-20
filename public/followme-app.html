@@ -26127,6 +26127,7 @@ document.addEventListener("visibilitychange", function(){
 
       #followmePdfSingleCard20260520 .fm-pdf-mini{
         width:100%;
+        aspect-ratio:1 / 1;
         min-height:118px;
         border-radius:18px;
         display:grid;
@@ -26370,7 +26371,229 @@ document.addEventListener("visibilitychange", function(){
 
 
 <script id="followme-pdf-thumbnail-generator-final-20260520" type="module">
-/* disattivato: la thumbnail PDF ora viene integrata nella preview principale */
+import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.mjs";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.worker.min.mjs";
+
+(function(){
+  if(window.__FollowMeRealPdfThumbnailCarousel20260520) return;
+  window.__FollowMeRealPdfThumbnailCarousel20260520 = true;
+
+  const generating = new Set();
+
+  function code(){
+    try{
+      const p = location.pathname.split("/").filter(Boolean);
+      const i = p.indexOf("app");
+      if(i >= 0 && p[i+1]) return decodeURIComponent(p[i+1]);
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function absUrl(path){
+    try{
+      return new URL(path, location.origin).href;
+    }catch(e){
+      return path;
+    }
+  }
+
+  function isSvgThumb(doc){
+    const t = String(doc?.thumbnail_url || doc?.thumbnail_path || "");
+    return !t || /\.svg(\?|$)/i.test(t);
+  }
+
+  async function getCurrentDocument(){
+    try{
+      const r = await fetch("/api/followme/" + encodeURIComponent(code()) + "/document/current?v=" + Date.now(), {
+        cache:"no-store"
+      });
+      const j = await r.json().catch(() => null);
+      if(j && j.success && j.document) return j.document;
+    }catch(e){}
+    return null;
+  }
+
+  async function generateSquareThumbFromPdf(pdfPath){
+    const target = 520;
+
+    const loadingTask = pdfjsLib.getDocument({
+      url: absUrl(pdfPath),
+      disableAutoFetch:true,
+      disableStream:false
+    });
+
+    const pdf = await loadingTask.promise;
+    const page = await pdf.getPage(1);
+    const base = page.getViewport({ scale:1 });
+
+    /*
+      Cover quadrato:
+      - scala la prima pagina in modo che il lato corto copra 520px
+      - per PDF verticali prendiamo la parte alta/centrale della prima pagina
+      - risultato stabile per card carosello
+    */
+    const scale = target / Math.min(base.width, base.height);
+    const viewport = page.getViewport({ scale });
+
+    const pageCanvas = document.createElement("canvas");
+    pageCanvas.width = Math.ceil(viewport.width);
+    pageCanvas.height = Math.ceil(viewport.height);
+
+    const pageCtx = pageCanvas.getContext("2d", { alpha:false });
+    pageCtx.fillStyle = "#ffffff";
+    pageCtx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+
+    await page.render({
+      canvasContext:pageCtx,
+      viewport,
+      renderInteractiveForms:false
+    }).promise;
+
+    const out = document.createElement("canvas");
+    out.width = target;
+    out.height = target;
+
+    const outCtx = out.getContext("2d", { alpha:false });
+    outCtx.imageSmoothingEnabled = true;
+    outCtx.imageSmoothingQuality = "high";
+    outCtx.fillStyle = "#ffffff";
+    outCtx.fillRect(0, 0, target, target);
+
+    const cropX = Math.max(0, Math.floor((pageCanvas.width - target) / 2));
+    /*
+      Se la pagina è verticale, tengo la parte alta, dove normalmente c'è titolo/contenuto.
+      Se è orizzontale, centro verticalmente.
+    */
+    const cropY = pageCanvas.height > target ? 0 : Math.max(0, Math.floor((pageCanvas.height - target) / 2));
+
+    outCtx.drawImage(
+      pageCanvas,
+      cropX,
+      cropY,
+      Math.min(target, pageCanvas.width),
+      Math.min(target, pageCanvas.height),
+      0,
+      0,
+      target,
+      target
+    );
+
+    return out.toDataURL("image/jpeg", 0.82);
+  }
+
+  async function saveThumb(documentId, thumbnailBase64){
+    const r = await fetch("/api/followme/document/" + encodeURIComponent(documentId) + "/thumbnail", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ thumbnail_base64:thumbnailBase64 })
+    });
+
+    const j = await r.json().catch(() => null);
+
+    if(!r.ok || !j || !j.success){
+      throw new Error((j && j.error) || "Salvataggio thumbnail non riuscito.");
+    }
+
+    return j;
+  }
+
+  async function generateForDoc(doc){
+    if(!doc || !doc.id || !doc.public_path) return false;
+
+    const id = String(doc.id);
+    if(generating.has(id)) return false;
+
+    /*
+      Genero solo se manca thumbnail reale oppure se è ancora il fallback SVG.
+      Non sovrascrivo PNG/JPG/WebP già salvati.
+    */
+    if(!isSvgThumb(doc)) return false;
+
+    generating.add(id);
+
+    try{
+      const b64 = await generateSquareThumbFromPdf(doc.public_path);
+
+      if(!b64 || b64.length < 1000){
+        throw new Error("Thumbnail PDF troppo piccola o non valida.");
+      }
+
+      await saveThumb(id, b64);
+
+      try{
+        await window.fmPdfSingleCard20260520?.refresh?.();
+        await window.fmPdfSingleCard20260520?.render?.();
+      }catch(e){}
+
+      try{
+        window.fmPdfSingleCard20260520?.boot?.();
+      }catch(e){}
+
+      return true;
+    }catch(e){
+      console.warn("FollowMe real PDF thumbnail carousel error:", e);
+      return false;
+    }finally{
+      generating.delete(id);
+    }
+  }
+
+  async function generateCurrent(){
+    const doc = await getCurrentDocument();
+    return generateForDoc(doc);
+  }
+
+  function patchFetch(){
+    if(window.__FollowMeRealPdfThumbFetchPatched20260520) return;
+    window.__FollowMeRealPdfThumbFetchPatched20260520 = true;
+
+    const originalFetch = window.fetch.bind(window);
+
+    window.fetch = async function(input, init){
+      const res = await originalFetch(input, init);
+
+      try{
+        const url = typeof input === "string" ? input : String(input && input.url || "");
+
+        if(url.includes("/document/upload") || url.includes("/document/current")){
+          res.clone().json().then(data => {
+            const doc = data && data.document;
+            if(doc && doc.id && doc.public_path){
+              setTimeout(() => generateForDoc(doc), 250);
+            }
+          }).catch(()=>{});
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  async function boot(){
+    patchFetch();
+    setTimeout(generateCurrent, 700);
+    setTimeout(generateCurrent, 1800);
+  }
+
+  window.fmRealPdfThumbnailCarousel20260520 = {
+    boot,
+    generateCurrent,
+    generateForDoc,
+    generateSquareThumbFromPdf
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 600);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 600);
+  });
+})();
 </script>
 
 
