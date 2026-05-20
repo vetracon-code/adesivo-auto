@@ -10897,6 +10897,29 @@ app.post('/api/followme/:code/document/publish', express.json(), async (req, res
     }
 
     /*
+      FOLLOWME DOCUMENT FORCE ACTIVE_URL FINAL 20260520
+      La tabella reale followme_projects usa active_url.
+      Quando pubblico o riattivo il documento, il QR deve trasmettere subito la pagina documento.
+    */
+    try {
+      await pool.query(
+        `UPDATE followme_projects
+         SET active_url = $1,
+             chat_mode_enabled = FALSE,
+             updated_at = NOW()
+         WHERE id = $2`,
+        [publicUrl, project.id]
+      );
+
+      updatedDestinationColumn = 'active_url';
+    } catch(e) {
+      console.error('followme document force active_url update error:', e);
+    }
+    /*
+      END FOLLOWME DOCUMENT FORCE ACTIVE_URL FINAL 20260520
+    */
+
+    /*
       Spegne la chat se presente, perché ora il QR deve consegnare il PDF.
     */
     try {
