@@ -26277,25 +26277,14 @@ document.addEventListener("visibilitychange", function(){
 
 
 <script id="followme-real-pdf-thumb-client-final-20260520" type="module">
+/* disattivato: preview reale PDF sostituita da thumbnail quadrata controllata */
+</script>
+
+
+<script id="followme-pdf-square-preview-final-20260520">
 (function(){
-  if(window.__FollowMeRealPdfThumbClient20260520) return;
-  window.__FollowMeRealPdfThumbClient20260520 = true;
-
-  let pdfjsReady = null;
-  let realThumbUrl = "";
-  let lastDocId = null;
-  let generating = false;
-
-  async function loadPdfJs(){
-    if(pdfjsReady) return pdfjsReady;
-
-    pdfjsReady = import("https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.mjs").then(pdfjsLib => {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.worker.min.mjs";
-      return pdfjsLib;
-    });
-
-    return pdfjsReady;
-  }
+  if(window.__FollowMePdfSquarePreview20260520) return;
+  window.__FollowMePdfSquarePreview20260520 = true;
 
   function code(){
     try{
@@ -26312,6 +26301,19 @@ document.addEventListener("visibilitychange", function(){
     });
   }
 
+  function clean(v){
+    return String(v || "").trim();
+  }
+
+  function isDocumentActive(){
+    const active =
+      window.__followMeActiveUrl ||
+      (document.getElementById("newUrl") && document.getElementById("newUrl").value) ||
+      "";
+
+    return clean(active).includes("/fm/document/");
+  }
+
   async function getCurrentDocument(){
     try{
       const r = await fetch("/api/followme/" + encodeURIComponent(code()) + "/document/current?v=" + Date.now(), { cache:"no-store" });
@@ -26321,103 +26323,116 @@ document.addEventListener("visibilitychange", function(){
     return null;
   }
 
-  async function generateRealThumb(doc){
-    if(!doc || !doc.id || !doc.public_path) return "";
-    if(realThumbUrl && lastDocId === String(doc.id)) return realThumbUrl;
-    if(generating) return realThumbUrl || "";
-
-    generating = true;
-
-    try{
-      const pdfjsLib = await loadPdfJs();
-
-      const loadingTask = pdfjsLib.getDocument({
-        url: doc.public_path + "?v=" + Date.now(),
-        disableAutoFetch: true,
-        disableStream: false
-      });
-
-      const pdf = await loadingTask.promise;
-      const page = await pdf.getPage(1);
-
-      const base = page.getViewport({ scale:1 });
-      const targetW = 700;
-      const cssScale = Math.min(Math.max(targetW / base.width, 0.8), 1.55);
-      const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
-      const renderScale = cssScale * dpr;
-
-      const viewport = page.getViewport({ scale:renderScale });
-
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d", { alpha:false });
-
-      canvas.width = Math.floor(viewport.width);
-      canvas.height = Math.floor(viewport.height);
-
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-
-      await page.render({
-        canvasContext: ctx,
-        viewport,
-        intent: "display",
-        renderInteractiveForms: true
-      }).promise;
-
-      realThumbUrl = canvas.toDataURL("image/jpeg", 0.78);
-      lastDocId = String(doc.id);
-
-      try{ await pdf.destroy(); }catch(e){}
-
-      return realThumbUrl;
-    }catch(e){
-      console.warn("FollowMe real PDF thumb failed:", e);
-      return "";
-    }finally{
-      generating = false;
-    }
-  }
-
   function ensureStyle(){
-    if(document.getElementById("followmeRealPdfThumbClientStyle20260520")) return;
+    if(document.getElementById("followmePdfSquarePreviewStyle20260520")) return;
 
     const st = document.createElement("style");
-    st.id = "followmeRealPdfThumbClientStyle20260520";
+    st.id = "followmePdfSquarePreviewStyle20260520";
     st.textContent = `
-      #followmePdfSingleCard20260520 .fm-pdf-mini img.followme-real-pdf-thumb-20260520{
-        object-fit:cover !important;
-        background:#fff !important;
+      .followme-pdf-square-preview-20260520{
+        width:100%;
+        aspect-ratio:1/1;
+        max-height:320px;
+        border-radius:18px;
+        overflow:hidden;
+        display:grid;
+        place-items:center;
+        background:
+          radial-gradient(circle at 20% 8%, rgba(200,255,46,.18), transparent 34%),
+          radial-gradient(circle at 88% 0%, rgba(94,231,255,.14), transparent 32%),
+          linear-gradient(145deg, rgba(255,255,255,.10), rgba(255,255,255,.035));
+        border:1px solid rgba(255,255,255,.12);
+        box-shadow:0 16px 34px rgba(0,0,0,.22);
       }
 
-      .followme-pdf-preview-inside-20260520 img.followme-real-pdf-thumb-20260520{
-        object-fit:contain !important;
-        background:#fff !important;
-        min-height:220px;
+      .followme-pdf-square-preview-20260520 img{
+        width:100%;
+        height:100%;
+        display:block;
+        object-fit:cover;
+        object-position:center center;
+        background:#101018;
+      }
+
+      .followme-pdf-square-preview-20260520 .pdf-square-fallback{
+        width:100%;
+        height:100%;
+        display:grid;
+        place-items:center;
+        text-align:center;
+        padding:20px;
+        color:#fff;
+        box-sizing:border-box;
+      }
+
+      .followme-pdf-square-preview-20260520 .pdf-square-fallback strong{
+        display:block;
+        font-size:1.4rem;
+        font-weight:950;
+        margin-bottom:6px;
+      }
+
+      .followme-pdf-square-preview-20260520 .pdf-square-fallback span{
+        display:block;
+        color:rgba(255,255,255,.68);
+        font-size:.88rem;
+        line-height:1.35;
+      }
+
+      #followmePdfSingleCard20260520 .fm-pdf-mini{
+        aspect-ratio:1/1 !important;
+        min-height:0 !important;
+        height:auto !important;
+      }
+
+      #followmePdfSingleCard20260520 .fm-pdf-mini img{
+        width:100% !important;
+        height:100% !important;
+        object-fit:cover !important;
+        object-position:center center !important;
+      }
+
+      #followmePdfMainThumb20260520,
+      #followmePdfIntegratedPreviewHolder20260520.extra,
+      .followme-real-pdf-thumb-20260520{
+        display:none !important;
       }
     `;
     document.head.appendChild(st);
   }
 
-  function currentDocumentUrl(){
-    try{
-      const publicId =
-        (window.__followMeStatusData && window.__followMeStatusData.project && window.__followMeStatusData.project.public_id) ||
-        "FMDEMO";
-      return "/fm/document/" + publicId;
-    }catch(e){
-      return "/fm/document/FMDEMO";
+  function buildSquare(doc){
+    const thumb = doc && (doc.thumbnail_url || doc.thumbnail_path) || "";
+    const name = doc && doc.original_name || "Documento PDF";
+
+    if(thumb){
+      return `<div class="followme-pdf-square-preview-20260520">
+        <img src="${esc(thumb)}?v=stable-square" alt="${esc(name)}">
+      </div>`;
     }
+
+    return `<div class="followme-pdf-square-preview-20260520">
+      <div class="pdf-square-fallback">
+        <div>
+          <strong>PDF</strong>
+          <span>${esc(name)}</span>
+        </div>
+      </div>
+    </div>`;
   }
 
-  function forceMainPreview(doc, imgUrl){
-    const thumb = imgUrl || doc.thumbnail_url || doc.thumbnail_path || "";
-    const name = doc.original_name || "Documento PDF";
+  function updateCarousel(doc){
+    const card = document.getElementById("followmePdfSingleCard20260520");
+    if(!card || !doc) return;
 
-    const frame =
-      document.querySelector(".qr-auto-preview-frame") ||
-      document.getElementById("qrAutoPreviewFrame") ||
-      document.querySelector(".simple-preview-frame") ||
-      document.querySelector(".simple-preview-card");
+    const mini = card.querySelector(".fm-pdf-mini");
+    if(!mini) return;
+
+    mini.innerHTML = buildSquare(doc);
+  }
+
+  function updateMainPreview(doc){
+    if(!doc || !isDocumentActive()) return;
 
     const previewCard =
       document.querySelector(".qr-preview-card") ||
@@ -26425,11 +26440,15 @@ document.addEventListener("visibilitychange", function(){
 
     if(previewCard) previewCard.classList.add("show");
 
+    const frame =
+      document.querySelector(".qr-auto-preview-frame") ||
+      document.getElementById("qrAutoPreviewFrame") ||
+      document.querySelector(".simple-preview-frame") ||
+      document.querySelector(".simple-preview-card");
+
     if(!frame) return;
 
-    const html = thumb
-      ? `<div class="followme-pdf-preview-inside-20260520"><img class="followme-real-pdf-thumb-20260520" src="${esc(thumb)}" alt="${esc(name)}"></div>`
-      : `<div class="followme-pdf-preview-inside-20260520"><div class="followme-pdf-preview-fallback-20260520"><strong>PDF</strong><span>${esc(name)}</span></div></div>`;
+    const html = buildSquare(doc);
 
     if(frame.tagName && frame.tagName.toLowerCase() === "iframe"){
       frame.style.display = "none";
@@ -26438,36 +26457,18 @@ document.addEventListener("visibilitychange", function(){
       if(!holder){
         holder = document.createElement("div");
         holder.id = "followmePdfIntegratedPreviewHolder20260520";
-        holder.className = "followme-pdf-preview-inside-20260520";
         frame.parentNode.insertBefore(holder, frame);
       }
 
-      holder.innerHTML = thumb
-        ? `<img class="followme-real-pdf-thumb-20260520" src="${esc(thumb)}" alt="${esc(name)}">`
-        : `<div class="followme-pdf-preview-fallback-20260520"><strong>PDF</strong><span>${esc(name)}</span></div>`;
+      holder.className = "";
+      holder.innerHTML = html;
       return;
     }
 
     frame.innerHTML = html;
   }
 
-  function forceCarouselCard(doc, imgUrl){
-    const card = document.getElementById("followmePdfSingleCard20260520");
-    if(!card) return;
-
-    const mini = card.querySelector(".fm-pdf-mini");
-    if(!mini) return;
-
-    const thumb = imgUrl || doc.thumbnail_url || doc.thumbnail_path || "";
-    if(!thumb) return;
-
-    const old = mini.querySelector("img");
-    if(old && old.getAttribute("src") === thumb) return;
-
-    mini.innerHTML = `<img class="followme-real-pdf-thumb-20260520" src="${esc(thumb)}" alt="${esc(doc.original_name || "Documento PDF")}">`;
-  }
-
-  function bindPdfCardClick(){
+  function bindCard(){
     document.addEventListener("click", async function(ev){
       const card = ev.target && ev.target.closest && ev.target.closest("#followmePdfSingleCard20260520");
       if(!card) return;
@@ -26475,9 +26476,8 @@ document.addEventListener("visibilitychange", function(){
       const doc = await getCurrentDocument();
       if(!doc) return;
 
-      const img = realThumbUrl || await generateRealThumb(doc) || doc.thumbnail_url || doc.thumbnail_path || "";
-      forceCarouselCard(doc, img);
-      forceMainPreview(doc, img);
+      updateCarousel(doc);
+      updateMainPreview(doc);
     }, true);
   }
 
@@ -26487,38 +26487,26 @@ document.addEventListener("visibilitychange", function(){
     const doc = await getCurrentDocument();
     if(!doc) return;
 
-    const img = await generateRealThumb(doc) || doc.thumbnail_url || doc.thumbnail_path || "";
-
-    forceCarouselCard(doc, img);
-
-    /*
-      Se il QR sta trasmettendo il documento, forziamo la preview grande.
-      Questo corregge il caso: passo su altro frame e poi ritorno sul documento.
-    */
-    const activeUrl =
-      window.__followMeActiveUrl ||
-      (document.getElementById("newUrl") && document.getElementById("newUrl").value) ||
-      "";
-
-    if(String(activeUrl).includes("/fm/document/")){
-      forceMainPreview(doc, img);
-    }
+    updateCarousel(doc);
+    updateMainPreview(doc);
   }
 
   async function boot(){
-    bindPdfCardClick();
+    bindCard();
     await refresh();
 
-    setTimeout(refresh, 800);
-    setTimeout(refresh, 1800);
+    /*
+      Un solo retry per aspettare il carosello.
+      Non riscriviamo continuamente la preview.
+    */
+    setTimeout(refresh, 900);
   }
 
-  window.fmRealPdfThumbClient20260520 = {
+  window.fmPdfSquarePreview20260520 = {
     boot,
     refresh,
-    generateRealThumb,
-    forceMainPreview,
-    forceCarouselCard
+    updateCarousel,
+    updateMainPreview
   };
 
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
