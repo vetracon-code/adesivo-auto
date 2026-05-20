@@ -26028,5 +26028,340 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-document-ui-publish-buttons-final-20260520">
+(function(){
+  if(window.__FollowMeDocumentUiPublishButtonsFinal20260520) return;
+  window.__FollowMeDocumentUiPublishButtonsFinal20260520 = true;
+
+  /*
+    FIX DEFINITIVO PULSANTI UI DOCUMENTO:
+    - Riattiva nel carosello pubblica l'ultimo documento active.
+    - Pubblica subito nella pagina Consegna Documento pubblica l'ultimo documento active.
+    - Modifica riapre Consegna Documento.
+    - Dopo pubblicazione aggiorna card/stato e mostra messaggio corretto.
+  */
+
+  let currentDocument = null;
+  let currentPublicUrl = "";
+
+  function projectCode(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("app");
+      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
+    }catch(e){}
+
+    try{
+      if(window.FOLLOWME_PROJECT_CODE) return String(window.FOLLOWME_PROJECT_CODE);
+      if(window.followMeProjectCode) return String(window.followMeProjectCode);
+    }catch(e){}
+
+    return "FM-DEMO";
+  }
+
+  async function loadCurrentDocument(){
+    const code = projectCode();
+
+    const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/current?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    const data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || !data.success || !data.document){
+      currentDocument = null;
+      currentPublicUrl = "";
+      return null;
+    }
+
+    currentDocument = data.document;
+    currentPublicUrl = data.public_url || "/fm/document/" + code;
+
+    return currentDocument;
+  }
+
+  function findDocumentPage(){
+    return document.getElementById("followmeConsegnaDocumentoPage20260520");
+  }
+
+  function setDocumentStatus(message){
+    const page = findDocumentPage();
+    if(!page) return;
+
+    const existing =
+      page.querySelector("#followmeDocumentStatus20260520") ||
+      page.querySelector(".fm-doc-status") ||
+      page.querySelector("[id*='Document'][id*='Status']");
+
+    if(existing){
+      existing.textContent = message;
+      existing.style.display = "";
+      return;
+    }
+
+    let box = document.getElementById("followmeDocumentUiPublishStatus20260520");
+
+    if(!box){
+      box = document.createElement("div");
+      box.id = "followmeDocumentUiPublishStatus20260520";
+      box.style.margin = "12px 0";
+      box.style.padding = "12px 14px";
+      box.style.borderRadius = "16px";
+      box.style.fontWeight = "850";
+      box.style.lineHeight = "1.35";
+      box.style.background = "rgba(15,23,42,.06)";
+      box.style.border = "1px solid rgba(15,23,42,.10)";
+
+      const anchor =
+        document.getElementById("followmeDocument5StepActions20260520") ||
+        document.getElementById("followmeDocumentStableActions20260520") ||
+        page.querySelector("button");
+
+      if(anchor) anchor.insertAdjacentElement("beforebegin", box);
+      else page.appendChild(box);
+    }
+
+    box.textContent = message;
+  }
+
+  function openConsegnaDocumento(){
+    try{
+      if(window.fmConsegnaDocumentoUi20260520 &&
+         typeof window.fmConsegnaDocumentoUi20260520.openPage === "function"){
+        window.fmConsegnaDocumentoUi20260520.openPage();
+        return;
+      }
+    }catch(e){}
+
+    const btn = document.getElementById("followmeConsegnaDocumentoBtn20260520");
+    if(btn){
+      btn.click();
+      return;
+    }
+
+    const page = findDocumentPage();
+    if(page){
+      document.body.classList.add("fm-consegna-documento-open-20260520");
+      page.style.display = "";
+      page.scrollIntoView({ behavior:"smooth", block:"start" });
+      return;
+    }
+
+    alert("Apri Consegna Documento dalla Home.");
+  }
+
+  function findPublishButton(){
+    const page = findDocumentPage() || document;
+    const buttons = Array.from(page.querySelectorAll("button,a"));
+
+    return document.getElementById("followme5PublishDoc20260520") ||
+           document.getElementById("followmeStablePublishDoc20260520") ||
+           document.getElementById("followmeDocumentPublishBtn20260520") ||
+           buttons.find(function(el){
+             return /pubblica/i.test(String(el.textContent || ""));
+           });
+  }
+
+  function findPreviewButton(){
+    const page = findDocumentPage() || document;
+    const buttons = Array.from(page.querySelectorAll("button,a"));
+
+    return document.getElementById("followme5PreviewDoc20260520") ||
+           document.getElementById("followmeStablePreviewDoc20260520") ||
+           document.getElementById("followmeDocumentPreviewBtn20260520") ||
+           buttons.find(function(el){
+             return /preview/i.test(String(el.textContent || ""));
+           });
+  }
+
+  function setButtonActive(btn, active){
+    if(!btn) return;
+
+    if(active){
+      btn.disabled = false;
+      btn.removeAttribute("disabled");
+      btn.classList.remove("disabled");
+      btn.style.pointerEvents = "auto";
+      btn.style.opacity = "";
+      btn.style.filter = "";
+      btn.style.cursor = "pointer";
+    }else{
+      btn.disabled = true;
+      btn.classList.add("disabled");
+      btn.style.pointerEvents = "none";
+      btn.style.opacity = ".38";
+      btn.style.filter = "grayscale(1)";
+      btn.style.cursor = "not-allowed";
+    }
+  }
+
+  async function refreshDocumentUi(){
+    const doc = await loadCurrentDocument().catch(function(){ return null; });
+    const ready = !!(doc && doc.id);
+
+    setButtonActive(findPreviewButton(), ready);
+    setButtonActive(findPublishButton(), ready);
+
+    try{
+      if(window.fmDocumentNativePremiumHistoryNoEmbed20260520 &&
+         typeof window.fmDocumentNativePremiumHistoryNoEmbed20260520.loadCurrentDocument === "function"){
+        window.fmDocumentNativePremiumHistoryNoEmbed20260520.loadCurrentDocument();
+      }
+    }catch(e){}
+
+    return doc;
+  }
+
+  async function publishLatestDocument(source){
+    try{
+      let doc = currentDocument;
+
+      if(!doc || !doc.id){
+        doc = await loadCurrentDocument();
+      }
+
+      if(!doc || !doc.id){
+        alert("Prima carica un Documento PDF.");
+        openConsegnaDocumento();
+        return false;
+      }
+
+      const ok = confirm(
+        source === "reactivate"
+          ? "Vuoi riattivare subito questo Documento PDF sul QR?"
+          : "Vuoi pubblicare subito questo Documento PDF sul QR?"
+      );
+
+      if(!ok) return false;
+
+      const code = projectCode();
+
+      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/publish", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ document_id:doc.id })
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success || !data.published){
+        throw new Error((data && data.error) || "Pubblicazione non riuscita.");
+      }
+
+      currentDocument = data.document || doc;
+      currentPublicUrl = data.public_url || currentPublicUrl || "/fm/document/" + code;
+
+      setDocumentStatus("Documento pubblicato correttamente. Ora puoi inquadrare il QR.");
+      alert("Documento PDF attivato sul QR.");
+
+      await refreshDocumentUi();
+
+      return true;
+
+    }catch(err){
+      alert(err.message || "Errore pubblicazione documento.");
+      return false;
+    }
+  }
+
+  function openPreview(){
+    if(!currentPublicUrl){
+      loadCurrentDocument().then(function(){
+        if(currentPublicUrl) window.open(currentPublicUrl, "_blank", "noopener");
+      });
+      return;
+    }
+
+    window.open(currentPublicUrl, "_blank", "noopener");
+  }
+
+  function bindCarouselButtons(){
+    const reactivate = document.getElementById("followmeDocHistoryReactivate20260520");
+    const edit = document.getElementById("followmeDocHistoryEdit20260520");
+
+    if(reactivate){
+      reactivate.disabled = false;
+      reactivate.removeAttribute("disabled");
+      reactivate.style.pointerEvents = "auto";
+      reactivate.onclick = function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        publishLatestDocument("reactivate");
+      };
+    }
+
+    if(edit){
+      edit.style.pointerEvents = "auto";
+      edit.onclick = function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        openConsegnaDocumento();
+      };
+    }
+  }
+
+  function bindDocumentPageButtons(){
+    const publish = findPublishButton();
+    const preview = findPreviewButton();
+
+    if(publish && publish.dataset.uiPublishFinalBound20260520 !== "1"){
+      publish.dataset.uiPublishFinalBound20260520 = "1";
+      publish.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        publishLatestDocument("publish");
+      }, true);
+    }
+
+    if(preview && preview.dataset.uiPreviewFinalBound20260520 !== "1"){
+      preview.dataset.uiPreviewFinalBound20260520 = "1";
+      preview.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        openPreview();
+      }, true);
+    }
+  }
+
+  function bindAll(){
+    bindCarouselButtons();
+    bindDocumentPageButtons();
+  }
+
+  function boot(){
+    bindAll();
+
+    refreshDocumentUi();
+
+    setTimeout(bindAll, 500);
+    setTimeout(bindAll, 1200);
+    setTimeout(refreshDocumentUi, 1600);
+    setTimeout(bindAll, 2600);
+  }
+
+  window.fmDocumentUiPublishButtons20260520 = {
+    boot,
+    refreshDocumentUi,
+    publishLatestDocument,
+    openConsegnaDocumento,
+    openPreview,
+    bindAll
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 300);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 300);
+  });
+})();
+</script>
+
 </body>
 </html>
