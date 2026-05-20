@@ -26617,5 +26617,433 @@ document.addEventListener("visibilitychange", function(){
 })();
 </script>
 
+
+
+<script id="followme-document-single-card-active-button-final-20260520">
+(function(){
+  if(window.__FollowMeDocumentSingleCardActiveButtonFinal20260520) return;
+  window.__FollowMeDocumentSingleCardActiveButtonFinal20260520 = true;
+
+  /*
+    FIX definitivo:
+    - una sola card Documento PDF nel carosello;
+    - se il documento è active_url, la card va al primo posto;
+    - "Attivo ora" deve essere acceso/evidenziato;
+    - "Modifica" resta visibile ma disabilitato quando il documento è attivo.
+  */
+
+  let lastStatus = null;
+  let lastDocument = null;
+  let busy = false;
+
+  function projectCode(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("app");
+      if(idx >= 0 && parts[idx + 1]) return parts[idx + 1];
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function publicId(){
+    return (
+      lastStatus &&
+      lastStatus.project &&
+      (lastStatus.project.public_id || lastStatus.project.code)
+    ) || "FMDEMO";
+  }
+
+  function expectedDocUrl(){
+    return "/fm/document/" + publicId();
+  }
+
+  function clean(v){
+    return String(v || "").trim().replace(/\/+$/, "");
+  }
+
+  function isDocActive(){
+    const active = clean(lastStatus?.project?.active_url || "");
+    const expected = clean(expectedDocUrl());
+    return active === expected || active.includes("/fm/document/");
+  }
+
+  function track(){
+    return document.getElementById("premiumHistoryTrack") ||
+           document.querySelector(".premium-history-track");
+  }
+
+  function allDocCards(){
+    return Array.from(document.querySelectorAll(
+      "#followmeDocumentPremiumHistoryCard20260520, " +
+      "#followmeDocumentCarouselCard20260520, " +
+      "[data-followme-document-card='1'], " +
+      ".followme-document-real-carousel-host-20260520 #followmeDocumentCarouselCard20260520"
+    ));
+  }
+
+  function canonicalCard(){
+    let card = document.getElementById("followmeDocumentPremiumHistoryCard20260520");
+
+    if(!card){
+      const candidates = allDocCards();
+      card = candidates[0] || document.createElement("section");
+    }
+
+    card.id = "followmeDocumentPremiumHistoryCard20260520";
+    card.dataset.followmeDocumentCard = "1";
+    return card;
+  }
+
+  function removeDuplicateDocCards(keep){
+    allDocCards().forEach(function(card){
+      if(card !== keep){
+        card.remove();
+      }
+    });
+
+    /*
+      Rimuove anche eventuali host vuoti creati da patch precedenti.
+    */
+    document.querySelectorAll(".followme-document-real-carousel-host-20260520").forEach(function(host){
+      if(!host.querySelector("#followmeDocumentPremiumHistoryCard20260520")){
+        if(!host.children.length) host.remove();
+      }
+    });
+  }
+
+  function shortName(name){
+    name = String(name || "Documento PDF").trim().replace(/\.pdf$/i, "");
+    if(name.length <= 24) return name;
+    return name.slice(0, 21) + "…";
+  }
+
+  function openDocumentPage(){
+    const btn = document.getElementById("followmeConsegnaDocumentoBtn20260520") ||
+                Array.from(document.querySelectorAll("button,a")).find(function(el){
+                  return /consegna documento/i.test(el.textContent || "");
+                });
+
+    if(btn){
+      btn.click();
+      return;
+    }
+
+    location.href = "/fm/app/" + encodeURIComponent(projectCode()) + "#consegna-documento";
+  }
+
+  async function publishDocument(){
+    if(!lastDocument || !lastDocument.id){
+      alert("Prima carica un PDF valido.");
+      openDocumentPage();
+      return;
+    }
+
+    const res = await fetch("/api/followme/" + encodeURIComponent(projectCode()) + "/document/publish", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ document_id:lastDocument.id })
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if(!res.ok || !data || !data.success){
+      throw new Error((data && data.error) || "Riattivazione documento non riuscita.");
+    }
+
+    await refresh();
+    render();
+  }
+
+  function ensureStyle(){
+    if(document.getElementById("followmeDocumentSingleCardActiveButtonStyle20260520")) return;
+
+    const st = document.createElement("style");
+    st.id = "followmeDocumentSingleCardActiveButtonStyle20260520";
+    st.textContent = `
+      #followmeDocumentPremiumHistoryCard20260520 .premium-history-preview{
+        min-height:118px;
+      }
+
+      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-preview-inner{
+        width:100%;
+        height:100%;
+        min-height:88px;
+        border-radius:16px;
+        display:grid;
+        place-items:center;
+        overflow:hidden;
+        background:
+          radial-gradient(circle at 20% 8%, rgba(200,255,46,.18), transparent 34%),
+          radial-gradient(circle at 88% 0%, rgba(94,231,255,.14), transparent 32%),
+          linear-gradient(145deg, rgba(255,255,255,.10), rgba(255,255,255,.035));
+        border:1px solid rgba(255,255,255,.10);
+      }
+
+      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-preview-inner img{
+        width:100%;
+        height:100%;
+        object-fit:cover;
+        display:block;
+      }
+
+      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-preview-fallback{
+        display:grid;
+        gap:5px;
+        text-align:center;
+        padding:10px;
+      }
+
+      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-preview-fallback strong{
+        color:#fff;
+        font-size:1.02rem;
+        line-height:1.05;
+      }
+
+      #followmeDocumentPremiumHistoryCard20260520 .fm-doc-preview-fallback span{
+        color:rgba(255,255,255,.62);
+        font-size:.74rem;
+        line-height:1.2;
+      }
+
+      #followmeDocumentPremiumHistoryCard20260520.is-active{
+        border-color:rgba(200,255,46,.72) !important;
+        box-shadow:
+          0 0 0 1px rgba(200,255,46,.18) inset,
+          0 18px 42px rgba(200,255,46,.12),
+          0 16px 34px rgba(0,0,0,.24) !important;
+      }
+
+      #followmeDocumentPremiumHistoryCard20260520 .premium-history-active{
+        color:#101018 !important;
+        background:linear-gradient(135deg,#c8ff2e,#5ee7ff) !important;
+        border:0 !important;
+        box-shadow:
+          0 0 0 0 rgba(200,255,46,.45),
+          0 10px 24px rgba(200,255,46,.22) !important;
+        animation:followmeDocActiveGlow20260520 1.4s ease-in-out infinite;
+        cursor:default !important;
+        opacity:1 !important;
+      }
+
+      #followmeDocumentPremiumHistoryCard20260520 .premium-history-edit-document{
+        color:#101018 !important;
+        background:linear-gradient(135deg,#c8ff2e,#5ee7ff) !important;
+        border:0 !important;
+        box-shadow:0 10px 24px rgba(200,255,46,.18) !important;
+      }
+
+      #followmeDocumentPremiumHistoryCard20260520 .premium-history-edit-document:disabled,
+      #followmeDocumentPremiumHistoryCard20260520 .premium-history-edit-document.is-disabled{
+        color:rgba(255,255,255,.42) !important;
+        background:rgba(255,255,255,.055) !important;
+        border:1px solid rgba(255,255,255,.09) !important;
+        box-shadow:none !important;
+        cursor:not-allowed !important;
+        opacity:.58 !important;
+      }
+
+      @keyframes followmeDocActiveGlow20260520{
+        0%,100%{
+          box-shadow:
+            0 0 0 0 rgba(200,255,46,.35),
+            0 10px 24px rgba(200,255,46,.22);
+          transform:translateY(0);
+        }
+        50%{
+          box-shadow:
+            0 0 0 7px rgba(200,255,46,.08),
+            0 15px 30px rgba(200,255,46,.28);
+          transform:translateY(-1px);
+        }
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  function deactivateOtherActiveCards(){
+    if(!isDocActive()) return;
+
+    const t = track();
+    if(!t) return;
+
+    Array.from(t.querySelectorAll(".premium-history-card.is-active")).forEach(function(card){
+      if(card.id !== "followmeDocumentPremiumHistoryCard20260520"){
+        card.classList.remove("is-active");
+      }
+    });
+
+    Array.from(t.querySelectorAll(".premium-history-active")).forEach(function(btn){
+      const card = btn.closest(".premium-history-card");
+      if(card && card.id !== "followmeDocumentPremiumHistoryCard20260520"){
+        btn.textContent = "Riattiva";
+        btn.disabled = false;
+        btn.classList.remove("premium-history-active");
+        btn.classList.add("premium-history-reactivate");
+      }
+    });
+  }
+
+  function render(){
+    ensureStyle();
+
+    const t = track();
+    if(!t) return;
+
+    const hasDoc = !!(lastDocument && lastDocument.id);
+    const activeDoc = hasDoc && isDocActive();
+
+    const card = canonicalCard();
+    removeDuplicateDocCards(card);
+
+    card.className = "premium-history-card" + (activeDoc ? " is-active" : "");
+
+    const views = Number(lastDocument?.views_count || 0);
+    const downloads = Number(lastDocument?.downloads_count || 0);
+    const name = hasDoc ? shortName(lastDocument.original_name || "Documento PDF") : "Nessun PDF";
+    const thumb = lastDocument?.thumbnail_url || lastDocument?.thumbnail_path || "";
+
+    const preview = thumb
+      ? `<div class="fm-doc-preview-inner"><img src="${String(thumb).replace(/"/g, "&quot;")}?v=${Date.now()}" alt="Preview documento PDF"></div>`
+      : `<div class="fm-doc-preview-inner">
+           <div class="fm-doc-preview-fallback">
+             <strong>PDF</strong>
+             <span>Documento consegnabile</span>
+           </div>
+         </div>`;
+
+    card.innerHTML = `
+      <div>
+        <div class="premium-history-badge">${activeDoc ? "Attivo ora" : "Documento PDF"}</div>
+        <div class="premium-history-domain">Consegna diretta</div>
+        <div class="premium-history-url">${name}</div>
+      </div>
+
+      <div class="premium-history-preview">
+        ${preview}
+      </div>
+
+      <div class="premium-history-meta">
+        <div class="premium-history-pill">
+          <strong>${views}</strong>
+          <span>Visualizzazioni</span>
+        </div>
+        <div class="premium-history-pill">
+          <strong>${downloads}</strong>
+          <span>Download</span>
+        </div>
+      </div>
+
+      <div class="premium-history-actions">
+        ${
+          activeDoc
+            ? `<button type="button" class="premium-history-active" disabled>Attivo ora</button>`
+            : `<button type="button" class="premium-history-reactivate" id="followmeDocHistoryReactivate20260520" ${hasDoc ? "" : "disabled"}>Riattiva</button>`
+        }
+        <button type="button" class="premium-history-edit-document ${activeDoc ? "is-disabled" : ""}" id="followmeDocHistoryEdit20260520" ${activeDoc ? "disabled" : ""}>Modifica</button>
+      </div>
+    `;
+
+    if(activeDoc){
+      if(t.firstElementChild !== card){
+        t.insertBefore(card, t.firstElementChild);
+      }
+    }else if(!card.parentNode){
+      t.insertBefore(card, t.firstElementChild);
+    }
+
+    deactivateOtherActiveCards();
+
+    const reactivate = document.getElementById("followmeDocHistoryReactivate20260520");
+    if(reactivate && !reactivate.dataset.boundSingleCard20260520){
+      reactivate.dataset.boundSingleCard20260520 = "1";
+      reactivate.addEventListener("click", async function(ev){
+        ev.preventDefault();
+
+        try{
+          reactivate.disabled = true;
+          reactivate.textContent = "Attivo...";
+          await publishDocument();
+        }catch(e){
+          alert(e.message || "Errore riattivazione documento.");
+          reactivate.disabled = false;
+          reactivate.textContent = "Riattiva";
+        }
+      });
+    }
+
+    const edit = document.getElementById("followmeDocHistoryEdit20260520");
+    if(edit && !activeDoc && !edit.dataset.boundSingleCard20260520){
+      edit.dataset.boundSingleCard20260520 = "1";
+      edit.addEventListener("click", function(ev){
+        ev.preventDefault();
+        openDocumentPage();
+      });
+    }
+
+    Array.from(t.children || []).forEach(function(el, idx){
+      el.style.display = idx < 20 ? "" : "none";
+    });
+  }
+
+  async function refresh(){
+    if(busy) return;
+    busy = true;
+
+    const code = projectCode();
+
+    try{
+      const st = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
+        cache:"no-store"
+      });
+      const sj = await st.json().catch(() => null);
+      if(sj && sj.success) lastStatus = sj;
+    }catch(e){}
+
+    try{
+      const dc = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/current?v=" + Date.now(), {
+        cache:"no-store"
+      });
+      const dj = await dc.json().catch(() => null);
+      if(dj && dj.success) lastDocument = dj.document || null;
+    }catch(e){}
+
+    busy = false;
+  }
+
+  async function boot(){
+    await refresh();
+    render();
+
+    setTimeout(async function(){ await refresh(); render(); }, 700);
+    setTimeout(async function(){ await refresh(); render(); }, 1800);
+  }
+
+  window.fmDocumentSingleCardActiveButton20260520 = {
+    boot,
+    refresh,
+    render,
+    publishDocument
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 350);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 350);
+  });
+
+  try{
+    const observer = new MutationObserver(function(){
+      setTimeout(render, 80);
+    });
+    observer.observe(document.body, { childList:true, subtree:true });
+  }catch(e){}
+})();
+</script>
+
 </body>
 </html>
