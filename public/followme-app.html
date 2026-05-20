@@ -26652,7 +26652,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
   function canvasToDataUrl(canvas){
     try{
-      return canvas.toDataURL("image/jpeg", 0.82);
+      return canvas.toDataURL("image/jpeg", 0.70);
     }catch(e){
       warn("canvasToDataUrl fallita", e);
       return "";
@@ -26704,7 +26704,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
         Miniatura quadrata stabile per Destinazioni recenti.
         520x520 è sufficiente per qualità visiva e resta sotto il limite payload.
       */
-      const target = 520;
+      const target = 360;
       const scale = target / Math.min(base.width, base.height);
       const viewport = page.getViewport({ scale });
 
@@ -26749,7 +26749,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
       const dataUrl = canvasToDataUrl(out);
 
-      if(!dataUrl || dataUrl.length < 3000){
+      if(!dataUrl || dataUrl.length < 1200){
         throw new Error("Miniatura generata non valida o troppo piccola.");
       }
 
@@ -26852,7 +26852,14 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
           res.clone().json().then(data => {
             const doc = data && data.document;
             if(doc && doc.id){
-              setTimeout(() => generateAndSaveForDocument(doc.id), 250);
+              /*
+                PDF grandi:
+                la prima generazione può arrivare troppo presto o impiegare più tempo.
+                Ritento senza bloccare il caricamento documento.
+              */
+              setTimeout(() => generateAndSaveForDocument(doc.id), 450);
+              setTimeout(() => generateAndSaveForDocument(doc.id), 1800);
+              setTimeout(() => generateAndSaveForDocument(doc.id), 4200);
             }
           }).catch(()=>{});
         }
@@ -26872,11 +26879,10 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       lastGenerated = null;
 
       /*
-        Generazione anticipata ma non obbligatoria:
-        se riesce, quando arriva document.id la salviamo subito.
-        se fallisce, verrà riprovata dopo upload.
+        Non genero subito al cambio file:
+        per PDF grandi evitiamo sovrapposizioni e generiamo dopo upload,
+        quando abbiamo il document_id su cui salvare la thumbnail.
       */
-      setTimeout(generateThumbnailFromSelectedFile, 350);
     });
   }
 
