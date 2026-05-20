@@ -25142,20 +25142,21 @@ document.addEventListener("visibilitychange", function(){
 
 
 
-<script id="followme-document-carousel-card-final-20260520">
+
+
+<script id="followme-document-carousel-card-real-container-final-20260520">
 (function(){
-  if(window.__FollowMeDocumentCarouselCardFinal20260520) return;
-  window.__FollowMeDocumentCarouselCardFinal20260520 = true;
+  if(window.__FollowMeDocumentCarouselCardRealContainerFinal20260520) return;
+  window.__FollowMeDocumentCarouselCardRealContainerFinal20260520 = true;
 
   /*
-    Documento PDF dentro carosello Destinazioni recenti:
-    - rimuove/nasconde il vecchio frame verticale;
-    - crea una card compatta nel formato carosello;
-    - posizione: terza card;
-    - max 20 card visibili;
-    - metriche: Visualizzazioni e Download;
-    - pulsante: Aggiungi / Aggiorna;
-    - predisposizione futura per thumbnail reale prima pagina PDF.
+    Inserisce Documento PDF nel vero carosello "Destinazioni recenti".
+    Strategia:
+    - trova il titolo "Destinazioni recenti";
+    - cerca il contenitore reale delle card subito dopo o nel suo blocco;
+    - se il contenitore non è chiaramente orizzontale, crea un rail dedicato dentro lo stesso blocco;
+    - inserisce la card come terzo elemento;
+    - nasconde il vecchio frame verticale.
   */
 
   let currentDocument = null;
@@ -25193,20 +25194,36 @@ document.addEventListener("visibilitychange", function(){
   }
 
   function ensureStyle(){
-    if(document.getElementById("followmeDocumentCarouselCardStyle20260520")) return;
+    if(document.getElementById("followmeDocumentCarouselRealStyle20260520")) return;
 
     const style = document.createElement("style");
-    style.id = "followmeDocumentCarouselCardStyle20260520";
+    style.id = "followmeDocumentCarouselRealStyle20260520";
     style.textContent = `
       #followmeDocumentDestinationFrame20260520{
         display:none !important;
       }
 
+      .followme-document-real-carousel-host-20260520{
+        display:flex !important;
+        flex-direction:row !important;
+        gap:12px !important;
+        overflow-x:auto !important;
+        overflow-y:hidden !important;
+        scroll-snap-type:x mandatory;
+        -webkit-overflow-scrolling:touch;
+        padding:4px 2px 10px !important;
+      }
+
+      .followme-document-real-carousel-host-20260520 > *{
+        flex:0 0 auto;
+        scroll-snap-align:start;
+      }
+
       #followmeDocumentCarouselCard20260520{
-        flex:0 0 220px;
-        width:220px;
-        min-width:220px;
-        max-width:220px;
+        flex:0 0 220px !important;
+        width:220px !important;
+        min-width:220px !important;
+        max-width:220px !important;
         min-height:245px;
         box-sizing:border-box;
         position:relative;
@@ -25287,8 +25304,7 @@ document.addEventListener("visibilitychange", function(){
         width:56px;
         height:74px;
         border-radius:14px;
-        background:
-          linear-gradient(180deg,#fff,#e5e7eb);
+        background:linear-gradient(180deg,#fff,#e5e7eb);
         box-shadow:0 12px 30px rgba(0,0,0,.24);
         display:flex;
         align-items:center;
@@ -25393,6 +25409,95 @@ document.addEventListener("visibilitychange", function(){
     document.head.appendChild(style);
   }
 
+  function textOf(el){
+    return String(el && el.textContent || "").replace(/\s+/g," ").trim().toLowerCase();
+  }
+
+  function findRecentTitle(){
+    const els = Array.from(document.querySelectorAll("h1,h2,h3,h4,div,span,p,strong"));
+    return els.find(function(el){
+      const t = textOf(el);
+      return t === "destinazioni recenti" || t.includes("destinazioni recenti");
+    }) || null;
+  }
+
+  function scoreCarouselCandidate(el){
+    if(!el || el.id === "followmeDocumentCarouselCard20260520") return -1;
+
+    const children = Array.from(el.children || []).filter(function(ch){
+      if(ch.id === "followmeDocumentCarouselCard20260520") return false;
+      return String(ch.textContent || "").trim().length > 0;
+    });
+
+    if(children.length < 2) return -1;
+
+    const st = getComputedStyle(el);
+    let score = 0;
+
+    if((st.display || "").includes("flex")) score += 4;
+    if((st.overflowX || "") === "auto" || (st.overflowX || "") === "scroll") score += 4;
+    if(el.scrollWidth > el.clientWidth + 20) score += 4;
+    if(children.length >= 3) score += 2;
+
+    const cls = String(el.className || "").toLowerCase();
+    const id = String(el.id || "").toLowerCase();
+
+    if(cls.includes("carousel") || id.includes("carousel")) score += 5;
+    if(cls.includes("history") || id.includes("history")) score += 3;
+    if(cls.includes("recent") || id.includes("recent")) score += 3;
+    if(cls.includes("list") || id.includes("list")) score += 2;
+
+    return score;
+  }
+
+  function findCarouselContainer(){
+    const title = findRecentTitle();
+
+    if(!title) return null;
+
+    /*
+      1) Prima cerca tra fratelli successivi: spesso il titolo è sopra il rail.
+    */
+    let sib = title.nextElementSibling;
+    for(let i=0; i<5 && sib; i++, sib=sib.nextElementSibling){
+      if(scoreCarouselCandidate(sib) >= 3) return sib;
+
+      const inside = Array.from(sib.querySelectorAll("div,section,ul"))
+        .map(el => ({ el, score:scoreCarouselCandidate(el) }))
+        .filter(x => x.score >= 3)
+        .sort((a,b) => b.score - a.score);
+
+      if(inside.length) return inside[0].el;
+    }
+
+    /*
+      2) Cerca nel contenitore padre del titolo.
+    */
+    let p = title.parentElement;
+    for(let depth=0; depth<6 && p; depth++, p=p.parentElement){
+      const candidates = Array.from(p.querySelectorAll("div,section,ul"))
+        .map(el => ({ el, score:scoreCarouselCandidate(el) }))
+        .filter(x => x.score >= 3)
+        .sort((a,b) => b.score - a.score);
+
+      if(candidates.length) return candidates[0].el;
+    }
+
+    /*
+      3) Fallback: crea un rail subito dopo il titolo dentro il suo parent.
+      Questo garantisce che sia realmente sotto “Destinazioni recenti”.
+    */
+    let rail = document.getElementById("followmeDocumentForcedRecentRail20260520");
+    if(!rail && title.parentElement){
+      rail = document.createElement("div");
+      rail.id = "followmeDocumentForcedRecentRail20260520";
+      rail.className = "followme-document-real-carousel-host-20260520";
+      title.insertAdjacentElement("afterend", rail);
+    }
+
+    return rail;
+  }
+
   async function loadCurrentDocument(){
     try{
       const code = projectCode();
@@ -25418,57 +25523,6 @@ document.addEventListener("visibilitychange", function(){
       currentDocumentPublicUrl = "";
       renderCard();
     }
-  }
-
-  function findCarouselContainer(){
-    /*
-      Cerca il carosello sotto “Destinazioni recenti”.
-      Deve essere un contenitore orizzontale/scrollabile o con più card.
-    */
-    const title = Array.from(document.querySelectorAll("*")).find(function(el){
-      const t = String(el.textContent || "").replace(/\s+/g," ").trim().toLowerCase();
-      return t === "destinazioni recenti" || t.includes("destinazioni recenti");
-    });
-
-    if(title){
-      let node = title;
-      for(let depth=0; depth<5 && node; depth++, node=node.parentElement){
-        const candidates = Array.from(node.querySelectorAll("div,section,ul"))
-          .filter(function(el){
-            if(el.id === "followmeDocumentCarouselCard20260520") return false;
-
-            const children = Array.from(el.children || []);
-            const visibleChildren = children.filter(function(ch){
-              const tx = String(ch.textContent || "").trim();
-              return tx.length > 0;
-            });
-
-            if(visibleChildren.length < 2) return false;
-
-            const st = getComputedStyle(el);
-            const overflowX = st.overflowX || "";
-            const display = st.display || "";
-            const looksScrollable = overflowX === "auto" || overflowX === "scroll" || el.scrollWidth > el.clientWidth + 20;
-            const looksFlex = display.includes("flex") || st.gridAutoFlow === "column";
-
-            return looksScrollable || looksFlex || visibleChildren.length >= 3;
-          });
-
-        if(candidates.length){
-          /*
-            Prende il contenitore più interno plausibile.
-          */
-          return candidates[candidates.length - 1];
-        }
-      }
-
-      if(title.parentElement) return title.parentElement;
-    }
-
-    return document.querySelector(".premium-history-list") ||
-           document.querySelector(".premium-history") ||
-           document.querySelector("[class*='history']") ||
-           null;
   }
 
   function findThirdPositionRef(container){
@@ -25520,9 +25574,8 @@ document.addEventListener("visibilitychange", function(){
     const container = findCarouselContainer();
     if(!container) return false;
 
-    /*
-      Nasconde il precedente frame verticale, se fosse rimasto in DOM.
-    */
+    container.classList.add("followme-document-real-carousel-host-20260520");
+
     const oldFrame = document.getElementById("followmeDocumentDestinationFrame20260520");
     if(oldFrame) oldFrame.style.display = "none";
 
@@ -25539,11 +25592,6 @@ document.addEventListener("visibilitychange", function(){
     const name = hasDoc ? (currentDocument.original_name || "Documento PDF") : "Nessun PDF caricato";
     const size = hasDoc ? fmtBytes(currentDocument.size_bytes) : "";
     const pages = hasDoc ? (currentDocument.page_count || "in lettura") : "";
-
-    /*
-      Thumbnail reale futura:
-      se in futuro il server restituisce thumbnail_url, verrà usata automaticamente.
-    */
     const thumb = hasDoc && currentDocument.thumbnail_url ? String(currentDocument.thumbnail_url) : "";
 
     card.innerHTML = `
@@ -25609,12 +25657,14 @@ document.addEventListener("visibilitychange", function(){
     setTimeout(renderCard, 500);
     setTimeout(loadCurrentDocument, 900);
     setTimeout(renderCard, 1600);
+    setTimeout(renderCard, 2600);
   }
 
-  window.fmDocumentCarouselCard20260520 = {
+  window.fmDocumentCarouselRealContainer20260520 = {
     boot,
     renderCard,
-    loadCurrentDocument
+    loadCurrentDocument,
+    findCarouselContainer
   };
 
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
