@@ -24401,7 +24401,7 @@ document.addEventListener("visibilitychange", function(){
         <div class="fm-doc-row" data-fm-doc-step="3">
           <div class="fm-doc-dot">3</div>
           <div>
-            <strong>Documento pronto per la pubblicazione</strong>
+            <strong>Controlla la Preview</strong>
             <span></span>
           </div>
         </div>
@@ -24409,7 +24409,15 @@ document.addEventListener("visibilitychange", function(){
         <div class="fm-doc-row" data-fm-doc-step="4">
           <div class="fm-doc-dot">4</div>
           <div>
-            <strong>Pubblica subito</strong>
+            <strong>Pubblicalo</strong>
+            <span></span>
+          </div>
+        </div>
+
+        <div class="fm-doc-row" data-fm-doc-step="5">
+          <div class="fm-doc-dot">5</div>
+          <div>
+            <strong>Torna su questa pagina per visualizzare statistiche e download reali</strong>
             <span></span>
           </div>
         </div>
@@ -24434,6 +24442,7 @@ document.addEventListener("visibilitychange", function(){
       actions.innerHTML = `
         <button type="button" class="prepare" id="followme5PrepareDoc20260520">Prepara documento</button>
         <button type="button" class="publish disabled" id="followme5PublishDoc20260520" disabled>Pubblica subito</button>
+        <button type="button" class="preview disabled" id="followme5PreviewDoc20260520" disabled>Preview</button>
       `;
       uploadBox.insertAdjacentElement("afterend", actions);
     }
@@ -24526,15 +24535,33 @@ document.addEventListener("visibilitychange", function(){
     }
   }
 
+  function movePreviewAfterPublish20260520(){
+    const preview = document.getElementById("followme5PreviewDoc20260520");
+    const publish = document.getElementById("followme5PublishDoc20260520");
+    if(!preview || !publish) return;
+    try{
+      if(preview.previousElementSibling !== publish){
+        publish.insertAdjacentElement("afterend", preview);
+      }
+    }catch(e){}
+  }
+
+  function showPreviewWait20260520(){
+    alert("Attendi il caricamento completo, riprova tra poco.");
+  }
+
   function refreshButtons(){
+    movePreviewAfterPublish20260520();
+    const preview = document.getElementById("followme5PreviewDoc20260520");
     const publish = document.getElementById("followme5PublishDoc20260520");
 
     const ready = !!preparedUrl;
 
-    if(publish){
-      publish.disabled = !ready;
-      publish.classList.toggle("disabled", !ready);
-    }
+    [preview, publish].forEach(function(btn){
+      if(!btn) return;
+      btn.disabled = !ready;
+      btn.classList.toggle("disabled", !ready);
+    });
   }
 
   function updateGuidance(){
@@ -24543,27 +24570,23 @@ document.addEventListener("visibilitychange", function(){
       const n = Number(row.dataset.fmDocStep || 0);
       row.classList.remove("fm-step-done-20260520", "fm-step-active-20260520");
 
-      /*
-        Progressione corretta:
-        1 verde solo dopo scelta file.
-        2 verde solo dopo preparazione riuscita.
-        3 verde solo quando il documento è pronto.
-        4 verde solo dopo pubblicazione.
-      */
       if(n === 1 && selectedPdfExists()) row.classList.add("fm-step-done-20260520");
       if(n === 2 && preparedUrl) row.classList.add("fm-step-done-20260520");
       if(n === 3 && preparedUrl) row.classList.add("fm-step-done-20260520");
       if(n === 4 && publishedDone) row.classList.add("fm-step-done-20260520");
+      if(n === 5 && publishedDone) row.classList.add("fm-step-done-20260520");
 
       if(!selectedPdfExists() && n === 1) row.classList.add("fm-step-active-20260520");
       else if(selectedPdfExists() && !preparedUrl && n === 2) row.classList.add("fm-step-active-20260520");
       else if(preparedUrl && !publishedDone && n === 4) row.classList.add("fm-step-active-20260520");
+      else if(publishedDone && n === 5) row.classList.add("fm-step-active-20260520");
     });
 
     const prepare = document.getElementById("followme5PrepareDoc20260520");
+    const preview = document.getElementById("followme5PreviewDoc20260520");
     const publish = document.getElementById("followme5PublishDoc20260520");
 
-    [prepare, publish].forEach(function(btn){
+    [prepare, preview, publish].forEach(function(btn){
       if(btn) btn.classList.remove("fm-next-click-20260520");
     });
 
@@ -24576,6 +24599,7 @@ document.addEventListener("visibilitychange", function(){
     if(selectedPdfExists() && !preparedUrl && prepare) prepare.classList.add("fm-next-click-20260520");
     if(preparedUrl && !publishedDone && publish) publish.classList.add("fm-next-click-20260520");
 
+    movePreviewAfterPublish20260520();
   }
 
   function selectedPdfExists(){
@@ -24634,6 +24658,20 @@ document.addEventListener("visibilitychange", function(){
     }, 900);
   }
 
+  function openPreview(){
+    if(!preparedUrl){
+      showPreviewWait20260520();
+      scrollDocElementIntoView20260520(document.getElementById("followme5PrepareDoc20260520"), "center");
+      return;
+    }
+
+    previewDone = true;
+    updateGuidance();
+
+    const url = absUrl(preparedUrl) + (preparedUrl.includes("?") ? "&" : "?") + "return_app=" + encodeURIComponent(projectCode());
+    window.open(url, "_blank", "noopener");
+  }
+
   async function publishNow(){
     if(!preparedDocument || !preparedUrl){
       alert("Prima prepara il documento.");
@@ -24664,26 +24702,7 @@ document.addEventListener("visibilitychange", function(){
 
       refreshButtons();
       updateGuidance();
-
-      /*
-        Dopo pubblicazione torniamo direttamente alla Home FollowMe.
-        Poi facciamo due refresh leggeri delle funzioni principali,
-        così carosello e stato "Attivo ora" si aggiornano subito.
-      */
-      document.body.classList.remove("fm-consegna-documento-open-20260520");
-      window.scrollTo({ top:0, left:0, behavior:"smooth" });
-
-      setTimeout(function(){
-        try{ window.fmPdfSingleCard20260520?.boot?.(); }catch(e){}
-        try{ window.fmPdfPreviewIntegrated20260520?.boot?.(); }catch(e){}
-        try{ window.fmOtherOptionsQrPreviewFixed20260520?.boot?.(); }catch(e){}
-      }, 350);
-
-      setTimeout(function(){
-        try{ window.fmPdfSingleCard20260520?.boot?.(); }catch(e){}
-        try{ window.fmPdfPreviewIntegrated20260520?.boot?.(); }catch(e){}
-        try{ window.fmOtherOptionsQrPreviewFixed20260520?.boot?.(); }catch(e){}
-      }, 1200);
+      showUserQrPanel();
 
       if(data.warning){
         alert(data.warning);
@@ -24725,11 +24744,17 @@ document.addEventListener("visibilitychange", function(){
 
   function bindActions(){
     const prepare = document.getElementById("followme5PrepareDoc20260520");
+    const preview = document.getElementById("followme5PreviewDoc20260520");
     const publish = document.getElementById("followme5PublishDoc20260520");
 
     if(prepare && prepare.dataset.step5Bound20260520 !== "1"){
       prepare.dataset.step5Bound20260520 = "1";
       prepare.onclick = prepareDocument;
+    }
+
+    if(preview && preview.dataset.step5Bound20260520 !== "1"){
+      preview.dataset.step5Bound20260520 = "1";
+      preview.onclick = openPreview;
     }
 
     if(publish && publish.dataset.step5Bound20260520 !== "1"){
@@ -24772,6 +24797,7 @@ document.addEventListener("visibilitychange", function(){
       "followmeDocumentUploadBtn20260520",
       "followmeDocumentQrPreviewBtn20260520",
       "followmeStablePrepareDoc20260520",
+      "followmeStablePreviewDoc20260520",
       "followmeStablePublishDoc20260520"
     ].forEach(function(id){
       const el = document.getElementById(id);
@@ -25462,16 +25488,17 @@ document.addEventListener("visibilitychange", function(){
     const p = page() || document;
     const buttons = Array.from(p.querySelectorAll("button,a"));
 
-    /*
-      Preview rimossa dal flusso documento:
-      qui gestiamo solo Pubblica subito.
-    */
+    const preview = document.getElementById("followme5PreviewDoc20260520") ||
+                    document.getElementById("followmeStablePreviewDoc20260520") ||
+                    document.getElementById("followmeDocumentPreviewBtn20260520") ||
+                    buttons.find(el => /preview/i.test(String(el.textContent || "")));
+
     const publish = document.getElementById("followme5PublishDoc20260520") ||
                     document.getElementById("followmeStablePublishDoc20260520") ||
                     document.getElementById("followmeDocumentPublishBtn20260520") ||
                     buttons.find(el => /pubblica/i.test(String(el.textContent || "")));
 
-    return { publish };
+    return { preview, publish };
   }
 
   function setEnabled(btn, enabled){
