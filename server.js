@@ -9591,6 +9591,7 @@ app.get('/fm/chat/closed', (req, res) => {
 async function ensureFollowMeDocumentThumbnailColumn20260520() {
   await ensureFollowMeDocumentTable20260520();
   await pool.query(`ALTER TABLE followme_documents ADD COLUMN IF NOT EXISTS thumbnail_path TEXT`);
+  await pool.query(`ALTER TABLE followme_documents ADD COLUMN IF NOT EXISTS thumbnail_data_url TEXT`);
 }
 
 function followmeCleanBase64Image20260520(v) {
@@ -9812,13 +9813,15 @@ async function ensureFollowMeDocumentPreparedColumns20260520() {
   await pool.query(`ALTER TABLE followme_documents ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE followme_documents ADD COLUMN IF NOT EXISTS is_published BOOLEAN DEFAULT FALSE`);
   await pool.query(`ALTER TABLE followme_documents ADD COLUMN IF NOT EXISTS thumbnail_path TEXT`);
+  await pool.query(`ALTER TABLE followme_documents ADD COLUMN IF NOT EXISTS thumbnail_data_url TEXT`);
 }
 
 function normalizeFollowMeDocumentForClient20260520(doc, extra = {}) {
   if (!doc) return null;
   return {
     ...doc,
-    thumbnail_url: doc.thumbnail_path || null,
+    thumbnail_data_url: doc.thumbnail_data_url || null,
+    thumbnail_url: doc.thumbnail_data_url || doc.thumbnail_path || null,
     prepared: !!extra.prepared,
     published: !!extra.published,
     is_published: !!doc.is_published
@@ -9980,6 +9983,8 @@ app.post('/api/followme/:code/document/upload', followmeDocumentUploadMulter2026
     await pool.query(
       `UPDATE followme_documents
        SET status = 'replaced',
+           thumbnail_path = NULL,
+           thumbnail_data_url = NULL,
            updated_at = NOW()
        WHERE project_id = $1
          AND status = 'active'`,
@@ -9990,7 +9995,7 @@ app.post('/api/followme/:code/document/upload', followmeDocumentUploadMulter2026
       `INSERT INTO followme_documents
        (project_id, original_name, stored_name, public_path, mime_type, size_bytes, page_count, status, is_published, created_at, updated_at)
        VALUES ($1,$2,$3,$4,'application/pdf',$5,$6,'active',FALSE,NOW(),NOW())
-       RETURNING id, project_id, original_name, public_path, mime_type, size_bytes, page_count, status, is_published, published_at, views_count, downloads_count, thumbnail_path, created_at, updated_at`,
+       RETURNING id, project_id, original_name, public_path, mime_type, size_bytes, page_count, status, is_published, published_at, views_count, downloads_count, thumbnail_path, thumbnail_data_url, created_at, updated_at`,
       [project.id, originalName, storedName, publicPath, buffer.length, pageCount]
     );
 
@@ -10010,7 +10015,7 @@ app.post('/api/followme/:code/document/upload', followmeDocumentUploadMulter2026
            SET thumbnail_path = $1,
                updated_at = NOW()
            WHERE id = $2
-           RETURNING id, project_id, original_name, public_path, mime_type, size_bytes, page_count, status, is_published, published_at, views_count, downloads_count, thumbnail_path, created_at, updated_at`,
+           RETURNING id, project_id, original_name, public_path, mime_type, size_bytes, page_count, status, is_published, published_at, views_count, downloads_count, thumbnail_path, thumbnail_data_url, created_at, updated_at`,
           [fallbackThumb, insertedDoc.id]
         );
 
@@ -10058,7 +10063,7 @@ app.get('/api/followme/:code/document/current', async (req, res) => {
     }
 
     const r = await pool.query(
-      `SELECT id, project_id, original_name, public_path, mime_type, size_bytes, page_count, status, is_published, published_at, views_count, downloads_count, thumbnail_path, created_at, updated_at
+      `SELECT id, project_id, original_name, public_path, mime_type, size_bytes, page_count, status, is_published, published_at, views_count, downloads_count, thumbnail_path, thumbnail_data_url, created_at, updated_at
        FROM followme_documents
        WHERE project_id = $1
          AND status = 'active'
@@ -10083,7 +10088,7 @@ app.get('/api/followme/:code/document/current', async (req, res) => {
            SET thumbnail_path = $1,
                updated_at = NOW()
            WHERE id = $2
-           RETURNING id, project_id, original_name, public_path, mime_type, size_bytes, page_count, status, is_published, published_at, views_count, downloads_count, thumbnail_path, created_at, updated_at`,
+           RETURNING id, project_id, original_name, public_path, mime_type, size_bytes, page_count, status, is_published, published_at, views_count, downloads_count, thumbnail_path, thumbnail_data_url, created_at, updated_at`,
           [fallbackThumb, doc.id]
         );
 
@@ -10326,15 +10331,17 @@ app.post('/api/followme/document/:document_id/thumbnail', express.json({ limit:'
       return res.status(400).json({ success:false, error:'Thumbnail non valida.' });
     }
 
+    /* FollowMe thumbnail persistente DB 20260520 */
     const upd = await pool.query(
       `UPDATE followme_documents
        SET thumbnail_path = $1,
+           thumbnail_data_url = $2,
            updated_at = NOW()
-       WHERE id = $2
+       WHERE id = $3
        RETURNING id, project_id, original_name, public_path, mime_type, size_bytes, page_count,
                  status, is_published, published_at, views_count, downloads_count,
-                 thumbnail_path, created_at, updated_at`,
-      [thumbnailPath, documentId]
+                 thumbnail_path, thumbnail_data_url, created_at, updated_at`,
+      [thumbnailPath, thumbnailBase64, documentId]
     );
 
     const updatedDoc = upd.rows[0];
