@@ -28102,62 +28102,101 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 </script>
 
 
-<script id="followme-hide-only-modalita-chat-20260521">
+
+
+<script id="followme-hide-modalita-chat-definitive-20260521">
 (function(){
   "use strict";
 
   /*
-    Nasconde esclusivamente il pulsante "Modalità Chat".
-    Non rimuove funzioni.
-    Non sposta blocchi.
-    Non tocca PDF, redirect, contatori, card o cronologia.
+    Nasconde SOLO il controllo/pulsante "Modalità Chat".
+    Non sposta elementi.
+    Non modifica PDF, card, contatori, redirect, cronologia o layout.
   */
 
-  function normalizeText(value){
-    return String(value || "")
+  function norm(v){
+    return String(v || "")
       .replace(/\s+/g, " ")
+      .replace(/[💬🗨️🔵🟢⚙️]/g, "")
       .trim()
       .toLowerCase();
   }
 
-  function hideOnlyModalitaChatButton(){
-    document.querySelectorAll("button, a").forEach(function(el){
-      var text = normalizeText(el.textContent);
+  function isModalitaChatControl(el){
+    if (!el) return false;
 
-      if (
-        text === "modalità chat" ||
-        text === "modalita chat"
-      ) {
-        el.style.display = "none";
-        el.setAttribute("hidden", "hidden");
-        el.setAttribute("aria-hidden", "true");
-        el.setAttribute("data-followme-hidden-modalita-chat", "true");
-      }
+    var text = norm(el.textContent || el.innerText || "");
+
+    /*
+      Deve contenere Modalità Chat / Modalita Chat.
+      Limitiamo la lunghezza per evitare di nascondere contenitori grandi.
+    */
+    if (
+      !text.includes("modalità chat") &&
+      !text.includes("modalita chat")
+    ) {
+      return false;
+    }
+
+    if (text.length > 80) return false;
+
+    var tag = String(el.tagName || "").toLowerCase();
+    var role = String(el.getAttribute("role") || "").toLowerCase();
+
+    return (
+      tag === "button" ||
+      tag === "a" ||
+      role === "button" ||
+      el.className.toString().toLowerCase().includes("btn") ||
+      el.className.toString().toLowerCase().includes("button")
+    );
+  }
+
+  function hideModalitaChat(){
+    document.querySelectorAll("button, a, [role='button'], .btn, .button").forEach(function(el){
+      if (!isModalitaChatControl(el)) return;
+
+      el.style.setProperty("display", "none", "important");
+      el.style.setProperty("visibility", "hidden", "important");
+      el.style.setProperty("width", "0", "important");
+      el.style.setProperty("height", "0", "important");
+      el.style.setProperty("min-width", "0", "important");
+      el.style.setProperty("min-height", "0", "important");
+      el.style.setProperty("margin", "0", "important");
+      el.style.setProperty("padding", "0", "important");
+      el.style.setProperty("border", "0", "important");
+      el.style.setProperty("overflow", "hidden", "important");
+
+      el.setAttribute("hidden", "hidden");
+      el.setAttribute("aria-hidden", "true");
+      el.setAttribute("data-followme-modalita-chat-hidden", "true");
+    });
+  }
+
+  function start(){
+    hideModalitaChat();
+
+    setTimeout(hideModalitaChat, 100);
+    setTimeout(hideModalitaChat, 500);
+    setTimeout(hideModalitaChat, 1200);
+    setTimeout(hideModalitaChat, 2500);
+
+    var obs = new MutationObserver(function(){
+      hideModalitaChat();
+    });
+
+    obs.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true
     });
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", hideOnlyModalitaChatButton);
+    document.addEventListener("DOMContentLoaded", start);
   } else {
-    hideOnlyModalitaChatButton();
+    start();
   }
-
-  /*
-    La pagina crea alcuni elementi dinamicamente:
-    ripetiamo il controllo in modo leggero e mirato.
-  */
-  setTimeout(hideOnlyModalitaChatButton, 300);
-  setTimeout(hideOnlyModalitaChatButton, 1000);
-  setTimeout(hideOnlyModalitaChatButton, 2500);
-
-  var observer = new MutationObserver(function(){
-    hideOnlyModalitaChatButton();
-  });
-
-  observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true
-  });
 })();
 </script>
 
