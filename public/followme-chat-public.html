@@ -557,13 +557,20 @@
 
 
 
-<style id="followme-public-bot-state-reader-20260521">
+
+
+<style id="followme-public-real-bot-off-keep-name-20260522">
   /*
-    L'utente non vede nessun pulsante BOT.
-    Se l'admin spegne il BOT, nascondiamo solo testi descrittivi marcati,
-    lasciando visibili chat, input, invio, allegati e primo avviso di collegamento.
+    BOT spento lato utente:
+    nasconde solo dialoghi/testi automatici del BOT.
+    Non nasconde:
+    - primo avviso collegamento
+    - richiesta/riconoscimento nome
+    - input chat
+    - messaggi utente/admin
+    - allegati
   */
-  body.followme-public-bot-off-20260521 [data-followme-public-bot-description="true"]{
+  body.followme-public-bot-off-20260522 [data-followme-bot-auto-dialogue="true"]{
     display:none !important;
   }
 </style>
@@ -5983,9 +5990,21 @@
 
 
 
-<script id="followme-public-bot-state-reader-script-20260521">
+
+
+<script id="followme-public-real-bot-off-keep-name-script-20260522">
 (function(){
   "use strict";
+
+  /*
+    Regola:
+    - lo stato BOT è deciso dall'admin su /fm/app/CODICE;
+    - l'utente non vede pulsanti BOT;
+    - se BOT è spento, non deve vedere dialoghi automatici/presentazioni;
+    - la funzione nome resta attiva.
+  */
+
+  var botEnabled = true;
 
   function getChatToken(){
     try {
@@ -5996,61 +6015,182 @@
     }
   }
 
-  function clean(v){
-    return String(v || "").replace(/\s+/g, " ").trim();
+  function txt(el){
+    return String(el && el.textContent || "")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
-  function lower(el){
-    return clean(el && el.textContent || "").toLowerCase();
+  function low(el){
+    return txt(el).toLowerCase();
+  }
+
+  function isInputOrControl(el){
+    if (!el) return false;
+
+    var tag = String(el.tagName || "").toLowerCase();
+
+    if (["button","a","input","textarea","select","form","label"].includes(tag)) {
+      return true;
+    }
+
+    if (el.querySelector && el.querySelector("input, textarea, button, a, select")) {
+      return true;
+    }
+
+    return false;
   }
 
   function isConnectionNotice(el){
-    var t = lower(el);
+    var t = low(el);
+
     return (
       t.includes("collegamento") ||
       t.includes("connessione") ||
       t.includes("stai informando") ||
       t.includes("informando") ||
       t.includes("richiesta inviata") ||
-      t.includes("attendi")
+      t.includes("attendi") ||
+      t.includes("proprietario") && t.includes("avvis")
     );
   }
 
-  function isDescription(el){
+  function isNameRecognition(el){
+    var t = low(el);
+
+    /*
+      Questo deve rimanere anche con BOT spento.
+      Serve per riconoscere l'utente/nome/display_name.
+    */
+    return (
+      t.includes("nome") ||
+      t.includes("come ti chiami") ||
+      t.includes("presentati") ||
+      t.includes("identific") ||
+      t.includes("riconosc") ||
+      t.includes("display name")
+    );
+  }
+
+  function isRealUserOrAdminMessage(el){
     if (!el) return false;
 
-    var tag = String(el.tagName || "").toLowerCase();
-    if (["button","a","input","textarea","select","form"].includes(tag)) return false;
-    if (el.querySelector && el.querySelector("input, textarea, button, a")) return false;
+    var cls = String(el.className || "").toLowerCase();
+    var dataSender = String(el.getAttribute && (
+      el.getAttribute("data-sender") ||
+      el.getAttribute("data-message-sender") ||
+      ""
+    ) || "").toLowerCase();
 
-    var t = lower(el);
-    if (!t || t.length > 600) return false;
+    /*
+      Non tocchiamo messaggi reali esplicitamente marcati come visitor/owner/admin.
+    */
+    if (
+      dataSender === "visitor" ||
+      dataSender === "owner" ||
+      dataSender === "admin"
+    ) {
+      return true;
+    }
 
+    if (
+      cls.includes("visitor") ||
+      cls.includes("owner") ||
+      cls.includes("admin") ||
+      cls.includes("user-message") ||
+      cls.includes("message-user") ||
+      cls.includes("message-owner") ||
+      cls.includes("message-admin")
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function isLikelyBotAutoDialogue(el){
+    if (!el) return false;
+
+    if (isInputOrControl(el)) return false;
     if (isConnectionNotice(el)) return false;
+    if (isNameRecognition(el)) return false;
+    if (isRealUserOrAdminMessage(el)) return false;
 
+    var t = low(el);
+    if (!t) return false;
+
+    /*
+      Evita di nascondere contenitori enormi.
+    */
+    if (t.length > 700) return false;
+
+    /*
+      Dialoghi/presentazioni tipiche del BOT.
+      Non includiamo "nome" perché deve restare.
+    */
     return (
       t.includes("bot") ||
       t.includes("assistente") ||
       t.includes("ti aiuto") ||
+      t.includes("sono qui per") ||
       t.includes("come funziona") ||
-      t.includes("puoi inviare") ||
       t.includes("puoi scrivere") ||
+      t.includes("puoi inviare") ||
+      t.includes("questa chat ti permette") ||
       t.includes("questo sistema") ||
-      t.includes("questa chat")
+      t.includes("descrizione") ||
+      t.includes("presentazione") ||
+      t.includes("messaggio automatico") ||
+      t.includes("risposta automatica")
     );
   }
 
-  function markDescriptions(){
+  function removeUserBotButtons(){
+    /*
+      Sicurezza: eventuali vecchi pulsanti BOT lato utente vengono rimossi/nascosti.
+    */
+    document.querySelectorAll("button, a, [role='button']").forEach(function(el){
+      var t = low(el);
+
+      if (
+        t.includes("accendi bot") ||
+        t.includes("spegni bot") ||
+        t === "bot chat"
+      ) {
+        el.style.setProperty("display", "none", "important");
+        el.setAttribute("hidden", "hidden");
+        el.setAttribute("aria-hidden", "true");
+        el.setAttribute("data-followme-user-bot-button-hidden", "true");
+      }
+    });
+  }
+
+  function markBotDialogue(){
     document.querySelectorAll("p, div, span, small, section, article").forEach(function(el){
+      if (el.closest && el.closest("form")) return;
+
       if (isConnectionNotice(el)) {
         el.setAttribute("data-followme-keep-connection-notice", "true");
         return;
       }
 
-      if (isDescription(el)) {
-        el.setAttribute("data-followme-public-bot-description", "true");
+      if (isNameRecognition(el)) {
+        el.setAttribute("data-followme-keep-name-recognition", "true");
+        return;
+      }
+
+      if (isLikelyBotAutoDialogue(el)) {
+        el.setAttribute("data-followme-bot-auto-dialogue", "true");
       }
     });
+  }
+
+  function applyBotState(){
+    removeUserBotButtons();
+    markBotDialogue();
+
+    document.body.classList.toggle("followme-public-bot-off-20260522", botEnabled === false);
+    window.__followMePublicBotEnabled = botEnabled;
   }
 
   async function refreshBotState(){
@@ -6069,19 +6209,30 @@
       var data = await res.json();
       if (!data || !data.success) return;
 
-      markDescriptions();
-      document.body.classList.toggle("followme-public-bot-off-20260521", data.bot_enabled === false);
+      botEnabled = data.bot_enabled !== false;
+      applyBotState();
     } catch(e) {
       console.warn("[FollowMe] stato BOT pubblico non disponibile:", e);
     }
   }
 
+  /*
+    Protezione ulteriore:
+    se qualche script frontend crea un dialogo BOT dopo il caricamento,
+    lo marchiamo e lo nascondiamo appena appare.
+  */
   function boot(){
+    applyBotState();
     refreshBotState();
+
     setInterval(refreshBotState, 4000);
 
+    setTimeout(applyBotState, 300);
+    setTimeout(applyBotState, 1000);
+    setTimeout(applyBotState, 2200);
+
     var obs = new MutationObserver(function(){
-      markDescriptions();
+      applyBotState();
     });
 
     obs.observe(document.documentElement, {
