@@ -24862,13 +24862,11 @@ document.addEventListener("visibilitychange", function(){
       window.scrollTo({ top:0, left:0, behavior:"smooth" });
 
       setTimeout(function(){
-        try{ window.fmPdfSingleCard20260520?.boot?.(); }catch(e){}
         try{ window.fmPdfPreviewIntegrated20260520?.boot?.(); }catch(e){}
         try{ window.fmOtherOptionsQrPreviewFixed20260520?.boot?.(); }catch(e){}
       }, 350);
 
       setTimeout(function(){
-        try{ window.fmPdfSingleCard20260520?.boot?.(); }catch(e){}
         try{ window.fmPdfPreviewIntegrated20260520?.boot?.(); }catch(e){}
         try{ window.fmOtherOptionsQrPreviewFixed20260520?.boot?.(); }catch(e){}
       }, 1250);
@@ -25835,14 +25833,12 @@ document.addEventListener("visibilitychange", function(){
 
       setTimeout(function(){
         try{ window.fmDocumentNativePremiumHistoryNoEmbed20260520?.loadCurrentDocument?.(); }catch(e){}
-        try{ window.fmPdfSingleCard20260520?.boot?.(); }catch(e){}
         try{ window.fmPdfPreviewIntegrated20260520?.boot?.(); }catch(e){}
         try{ window.fmOtherOptionsQrPreviewFixed20260520?.boot?.(); }catch(e){}
       }, 350);
 
       setTimeout(function(){
         try{ window.fmDocumentNativePremiumHistoryNoEmbed20260520?.loadCurrentDocument?.(); }catch(e){}
-        try{ window.fmPdfSingleCard20260520?.boot?.(); }catch(e){}
         try{ window.fmPdfPreviewIntegrated20260520?.boot?.(); }catch(e){}
         try{ window.fmOtherOptionsQrPreviewFixed20260520?.boot?.(); }catch(e){}
       }, 1250);
@@ -26042,410 +26038,6 @@ document.addEventListener("visibilitychange", function(){
 
 
 
-<script id="followme-pdf-single-card-final-20260520">
-(function(){
-  if(window.__FollowMePdfSingleCardFinal20260520) return;
-  window.__FollowMePdfSingleCardFinal20260520 = true;
-
-  let statusData = null;
-  let docData = null;
-  let busy = false;
-
-  function code(){
-    try{
-      const p = location.pathname.split("/").filter(Boolean);
-      const i = p.indexOf("app");
-      if(i >= 0 && p[i+1]) return p[i+1];
-    }catch(e){}
-    return "FM-DEMO";
-  }
-
-  function clean(v){
-    return String(v || "").trim().replace(/\/+$/, "");
-  }
-
-  function publicId(){
-    return statusData?.project?.public_id || "FMDEMO";
-  }
-
-  function documentUrl(){
-    return "/fm/document/" + publicId();
-  }
-
-  function isPdfActive(){
-    const active = clean(statusData?.project?.active_url || "");
-    return active === clean(documentUrl()) || active.includes("/fm/document/");
-  }
-
-  function track(){
-    return document.getElementById("premiumHistoryTrack") ||
-           document.querySelector(".premium-history-track");
-  }
-
-  function esc(v){
-    return String(v || "").replace(/[&<>"']/g, function(c){
-      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
-    });
-  }
-
-  function shortName(v){
-    v = String(v || "Documento PDF").replace(/\.pdf$/i, "").trim();
-    return v.length > 24 ? v.slice(0, 21) + "…" : v;
-  }
-
-  function removePdfCards(){
-    document.querySelectorAll(
-      "#followmeDocumentPremiumHistoryCard20260520," +
-      "#followmeDocumentCarouselCard20260520," +
-      "#followmeDocumentOneTrueCard20260520," +
-      "#followmePdfSingleCard20260520," +
-      "[data-followme-document-card='1']," +
-      "[data-followme-doc-card='1']"
-    ).forEach(el => el.remove());
-
-    document.querySelectorAll(".premium-history-card").forEach(card => {
-      const txt = (card.textContent || "").replace(/\s+/g, " ").trim();
-      if(txt.includes("Documento PDF") || txt.includes("Consegna diretta")){
-        card.remove();
-      }
-    });
-  }
-
-  function ensureStyle(){
-    if(document.getElementById("followmePdfSingleCardStyle20260520")) return;
-
-    const st = document.createElement("style");
-    st.id = "followmePdfSingleCardStyle20260520";
-    st.textContent = `
-      #followmePdfSingleCard20260520.is-active{
-        border-color:rgba(200,255,46,.72) !important;
-        box-shadow:
-          0 0 0 1px rgba(200,255,46,.18) inset,
-          0 18px 42px rgba(200,255,46,.12),
-          0 16px 34px rgba(0,0,0,.24) !important;
-      }
-
-      #followmePdfSingleCard20260520 .fm-pdf-mini{
-        width:100%;
-        aspect-ratio:1 / 1;
-        min-height:118px;
-        border-radius:18px;
-        display:grid;
-        place-items:center;
-        overflow:hidden;
-        background:
-          radial-gradient(circle at 20% 8%, rgba(200,255,46,.18), transparent 34%),
-          radial-gradient(circle at 88% 0%, rgba(94,231,255,.14), transparent 32%),
-          linear-gradient(145deg, rgba(255,255,255,.10), rgba(255,255,255,.035));
-        border:1px solid rgba(255,255,255,.10);
-      }
-
-      #followmePdfSingleCard20260520 .fm-pdf-mini img{
-        width:100%;
-        height:100%;
-        object-fit:cover;
-        display:block;
-      }
-
-      #followmePdfSingleCard20260520 .fm-pdf-fallback{
-        display:grid;
-        gap:5px;
-        text-align:center;
-        padding:10px;
-      }
-
-      #followmePdfSingleCard20260520 .fm-pdf-fallback strong{
-        color:#fff;
-        font-size:1.05rem;
-      }
-
-      #followmePdfSingleCard20260520 .fm-pdf-fallback span{
-        color:rgba(255,255,255,.62);
-        font-size:.74rem;
-      }
-
-      #followmePdfSingleCard20260520 .premium-history-active{
-        color:#101018 !important;
-        background:linear-gradient(135deg,#c8ff2e,#5ee7ff) !important;
-        border:0 !important;
-        opacity:1 !important;
-        cursor:default !important;
-        animation:fmPdfActiveGlow20260520 1.4s ease-in-out infinite;
-      }
-
-      #followmePdfSingleCard20260520 .fm-pdf-edit-disabled{
-        color:rgba(255,255,255,.42) !important;
-        background:rgba(255,255,255,.055) !important;
-        border:1px solid rgba(255,255,255,.09) !important;
-        box-shadow:none !important;
-        cursor:not-allowed !important;
-        opacity:.58 !important;
-      }
-
-      #followmePdfSingleCard20260520 .fm-pdf-edit-enabled{
-        color:#101018 !important;
-        background:linear-gradient(135deg,#c8ff2e,#5ee7ff) !important;
-        border:0 !important;
-      }
-
-      @keyframes fmPdfActiveGlow20260520{
-        0%,100%{transform:translateY(0);box-shadow:0 0 0 0 rgba(200,255,46,.35),0 10px 24px rgba(200,255,46,.22);}
-        50%{transform:translateY(-1px);box-shadow:0 0 0 7px rgba(200,255,46,.08),0 15px 30px rgba(200,255,46,.28);}
-      }
-    `;
-    document.head.appendChild(st);
-  }
-
-  async function refresh(){
-    if(busy) return;
-    busy = true;
-    const c = code();
-
-    try{
-      const r = await fetch("/api/followme/" + encodeURIComponent(c) + "/status?v=" + Date.now(), { cache:"no-store" });
-      const j = await r.json().catch(() => null);
-      if(j && j.success) statusData = j;
-    }catch(e){}
-
-    try{
-      const r = await fetch("/api/followme/" + encodeURIComponent(c) + "/document/current?v=" + Date.now(), { cache:"no-store" });
-      const j = await r.json().catch(() => null);
-      if(j && j.success) docData = j.document || null;
-    }catch(e){}
-
-    busy = false;
-  }
-
-  function deactivateOtherActiveCards(){
-    if(!isPdfActive()) return;
-
-    const t = track();
-    if(!t) return;
-
-    t.querySelectorAll(".premium-history-card.is-active").forEach(card => {
-      if(card.id !== "followmePdfSingleCard20260520"){
-        card.classList.remove("is-active");
-      }
-    });
-
-    t.querySelectorAll(".premium-history-active").forEach(btn => {
-      const card = btn.closest(".premium-history-card");
-      if(card && card.id !== "followmePdfSingleCard20260520"){
-        btn.textContent = "Riattiva";
-        btn.disabled = false;
-        btn.className = "premium-history-reactivate";
-      }
-    });
-  }
-
-  function openDocPage(){
-    const btn = document.getElementById("followmeConsegnaDocumentoBtn20260520") ||
-      Array.from(document.querySelectorAll("button,a")).find(el => /consegna documento/i.test(el.textContent || ""));
-    if(btn) return btn.click();
-
-    location.href = "/fm/app/" + encodeURIComponent(code()) + "#consegna-documento";
-  }
-
-  function findWorkingPdfHistoryReactivateButton20260521(){
-    /*
-      followme-restore-simple-pdf-reactivate-bridge-20260521
-      Versione prudente:
-      cerca la card fantasma funzionante e clicca il suo Riattiva,
-      senza spostarla, senza nasconderla, senza forzare display/ordine.
-    */
-    const cards = Array.from(document.querySelectorAll(".premium-history-card"));
-
-    for(const card of cards){
-      if(!card || card.id === "followmePdfSingleCard20260520") continue;
-
-      const txt = String(card.textContent || "").replace(/\s+/g, " ").toLowerCase();
-
-      const looksPdfHistory =
-        txt.includes("/fm/document/") ||
-        txt.includes("fm/document") ||
-        txt.includes("documento pdf") ||
-        (
-          (txt.includes("destinazione") || txt.includes("precedente")) &&
-          (txt.includes("scansioni") || txt.includes("ultimo uso"))
-        );
-
-      if(!looksPdfHistory) continue;
-
-      const buttons = Array.from(card.querySelectorAll("button,a"));
-      const btn = buttons.find(function(el){
-        const t = String(el.textContent || "").toLowerCase();
-        return t.includes("riattiva") || t.includes("attiva");
-      });
-
-      if(btn) return btn;
-    }
-
-    return null;
-  }
-
-  async function publishDoc(){
-    if(!docData?.id){
-      alert("Prima carica un PDF valido.");
-      openDocPage();
-      return;
-    }
-
-    const r = await fetch("/api/followme/" + encodeURIComponent(code()) + "/document/publish", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ document_id:docData.id })
-    });
-
-    const j = await r.json().catch(() => null);
-    if(!r.ok || !j || !j.success){
-      throw new Error((j && j.error) || "Riattivazione documento non riuscita.");
-    }
-
-    await refresh();
-    render();
-  }
-
-  function render(){
-    ensureStyle();
-
-    const t = track();
-    if(!t) return;
-
-    const hasDoc = !!docData?.id;
-    const active = hasDoc && isPdfActive();
-
-    removePdfCards();
-
-    const card = document.createElement("section");
-    card.id = "followmePdfSingleCard20260520";
-    card.dataset.followmeDocumentCard = "1";
-    card.className = "premium-history-card" + (active ? " is-active" : "");
-
-    const thumb = docData?.thumbnail_data_url || docData?.thumbnail_url || docData?.thumbnail_path || "";
-    const preview = thumb
-      ? `<div class="fm-pdf-mini"><img src="${esc(thumb.startsWith('data:') ? thumb : thumb + '?v=' + Date.now())}" alt="Preview PDF"></div>`
-      : `<div class="fm-pdf-mini"><div class="fm-pdf-fallback"><strong>PDF</strong><span>Documento consegnabile</span></div></div>`;
-
-    card.innerHTML = `
-      <div>
-        <div class="premium-history-badge">${active ? "Attivo ora" : "Documento PDF"}</div>
-        <div class="premium-history-domain">Consegna diretta</div>
-        <div class="premium-history-url">${esc(hasDoc ? shortName(docData.original_name) : "Nessun PDF")}</div>
-      </div>
-
-      <div class="premium-history-preview">${preview}</div>
-
-      <div class="premium-history-meta">
-        <div class="premium-history-pill">
-          <strong>${Number(docData?.views_count || 0)}</strong>
-          <span>Visualizzazioni</span>
-        </div>
-        <div class="premium-history-pill">
-          <strong>${Number(docData?.downloads_count || 0)}</strong>
-          <span>Download</span>
-        </div>
-      </div>
-
-      <div class="premium-history-actions">
-        ${
-          active
-            ? `<button type="button" class="premium-history-active" disabled>Attivo ora</button>`
-            : `<button type="button" class="premium-history-reactivate" id="followmePdfReactivate20260520" ${hasDoc ? "" : "disabled"}>Riattiva</button>`
-        }
-        <button type="button" class="${active ? "fm-pdf-edit-disabled" : "fm-pdf-edit-enabled"}" id="followmePdfEdit20260520" ${active ? "disabled" : ""}>Modifica</button>
-      </div>
-    `;
-
-    /*
-      followme-pdf-inactive-card-position-20260521
-      Se il PDF è attivo, la card PDF deve stare in prima posizione.
-      Se invece è attivo un URL normale, la card PDF resta disponibile per "Riattiva",
-      ma non deve sostituire visivamente la destinazione reale attiva.
-    */
-    if(active){
-      t.insertBefore(card, t.firstElementChild);
-    }else if(t.firstElementChild){
-      t.firstElementChild.insertAdjacentElement("afterend", card);
-    }else{
-      t.appendChild(card);
-    }
-
-    deactivateOtherActiveCards();
-
-    const react = document.getElementById("followmePdfReactivate20260520");
-    if(react){
-      react.onclick = async function(ev){
-        ev.preventDefault();
-
-        /*
-          followme-pdf-official-reactivate-bridge-20260521
-          La card storico "fantasma" contiene già la logica corretta di riattivazione
-          e aggiorna bene anche le preview. Prima provo quindi a pilotare quella.
-          Se non la trovo, uso il fallback diretto publishDoc().
-        */
-        try{
-          const ghostBtn = findWorkingPdfHistoryReactivateButton20260521();
-
-          if(ghostBtn){
-            react.disabled = true;
-            react.textContent = "Attivo...";
-
-            ghostBtn.click();
-
-            setTimeout(function(){
-              try{ window.fmCarouselSwitchPreviewSync20260521?.syncNow?.("official-pdf-reactivate-bridge"); }catch(_){}
-              try{ window.fmPdfSingleCard20260520?.boot?.(); }catch(_){}
-              react.disabled = false;
-              react.textContent = "Riattiva";
-            }, 1600);
-
-            return;
-          }
-        }catch(e){}
-
-        try{
-          react.disabled = true;
-          react.textContent = "Attivo...";
-          await publishDoc();
-
-          try{ window.fmCarouselSwitchPreviewSync20260521?.syncNow?.("official-pdf-reactivate-fallback"); }catch(_){}
-        }catch(e){
-          alert(e.message || "Errore riattivazione.");
-          react.disabled = false;
-          react.textContent = "Riattiva";
-        }
-      };
-    }
-
-    const edit = document.getElementById("followmePdfEdit20260520");
-    if(edit && !active){
-      edit.onclick = function(ev){
-        ev.preventDefault();
-        openDocPage();
-      };
-    }
-
-    Array.from(t.children).forEach((el, idx) => {
-      el.style.display = idx < 20 ? "" : "none";
-    });
-  }
-
-  async function boot(){
-    await refresh();
-    render();
-    setTimeout(async()=>{ await refresh(); render(); }, 700);
-    setTimeout(async()=>{ await refresh(); render(); }, 1800);
-  }
-
-  window.fmPdfSingleCard20260520 = { boot, refresh, render, publishDoc };
-
-  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
-  else boot();
-
-  window.addEventListener("load", () => setTimeout(boot, 350));
-  window.addEventListener("pageshow", () => setTimeout(boot, 350));
-})();
-</script>
 
 
 <script id="followme-pdf-thumbnail-generator-final-20260520" type="module">
@@ -26620,12 +26212,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       console.log("[FollowMe PDF Thumb] thumbnail salvata", id);
 
       try{
-        await window.fmPdfSingleCard20260520?.refresh?.();
-        await window.fmPdfSingleCard20260520?.render?.();
-      }catch(e){}
-
-      try{
-        window.fmPdfSingleCard20260520?.boot?.();
       }catch(e){}
 
       return true;
@@ -26881,12 +26467,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       log("miniatura salvata", j.document && j.document.id);
 
       try{
-        await window.fmPdfSingleCard20260520?.refresh?.();
-        await window.fmPdfSingleCard20260520?.render?.();
-      }catch(e){}
-
-      try{
-        window.fmPdfSingleCard20260520?.boot?.();
       }catch(e){}
 
       return true;
@@ -27285,15 +26865,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
   async function refreshPdfCard(){
     try{
-      if(window.fmPdfSingleCard20260520?.refresh){
-        await window.fmPdfSingleCard20260520.refresh();
-      }
-      if(window.fmPdfSingleCard20260520?.render){
-        window.fmPdfSingleCard20260520.render();
-      }else if(window.fmPdfSingleCard20260520?.boot){
-        window.fmPdfSingleCard20260520.boot();
-      }
-    }catch(e){}
+}catch(e){}
   }
 
   async function refreshMainPdfPreview(){
@@ -27718,6 +27290,392 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 
 
+
+
+
+
+
+
+<script id="followme-promote-ghost-history-to-main-pdf-card-20260521">
+(function(){
+  if(window.__FollowMePromoteGhostHistoryToMainPdfCard20260521) return;
+  window.__FollowMePromoteGhostHistoryToMainPdfCard20260521 = true;
+
+  let currentDoc = null;
+  let currentStatus = null;
+  let loading = false;
+
+  function esc(v){
+    return String(v || "").replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+
+  function code(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const i = parts.indexOf("app");
+      if(i >= 0 && parts[i+1]) return decodeURIComponent(parts[i+1]);
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function clean(v){
+    return String(v || "").trim().replace(/\/+$/, "");
+  }
+
+  function track(){
+    return document.getElementById("premiumHistoryTrack") ||
+           document.querySelector(".premium-history-track");
+  }
+
+  function text(el){
+    return String(el && el.textContent || "").replace(/\s+/g, " ").trim();
+  }
+
+  function lowerText(el){
+    return text(el).toLowerCase();
+  }
+
+  function thumbSrc(doc){
+    const raw = String(
+      doc && (
+        doc.thumbnail_data_url ||
+        doc.thumbnail_url ||
+        doc.thumbnail_path ||
+        ""
+      ) || ""
+    );
+
+    if(!raw) return "";
+    return raw.startsWith("data:") ? raw : raw + "?v=" + Date.now();
+  }
+
+  function shortName(v){
+    v = String(v || "Documento PDF")
+      .replace(/\.pdf$/i, "")
+      .replace(/[_-]+/g, " ")
+      .trim();
+
+    return v.length > 28 ? v.slice(0, 25) + "…" : v;
+  }
+
+  function documentUrl(){
+    const publicId = currentStatus?.project?.public_id || "FMDEMO";
+    return "/fm/document/" + publicId;
+  }
+
+  function isPdfActive(){
+    const active = clean(currentStatus?.project?.active_url || "");
+    return active === clean(documentUrl()) || active.includes("/fm/document/");
+  }
+
+  async function fetchJson(url){
+    try{
+      const r = await fetch(url, { cache:"no-store" });
+      return await r.json().catch(() => null);
+    }catch(e){
+      return null;
+    }
+  }
+
+  async function loadData(){
+    if(loading) return { doc:currentDoc, status:currentStatus };
+    loading = true;
+
+    try{
+      const c = code();
+
+      const st = await fetchJson("/api/followme/" + encodeURIComponent(c) + "/status?v=" + Date.now());
+      if(st && st.success) currentStatus = st;
+
+      const doc = await fetchJson("/api/followme/" + encodeURIComponent(c) + "/document/current?v=" + Date.now());
+      if(doc && doc.success && doc.document) currentDoc = doc.document;
+
+    }catch(e){}
+
+    loading = false;
+    return { doc:currentDoc, status:currentStatus };
+  }
+
+  function ensureStyle(){
+    if(document.getElementById("followmePromotedGhostPdfStyle20260521")) return;
+
+    const st = document.createElement("style");
+    st.id = "followmePromotedGhostPdfStyle20260521";
+    st.textContent = `
+      .followme-promoted-pdf-card-20260521{
+        border-color:rgba(200,255,46,.50) !important;
+        box-shadow:
+          0 0 0 1px rgba(200,255,46,.14) inset,
+          0 14px 34px rgba(0,0,0,.20) !important;
+      }
+
+      .followme-promoted-pdf-card-20260521.is-active{
+        border-color:rgba(200,255,46,.72) !important;
+        box-shadow:
+          0 0 0 1px rgba(200,255,46,.18) inset,
+          0 18px 42px rgba(200,255,46,.12),
+          0 16px 34px rgba(0,0,0,.24) !important;
+      }
+
+      .followme-promoted-pdf-thumb-20260521{
+        width:100%;
+        aspect-ratio:1 / 1;
+        min-height:118px;
+        border-radius:18px;
+        overflow:hidden;
+        display:grid;
+        place-items:center;
+        background:
+          radial-gradient(circle at 20% 8%, rgba(200,255,46,.18), transparent 34%),
+          radial-gradient(circle at 88% 0%, rgba(94,231,255,.14), transparent 32%),
+          linear-gradient(145deg, rgba(255,255,255,.10), rgba(255,255,255,.035));
+        border:1px solid rgba(255,255,255,.10);
+      }
+
+      .followme-promoted-pdf-thumb-20260521 img{
+        width:100%;
+        height:100%;
+        display:block;
+        object-fit:cover;
+      }
+
+      .followme-promoted-pdf-thumb-20260521 .fallback{
+        color:#fff;
+        text-align:center;
+        display:grid;
+        gap:5px;
+        padding:10px;
+      }
+
+      .followme-promoted-pdf-thumb-20260521 .fallback strong{
+        font-size:1rem;
+        font-weight:950;
+      }
+
+      .followme-promoted-pdf-thumb-20260521 .fallback span{
+        color:rgba(255,255,255,.62);
+        font-size:.74rem;
+      }
+
+      .followme-promoted-pdf-card-20260521 .premium-history-badge{
+        color:#101018 !important;
+        background:linear-gradient(135deg,#c8ff2e,#5ee7ff) !important;
+        border:0 !important;
+      }
+
+      .followme-promoted-pdf-card-20260521 .premium-history-domain{
+        color:rgba(255,255,255,.72) !important;
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  function isOldOfficialPdfCard(card){
+    return !!(
+      card &&
+      (
+        card.id === "followmePdfSingleCard20260520" ||
+        card.dataset.followmeDocumentCard === "1" ||
+        card.dataset.followmeDocCard === "1"
+      )
+    );
+  }
+
+  function removeOldOfficialCards(){
+    document.querySelectorAll(
+      "#followmePdfSingleCard20260520," +
+      "#followmeDocumentPremiumHistoryCard20260520," +
+      "#followmeDocumentCarouselCard20260520," +
+      "#followmeDocumentOneTrueCard20260520," +
+      "[data-followme-document-card='1']," +
+      "[data-followme-doc-card='1']"
+    ).forEach(function(el){
+      el.remove();
+    });
+  }
+
+  function isGhostPdfHistoryCard(card){
+    if(!card || isOldOfficialPdfCard(card)) return false;
+
+    const t = lowerText(card);
+    const html = String(card.innerHTML || "").toLowerCase();
+    const data = JSON.stringify(card.dataset || {}).toLowerCase();
+    const hrefs = Array.from(card.querySelectorAll("a"))
+      .map(a => String(a.href || a.getAttribute("href") || "").toLowerCase())
+      .join(" ");
+
+    const hasHistorySignals =
+      t.includes("destinazione") ||
+      t.includes("precedente") ||
+      t.includes("scansioni") ||
+      t.includes("ultimo uso") ||
+      t.includes("riattiva");
+
+    const hasPdfSignals =
+      t.includes("documento pdf") ||
+      t.includes("consegna documento") ||
+      t.includes("consegna diretta") ||
+      html.includes("/fm/document") ||
+      hrefs.includes("/fm/document") ||
+      data.includes("fm/document") ||
+      data.includes("document");
+
+    const hasOldOfficialMetrics =
+      t.includes("visualizzazioni") ||
+      t.includes("download");
+
+    return hasHistorySignals && hasPdfSignals && !hasOldOfficialMetrics;
+  }
+
+  function findGhostPdfCards(){
+    return Array.from(document.querySelectorAll(".premium-history-card"))
+      .filter(isGhostPdfHistoryCard);
+  }
+
+  function setTextIfExists(root, selector, value){
+    const el = root.querySelector(selector);
+    if(el) el.textContent = value;
+  }
+
+  function ensureThumb(card){
+    const doc = currentDoc;
+    if(!doc) return;
+
+    const src = thumbSrc(doc);
+    let holder =
+      card.querySelector(".followme-promoted-pdf-thumb-20260521") ||
+      card.querySelector(".followme-pdf-ghost-thumb-20260521") ||
+      card.querySelector(".followme-pdf-direct-ghost-thumb-20260521");
+
+    if(!holder){
+      holder = document.createElement("div");
+      holder.className = "followme-promoted-pdf-thumb-20260521";
+
+      const preview = card.querySelector(".premium-history-preview");
+      const meta = card.querySelector(".premium-history-meta");
+      const first = card.firstElementChild;
+
+      if(preview){
+        preview.innerHTML = "";
+        preview.appendChild(holder);
+      }else if(meta){
+        meta.insertAdjacentElement("beforebegin", holder);
+      }else if(first){
+        first.insertAdjacentElement("afterend", holder);
+      }else{
+        card.appendChild(holder);
+      }
+    }
+
+    holder.classList.add("followme-promoted-pdf-thumb-20260521");
+
+    if(src){
+      const existing = holder.querySelector("img");
+      if(!existing || existing.getAttribute("src") !== src){
+        holder.innerHTML = `<img src="${esc(src)}" alt="${esc(doc.original_name || "Documento PDF")}">`;
+      }
+    }else{
+      holder.innerHTML = `<div class="fallback"><strong>PDF</strong><span>${esc(doc.original_name || "Documento PDF")}</span></div>`;
+    }
+  }
+
+  function promoteCard(card){
+    if(!card || !currentDoc) return;
+
+    const active = isPdfActive();
+
+    card.classList.add("followme-promoted-pdf-card-20260521");
+    card.classList.toggle("is-active", active);
+    card.dataset.followmePromotedPdfMainCard20260521 = "1";
+
+    setTextIfExists(card, ".premium-history-badge", active ? "Attivo ora" : "Documento PDF");
+    setTextIfExists(card, ".premium-history-domain", "Consegna diretta");
+    setTextIfExists(card, ".premium-history-url", shortName(currentDoc.original_name));
+
+    ensureThumb(card);
+
+    /*
+      Non tocchiamo i pulsanti originali: sono quelli già funzionanti.
+      Cambiamo solo eventuale testo visibile se è coerente.
+    */
+    Array.from(card.querySelectorAll("button,a")).forEach(function(btn){
+      const t = String(btn.textContent || "").trim().toLowerCase();
+
+      if(active && (t.includes("riattiva") || t.includes("attiva"))){
+        btn.textContent = "Attivo ora";
+        if(btn.tagName.toLowerCase() === "button"){
+          btn.disabled = true;
+        }
+      }
+
+      if(!active && t.includes("attivo ora")){
+        btn.textContent = "Riattiva";
+        if(btn.tagName.toLowerCase() === "button"){
+          btn.disabled = false;
+          btn.removeAttribute("disabled");
+        }
+      }
+    });
+  }
+
+  async function promote(reason){
+    ensureStyle();
+    await loadData();
+
+    if(!currentDoc || !currentDoc.id) return;
+
+    removeOldOfficialCards();
+
+    const ghosts = findGhostPdfCards();
+
+    ghosts.forEach(promoteCard);
+
+    /*
+      Manteniamo la regola visiva esistente del carosello.
+      Non riordiniamo nulla: lasciamo ordine naturale per reale utilizzo.
+    */
+    const t = track();
+    if(t){
+      Array.from(t.children).forEach(function(el, idx){
+        el.style.display = idx < 20 ? "" : "none";
+      });
+    }
+  }
+
+  function boot(){
+    promote("boot");
+    setTimeout(function(){ promote("350"); }, 350);
+    setTimeout(function(){ promote("1200"); }, 1200);
+    setTimeout(function(){ promote("2600"); }, 2600);
+    setTimeout(function(){ promote("5200"); }, 5200);
+  }
+
+  window.fmPromoteGhostHistoryToMainPdfCard20260521 = {
+    boot,
+    promote,
+    findGhostPdfCards,
+    removeOldOfficialCards
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 350);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 350);
+  });
+
+  document.addEventListener("click", function(){
+    setTimeout(function(){ promote("click-700"); }, 700);
+    setTimeout(function(){ promote("click-1800"); }, 1800);
+  }, true);
+})();
+</script>
 
 
 </body>
