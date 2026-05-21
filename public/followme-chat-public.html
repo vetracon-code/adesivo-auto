@@ -555,41 +555,15 @@
 
 </style>
 
-<style id="followme-chat-bot-toggle-20260521">
-  .followme-bot-toggle-wrap-20260521{
-    width:100%;
-    display:flex;
-    justify-content:center;
-    margin:10px 0 8px 0;
-    padding:0 12px;
-    box-sizing:border-box;
-  }
 
-  .followme-bot-toggle-btn-20260521{
-    appearance:none;
-    border:1px solid rgba(255,255,255,.14);
-    border-radius:14px;
-    padding:9px 13px;
-    min-height:38px;
-    background:linear-gradient(135deg, rgba(34,197,94,.95), rgba(22,163,74,.95), rgba(21,128,61,.95));
-    color:#fff;
-    font-weight:900;
-    font-size:12px;
-    line-height:1;
-    cursor:pointer;
-    box-shadow:0 10px 24px rgba(22,163,74,.22);
-  }
 
-  .followme-bot-toggle-btn-20260521.is-off{
-    background:linear-gradient(135deg, rgba(75,85,99,.95), rgba(55,65,81,.95), rgba(31,41,55,.95));
-    box-shadow:0 10px 24px rgba(0,0,0,.18);
-  }
-
+<style id="followme-public-bot-state-reader-20260521">
   /*
-    Quando il BOT è spento, nascondiamo solo i blocchi marcati come descrittivi.
-    Non tocchiamo messaggi reali, input, pulsanti invio, allegati o stato collegamento.
+    L'utente non vede nessun pulsante BOT.
+    Se l'admin spegne il BOT, nascondiamo solo testi descrittivi marcati,
+    lasciando visibili chat, input, invio, allegati e primo avviso di collegamento.
   */
-  body.followme-bot-off-20260521 [data-followme-bot-description="true"]{
+  body.followme-public-bot-off-20260521 [data-followme-public-bot-description="true"]{
     display:none !important;
   }
 </style>
@@ -6007,51 +5981,31 @@
 </script>
 
 
-<script id="followme-chat-bot-toggle-script-20260521">
+
+
+<script id="followme-public-bot-state-reader-script-20260521">
 (function(){
   "use strict";
 
-  /*
-    Accendi/Spegni BOT — chat pubblica FollowMe.
-    Obiettivo:
-    - utile per presentare il sistema con descrizioni attive;
-    - utile per usare la chat pulita senza testi descrittivi;
-    - mantiene l'avviso essenziale di collegamento;
-    - non blocca la chat reale e non modifica endpoint/server.
-  */
-
-  var STORAGE_KEY = "followme_chat_bot_enabled_20260521";
-
-  function getBotEnabled(){
+  function getChatToken(){
     try {
-      var saved = localStorage.getItem(STORAGE_KEY);
-      if (saved === "0") return false;
-      if (saved === "1") return true;
-    } catch(e) {}
-    return true;
+      var m = String(location.pathname || "").match(/\/fm\/chat\/c\/([^\/?#]+)/);
+      return m && m[1] ? decodeURIComponent(m[1]) : "";
+    } catch(e) {
+      return "";
+    }
   }
 
-  function setBotEnabled(value){
-    try {
-      localStorage.setItem(STORAGE_KEY, value ? "1" : "0");
-    } catch(e) {}
-  }
-
-  function cleanText(v){
+  function clean(v){
     return String(v || "").replace(/\s+/g, " ").trim();
   }
 
-  function lowerText(el){
-    return cleanText(el && el.textContent || "").toLowerCase();
+  function lower(el){
+    return clean(el && el.textContent || "").toLowerCase();
   }
 
   function isConnectionNotice(el){
-    var t = lowerText(el);
-
-    /*
-      Questo deve rimanere visibile anche con BOT spento:
-      è il primo avviso informativo sul collegamento.
-    */
+    var t = lower(el);
     return (
       t.includes("collegamento") ||
       t.includes("connessione") ||
@@ -6062,30 +6016,18 @@
     );
   }
 
-  function isLikelyBotDescription(el){
+  function isDescription(el){
     if (!el) return false;
 
-    var t = lowerText(el);
-    if (!t) return false;
-
-    /*
-      Evitiamo contenitori enormi.
-    */
-    if (t.length > 900) return false;
-
-    /*
-      Non nascondiamo mai input, bottoni, allegati o messaggi effettivi.
-    */
     var tag = String(el.tagName || "").toLowerCase();
     if (["button","a","input","textarea","select","form"].includes(tag)) return false;
-
     if (el.querySelector && el.querySelector("input, textarea, button, a")) return false;
+
+    var t = lower(el);
+    if (!t || t.length > 600) return false;
 
     if (isConnectionNotice(el)) return false;
 
-    /*
-      Testi descrittivi/di presentazione del BOT.
-    */
     return (
       t.includes("bot") ||
       t.includes("assistente") ||
@@ -6093,104 +6035,53 @@
       t.includes("come funziona") ||
       t.includes("puoi inviare") ||
       t.includes("puoi scrivere") ||
-      t.includes("descrizione") ||
-      t.includes("presentazione") ||
       t.includes("questo sistema") ||
       t.includes("questa chat")
     );
   }
 
-  function markBotDescriptions(){
+  function markDescriptions(){
     document.querySelectorAll("p, div, span, small, section, article").forEach(function(el){
-      if (el.closest && el.closest(".followme-bot-toggle-wrap-20260521")) return;
-      if (el.getAttribute("data-followme-keep-connection-notice") === "true") return;
-
       if (isConnectionNotice(el)) {
         el.setAttribute("data-followme-keep-connection-notice", "true");
         return;
       }
 
-      if (isLikelyBotDescription(el)) {
-        el.setAttribute("data-followme-bot-description", "true");
+      if (isDescription(el)) {
+        el.setAttribute("data-followme-public-bot-description", "true");
       }
     });
   }
 
-  function applyState(){
-    var enabled = getBotEnabled();
-    document.body.classList.toggle("followme-bot-off-20260521", !enabled);
+  async function refreshBotState(){
+    var token = getChatToken();
+    if (!token) return;
 
-    var btn = document.getElementById("followmeBotToggleBtn20260521");
-    if (btn) {
-      btn.textContent = enabled ? "Spegni BOT" : "Accendi BOT";
-      btn.classList.toggle("is-off", !enabled);
-      btn.setAttribute("aria-pressed", enabled ? "true" : "false");
+    try {
+      var res = await fetch("/api/followme/chat/" + encodeURIComponent(token) + "/bot-state?v=" + Date.now(), {
+        method:"GET",
+        cache:"no-store",
+        headers:{ "Accept":"application/json" }
+      });
+
+      if (!res.ok) return;
+
+      var data = await res.json();
+      if (!data || !data.success) return;
+
+      markDescriptions();
+      document.body.classList.toggle("followme-public-bot-off-20260521", data.bot_enabled === false);
+    } catch(e) {
+      console.warn("[FollowMe] stato BOT pubblico non disponibile:", e);
     }
-  }
-
-  function findInsertHost(){
-    /*
-      Proviamo a inserirlo nella parte alta della chat senza alterare la struttura.
-    */
-    var selectors = [
-      ".chat-header",
-      ".followme-chat-header",
-      "#chatHeader",
-      "main",
-      ".chat",
-      ".app"
-    ];
-
-    for (var i = 0; i < selectors.length; i++) {
-      var el = document.querySelector(selectors[i]);
-      if (el) return el;
-    }
-
-    return document.body;
-  }
-
-  function installToggle(){
-    if (document.getElementById("followmeBotToggleBtn20260521")) return;
-
-    var wrap = document.createElement("div");
-    wrap.className = "followme-bot-toggle-wrap-20260521";
-    wrap.innerHTML = '<button type="button" id="followmeBotToggleBtn20260521" class="followme-bot-toggle-btn-20260521">Spegni BOT</button>';
-
-    var host = findInsertHost();
-
-    if (host === document.body) {
-      document.body.insertBefore(wrap, document.body.firstChild);
-    } else {
-      host.insertBefore(wrap, host.firstChild);
-    }
-
-    var btn = document.getElementById("followmeBotToggleBtn20260521");
-    btn.addEventListener("click", function(){
-      var next = !getBotEnabled();
-      setBotEnabled(next);
-      markBotDescriptions();
-      applyState();
-    });
   }
 
   function boot(){
-    installToggle();
-    markBotDescriptions();
-    applyState();
-
-    setTimeout(function(){
-      markBotDescriptions();
-      applyState();
-    }, 400);
-
-    setTimeout(function(){
-      markBotDescriptions();
-      applyState();
-    }, 1400);
+    refreshBotState();
+    setInterval(refreshBotState, 4000);
 
     var obs = new MutationObserver(function(){
-      markBotDescriptions();
-      applyState();
+      markDescriptions();
     });
 
     obs.observe(document.documentElement, {

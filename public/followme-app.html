@@ -5978,6 +5978,73 @@ body.followme-safe-pc-dismissed #followmeSafeInstallOverlay{
   }
 </style>
 
+
+<style id="followme-admin-bot-toggle-20260521">
+  .followme-admin-bot-toggle-wrap-20260521{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    width:100%;
+    margin:10px 0;
+    padding:10px 11px;
+    border-radius:16px;
+    border:1px solid rgba(255,255,255,.12);
+    background:rgba(255,255,255,.055);
+    box-sizing:border-box;
+  }
+
+  .followme-admin-bot-toggle-copy-20260521{
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    min-width:0;
+  }
+
+  .followme-admin-bot-toggle-copy-20260521 strong{
+    font-size:13px;
+    font-weight:900;
+    line-height:1.15;
+  }
+
+  .followme-admin-bot-toggle-copy-20260521 span{
+    font-size:11px;
+    line-height:1.2;
+    opacity:.72;
+  }
+
+  .followme-admin-bot-toggle-btn-20260521{
+    appearance:none;
+    border:1px solid rgba(255,255,255,.14);
+    border-radius:13px;
+    padding:9px 12px;
+    min-height:38px;
+    font-size:12px;
+    line-height:1;
+    font-weight:900;
+    cursor:pointer;
+    color:#fff;
+    white-space:nowrap;
+    background:linear-gradient(135deg, #22c55e 0%, #16a34a 55%, #15803d 100%);
+    box-shadow:0 9px 20px rgba(22,163,74,.22);
+  }
+
+  .followme-admin-bot-toggle-btn-20260521.is-off{
+    background:linear-gradient(135deg, #64748b 0%, #475569 55%, #334155 100%);
+    box-shadow:0 9px 20px rgba(0,0,0,.18);
+  }
+
+  @media (max-width:680px){
+    .followme-admin-bot-toggle-wrap-20260521{
+      align-items:stretch;
+      flex-direction:column;
+    }
+    .followme-admin-bot-toggle-btn-20260521{
+      width:100%;
+    }
+  }
+</style>
+
 </head>
 <body>
   <main class="app">
@@ -28596,6 +28663,200 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   });
 
   window.addEventListener("focus", refreshActivePdfCardStats);
+})();
+</script>
+
+
+<script id="followme-admin-bot-toggle-script-20260521">
+(function(){
+  "use strict";
+
+  /*
+    Pulsante BOT SOLO lato admin.
+    Compare nel pannello/pagina chat della WebApp FollowMe.
+    Non appare nella chat pubblica utente.
+  */
+
+  function getCode(){
+    try {
+      var m = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/);
+      if (m && m[1]) return decodeURIComponent(m[1]);
+
+      var q = new URLSearchParams(location.search || "");
+      return q.get("code") || window.FOLLOWME_CODE || "";
+    } catch(e) {
+      return "";
+    }
+  }
+
+  function isChatArea(el){
+    if (!el) return false;
+    var t = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+
+    return (
+      t.includes("parla con gli utenti") ||
+      t.includes("attiva chat") ||
+      t.includes("disattiva chat") ||
+      t.includes("sessioni chat") ||
+      t.includes("utenti") && t.includes("chat")
+    );
+  }
+
+  function findChatHost(){
+    var selectors = [
+      "[data-followme-chat-admin]",
+      "#followmeChatAdmin",
+      "#followmeChatPanel",
+      ".followme-chat-admin",
+      ".followme-chat-panel",
+      ".chat-admin",
+      ".chat-panel"
+    ];
+
+    for (var i = 0; i < selectors.length; i++) {
+      var el = document.querySelector(selectors[i]);
+      if (el) return el;
+    }
+
+    var candidates = [];
+    document.querySelectorAll("section, article, div, details").forEach(function(el){
+      if (isChatArea(el)) {
+        var textLen = String(el.textContent || "").length;
+        var controls = el.querySelectorAll ? el.querySelectorAll("button, a, input, textarea").length : 0;
+
+        if (textLen < 5000 && controls <= 30) {
+          candidates.push(el);
+        }
+      }
+    });
+
+    return candidates[0] || null;
+  }
+
+  function buildToggle(){
+    var wrap = document.createElement("div");
+    wrap.className = "followme-admin-bot-toggle-wrap-20260521";
+    wrap.id = "followmeAdminBotToggleWrap20260521";
+    wrap.innerHTML =
+      '<div class="followme-admin-bot-toggle-copy-20260521">' +
+      '  <strong>BOT chat</strong>' +
+      '  <span>Accendi per presentare il sistema, spegni per una chat pulita.</span>' +
+      '</div>' +
+      '<button type="button" class="followme-admin-bot-toggle-btn-20260521" id="followmeAdminBotToggleBtn20260521">Carico...</button>';
+    return wrap;
+  }
+
+  async function loadBotState(){
+    var code = getCode();
+    if (!code) return true;
+
+    try {
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/bot-state?v=" + Date.now(), {
+        method:"GET",
+        cache:"no-store",
+        headers:{ "Accept":"application/json" }
+      });
+
+      var data = await res.json();
+      if (!data || !data.success) return true;
+
+      return data.bot_enabled !== false;
+    } catch(e) {
+      console.warn("[FollowMe] impossibile leggere stato BOT:", e);
+      return true;
+    }
+  }
+
+  async function saveBotState(enabled){
+    var code = getCode();
+    if (!code) return;
+
+    try {
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/bot-state", {
+        method:"POST",
+        cache:"no-store",
+        headers:{
+          "Content-Type":"application/json",
+          "Accept":"application/json"
+        },
+        body: JSON.stringify({ bot_enabled: !!enabled })
+      });
+
+      var data = await res.json();
+      if (!data || !data.success) throw new Error(data && data.error || "Errore BOT");
+
+      return data.bot_enabled !== false;
+    } catch(e) {
+      alert("Non riesco ad aggiornare il BOT. Riprova.");
+      console.warn("[FollowMe] salvataggio BOT fallito:", e);
+      return null;
+    }
+  }
+
+  function updateButton(enabled){
+    var btn = document.getElementById("followmeAdminBotToggleBtn20260521");
+    if (!btn) return;
+
+    btn.textContent = enabled ? "Spegni BOT" : "Accendi BOT";
+    btn.classList.toggle("is-off", !enabled);
+    btn.setAttribute("aria-pressed", enabled ? "true" : "false");
+    btn.setAttribute("data-bot-enabled", enabled ? "true" : "false");
+  }
+
+  async function install(){
+    if (document.getElementById("followmeAdminBotToggleWrap20260521")) return;
+
+    var host = findChatHost();
+    if (!host) return;
+
+    var wrap = buildToggle();
+
+    /*
+      Inserimento prudente nel pannello chat admin.
+      Non tocca input messaggi e non sposta le funzioni principali.
+    */
+    host.insertBefore(wrap, host.firstChild);
+
+    var enabled = await loadBotState();
+    updateButton(enabled);
+
+    var btn = document.getElementById("followmeAdminBotToggleBtn20260521");
+    if (btn) {
+      btn.addEventListener("click", async function(){
+        var current = btn.getAttribute("data-bot-enabled") !== "false";
+        btn.textContent = "Salvo...";
+        var saved = await saveBotState(!current);
+        if (saved !== null) updateButton(saved);
+        else updateButton(current);
+      });
+    }
+  }
+
+  function boot(){
+    install();
+
+    /*
+      La chat admin può essere creata dinamicamente dopo il click su Parla con gli utenti.
+    */
+    setTimeout(install, 500);
+    setTimeout(install, 1500);
+    setTimeout(install, 3000);
+
+    var obs = new MutationObserver(function(){
+      install();
+    });
+
+    obs.observe(document.documentElement, {
+      childList:true,
+      subtree:true
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
 })();
 </script>
 

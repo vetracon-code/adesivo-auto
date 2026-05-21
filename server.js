@@ -9109,6 +9109,7 @@ async function ensureFollowMeChatSchema() {
   await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS chat_mode_enabled BOOLEAN DEFAULT FALSE`);
   await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS chat_public_token TEXT`);
   await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS chat_token_rotated_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS bot_enabled BOOLEAN DEFAULT TRUE`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS followme_chat_sessions (
@@ -11524,6 +11525,124 @@ app.get('/fm/chat/c/:chat_token', async (req, res) => {
     return res.status(500).send('Errore apertura chat.');
   }
 });
+
+
+
+// followme-bot-enabled-admin-only-20260521
+async function ensureFollowMeBotEnabledColumn20260521() {
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS bot_enabled BOOLEAN DEFAULT TRUE`);
+}
+
+/*
+  Stato BOT lato admin per singolo QR.
+  Usato dalla WebApp proprietario /fm/app/:code.
+*/
+app.get('/api/followme/:code/bot-state', async (req, res) => {
+  try {
+    await ensureFollowMeBotEnabledColumn20260521();
+
+    const code = String(req.params.code || '').trim();
+
+    const r = await pool.query(
+      `SELECT code, public_id, COALESCE(bot_enabled, TRUE) AS bot_enabled
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!r.rows.length) {
+      return res.status(404).json({ success:false, error:'Progetto non trovato.' });
+    }
+
+    return res.json({
+      success:true,
+      bot_enabled: r.rows[0].bot_enabled === true,
+      project: {
+        code: r.rows[0].code,
+        public_id: r.rows[0].public_id
+      }
+    });
+  } catch (err) {
+    console.error('followme bot-state get error:', err);
+    return res.status(500).json({ success:false, error:'Errore stato BOT.' });
+  }
+});
+
+app.post('/api/followme/:code/bot-state', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeBotEnabledColumn20260521();
+
+    const code = String(req.params.code || '').trim();
+    const enabled = req.body && typeof req.body.bot_enabled === 'boolean'
+      ? req.body.bot_enabled
+      : true;
+
+    const r = await pool.query(
+      `UPDATE followme_projects
+       SET bot_enabled = $2,
+           updated_at = NOW()
+       WHERE code = $1 OR public_id = $1
+       RETURNING code, public_id, COALESCE(bot_enabled, TRUE) AS bot_enabled`,
+      [code, enabled]
+    );
+
+    if (!r.rows.length) {
+      return res.status(404).json({ success:false, error:'Progetto non trovato.' });
+    }
+
+    return res.json({
+      success:true,
+      bot_enabled: r.rows[0].bot_enabled === true,
+      project: {
+        code: r.rows[0].code,
+        public_id: r.rows[0].public_id
+      }
+    });
+  } catch (err) {
+    console.error('followme bot-state post error:', err);
+    return res.status(500).json({ success:false, error:'Errore aggiornamento BOT.' });
+  }
+});
+
+/*
+  Stato BOT lato chat pubblica.
+  L'utente NON vede il pulsante, ma la pagina pubblica legge qui se mostrare
+  o nascondere i testi descrittivi.
+*/
+app.get('/api/followme/chat/:chat_token/bot-state', async (req, res) => {
+  try {
+    await ensureFollowMeBotEnabledColumn20260521();
+
+    const token = String(req.params.chat_token || '').trim();
+
+    const r = await pool.query(
+      `SELECT code, public_id, COALESCE(bot_enabled, TRUE) AS bot_enabled
+       FROM followme_projects
+       WHERE chat_public_token = $1
+       LIMIT 1`,
+      [token]
+    );
+
+    if (!r.rows.length) {
+      return res.status(404).json({ success:false, error:'Chat non trovata.' });
+    }
+
+    return res.json({
+      success:true,
+      bot_enabled: r.rows[0].bot_enabled === true,
+      project: {
+        code: r.rows[0].code,
+        public_id: r.rows[0].public_id
+      }
+    });
+  } catch (err) {
+    console.error('followme public bot-state error:', err);
+    return res.status(500).json({ success:false, error:'Errore stato BOT pubblico.' });
+  }
+});
+// end-followme-bot-enabled-admin-only-20260521
+
 
 app.post('/api/followme/chat/:chat_token/session', express.json(), async (req, res) => {
   try {
