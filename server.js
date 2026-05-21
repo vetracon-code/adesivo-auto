@@ -2002,7 +2002,34 @@ if (!global.__followMeAttachmentCleanupStarted) {
 }
 
 
+
 app.use(express.static(path.join(__dirname, 'public')));
+
+/*
+  FollowMe documenti PDF persistenti.
+  In locale salva dentro public/uploads.
+  Su Render, se FOLLOWME_STORAGE_DIR è impostato, salva sul Persistent Disk.
+  Consigliato su Render:
+  FOLLOWME_STORAGE_DIR=/var/data
+*/
+const FOLLOWME_STORAGE_ROOT = process.env.FOLLOWME_STORAGE_DIR
+  ? path.resolve(process.env.FOLLOWME_STORAGE_DIR)
+  : path.join(__dirname, 'public');
+
+const FOLLOWME_DOCUMENTS_DISK_DIR = path.join(FOLLOWME_STORAGE_ROOT, 'uploads', 'followme-documents');
+
+app.use(
+  '/uploads/followme-documents',
+  express.static(FOLLOWME_DOCUMENTS_DISK_DIR, {
+    fallthrough: true,
+    immutable: false,
+    maxAge: 0,
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    }
+  })
+);
+
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -10185,7 +10212,10 @@ app.get('/api/followme/document/:document_id/download', async (req, res) => {
     }
 
     const row = r.rows[0];
-    const filePath = followmeDocumentPath.join(__dirname, 'public', String(row.public_path || '').replace(/^\//, ''));
+    const relativePublicPath = String(row.public_path || '').replace(/^\//, '');
+    const filePath = relativePublicPath.startsWith('uploads/followme-documents/')
+      ? path.join(FOLLOWME_STORAGE_ROOT, relativePublicPath)
+      : followmeDocumentPath.join(__dirname, 'public', relativePublicPath);
 
     return res.download(filePath, row.original_name || 'documento.pdf');
   } catch(err) {
