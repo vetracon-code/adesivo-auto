@@ -10392,6 +10392,19 @@ app.get('/fm/document/:code', async (req, res) => {
 
     const doc = r.rows[0];
 
+    // Incremento visualizzazione reale quando viene aperta la pagina pubblica del documento.
+    try {
+      await pool.query(
+        `UPDATE followme_documents
+         SET views_count = COALESCE(views_count, 0) + 1,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [doc.id]
+      );
+    } catch(viewErr) {
+      console.error('followme public document view increment error:', viewErr);
+    }
+
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
 
@@ -10713,6 +10726,28 @@ app.get('/fm/document/:code', async (req, res) => {
 
     const DOCUMENT_ID = ${doc.id};
     const PDF_URL = ${JSON.stringify(doc.public_path)};
+
+    // Incrementa una sola visualizzazione quando la pagina pubblica del documento viene aperta.
+    // Usa sendBeacon quando disponibile, con fallback fetch.
+    (function registerDocumentView(){
+      try {
+        const viewUrl = "/api/followme/document/" + encodeURIComponent(DOCUMENT_ID) + "/view";
+
+        if (navigator.sendBeacon) {
+          const blob = new Blob(["{}"], { type: "application/json" });
+          navigator.sendBeacon(viewUrl, blob);
+          return;
+        }
+
+        fetch(viewUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+          cache: "no-store",
+          keepalive: true
+        }).catch(function(){});
+      } catch(e) {}
+    })();
     const viewer = document.getElementById("viewer");
     const canvas = document.getElementById("pdfCanvas");
     const ctx = canvas.getContext("2d");
@@ -10738,14 +10773,6 @@ app.get('/fm/document/:code', async (req, res) => {
     let draggingPan = false;
     let lastTapAt = 0;
     let lastMouseClickAt = 0;
-
-    try {
-      fetch("/api/followme/document/" + DOCUMENT_ID + "/view", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ source:"document_viewer_sharp_20260520" })
-      }).catch(()=>{});
-    } catch(e){}
 
     function renderIndicator(){
       indicator.textContent = pageNum + " / " + totalPages;
