@@ -28291,16 +28291,22 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 </script>
 
 
-<script id="followme-pdf-card-download-counter-20260521">
+
+
+<script id="followme-active-pdf-card-scans-downloads-20260521">
 (function(){
   "use strict";
 
   /*
+    FollowMe — card PDF attiva.
     Obiettivo:
-    - SOLO card PDF/documento;
-    - sostituisce data/ora ultimo uso con il numero download;
+    - SOLO quando la destinazione attiva è il PDF/documento;
+    - SOLO nella card PDF attiva;
+    - mostra scansioni + download;
+    - sostituisce data/ora ultimo uso con download;
+    - aggiorna ogni 4 secondi;
     - non tocca card URL normali;
-    - non tocca PDF, redirect, contatori scansioni, pulsanti Attivo ora/Elimina.
+    - non tocca PDF, redirect, pulsanti Attivo ora/Elimina, layout generale.
   */
 
   function getCode(){
@@ -28315,42 +28321,82 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     }
   }
 
-  function normalizeText(v){
+  function cleanText(v){
     return String(v || "").replace(/\s+/g, " ").trim();
   }
 
-  function isPdfCard(card){
-    if (!card) return false;
+  function normalizeUrl(value){
+    var v = String(value || "").trim();
+    if (!v) return "";
 
-    var text = normalizeText(card.textContent).toLowerCase();
+    try {
+      var u = new URL(v, window.location.origin);
+      var path = u.pathname || "";
+      var search = u.search || "";
 
-    if (
-      text.includes("documento pdf") ||
-      text.includes("consegna documento") ||
-      text.includes("scarica documento") ||
-      text.includes("visualizzazioni documento") ||
-      text.includes("download documento")
-    ) {
-      return true;
+      path = path.replace(/\/+$/, "");
+      if (!path) path = "/";
+
+      return path + search;
+    } catch(e) {
+      return v.replace(/\/+$/, "");
     }
-
-    var links = card.querySelectorAll ? card.querySelectorAll("a[href]") : [];
-    for (var i = 0; i < links.length; i++) {
-      var href = String(links[i].getAttribute("href") || "").toLowerCase();
-      if (
-        href.includes("/fm/document/") ||
-        href.includes("/uploads/followme-documents/") ||
-        href.includes("/api/followme/document/") ||
-        href.includes(".pdf")
-      ) {
-        return true;
-      }
-    }
-
-    return false;
   }
 
-  function findPdfCards(){
+  function isPdfActiveUrl(url, code){
+    var u = normalizeUrl(url).toLowerCase();
+    var c = String(code || "").toLowerCase();
+
+    return (
+      u === ("/fm/document/" + c) ||
+      u.includes("/fm/document/") ||
+      u.includes("/uploads/followme-documents/") ||
+      u.includes("/api/followme/document/") ||
+      u.endsWith(".pdf")
+    );
+  }
+
+  function cardMatchesActivePdf(card, activeUrl){
+    if (!card || !activeUrl) return false;
+
+    var active = normalizeUrl(activeUrl);
+
+    var candidates = [
+      card.getAttribute("data-followme-url"),
+      card.getAttribute("data-url"),
+      card.getAttribute("data-active-url"),
+      card.getAttribute("href")
+    ];
+
+    if (card.querySelectorAll) {
+      card.querySelectorAll("a[href]").forEach(function(a){
+        candidates.push(a.getAttribute("href"));
+      });
+    }
+
+    for (var i = 0; i < candidates.length; i++) {
+      if (normalizeUrl(candidates[i]) === active) return true;
+    }
+
+    var txt = cleanText(card.textContent);
+    if (txt.indexOf(active) !== -1) return true;
+
+    /*
+      Fallback: riconosce la card PDF/documento anche quando non espone direttamente l'URL.
+      Lo usiamo solo dopo avere già verificato che active_url è PDF.
+    */
+    var low = txt.toLowerCase();
+
+    return (
+      low.includes("documento pdf") ||
+      low.includes("consegna documento") ||
+      low.includes("scarica documento") ||
+      low.includes("visualizzazioni documento") ||
+      low.includes("download documento")
+    );
+  }
+
+  function findActivePdfCards(activeUrl){
     var selectors = [
       ".premium-history-card",
       ".followme-history-card",
@@ -28368,54 +28414,69 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
     selectors.forEach(function(sel){
       document.querySelectorAll(sel).forEach(function(el){
-        if (out.indexOf(el) === -1 && isPdfCard(el)) {
+        if (out.indexOf(el) === -1 && cardMatchesActivePdf(el, activeUrl)) {
           out.push(el);
         }
       });
     });
 
-    /*
-      Fallback prudente: se la card PDF non usa classi prevedibili,
-      cerchiamo contenitori piccoli che parlano chiaramente di documento/PDF.
-    */
-    if (!out.length) {
-      document.querySelectorAll("article, section, div").forEach(function(el){
-        var t = normalizeText(el.textContent).toLowerCase();
-        var buttons = el.querySelectorAll ? el.querySelectorAll("button, a").length : 0;
-
-        if (
-          buttons <= 8 &&
-          t.length < 1800 &&
-          (
-            t.includes("documento pdf") ||
-            t.includes("/fm/document/") ||
-            t.includes("download documento")
-          )
-        ) {
-          if (out.indexOf(el) === -1) out.push(el);
-        }
-      });
-    }
-
     return out;
   }
 
-  function setDownloadTextInPdfCard(card, downloads){
-    if (!card) return;
-
-    var value = String(downloads || 0);
-    var label = value === "1" ? "download" : "download";
-    var newText = value + " " + label;
+  function updateScansInCard(card, scans){
+    var scanValue = String(scans || 0);
 
     /*
-      Prima cerchiamo l'elemento che oggi contiene "ultimo uso".
-      Lo sostituiamo solo nella card PDF.
+      Aggiorna il numero scansioni già visibile, senza cambiare la struttura.
+    */
+    var strongCandidates = card.querySelectorAll("strong");
+    for (var i = 0; i < strongCandidates.length; i++) {
+      var strong = strongCandidates[i];
+      var parentText = "";
+
+      if (strong.parentElement) {
+        parentText = cleanText(strong.parentElement.textContent).toLowerCase();
+      }
+
+      if (parentText.includes("scansion")) {
+        strong.textContent = scanValue;
+        return;
+      }
+    }
+
+    var nodes = card.querySelectorAll("span, div, p, small");
+    for (var j = 0; j < nodes.length; j++) {
+      var el = nodes[j];
+      var txt = cleanText(el.textContent);
+
+      if (txt.toLowerCase().includes("scansion")) {
+        el.textContent = txt.replace(/\b\d+\s+(scansioni?)/i, scanValue + " $1");
+        return;
+      }
+    }
+  }
+
+  function updateDownloadsInCard(card, downloads){
+    var value = String(downloads || 0);
+    var newText = value + " download";
+
+    /*
+      Prima: se abbiamo già sostituito il campo, aggiorniamo quello.
+    */
+    var existing = card.querySelector("[data-followme-active-pdf-download-counter='true']");
+    if (existing) {
+      existing.textContent = newText;
+      return;
+    }
+
+    /*
+      Seconda: sostituiamo SOLO la riga "ultimo uso", escludendo scansioni e pulsanti.
     */
     var nodes = card.querySelectorAll("span, div, p, small");
 
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
-      var txt = normalizeText(el.textContent);
+      var txt = cleanText(el.textContent);
       var low = txt.toLowerCase();
 
       if (
@@ -28425,23 +28486,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
         !low.includes("elimina")
       ) {
         el.textContent = newText;
-        el.setAttribute("data-followme-pdf-download-counter", "true");
+        el.setAttribute("data-followme-active-pdf-download-counter", "true");
         return;
       }
     }
 
     /*
-      Se era già stato sostituito una volta, aggiorniamo quello.
-    */
-    var existing = card.querySelector("[data-followme-pdf-download-counter='true']");
-    if (existing) {
-      existing.textContent = newText;
-      return;
-    }
-
-    /*
-      Fallback: cerca una riga meta della card PDF che NON sia il contatore scansioni.
-      Non tocchiamo strong o pulsanti.
+      Terza: sostituiamo una meta compatibile, ma non se contiene scansioni.
     */
     var metaSelectors = [
       ".recent-meta",
@@ -28453,7 +28504,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       var meta = card.querySelector(metaSelectors[j]);
       if (!meta) continue;
 
-      var mt = normalizeText(meta.textContent).toLowerCase();
+      var mt = cleanText(meta.textContent).toLowerCase();
 
       if (
         !mt.includes("scansion") &&
@@ -28461,58 +28512,90 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
         !mt.includes("elimina")
       ) {
         meta.textContent = newText;
-        meta.setAttribute("data-followme-pdf-download-counter", "true");
+        meta.setAttribute("data-followme-active-pdf-download-counter", "true");
         return;
       }
     }
 
     /*
-      Ultimo fallback visivo ma non invasivo:
-      se non trova dove sostituire, aggiunge un attributo dati senza cambiare layout.
+      Fallback non invasivo: non crea box, non cambia layout.
     */
-    card.setAttribute("data-followme-pdf-downloads", value);
+    card.setAttribute("data-followme-active-pdf-downloads", value);
   }
 
-  async function refreshPdfDownloadCounter(){
+  async function refreshActivePdfCardStats(){
     var code = getCode();
     if (!code) return;
 
     try {
-      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/current?v=" + Date.now(), {
+      var statusRes = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
         method: "GET",
         cache: "no-store",
         headers: { "Accept": "application/json" }
       });
 
-      if (!res.ok) return;
+      if (!statusRes.ok) return;
 
-      var data = await res.json();
-      if (!data || !data.success || !data.document) return;
+      var status = await statusRes.json();
+      if (!status || !status.success || !status.project) return;
 
-      var downloads = Number(data.document.downloads_count || 0);
-      var cards = findPdfCards();
+      var activeUrl = status.project.active_url || "";
 
-      cards.forEach(function(card){
-        setDownloadTextInPdfCard(card, downloads);
+      /*
+        Regola fondamentale:
+        se la destinazione attiva NON è PDF/documento, non tocchiamo la card PDF.
+      */
+      if (!isPdfActiveUrl(activeUrl, code)) return;
+
+      var activeNormalized = normalizeUrl(activeUrl);
+      var history = Array.isArray(status.history) ? status.history : [];
+      var scans = 0;
+
+      for (var i = 0; i < history.length; i++) {
+        if (normalizeUrl(history[i].url) === activeNormalized) {
+          scans = Number(history[i].scan_count || 0);
+          break;
+        }
+      }
+
+      var docRes = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/current?v=" + Date.now(), {
+        method: "GET",
+        cache: "no-store",
+        headers: { "Accept": "application/json" }
       });
 
-      window.__followMeLastPdfDownloadCounterRefresh = Date.now();
+      if (!docRes.ok) return;
+
+      var docData = await docRes.json();
+      if (!docData || !docData.success || !docData.document) return;
+
+      var downloads = Number(docData.document.downloads_count || 0);
+
+      var cards = findActivePdfCards(activeUrl);
+
+      cards.forEach(function(card){
+        updateScansInCard(card, scans);
+        updateDownloadsInCard(card, downloads);
+        card.setAttribute("data-followme-active-pdf-card-live", "true");
+      });
+
+      window.__followMeLastActivePdfCardStatsRefresh = Date.now();
     } catch(err) {
-      console.warn("[FollowMe] aggiornamento download PDF card non riuscito:", err);
+      console.warn("[FollowMe] aggiornamento card PDF attiva non riuscito:", err);
     }
   }
 
-  if (window.__followMePdfCardDownloadCounterStarted) return;
-  window.__followMePdfCardDownloadCounterStarted = true;
+  if (window.__followMeActivePdfCardStatsStarted) return;
+  window.__followMeActivePdfCardStatsStarted = true;
 
-  refreshPdfDownloadCounter();
-  setInterval(refreshPdfDownloadCounter, 4000);
+  refreshActivePdfCardStats();
+  setInterval(refreshActivePdfCardStats, 4000);
 
   document.addEventListener("visibilitychange", function(){
-    if (!document.hidden) refreshPdfDownloadCounter();
+    if (!document.hidden) refreshActivePdfCardStats();
   });
 
-  window.addEventListener("focus", refreshPdfDownloadCounter);
+  window.addEventListener("focus", refreshActivePdfCardStats);
 })();
 </script>
 
