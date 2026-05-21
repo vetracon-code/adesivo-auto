@@ -5978,6 +5978,100 @@ body.followme-safe-pc-dismissed #followmeSafeInstallOverlay{
   }
 </style>
 
+
+<style id="followme-parla-con-utenti-options-20260521">
+  /*
+    FollowMe — Parla con gli utenti
+    Obiettivo:
+    - non modificare le funzioni principali della pagina;
+    - non toccare PDF, redirect, contatori, card o cronologia;
+    - rendere la chat una funzione opzionale ma importante;
+    - usare un pulsante verde dentro l'area opzioni.
+  */
+
+  .followme-parla-utenti-entry-20260521{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    width:100%;
+    margin:12px 0;
+    padding:14px;
+    border-radius:18px;
+    border:1px solid rgba(34,197,94,.35);
+    background:linear-gradient(135deg, rgba(34,197,94,.16), rgba(21,128,61,.08));
+    box-shadow:0 12px 30px rgba(0,0,0,.12);
+  }
+
+  .followme-parla-utenti-copy-20260521{
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    gap:3px;
+  }
+
+  .followme-parla-utenti-copy-20260521 strong{
+    font-size:14px;
+    line-height:1.15;
+    font-weight:900;
+    color:inherit;
+  }
+
+  .followme-parla-utenti-copy-20260521 span{
+    font-size:12px;
+    line-height:1.25;
+    opacity:.72;
+  }
+
+  .followme-parla-utenti-btn-20260521{
+    appearance:none;
+    border:0;
+    border-radius:14px;
+    padding:10px 13px;
+    min-height:42px;
+    background:#16a34a;
+    color:#fff;
+    font-weight:900;
+    font-size:13px;
+    line-height:1;
+    cursor:pointer;
+    white-space:nowrap;
+    box-shadow:0 10px 24px rgba(22,163,74,.28);
+  }
+
+  .followme-parla-utenti-btn-20260521:active{
+    transform:translateY(1px);
+  }
+
+  .followme-parla-utenti-panel-20260521{
+    display:none;
+    margin:10px 0 0 0;
+    padding:12px;
+    border-radius:18px;
+    border:1px solid rgba(255,255,255,.12);
+    background:rgba(255,255,255,.055);
+  }
+
+  .followme-parla-utenti-panel-20260521.is-open{
+    display:block;
+  }
+
+  .followme-parla-utenti-panel-20260521 [data-followme-parla-moved="true"]{
+    margin-top:8px !important;
+  }
+
+  @media (max-width: 680px){
+    .followme-parla-utenti-entry-20260521{
+      align-items:stretch;
+      flex-direction:column;
+    }
+
+    .followme-parla-utenti-btn-20260521{
+      width:100%;
+    }
+  }
+</style>
+
 </head>
 <body>
   <main class="app">
@@ -28098,6 +28192,241 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   });
 
   window.addEventListener("focus", refreshLiveCardCounters);
+})();
+</script>
+
+
+<script id="followme-parla-con-utenti-options-script-20260521">
+(function(){
+  "use strict";
+
+  /*
+    Patch prudente:
+    - non elimina la chat;
+    - non cambia endpoint;
+    - non cambia logica interna;
+    - sposta/raggruppa i controlli chat esistenti dentro un pannello opzionale;
+    - se non trova i controlli, crea solo il pulsante informativo senza rompere nulla.
+  */
+
+  function ready(fn){
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", fn);
+    } else {
+      fn();
+    }
+  }
+
+  function txt(el){
+    return String(el && el.textContent || "").replace(/\s+/g, " ").trim();
+  }
+
+  function lower(el){
+    return txt(el).toLowerCase();
+  }
+
+  function isVisible(el){
+    if (!el) return false;
+    var st = window.getComputedStyle(el);
+    return st.display !== "none" && st.visibility !== "hidden";
+  }
+
+  function findOptionsHost(){
+    var candidates = [];
+
+    document.querySelectorAll("section, article, div, details").forEach(function(el){
+      var t = lower(el);
+      if (
+        t.includes("altre opzioni") ||
+        t.includes("opzioni") ||
+        t.includes("funzioni aggiuntive") ||
+        t.includes("strumenti")
+      ) {
+        candidates.push(el);
+      }
+    });
+
+    if (candidates.length) return candidates[0];
+
+    /*
+      Fallback: se non troviamo una vera area opzioni,
+      mettiamo il blocco dopo la cronologia/card, senza toccare la parte alta.
+    */
+    var fallbackSelectors = [
+      "#followmeHistory",
+      ".premium-history",
+      ".followme-premium-history",
+      ".followme-document-section",
+      ".followme-destination-history"
+    ];
+
+    for (var i = 0; i < fallbackSelectors.length; i++) {
+      var found = document.querySelector(fallbackSelectors[i]);
+      if (found && found.parentElement) return found.parentElement;
+    }
+
+    return document.body;
+  }
+
+  function looksLikeChatControl(el){
+    var t = lower(el);
+
+    if (!t) return false;
+
+    /*
+      Evitiamo di intercettare testi generici della pagina principale.
+      Prendiamo solo controlli chiaramente legati alla chat/canale diretto/sessioni utente.
+    */
+    var hasChat =
+      t.includes("chat") ||
+      t.includes("canale diretto") ||
+      t.includes("sessioni chat") ||
+      t.includes("utenti collegati") ||
+      t.includes("chiudi tutte le chat") ||
+      t.includes("riapri servizio chat");
+
+    if (!hasChat) return false;
+
+    var tag = String(el.tagName || "").toLowerCase();
+    if (["button", "a", "details", "section", "article"].includes(tag)) return true;
+
+    if (el.querySelector && el.querySelector("button, a")) return true;
+
+    return false;
+  }
+
+  function collectChatControls(){
+    var out = [];
+
+    /*
+      Usiamo selettori larghi ma con filtro testuale.
+      Non tocchiamo PDF, card, cronologia URL o destinazione attiva.
+    */
+    document.querySelectorAll("button, a, details, section, article, div").forEach(function(el){
+      if (!isVisible(el)) return;
+      if (el.closest(".followme-parla-utenti-entry-20260521")) return;
+      if (el.closest(".followme-parla-utenti-panel-20260521")) return;
+
+      if (looksLikeChatControl(el)) {
+        /*
+          Evita di spostare l'intera app o contenitori enormi.
+        */
+        var textLength = txt(el).length;
+        var buttons = el.querySelectorAll ? el.querySelectorAll("button, a").length : 0;
+
+        if (textLength > 1400 || buttons > 12) return;
+
+        out.push(el);
+      }
+    });
+
+    /*
+      Deduplica: se abbiamo già un padre selezionato, non spostiamo anche il figlio.
+    */
+    return out.filter(function(el, index){
+      if (out.indexOf(el) !== index) return false;
+      for (var i = 0; i < out.length; i++) {
+        if (out[i] !== el && out[i].contains && out[i].contains(el)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+
+  function renameChatTexts(root){
+    if (!root) return;
+
+    root.querySelectorAll("button, a, strong, h2, h3, h4, span, div").forEach(function(el){
+      if (!el.childNodes || el.childNodes.length !== 1) return;
+
+      var t = txt(el);
+      var l = t.toLowerCase();
+
+      if (l === "chat" || l === "chat diretta" || l === "canale diretto") {
+        el.textContent = "Parla con gli utenti";
+      }
+
+      if (l.includes("gestisci chat")) {
+        el.textContent = t.replace(/gestisci chat/ig, "Gestisci Parla con gli utenti");
+      }
+
+      if (l.includes("attiva chat")) {
+        el.textContent = t.replace(/attiva chat/ig, "Attiva Parla con gli utenti");
+      }
+
+      if (l.includes("disattiva chat")) {
+        el.textContent = t.replace(/disattiva chat/ig, "Disattiva Parla con gli utenti");
+      }
+    });
+  }
+
+  function buildEntry(){
+    var wrap = document.createElement("div");
+    wrap.className = "followme-parla-utenti-wrapper-20260521";
+
+    wrap.innerHTML =
+      '<div class="followme-parla-utenti-entry-20260521">' +
+      '  <div class="followme-parla-utenti-copy-20260521">' +
+      '    <strong>Parla con gli utenti</strong>' +
+      '    <span>Opzione avanzata: consenti a chi inquadra il QR di scriverti quando serve.</span>' +
+      '  </div>' +
+      '  <button type="button" class="followme-parla-utenti-btn-20260521" id="followmeParlaUtentiBtn20260521">Apri</button>' +
+      '</div>' +
+      '<div class="followme-parla-utenti-panel-20260521" id="followmeParlaUtentiPanel20260521"></div>';
+
+    return wrap;
+  }
+
+  function install(){
+    if (window.__followMeParlaConUtentiInstalled) return;
+    window.__followMeParlaConUtentiInstalled = true;
+
+    renameChatTexts(document.body);
+
+    var host = findOptionsHost();
+    if (!host) return;
+
+    var entry = buildEntry();
+
+    /*
+      Inserimento prudente: in fondo all'area opzioni/host.
+      Non altera la parte alta della pagina.
+    */
+    host.appendChild(entry);
+
+    var btn = document.getElementById("followmeParlaUtentiBtn20260521");
+    var panel = document.getElementById("followmeParlaUtentiPanel20260521");
+
+    var moved = collectChatControls();
+
+    moved.forEach(function(el){
+      el.setAttribute("data-followme-parla-moved", "true");
+      panel.appendChild(el);
+    });
+
+    if (!moved.length) {
+      panel.innerHTML =
+        '<div style="font-size:13px;line-height:1.35;opacity:.75;">' +
+        'La funzione resta disponibile nelle impostazioni operative del QR.' +
+        '</div>';
+    }
+
+    btn.addEventListener("click", function(){
+      var open = panel.classList.toggle("is-open");
+      btn.textContent = open ? "Chiudi" : "Apri";
+    });
+  }
+
+  ready(function(){
+    /*
+      Piccolo ritardo perché followme-app.html costruisce alcune parti in modo dinamico.
+    */
+    setTimeout(install, 450);
+    setTimeout(function(){
+      renameChatTexts(document.body);
+    }, 1200);
+  });
 })();
 </script>
 
