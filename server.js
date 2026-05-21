@@ -9861,7 +9861,14 @@ const followmeDocumentPath = require('path');
 const followmeDocumentFs = require('fs');
 const followmeDocumentFsp = followmeDocumentFs.promises;
 
-const FOLLOWME_DOCUMENT_UPLOAD_DIR = followmeDocumentPath.join(__dirname, 'public', 'followme-documents');
+/*
+  Upload PDF FollowMe.
+  Deve usare lo stesso percorso esposto da:
+  /uploads/followme-documents
+  In locale: public/uploads/followme-documents
+  Su Render: /var/data/uploads/followme-documents se FOLLOWME_STORAGE_DIR=/var/data
+*/
+const FOLLOWME_DOCUMENT_UPLOAD_DIR = FOLLOWME_DOCUMENTS_DISK_DIR;
 
 const followmeDocumentUploadMulter20260520 = multer({
   storage: multer.memoryStorage(),
@@ -9999,10 +10006,19 @@ app.post('/api/followme/:code/document/upload', followmeDocumentUploadMulter2026
       });
     }
 
-    const storedName = `followme-doc-${project.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.pdf`;
-    const diskPath = followmeDocumentPath.join(FOLLOWME_DOCUMENT_UPLOAD_DIR, storedName);
-    const publicPath = `/followme-documents/${storedName}`;
+    /*
+      Salvataggio definitivo:
+      ogni QR ha la propria cartella stabile.
+      Il PDF si chiama sempre documento.pdf, quindi ogni nuovo caricamento
+      sostituisce automaticamente il precedente.
+    */
+    const qrFolder = String(project.code || code || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '') || String(project.id);
+    const storedName = 'documento.pdf';
+    const projectDocumentDir = followmeDocumentPath.join(FOLLOWME_DOCUMENT_UPLOAD_DIR, qrFolder);
+    const diskPath = followmeDocumentPath.join(projectDocumentDir, storedName);
+    const publicPath = `/uploads/followme-documents/${qrFolder}/${storedName}`;
 
+    await followmeDocumentFsp.mkdir(projectDocumentDir, { recursive:true });
     await followmeDocumentFsp.writeFile(diskPath, buffer);
 
     const pageCount = countPdfPagesRough20260520(buffer);
