@@ -27678,5 +27678,86 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 </script>
 
 
+
+<script id="followme-live-counter-refresh-final-20260521">
+(function(){
+  "use strict";
+
+  /*
+    Aggiornamento leggero contatori FollowMe.
+    Non ricarica la pagina.
+    Non tocca layout, card, chat, PDF o carosello.
+    Aggiorna solo:
+    - Scansioni totali
+    - Scansioni link attuale
+  */
+
+  function getFollowMeCode(){
+    try {
+      var path = window.location.pathname || "";
+      var m = path.match(/\/fm\/app\/([^\/?#]+)/);
+      if (m && m[1]) return decodeURIComponent(m[1]);
+
+      var params = new URLSearchParams(window.location.search || "");
+      return params.get("code") || window.FOLLOWME_CODE || "";
+    } catch(e) {
+      return "";
+    }
+  }
+
+  function setText(id, value){
+    var el = document.getElementById(id);
+    if (!el) return;
+    var next = String(value == null ? 0 : value);
+    if (el.textContent !== next) {
+      el.textContent = next;
+      el.setAttribute("data-live-updated-at", String(Date.now()));
+    }
+  }
+
+  async function refreshFollowMeCounters(){
+    var code = getFollowMeCode();
+    if (!code) return;
+
+    try {
+      var res = await fetch(
+        "/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(),
+        {
+          method: "GET",
+          cache: "no-store",
+          headers: {
+            "Accept": "application/json"
+          }
+        }
+      );
+
+      if (!res.ok) return;
+
+      var data = await res.json();
+      if (!data || !data.success || !data.stats) return;
+
+      setText("totalScans", data.stats.total_scans || 0);
+      setText("currentScans", data.stats.current_url_scans || 0);
+
+      window.__followMeLastLiveCounterRefresh = Date.now();
+    } catch(err) {
+      console.warn("[FollowMe] aggiornamento contatori non riuscito:", err);
+    }
+  }
+
+  if (window.__followMeLiveCounterRefreshStarted) return;
+  window.__followMeLiveCounterRefreshStarted = true;
+
+  refreshFollowMeCounters();
+  setInterval(refreshFollowMeCounters, 4000);
+
+  document.addEventListener("visibilitychange", function(){
+    if (!document.hidden) refreshFollowMeCounters();
+  });
+
+  window.addEventListener("focus", refreshFollowMeCounters);
+})();
+</script>
+
 </body>
 </html>
