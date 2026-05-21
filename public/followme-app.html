@@ -27714,5 +27714,107 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 </script>
 
 
+
+<script id="followme-pdf-cards-refresh-stabilizer-20260521">
+(function(){
+  if(window.__FollowMePdfCardsRefreshStabilizer20260521) return;
+  window.__FollowMePdfCardsRefreshStabilizer20260521 = true;
+
+  let running = false;
+
+  function log(){
+    try{ console.log.apply(console, ["[FollowMe PDF Refresh Stabilizer]"].concat(Array.from(arguments))); }catch(e){}
+  }
+
+  function trackExists(){
+    return !!(
+      document.getElementById("premiumHistoryTrack") ||
+      document.querySelector(".premium-history-track")
+    );
+  }
+
+  async function stabilize(reason){
+    if(running) return;
+    running = true;
+
+    try{
+      log("stabilize", reason, "trackExists:", trackExists());
+
+      /*
+        1) Card PDF ufficiale:
+        rilancio refresh/render solo se lo script esiste.
+        Non sposto, non nascondo, non rimuovo nulla.
+      */
+      try{
+        if(window.fmPdfSingleCard20260520?.refresh){
+          await window.fmPdfSingleCard20260520.refresh();
+        }
+        if(window.fmPdfSingleCard20260520?.render){
+          window.fmPdfSingleCard20260520.render();
+        }else if(window.fmPdfSingleCard20260520?.boot){
+          await window.fmPdfSingleCard20260520.boot();
+        }
+      }catch(e){}
+
+      /*
+        2) Miniatura sulla card fantasma:
+        dopo refresh può essere stata renderizzata tardi.
+      */
+      try{
+        if(window.fmPdfThumbInsideGhostHistoryCard20260521?.enhanceGhostCards){
+          await window.fmPdfThumbInsideGhostHistoryCard20260521.enhanceGhostCards("refresh-stabilizer-" + reason);
+        }else if(window.fmPdfThumbInsideGhostHistoryCard20260521?.boot){
+          window.fmPdfThumbInsideGhostHistoryCard20260521.boot();
+        }
+      }catch(e){}
+
+      /*
+        3) Sync preview grande/piccola:
+        solo rilancio leggero.
+      */
+      try{
+        if(window.fmCarouselSwitchPreviewSync20260521?.syncNow){
+          await window.fmCarouselSwitchPreviewSync20260521.syncNow("refresh-stabilizer-" + reason);
+        }
+      }catch(e){}
+
+    }catch(e){
+      log("errore", e);
+    }finally{
+      setTimeout(function(){ running = false; }, 350);
+    }
+  }
+
+  function boot(){
+    /*
+      Sequenza limitata: niente observer, niente loop infinito.
+      Serve solo a coprire il render tardivo dopo refresh.
+    */
+    setTimeout(function(){ stabilize("350"); }, 350);
+    setTimeout(function(){ stabilize("1000"); }, 1000);
+    setTimeout(function(){ stabilize("2200"); }, 2200);
+    setTimeout(function(){ stabilize("4200"); }, 4200);
+    setTimeout(function(){ stabilize("6500"); }, 6500);
+  }
+
+  window.fmPdfCardsRefreshStabilizer20260521 = {
+    boot,
+    stabilize
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 300);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 300);
+  });
+})();
+</script>
+
+
 </body>
 </html>
