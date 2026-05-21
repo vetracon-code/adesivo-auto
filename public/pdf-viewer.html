@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Documento</title>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      min-height: 100%;
+      background: #f3f4f6;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      color: #111827;
+    }
+
+    .app {
+      width: 100%;
+      min-height: 100vh;
+      background: #f3f4f6;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px;
+      padding-top: calc(10px + env(safe-area-inset-top));
+      background: rgba(255,255,255,0.96);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(0,0,0,0.08);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    .topbar button,
+    .topbar a {
+      appearance: none;
+      border: 0;
+      border-radius: 12px;
+      padding: 9px 12px;
+      background: #111827;
+      color: white;
+      font-size: 14px;
+      font-weight: 700;
+      text-decoration: none;
+      line-height: 1;
+    }
+
+    .topbar .secondary {
+      background: #e5e7eb;
+      color: #111827;
+    }
+
+    #zoomLabel {
+      min-width: 48px;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: #374151;
+    }
+
+    #status {
+      padding: 14px;
+      font-size: 14px;
+      color: #4b5563;
+      text-align: center;
+    }
+
+    .viewer-shell {
+      width: 100%;
+      overflow-x: auto;
+      overflow-y: visible;
+      -webkit-overflow-scrolling: touch;
+      padding: 14px 0 32px;
+    }
+
+    #pdfViewer {
+      width: max-content;
+      min-width: 100%;
+      margin: 0 auto;
+    }
+
+    .pdf-page {
+      display: flex;
+      justify-content: center;
+      margin: 0 auto 16px;
+    }
+
+    .pdf-page canvas {
+      display: block;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.18);
+      max-width: none;
+    }
+
+    .error-box {
+      margin: 20px;
+      padding: 18px;
+      background: white;
+      border-radius: 18px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.08);
+      text-align: center;
+    }
+
+    .error-box p {
+      margin: 0 0 14px;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    .error-box a {
+      display: inline-block;
+      padding: 12px 16px;
+      border-radius: 12px;
+      background: #111827;
+      color: white;
+      text-decoration: none;
+      font-weight: 800;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <div class="topbar">
+      <button type="button" onclick="zoomOut()">−</button>
+      <span id="zoomLabel">120%</span>
+      <button type="button" onclick="zoomIn()">+</button>
+      <button type="button" class="secondary" onclick="fitWidth()">Adatta</button>
+      <a id="openPdfBtn" href="#" target="_blank" rel="noopener">Apri</a>
+    </div>
+
+    <div id="status">Caricamento documento…</div>
+
+    <div class="viewer-shell">
+      <div id="pdfViewer"></div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+    const params = new URLSearchParams(window.location.search);
+    const pdfUrl = params.get("file") || params.get("url") || "";
+
+    const viewer = document.getElementById("pdfViewer");
+    const statusEl = document.getElementById("status");
+    const zoomLabel = document.getElementById("zoomLabel");
+    const openPdfBtn = document.getElementById("openPdfBtn");
+
+    let pdfDoc = null;
+    let scale = 1.2;
+    let rendering = false;
+
+    if (!pdfUrl) {
+      showError("Documento non trovato. Manca il parametro file nell’indirizzo.");
+    } else {
+      openPdfBtn.href = pdfUrl;
+      renderPdf();
+    }
+
+    async function renderPdf() {
+      if (rendering) return;
+      rendering = true;
+
+      viewer.innerHTML = "";
+      statusEl.textContent = "Caricamento documento…";
+
+      try {
+        pdfDoc = await pdfjsLib.getDocument({
+          url: pdfUrl,
+          withCredentials: false
+        }).promise;
+
+        statusEl.textContent = "Documento caricato. Puoi ingrandire, ridurre o scorrere le pagine.";
+
+        for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+          const page = await pdfDoc.getPage(pageNum);
+          const viewport = page.getViewport({ scale });
+
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d", { alpha: false });
+
+          const outputScale = Math.max(window.devicePixelRatio || 1, 1);
+
+          canvas.width = Math.floor(viewport.width * outputScale);
+          canvas.height = Math.floor(viewport.height * outputScale);
+          canvas.style.width = Math.floor(viewport.width) + "px";
+          canvas.style.height = Math.floor(viewport.height) + "px";
+
+          context.setTransform(outputScale, 0, 0, outputScale, 0, 0);
+
+          const pageBox = document.createElement("div");
+          pageBox.className = "pdf-page";
+          pageBox.appendChild(canvas);
+          viewer.appendChild(pageBox);
+
+          await page.render({
+            canvasContext: context,
+            viewport
+          }).promise;
+        }
+
+        zoomLabel.textContent = Math.round(scale * 100) + "%";
+      } catch (error) {
+        console.error("Errore visualizzazione PDF:", error);
+        showError("Non riesco a visualizzare il PDF in anteprima su questo browser.");
+      } finally {
+        rendering = false;
+      }
+    }
+
+    function zoomIn() {
+      scale = Math.min(scale + 0.25, 3);
+      renderPdf();
+    }
+
+    function zoomOut() {
+      scale = Math.max(scale - 0.25, 0.75);
+      renderPdf();
+    }
+
+    function fitWidth() {
+      if (!pdfDoc) {
+        scale = 1.2;
+        renderPdf();
+        return;
+      }
+
+      pdfDoc.getPage(1).then(page => {
+        const unscaledViewport = page.getViewport({ scale: 1 });
+        const availableWidth = Math.max(window.innerWidth - 20, 280);
+        scale = Math.max(0.7, Math.min(availableWidth / unscaledViewport.width, 2.5));
+        renderPdf();
+      });
+    }
+
+    function showError(message) {
+      statusEl.textContent = "";
+      viewer.innerHTML = `
+        <div class="error-box">
+          <p>${message}</p>
+          ${pdfUrl ? `<a href="${pdfUrl}" target="_blank" rel="noopener">Apri direttamente il PDF</a>` : ""}
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>

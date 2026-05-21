@@ -13722,6 +13722,21 @@ app.get('/fm/u/:public_id', async (req, res) => {
       `);
     }
 
+    const activeUrlLower = String(activeUrl || '').toLowerCase();
+
+    if (
+      activeUrl &&
+      (
+        activeUrlLower.includes('/uploads/followme-documents/') ||
+        activeUrlLower.includes('/uploads/followme-docs/') ||
+        activeUrlLower.includes('/api/followme/document/') ||
+        activeUrlLower.endsWith('.pdf')
+      )
+    ) {
+      const viewerUrl = '/pdf-viewer.html?file=' + encodeURIComponent(activeUrl);
+      return res.redirect(302, viewerUrl);
+    }
+
     return res.redirect(302, activeUrl);
   } catch (err) {
     console.error('fm/u error:', err);
