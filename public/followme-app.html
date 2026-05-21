@@ -5920,6 +5920,45 @@ body.followme-safe-pc-dismissed #followmeSafeInstallOverlay{
 
 
 
+
+<style id="followme-live-scan-box-style-20260521">
+  .followme-live-scan-box-20260521{
+    display:inline-flex;
+    align-items:center;
+    gap:7px;
+    width:auto;
+    margin:8px 0 0 0;
+    padding:7px 10px;
+    border-radius:14px;
+    border:1px solid rgba(255,255,255,.14);
+    background:rgba(255,255,255,.07);
+    box-shadow:0 8px 22px rgba(0,0,0,.10);
+    vertical-align:middle;
+  }
+
+  .followme-live-scan-value-20260521{
+    font-weight:900;
+    font-size:15px;
+    line-height:1;
+    color:inherit;
+  }
+
+  .followme-live-scan-label-20260521{
+    font-size:11px;
+    line-height:1;
+    opacity:.72;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+  }
+
+  @media (min-width: 700px){
+    .followme-live-scan-box-20260521{
+      margin-left:8px;
+      margin-top:0;
+    }
+  }
+</style>
+
 </head>
 <body>
   <main class="app">
@@ -27871,36 +27910,44 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     return out;
   }
 
+  function ensureLiveScanBox(card){
+    if (!card) return null;
+
+    var existing = card.querySelector(".followme-live-scan-box-20260521");
+    if (existing) return existing;
+
+    var box = document.createElement("div");
+    box.className = "followme-live-scan-box-20260521";
+    box.setAttribute("data-followme-live-scan-box", "true");
+    box.innerHTML =
+      '<div class="followme-live-scan-value-20260521">0</div>' +
+      '<div class="followme-live-scan-label-20260521">scansioni</div>';
+
+    /*
+      Inserimento non invasivo:
+      lo aggiungiamo alla card come box dedicato, senza modificare
+      i testi esistenti di data, ora, ultimo uso o caricamento.
+    */
+    var meta = card.querySelector(".premium-history-meta, .recent-meta, .followme-history-meta");
+    if (meta && meta.parentNode) {
+      meta.parentNode.insertBefore(box, meta.nextSibling);
+    } else {
+      card.appendChild(box);
+    }
+
+    return box;
+  }
+
   function updateTextInsideCard(card, scans, lastUsed){
     if (!card) return;
 
-    var last = formatLastUsed(lastUsed);
-    var newText = scans + " scansioni · ultimo uso: " + last;
+    var box = ensureLiveScanBox(card);
+    if (!box) return;
 
-    var preferred = card.querySelector(
-      "[data-followme-scan-count], [data-scan-count], .recent-meta, .premium-history-meta, .premium-history-pill span"
-    );
+    var value = box.querySelector(".followme-live-scan-value-20260521");
+    if (value) value.textContent = String(scans || 0);
 
-    if (preferred) {
-      var t = preferred.textContent || "";
-
-      if (t.toLowerCase().includes("scansion")) {
-        preferred.textContent = newText;
-        return;
-      }
-    }
-
-    var all = card.querySelectorAll("span, div, p, small");
-    for (var i = 0; i < all.length; i++) {
-      var el = all[i];
-      var txt = el.textContent || "";
-      if (txt.toLowerCase().includes("scansion")) {
-        el.textContent = newText;
-        return;
-      }
-    }
-
-    card.setAttribute("data-live-scan-count", String(scans));
+    card.setAttribute("data-live-scan-count", String(scans || 0));
     card.setAttribute("data-live-last-used", String(lastUsed || ""));
   }
 
