@@ -1001,17 +1001,78 @@
     }catch(e){}
   }
 
+
+  // followme-bot-off-robust-sequence-guard-20260522
+  window.__followMePublicBotEnabled = null;
+
+  function getFollowMeChatTokenForBot20260522(){
+    try {
+      const m = String(location.pathname || "").match(/\/fm\/chat\/c\/([^\/?#]+)/);
+      return m && m[1] ? decodeURIComponent(m[1]) : "";
+    } catch(e) {
+      return "";
+    }
+  }
+
+  async function loadFollowMeBotEnabled20260522(){
+    const token = getFollowMeChatTokenForBot20260522();
+
+    if (!token) {
+      window.__followMePublicBotEnabled = true;
+      return true;
+    }
+
+    try {
+      const res = await fetch("/api/followme/chat/" + encodeURIComponent(token) + "/bot-state?v=" + Date.now(), {
+        method: "GET",
+        cache: "no-store",
+        headers: { "Accept": "application/json" }
+      });
+
+      if (!res.ok) {
+        window.__followMePublicBotEnabled = true;
+        return true;
+      }
+
+      const data = await res.json();
+      window.__followMePublicBotEnabled = !(data && data.success && data.bot_enabled === false);
+      return window.__followMePublicBotEnabled;
+    } catch(e) {
+      console.warn("[FollowMe] stato BOT non disponibile:", e);
+      window.__followMePublicBotEnabled = true;
+      return true;
+    }
+  }
+
   async function boot(){
     try{
       await createSession();
 
-      botTypingThen("Ciao, sono <strong>FollowMe QR</strong> 👋", 800);
+      /*
+        followme-bot-off-robust-sequence-guard-20260522
 
-      scheduleRobot(()=>botTypingThen("Ho avvisato il proprietario che ti sei collegato.<br>Se è disponibile, ti risponderà qui.", 850), 1800);
+        BOT acceso:
+        - parte la sequenza completa di accoglienza.
 
-      scheduleRobot(()=>botTypingThen("Mentre aspetti, vuoi sapere <strong>cosa sono</strong>?", 750), 4200);
+        BOT spento:
+        - NON parte “Ciao, sono FollowMe QR”;
+        - NON parte “Mentre aspetti...”;
+        - NON partono le scelte automatiche;
+        - resta solo l'avviso essenziale di collegamento.
+      */
+      const botEnabledNow = await loadFollowMeBotEnabled20260522();
 
-      scheduleRobot(addChoices, 5600);
+      if (botEnabledNow === false) {
+        botTypingThen("Ho avvisato il proprietario che ti sei collegato.<br>Se è disponibile, ti risponderà qui.", 500);
+      } else {
+        botTypingThen("Ciao, sono <strong>FollowMe QR</strong> 👋", 800);
+
+        scheduleRobot(()=>botTypingThen("Ho avvisato il proprietario che ti sei collegato.<br>Se è disponibile, ti risponderà qui.", 850), 1800);
+
+        scheduleRobot(()=>botTypingThen("Mentre aspetti, vuoi sapere <strong>cosa sono</strong>?", 750), 4200);
+
+        scheduleRobot(addChoices, 5600);
+      }
 
       setInterval(poll, 1500);
     }catch(err){
