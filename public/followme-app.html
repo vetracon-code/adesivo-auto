@@ -27759,5 +27759,213 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-live-card-counter-refresh-final-20260521">
+(function(){
+  "use strict";
+
+  /*
+    Aggiornamento live delle card FollowMe.
+    Regola fondamentale:
+    aggiorna il contatore della card SOLO se la URL della card coincide
+    esattamente con la active_url corrente del QR.
+    Non rigenera le card.
+    Non sposta elementi.
+    Non tocca PDF, chat, carosello o layout.
+  */
+
+  function getCode(){
+    try {
+      var m = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/);
+      if (m && m[1]) return decodeURIComponent(m[1]);
+      var q = new URLSearchParams(location.search || "");
+      return q.get("code") || window.FOLLOWME_CODE || "";
+    } catch(e) {
+      return "";
+    }
+  }
+
+  function normalizeUrl(value){
+    var v = String(value || "").trim();
+    if (!v) return "";
+
+    try {
+      var u = new URL(v, window.location.origin);
+      var path = u.pathname || "";
+      var search = u.search || "";
+
+      path = path.replace(/\/+$/, "");
+      if (!path) path = "/";
+
+      return path + search;
+    } catch(e) {
+      return v.replace(/\/+$/, "");
+    }
+  }
+
+  function escapeRegExp(str){
+    return String(str || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function formatLastUsed(value){
+    if (!value) return "mai";
+    try {
+      var d = new Date(value);
+      if (isNaN(d.getTime())) return String(value);
+      return d.toLocaleString("it-IT", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    } catch(e) {
+      return String(value);
+    }
+  }
+
+  function cardContainsUrl(el, normalizedUrl){
+    if (!el || !normalizedUrl) return false;
+
+    var candidates = [
+      el.getAttribute("data-followme-url"),
+      el.getAttribute("data-url"),
+      el.getAttribute("data-active-url"),
+      el.getAttribute("href")
+    ];
+
+    var links = el.querySelectorAll ? el.querySelectorAll("a[href]") : [];
+    links.forEach(function(a){
+      candidates.push(a.getAttribute("href"));
+    });
+
+    for (var i = 0; i < candidates.length; i++) {
+      if (normalizeUrl(candidates[i]) === normalizedUrl) return true;
+    }
+
+    var txt = el.textContent || "";
+    return txt.indexOf(normalizedUrl) !== -1;
+  }
+
+  function findPossibleCards(){
+    var selectors = [
+      ".premium-history-card",
+      ".followme-history-card",
+      ".history-card",
+      ".recent-card",
+      ".followme-destination-card",
+      ".followme-document-card",
+      ".document-card",
+      "[data-followme-url]",
+      "[data-url]",
+      "[data-active-url]"
+    ];
+
+    var out = [];
+    selectors.forEach(function(sel){
+      document.querySelectorAll(sel).forEach(function(el){
+        if (out.indexOf(el) === -1) out.push(el);
+      });
+    });
+
+    return out;
+  }
+
+  function updateTextInsideCard(card, scans, lastUsed){
+    if (!card) return;
+
+    var last = formatLastUsed(lastUsed);
+    var newText = scans + " scansioni · ultimo uso: " + last;
+
+    var preferred = card.querySelector(
+      "[data-followme-scan-count], [data-scan-count], .recent-meta, .premium-history-meta, .premium-history-pill span"
+    );
+
+    if (preferred) {
+      var t = preferred.textContent || "";
+
+      if (t.toLowerCase().includes("scansion")) {
+        preferred.textContent = newText;
+        return;
+      }
+    }
+
+    var all = card.querySelectorAll("span, div, p, small");
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      var txt = el.textContent || "";
+      if (txt.toLowerCase().includes("scansion")) {
+        el.textContent = newText;
+        return;
+      }
+    }
+
+    card.setAttribute("data-live-scan-count", String(scans));
+    card.setAttribute("data-live-last-used", String(lastUsed || ""));
+  }
+
+  async function refreshLiveCardCounters(){
+    var code = getCode();
+    if (!code) return;
+
+    try {
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
+        method: "GET",
+        cache: "no-store",
+        headers: { "Accept": "application/json" }
+      });
+
+      if (!res.ok) return;
+
+      var data = await res.json();
+      if (!data || !data.success || !data.project) return;
+
+      var activeUrl = normalizeUrl(data.project.active_url || "");
+      if (!activeUrl) return;
+
+      var history = Array.isArray(data.history) ? data.history : [];
+      var activeHistory = null;
+
+      for (var i = 0; i < history.length; i++) {
+        if (normalizeUrl(history[i].url) === activeUrl) {
+          activeHistory = history[i];
+          break;
+        }
+      }
+
+      if (!activeHistory) return;
+
+      var scans = Number(activeHistory.scan_count || 0);
+      var lastUsed = activeHistory.last_used_at || "";
+
+      var cards = findPossibleCards();
+
+      cards.forEach(function(card){
+        if (cardContainsUrl(card, activeUrl)) {
+          updateTextInsideCard(card, scans, lastUsed);
+          card.setAttribute("data-followme-live-active", "true");
+        }
+      });
+
+      window.__followMeLastLiveCardCounterRefresh = Date.now();
+    } catch(err) {
+      console.warn("[FollowMe] aggiornamento card live non riuscito:", err);
+    }
+  }
+
+  if (window.__followMeLiveCardCounterRefreshStarted) return;
+  window.__followMeLiveCardCounterRefreshStarted = true;
+
+  refreshLiveCardCounters();
+  setInterval(refreshLiveCardCounters, 4000);
+
+  document.addEventListener("visibilitychange", function(){
+    if (!document.hidden) refreshLiveCardCounters();
+  });
+
+  window.addEventListener("focus", refreshLiveCardCounters);
+})();
+</script>
+
 </body>
 </html>
