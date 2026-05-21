@@ -27608,5 +27608,242 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 </script>
 
 
+
+<script id="followme-pdf-thumb-inside-ghost-history-card-20260521">
+(function(){
+  if(window.__FollowMePdfThumbInsideGhostHistoryCard20260521) return;
+  window.__FollowMePdfThumbInsideGhostHistoryCard20260521 = true;
+
+  let currentDoc = null;
+  let loading = false;
+
+  function code(){
+    try{
+      const p = location.pathname.split("/").filter(Boolean);
+      const i = p.indexOf("app");
+      if(i >= 0 && p[i+1]) return decodeURIComponent(p[i+1]);
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function esc(v){
+    return String(v || "").replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+
+  function cleanText(el){
+    return String(el && el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
+  function isOfficialPdfCard(card){
+    return !!(
+      card &&
+      (
+        card.id === "followmePdfSingleCard20260520" ||
+        card.dataset.followmeDocumentCard === "1" ||
+        card.dataset.followmeDocCard === "1"
+      )
+    );
+  }
+
+  function isPdfGhostCard(card){
+    if(!card || isOfficialPdfCard(card)) return false;
+
+    const t = cleanText(card);
+
+    const looksHistory =
+      t.includes("destinazione") ||
+      t.includes("precedente") ||
+      t.includes("scansioni") ||
+      t.includes("ultimo uso");
+
+    const looksPdf =
+      t.includes("/fm/document/") ||
+      t.includes("fm/document") ||
+      t.includes("documento pdf") ||
+      t.includes("consegna documento");
+
+    const officialMetrics =
+      t.includes("visualizzazioni") ||
+      t.includes("download");
+
+    return looksHistory && looksPdf && !officialMetrics;
+  }
+
+  async function loadCurrentDoc(){
+    if(loading) return currentDoc;
+    loading = true;
+
+    try{
+      const r = await fetch("/api/followme/" + encodeURIComponent(code()) + "/document/current?v=" + Date.now(), {
+        cache:"no-store"
+      });
+      const j = await r.json().catch(() => null);
+      if(j && j.success && j.document){
+        currentDoc = j.document;
+      }
+    }catch(e){}
+
+    loading = false;
+    return currentDoc;
+  }
+
+  function ensureStyle(){
+    if(document.getElementById("followmePdfGhostThumbStyle20260521")) return;
+
+    const st = document.createElement("style");
+    st.id = "followmePdfGhostThumbStyle20260521";
+    st.textContent = `
+      .followme-pdf-ghost-thumb-20260521{
+        width:100%;
+        aspect-ratio:1 / 1;
+        min-height:118px;
+        border-radius:18px;
+        overflow:hidden;
+        display:grid;
+        place-items:center;
+        background:
+          radial-gradient(circle at 20% 8%, rgba(200,255,46,.18), transparent 34%),
+          radial-gradient(circle at 88% 0%, rgba(94,231,255,.14), transparent 32%),
+          linear-gradient(145deg, rgba(255,255,255,.10), rgba(255,255,255,.035));
+        border:1px solid rgba(255,255,255,.10);
+        margin:10px 0 12px;
+      }
+
+      .followme-pdf-ghost-thumb-20260521 img{
+        width:100%;
+        height:100%;
+        display:block;
+        object-fit:cover;
+      }
+
+      .followme-pdf-ghost-thumb-20260521 .fallback{
+        color:#fff;
+        text-align:center;
+        display:grid;
+        gap:5px;
+        padding:10px;
+      }
+
+      .followme-pdf-ghost-thumb-20260521 .fallback strong{
+        font-size:1rem;
+        font-weight:950;
+      }
+
+      .followme-pdf-ghost-thumb-20260521 .fallback span{
+        color:rgba(255,255,255,.62);
+        font-size:.74rem;
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  function thumbSrc(doc){
+    const raw = String(
+      doc && (
+        doc.thumbnail_data_url ||
+        doc.thumbnail_url ||
+        doc.thumbnail_path ||
+        ""
+      ) || ""
+    );
+
+    if(!raw) return "";
+    return raw.startsWith("data:") ? raw : raw + "?v=" + Date.now();
+  }
+
+  function injectThumbIntoCard(card, doc){
+    if(!card || !doc) return;
+
+    const src = thumbSrc(doc);
+    const name = doc.original_name || "Documento PDF";
+
+    let holder = card.querySelector(".followme-pdf-ghost-thumb-20260521");
+
+    if(!holder){
+      holder = document.createElement("div");
+      holder.className = "followme-pdf-ghost-thumb-20260521";
+      holder.dataset.followmePdfGhostThumb20260521 = "1";
+
+      /*
+        Inserimento prudente:
+        dopo la testata della card se esiste, altrimenti prima delle metriche,
+        altrimenti in fondo.
+      */
+      const preview = card.querySelector(".premium-history-preview");
+      const meta = card.querySelector(".premium-history-meta");
+      const firstBlock = card.firstElementChild;
+
+      if(preview){
+        preview.innerHTML = "";
+        preview.appendChild(holder);
+      }else if(meta){
+        meta.insertAdjacentElement("beforebegin", holder);
+      }else if(firstBlock){
+        firstBlock.insertAdjacentElement("afterend", holder);
+      }else{
+        card.appendChild(holder);
+      }
+    }
+
+    if(src){
+      const existing = holder.querySelector("img");
+      if(!existing || existing.getAttribute("src") !== src){
+        holder.innerHTML = `<img src="${esc(src)}" alt="${esc(name)}">`;
+      }
+    }else if(!holder.querySelector(".fallback")){
+      holder.innerHTML = `<div class="fallback"><strong>PDF</strong><span>${esc(name)}</span></div>`;
+    }
+
+    card.dataset.followmePdfGhostThumbInjected20260521 = "1";
+  }
+
+  async function enhanceGhostCards(reason){
+    ensureStyle();
+
+    const doc = await loadCurrentDoc();
+    if(!doc) return;
+
+    const cards = Array.from(document.querySelectorAll(".premium-history-card"));
+    cards.forEach(function(card){
+      if(isPdfGhostCard(card)){
+        injectThumbIntoCard(card, doc);
+      }
+    });
+  }
+
+  function boot(){
+    enhanceGhostCards("boot");
+    setTimeout(function(){ enhanceGhostCards("late-350"); }, 350);
+    setTimeout(function(){ enhanceGhostCards("late-1000"); }, 1000);
+    setTimeout(function(){ enhanceGhostCards("late-2200"); }, 2200);
+  }
+
+  window.fmPdfThumbInsideGhostHistoryCard20260521 = {
+    boot,
+    enhanceGhostCards,
+    isPdfGhostCard
+  };
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+
+  window.addEventListener("load", function(){
+    setTimeout(boot, 350);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 350);
+  });
+
+  document.addEventListener("click", function(){
+    setTimeout(function(){ enhanceGhostCards("click-500"); }, 500);
+    setTimeout(function(){ enhanceGhostCards("click-1500"); }, 1500);
+  }, true);
+})();
+</script>
+
+
 </body>
 </html>
