@@ -2003,14 +2003,12 @@ if (!global.__followMeAttachmentCleanupStarted) {
 
 
 
-app.use(express.static(path.join(__dirname, 'public')));
-
 /*
   FollowMe documenti PDF persistenti.
   In locale salva dentro public/uploads.
   Su Render, se FOLLOWME_STORAGE_DIR è impostato, salva sul Persistent Disk.
-  Consigliato su Render:
-  FOLLOWME_STORAGE_DIR=/var/data
+  Nel tuo servizio Render il disco è montato su:
+  FOLLOWME_STORAGE_DIR=/data
 */
 const FOLLOWME_STORAGE_ROOT = process.env.FOLLOWME_STORAGE_DIR
   ? path.resolve(process.env.FOLLOWME_STORAGE_DIR)
@@ -2018,10 +2016,16 @@ const FOLLOWME_STORAGE_ROOT = process.env.FOLLOWME_STORAGE_DIR
 
 const FOLLOWME_DOCUMENTS_DISK_DIR = path.join(FOLLOWME_STORAGE_ROOT, 'uploads', 'followme-documents');
 
+/*
+  IMPORTANTE:
+  questa route deve stare PRIMA di express.static(public),
+  altrimenti eventuali vecchi PDF dentro public/uploads vengono serviti
+  prima dei PDF corretti salvati nel Persistent Disk.
+*/
 app.use(
   '/uploads/followme-documents',
   express.static(FOLLOWME_DOCUMENTS_DISK_DIR, {
-    fallthrough: true,
+    fallthrough: false,
     immutable: false,
     maxAge: 0,
     setHeaders: (res) => {
@@ -2029,6 +2033,8 @@ app.use(
     }
   })
 );
+
+app.use(express.static(path.join(__dirname, 'public')));
 
 
 app.get('/', (req, res) => {
