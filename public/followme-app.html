@@ -28667,14 +28667,17 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 </script>
 
 
-<script id="followme-admin-bot-toggle-script-20260521">
+
+
+<script id="followme-admin-bot-toggle-always-options-20260521">
 (function(){
   "use strict";
 
   /*
-    Pulsante BOT SOLO lato admin.
-    Compare nel pannello/pagina chat della WebApp FollowMe.
-    Non appare nella chat pubblica utente.
+    Pulsante BOT sempre visibile lato admin.
+    Posizione: vicino a "Parla con gli utenti" / "Attiva chat" dentro Altre opzioni.
+    Non aspetta l'arrivo del primo utente.
+    Non tocca input chat, PDF, redirect, card, contatori o layout principale.
   */
 
   function getCode(){
@@ -28689,60 +28692,102 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     }
   }
 
-  function isChatArea(el){
-    if (!el) return false;
-    var t = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
-
-    return (
-      t.includes("parla con gli utenti") ||
-      t.includes("attiva chat") ||
-      t.includes("disattiva chat") ||
-      t.includes("sessioni chat") ||
-      t.includes("utenti") && t.includes("chat")
-    );
+  function clean(v){
+    return String(v || "").replace(/\s+/g, " ").trim();
   }
 
-  function findChatHost(){
-    var selectors = [
-      "[data-followme-chat-admin]",
-      "#followmeChatAdmin",
-      "#followmeChatPanel",
-      ".followme-chat-admin",
-      ".followme-chat-panel",
-      ".chat-admin",
-      ".chat-panel"
-    ];
+  function lower(el){
+    return clean(el && el.textContent || "").toLowerCase();
+  }
 
-    for (var i = 0; i < selectors.length; i++) {
-      var el = document.querySelector(selectors[i]);
-      if (el) return el;
+  function findParlaButton(){
+    var candidates = Array.from(document.querySelectorAll("button, a, [role='button']"));
+
+    for (var i = 0; i < candidates.length; i++) {
+      var t = lower(candidates[i]);
+
+      if (
+        t === "parla con gli utenti" ||
+        t.includes("parla con gli utenti") ||
+        t === "attiva chat" ||
+        t.includes("attiva chat")
+      ) {
+        return candidates[i];
+      }
     }
 
-    var candidates = [];
-    document.querySelectorAll("section, article, div, details").forEach(function(el){
-      if (isChatArea(el)) {
-        var textLen = String(el.textContent || "").length;
-        var controls = el.querySelectorAll ? el.querySelectorAll("button, a, input, textarea").length : 0;
+    return null;
+  }
 
-        if (textLen < 5000 && controls <= 30) {
-          candidates.push(el);
+  function findOptionsHost(){
+    var parlaBtn = findParlaButton();
+
+    if (parlaBtn) {
+      /*
+        Prima scelta: stesso contenitore del pulsante Parla con gli utenti.
+        Così resta dentro Altre opzioni e mantiene il senso operativo.
+      */
+      var p = parlaBtn.parentElement;
+      while (p && p !== document.body) {
+        var txt = lower(p);
+        var buttons = p.querySelectorAll ? p.querySelectorAll("button, a, [role='button']").length : 0;
+
+        if (
+          buttons >= 1 &&
+          buttons <= 12 &&
+          (
+            txt.includes("altre opzioni") ||
+            txt.includes("parla con gli utenti") ||
+            txt.includes("attiva chat") ||
+            txt.includes("caricamento") ||
+            txt.includes("chat")
+          )
+        ) {
+          return { host:p, after:parlaBtn };
         }
-      }
-    });
 
-    return candidates[0] || null;
+        p = p.parentElement;
+      }
+
+      return { host:parlaBtn.parentElement || document.body, after:parlaBtn };
+    }
+
+    /*
+      Fallback: area Altre opzioni.
+    */
+    var blocks = Array.from(document.querySelectorAll("section, article, div, details"));
+    for (var j = 0; j < blocks.length; j++) {
+      var t = lower(blocks[j]);
+      var controls = blocks[j].querySelectorAll ? blocks[j].querySelectorAll("button, a, [role='button']").length : 0;
+
+      if (
+        controls > 0 &&
+        controls <= 20 &&
+        (
+          t.includes("altre opzioni") ||
+          t.includes("opzioni")
+        )
+      ) {
+        return { host:blocks[j], after:null };
+      }
+    }
+
+    return { host:null, after:null };
   }
 
   function buildToggle(){
     var wrap = document.createElement("div");
     wrap.className = "followme-admin-bot-toggle-wrap-20260521";
     wrap.id = "followmeAdminBotToggleWrap20260521";
+    wrap.setAttribute("data-followme-admin-bot-toggle", "true");
+
     wrap.innerHTML =
       '<div class="followme-admin-bot-toggle-copy-20260521">' +
       '  <strong>BOT chat</strong>' +
       '  <span>Accendi per presentare il sistema, spegni per una chat pulita.</span>' +
       '</div>' +
       '<button type="button" class="followme-admin-bot-toggle-btn-20260521" id="followmeAdminBotToggleBtn20260521">Carico...</button>';
+
     return wrap;
   }
 
@@ -28769,7 +28814,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
   async function saveBotState(enabled){
     var code = getCode();
-    if (!code) return;
+    if (!code) return null;
 
     try {
       var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/bot-state", {
@@ -28806,16 +28851,21 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   async function install(){
     if (document.getElementById("followmeAdminBotToggleWrap20260521")) return;
 
-    var host = findChatHost();
-    if (!host) return;
+    var target = findOptionsHost();
+
+    if (!target.host) return;
 
     var wrap = buildToggle();
 
     /*
-      Inserimento prudente nel pannello chat admin.
-      Non tocca input messaggi e non sposta le funzioni principali.
+      Inserimento subito dopo Parla con gli utenti, se lo troviamo.
+      Altrimenti in fondo ad Altre opzioni.
     */
-    host.insertBefore(wrap, host.firstChild);
+    if (target.after && target.after.parentNode) {
+      target.after.parentNode.insertBefore(wrap, target.after.nextSibling);
+    } else {
+      target.host.appendChild(wrap);
+    }
 
     var enabled = await loadBotState();
     updateButton(enabled);
@@ -28826,8 +28876,12 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
         var current = btn.getAttribute("data-bot-enabled") !== "false";
         btn.textContent = "Salvo...";
         var saved = await saveBotState(!current);
-        if (saved !== null) updateButton(saved);
-        else updateButton(current);
+
+        if (saved !== null) {
+          updateButton(saved);
+        } else {
+          updateButton(current);
+        }
       });
     }
   }
@@ -28836,11 +28890,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     install();
 
     /*
-      La chat admin può essere creata dinamicamente dopo il click su Parla con gli utenti.
+      La pagina può creare Altre opzioni dopo qualche istante.
+      Quindi riproviamo, ma senza duplicare il pulsante.
     */
-    setTimeout(install, 500);
-    setTimeout(install, 1500);
-    setTimeout(install, 3000);
+    setTimeout(install, 300);
+    setTimeout(install, 900);
+    setTimeout(install, 1800);
+    setTimeout(install, 3200);
 
     var obs = new MutationObserver(function(){
       install();
