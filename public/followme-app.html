@@ -27957,14 +27957,82 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     return box;
   }
 
+  function updateVisibleOriginalScanCounter(card, scans){
+    if (!card) return;
+
+    var scanValue = String(scans || 0);
+
+    /*
+      Aggiorna il contatore visibile già esistente nella card,
+      senza creare nuovi elementi e senza toccare data/ora o pulsanti.
+    */
+
+    var strongCandidates = card.querySelectorAll("strong");
+    for (var i = 0; i < strongCandidates.length; i++) {
+      var strong = strongCandidates[i];
+      var parentText = "";
+
+      if (strong.parentElement) {
+        parentText = (strong.parentElement.textContent || "").toLowerCase();
+      }
+
+      if (parentText.indexOf("scansion") !== -1) {
+        strong.textContent = scanValue;
+        return;
+      }
+    }
+
+    var pillCandidates = card.querySelectorAll(".premium-history-pill, .followme-history-pill, .recent-meta, .premium-history-meta");
+    for (var j = 0; j < pillCandidates.length; j++) {
+      var pill = pillCandidates[j];
+      var txt = (pill.textContent || "").toLowerCase();
+
+      if (txt.indexOf("scansion") !== -1) {
+        var strongInside = pill.querySelector("strong");
+        if (strongInside) {
+          strongInside.textContent = scanValue;
+          return;
+        }
+
+        /*
+          Fallback prudente: sostituisce solo il numero prima di "scansioni",
+          lasciando invariato il resto del testo, inclusi data e ultimo uso.
+        */
+        pill.textContent = (pill.textContent || "").replace(/\b\d+\s+(scansioni?)/i, scanValue + " $1");
+        return;
+      }
+    }
+
+    /*
+      Ultimo fallback: cerca un testo tipo "4 scansioni" e cambia solo il numero.
+      Non tocca elementi che non contengono la parola scansioni.
+    */
+    var textNodes = card.querySelectorAll("span, div, p, small");
+    for (var k = 0; k < textNodes.length; k++) {
+      var el = textNodes[k];
+      var current = el.textContent || "";
+
+      if (current.toLowerCase().indexOf("scansion") !== -1) {
+        el.textContent = current.replace(/\b\d+\s+(scansioni?)/i, scanValue + " $1");
+        return;
+      }
+    }
+  }
+
   function updateTextInsideCard(card, scans, lastUsed){
     if (!card) return;
 
+    /*
+      Il box nascosto resta come deposito tecnico del valore live,
+      ma il valore viene copiato nel contatore visibile originale.
+    */
     var box = ensureLiveScanBox(card);
-    if (!box) return;
+    if (box) {
+      var value = box.querySelector(".followme-live-scan-value-20260521");
+      if (value) value.textContent = String(scans || 0);
+    }
 
-    var value = box.querySelector(".followme-live-scan-value-20260521");
-    if (value) value.textContent = String(scans || 0);
+    updateVisibleOriginalScanCounter(card, scans);
 
     card.setAttribute("data-live-scan-count", String(scans || 0));
     card.setAttribute("data-live-last-used", String(lastUsed || ""));
