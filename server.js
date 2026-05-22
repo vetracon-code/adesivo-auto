@@ -9660,20 +9660,38 @@ async function saveFollowMeDocumentThumbnail20260520(projectId, documentId, thum
     In locale: public/uploads/followme-documents/thumbs
     Su Render: /var/data/uploads/followme-documents/thumbs se FOLLOWME_STORAGE_DIR=/var/data
   */
-  const dir = path.join(FOLLOWME_DOCUMENTS_DISK_DIR, 'thumbs');
+  const projectThumbDirName = `project-${projectId}`;
+  const dir = path.join(FOLLOWME_DOCUMENTS_DISK_DIR, 'thumbs', projectThumbDirName);
   await fs.promises.mkdir(dir, { recursive:true });
 
   /*
-    Nome prevedibile per sostituzione ordinata:
-    stesso documento = stessa miniatura.
-    Nuovo PDF = nuovo record documento = nuovo file.
+    Nome fisso per QR/progetto:
+    ogni nuovo PDF sostituisce la preview precedente.
+    Prima puliamo eventuali preview vecchie, anche quelle generate con il vecchio schema.
   */
-  const filename = `followme-doc-${projectId}-${documentId}-thumb.${img.ext}`;
+  try {
+    const files = await fs.promises.readdir(dir).catch(() => []);
+    await Promise.all(
+      files
+        .filter(file => /^preview\.(jpg|jpeg|png|webp|svg)$/i.test(file))
+        .map(file => fs.promises.unlink(path.join(dir, file)).catch(() => null))
+    );
+
+    const legacyDir = path.join(FOLLOWME_DOCUMENTS_DISK_DIR, 'thumbs');
+    const legacyFiles = await fs.promises.readdir(legacyDir).catch(() => []);
+    await Promise.all(
+      legacyFiles
+        .filter(file => file.startsWith(`followme-doc-${projectId}-`) && /-thumb\.(jpg|jpeg|png|webp|svg)$/i.test(file))
+        .map(file => fs.promises.unlink(path.join(legacyDir, file)).catch(() => null))
+    );
+  } catch(e) {}
+
+  const filename = `preview.${img.ext}`;
   const full = path.join(dir, filename);
 
   await fs.promises.writeFile(full, img.buffer);
 
-  return `/uploads/followme-documents/thumbs/${filename}`;
+  return `/uploads/followme-documents/thumbs/${projectThumbDirName}/${filename}`;
 }
 
 function escapeFollowMeSvg20260520(value) {
@@ -9689,7 +9707,8 @@ async function createFollowMeDocumentFallbackThumbnail20260520(projectId, docume
     Fallback thumbnail persistente:
     non deve stare in public/followme-documents perché Render può cancellarla al redeploy.
   */
-  const dir = path.join(FOLLOWME_DOCUMENTS_DISK_DIR, 'thumbs');
+  const projectThumbDirName = `project-${projectId}`;
+  const dir = path.join(FOLLOWME_DOCUMENTS_DISK_DIR, 'thumbs', projectThumbDirName);
   await fs.promises.mkdir(dir, { recursive:true });
 
   const cleanName = String(originalName || 'Documento PDF')
@@ -9700,7 +9719,24 @@ async function createFollowMeDocumentFallbackThumbnail20260520(projectId, docume
   const shortName = cleanName.length > 42 ? cleanName.slice(0, 39) + '…' : cleanName;
   const pages = pageCount ? `${pageCount} pagine` : 'Documento PDF';
 
-  const filename = `followme-doc-${projectId}-${documentId}-thumb.svg`;
+  try {
+    const files = await fs.promises.readdir(dir).catch(() => []);
+    await Promise.all(
+      files
+        .filter(file => /^preview\.(jpg|jpeg|png|webp|svg)$/i.test(file))
+        .map(file => fs.promises.unlink(path.join(dir, file)).catch(() => null))
+    );
+
+    const legacyDir = path.join(FOLLOWME_DOCUMENTS_DISK_DIR, 'thumbs');
+    const legacyFiles = await fs.promises.readdir(legacyDir).catch(() => []);
+    await Promise.all(
+      legacyFiles
+        .filter(file => file.startsWith(`followme-doc-${projectId}-`) && /-thumb\.(jpg|jpeg|png|webp|svg)$/i.test(file))
+        .map(file => fs.promises.unlink(path.join(legacyDir, file)).catch(() => null))
+    );
+  } catch(e) {}
+
+  const filename = `preview.svg`;
   const full = path.join(dir, filename);
 
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
@@ -9749,7 +9785,7 @@ async function createFollowMeDocumentFallbackThumbnail20260520(projectId, docume
 </svg>`;
 
   await fs.promises.writeFile(full, svg, 'utf8');
-  return `/uploads/followme-documents/thumbs/${filename}`;
+  return `/uploads/followme-documents/thumbs/${projectThumbDirName}/${filename}`;
 }
 // end-followme-document-thumbnail-server-final-20260520
 
