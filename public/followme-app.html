@@ -29303,751 +29303,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
-<script id="followme-image-card-preview-sync-final-20260522">
-(function(){
-  "use strict";
 
-  const STYLE_ID = "followme-image-card-preview-style-final-20260522";
-  let currentImage = null;
-  let refreshScheduled = false;
 
-  function esc(v){
-    return String(v == null ? "" : v)
-      .replaceAll("&","&amp;")
-      .replaceAll("<","&lt;")
-      .replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;")
-      .replaceAll("'","&#039;");
-  }
-
-  function getCode(){
-    const qs = new URLSearchParams(location.search);
-    return (
-      qs.get("code") ||
-      qs.get("qr") ||
-      qs.get("id") ||
-      window.followMeCode ||
-      window.FOLLOWME_CODE ||
-      "FMDEMO"
-    );
-  }
-
-  function cleanUrl(url){
-    return String(url || "").trim();
-  }
-
-  function absoluteUrl(url){
-    const u = cleanUrl(url);
-    if(!u) return "";
-    if(/^https?:\/\//i.test(u)) return u;
-    if(u.startsWith("/")) return location.origin + u;
-    return location.origin + "/" + u.replace(/^\/+/, "");
-  }
-
-  function imageSrc(img){
-    const raw = String(img && (img.image_url || img.public_path || img.public_url || "") || "");
-    if(!raw) return "";
-
-    /*
-      FIX 20260522:
-      niente Date.now qui.
-      Se cambia a ogni render, il browser ricarica l'immagine di continuo e la preview sfarfalla.
-      Usiamo una versione stabile legata al record immagine.
-    */
-    const version = String(
-      (img && (img.updated_at || img.created_at || img.id || img.stored_name)) ||
-      "stable"
-    ).replace(/[^a-zA-Z0-9_-]/g, "");
-
-    const abs = absoluteUrl(raw);
-    return abs + (abs.includes("?") ? "&" : "?") + "v=" + version;
-  }
-
-  function publicImageUrl(){
-    const code = getCode();
-    return "/fm/image/" + encodeURIComponent(code);
-  }
-
-  function activeLooksLikeImage(){
-    const active = String(
-      window.followMeCurrentActiveUrl ||
-      window.currentFollowMeActiveUrl ||
-      window.activeFollowMeUrl ||
-      ""
-    );
-    return active.includes("/fm/image/");
-  }
-
-  async function fetchJson(url, options){
-    const res = await fetch(url, options || {});
-    const text = await res.text();
-    try {
-      return JSON.parse(text);
-    } catch(e) {
-      console.warn("[FollowMe Image Preview] risposta non JSON", url, text.slice(0, 300));
-      return null;
-    }
-  }
-
-  async function getCurrentImage(){
-    const code = getCode();
-    const j = await fetchJson("/api/followme/" + encodeURIComponent(code) + "/image-card/current?v=" + Date.now());
-    if(j && j.success && j.image){
-      currentImage = j.image;
-      return currentImage;
-    }
-    return currentImage;
-  }
-
-  function ensureStyle(){
-    if(document.getElementById(STYLE_ID)) return;
-
-    const style = document.createElement("style");
-    style.id = STYLE_ID;
-    style.textContent = `
-      .followme-image-main-preview-20260522{
-        width:100%;
-        height:100%;
-        min-height:210px;
-        border-radius:22px;
-        overflow:hidden;
-        background:linear-gradient(145deg,#06140d,#10271a);
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        box-shadow:inset 0 0 0 1px rgba(255,255,255,.10);
-      }
-
-      .followme-image-main-preview-20260522 img{
-        width:100%;
-        height:100%;
-        object-fit:cover;
-        display:block;
-      }
-
-      .premium-history-preview .followme-image-main-preview-20260522,
-      .premium-card-preview-inner .followme-image-main-preview-20260522{
-        min-height:92px;
-        height:104px;
-        border-radius:18px;
-      }
-
-      .premium-history-preview .followme-image-main-preview-20260522 img,
-      .premium-card-preview-inner .followme-image-main-preview-20260522 img{
-        object-fit:cover;
-      }
-
-      .followme-image-fallback-20260522{
-        width:100%;
-        min-height:96px;
-        border-radius:18px;
-        background:linear-gradient(145deg,#052e16,#16a34a);
-        color:white;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        flex-direction:column;
-        gap:6px;
-        text-align:center;
-        padding:18px;
-        box-sizing:border-box;
-      }
-
-      .followme-image-fallback-20260522 strong{
-        font-size:15px;
-        letter-spacing:.04em;
-      }
-
-      .followme-image-fallback-20260522 span{
-        font-size:12px;
-        opacity:.84;
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  function buildImagePreview(img){
-    ensureStyle();
-
-    const src = imageSrc(img);
-    const name = img && (img.original_name || img.stored_name || "Immagine");
-
-    if(src){
-      const holder = document.createElement("div");
-      holder.className = "followme-image-main-preview-20260522";
-
-      const image = document.createElement("img");
-      image.src = src;
-      image.alt = name;
-      image.loading = "lazy";
-
-      holder.appendChild(image);
-      return holder;
-    }
-
-    const fallback = document.createElement("div");
-    fallback.className = "followme-image-fallback-20260522";
-    fallback.innerHTML = `<strong>IMMAGINE</strong><span>${esc(name)}</span>`;
-    return fallback;
-  }
-
-  function looksLikePreviewTarget(el){
-    if(!el || el.nodeType !== 1) return false;
-
-    const id = String(el.id || "").toLowerCase();
-    const cls = String(el.className || "").toLowerCase();
-
-    if(id.includes("preview") || cls.includes("preview")) return true;
-    if(id.includes("destination") || cls.includes("destination")) return true;
-    if(id.includes("frame") || cls.includes("frame")) return true;
-
-    return false;
-  }
-
-  function findTopPreviewTarget(){
-    const selectors = [
-      "#simpleDestinationPreviewFrame",
-      ".qr-auto-preview-frame",
-      ".simple-preview-frame",
-      ".destination-preview-frame",
-      ".preview-frame",
-      "#previewFallbackBox",
-      "#simpleDestinationPreviewBlock .simple-preview-square",
-      ".simple-preview-square",
-      ".simple-preview-card"
-    ];
-
-    for(const sel of selectors){
-      const el = document.querySelector(sel);
-      if(el) return el;
-    }
-
-    const all = Array.from(document.querySelectorAll("iframe, .card, section, div"));
-    return all.find(looksLikePreviewTarget) || null;
-  }
-
-  function renderTopPreview(img){
-    const target = findTopPreviewTarget();
-    if(!target) return false;
-
-    const node = buildImagePreview(img);
-
-    if(target.tagName === "IFRAME"){
-      const parent = target.parentElement;
-      if(!parent) return false;
-
-      target.style.display = "none";
-
-      let holder = parent.querySelector(".followme-image-main-preview-holder-20260522");
-      if(!holder){
-        holder = document.createElement("div");
-        holder.className = "followme-image-main-preview-holder-20260522";
-        parent.appendChild(holder);
-      }
-
-      holder.innerHTML = "";
-      holder.appendChild(node);
-      return true;
-    }
-
-    target.innerHTML = "";
-    target.appendChild(node);
-
-    const card = document.querySelector(".simple-preview-card");
-    if(card){
-      card.classList.add("show", "preview-loaded");
-      card.classList.remove("preview-loading");
-    }
-
-    const empty = document.getElementById("simpleDestinationPreviewEmpty");
-    if(empty) empty.style.display = "none";
-
-    const open = document.getElementById("simpleDestinationPreviewOpen");
-    if(open){
-      open.href = publicImageUrl();
-      open.style.opacity = "1";
-      open.style.pointerEvents = "auto";
-    }
-
-    return true;
-  }
-
-  function renderGhostCards(img){
-    const nodes = Array.from(document.querySelectorAll(".premium-history-preview, .premium-card-preview-inner, .premium-history-card, .premium-card, .history-card, .destination-card"));
-
-    nodes.forEach(card => {
-      const txt = String(card.textContent || "").toLowerCase();
-
-      const isImageCard =
-        txt.includes("scatta o carica immagine") ||
-        txt.includes("immagine") ||
-        txt.includes("/fm/image") ||
-        txt.includes("image-card");
-
-      const isPdfCard =
-        txt.includes("pdf") ||
-        txt.includes("documento");
-
-      if(!isImageCard || isPdfCard) return;
-
-      const preview =
-        card.querySelector(".premium-history-preview") ||
-        card.querySelector(".premium-card-preview-inner") ||
-        card;
-
-      preview.innerHTML = "";
-      preview.appendChild(buildImagePreview(img));
-    });
-  }
-
-  async function renderAll(){
-    if(
-      typeof window.followmeIsImageReallyActive20260522 === "function" &&
-      !window.followmeIsImageReallyActive20260522()
-    ){
-      return;
-    }
-
-    /*
-      FIX 20260522:
-      renderizzo la preview immagine solo se la destinazione attiva reale è una card immagine.
-      Questo evita che la preview grande rimanga fissa sull'immagine quando passi a PDF, URL o documento.
-    */
-    const active = String(
-      window.followMeCurrentActiveUrl ||
-      window.currentFollowMeActiveUrl ||
-      window.activeFollowMeUrl ||
-      ""
-    );
-
-    if(active && !active.includes("/fm/image/")) return;
-
-    const img = await getCurrentImage();
-    if(!img) return;
-
-    renderTopPreview(img);
-    renderGhostCards(img);
-  }
-
-  function scheduleHomeRefresh(){
-    /*
-      DISABILITATO 20260522:
-      nessun refresh automatico della Home dopo upload immagine.
-      La pagina non deve mai saltare o ricaricarsi da sola.
-    */
-    return;
-  }
-
-  function patchFetch(){
-    if(window.__followmeImageCardFetchPatched20260522) return;
-    window.__followmeImageCardFetchPatched20260522 = true;
-
-    const originalFetch = window.fetch;
-    window.fetch = async function(input, init){
-      const res = await originalFetch.apply(this, arguments);
-
-      try {
-        const url = typeof input === "string" ? input : (input && input.url) || "";
-        if(
-          url.includes("/image-card/upload") ||
-          url.includes("/image-card/disable")
-        ){
-          const clone = res.clone();
-          clone.json().then(function(j){
-            if(j && j.success){
-              if(j.image) currentImage = j.image;
-              /* scheduleHomeRefresh disabilitato */
-            }
-          }).catch(function(){
-            /* scheduleHomeRefresh disabilitato */
-          });
-        }
-      } catch(e) {}
-
-      return res;
-    };
-  }
-
-  function patchXHR(){
-    if(window.__followmeImageCardXHRPatched20260522) return;
-    window.__followmeImageCardXHRPatched20260522 = true;
-
-    const open = XMLHttpRequest.prototype.open;
-    const send = XMLHttpRequest.prototype.send;
-
-    XMLHttpRequest.prototype.open = function(method, url){
-      this.__followmeImageCardUrl20260522 = String(url || "");
-      return open.apply(this, arguments);
-    };
-
-    XMLHttpRequest.prototype.send = function(){
-      this.addEventListener("load", function(){
-        const url = this.__followmeImageCardUrl20260522 || "";
-        if(
-          url.includes("/image-card/upload") ||
-          url.includes("/image-card/disable")
-        ){
-          /* scheduleHomeRefresh disabilitato */
-        }
-      });
-      return send.apply(this, arguments);
-    };
-  }
-
-  function boot(){
-    patchFetch();
-    patchXHR();
-
-    /*
-      STOP LOOP 20260522:
-      render immagine non ripetuto continuamente.
-      Manteniamo solo due tentativi iniziali.
-    */
-    /* renderAll automatico rimosso: preview gestita dal single sync finale */
-    /* renderAll automatico rimosso: preview gestita dal single sync finale */
-
-    /*
-      Disabilitati focus/visibilitychange:
-      potevano riattivare la reiniezione quando la Web App tornava attiva.
-    */
-  }
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", boot);
-  } else {
-    boot();
-  }
-
-  window.followMeRenderImageCardPreview20260522 = renderAll;
-})();
-</script>
-
-
-<script id="followme-image-card-ghost-preview-hardfix-20260522">
-(function(){
-  "use strict";
-
-  const DEBUG = false;
-
-  function log(){
-    if(DEBUG) console.log.apply(console, ["[FollowMe Image Ghost Preview]"].concat([].slice.call(arguments)));
-  }
-
-  function getCode(){
-    try{
-      const p = new URLSearchParams(location.search);
-      return (
-        p.get("code") ||
-        p.get("qr") ||
-        p.get("c") ||
-        window.FOLLOWME_CODE ||
-        window.followmeCode ||
-        "FMDEMO"
-      );
-    }catch(e){
-      return window.FOLLOWME_CODE || window.followmeCode || "FMDEMO";
-    }
-  }
-
-  function esc(v){
-    return String(v || "").replace(/[&<>"']/g, function(c){
-      return ({
-        "&":"&amp;",
-        "<":"&lt;",
-        ">":"&gt;",
-        '"':"&quot;",
-        "'":"&#39;"
-      })[c];
-    });
-  }
-
-  function absUrl(path, img){
-    const raw = String(path || "");
-    if(!raw) return "";
-
-    /*
-      FIX 20260522:
-      versione stabile, non Date.now, altrimenti ogni reiniezione ricarica la foto.
-    */
-    const version = String(
-      (img && (img.updated_at || img.created_at || img.id || img.stored_name)) ||
-      "stable"
-    ).replace(/[^a-zA-Z0-9_-]/g, "");
-
-    const base = /^https?:\/\//i.test(raw)
-      ? raw
-      : (raw.startsWith("/") ? raw : "/" + raw);
-
-    return base + (base.includes("?") ? "&" : "?") + "v=" + version;
-  }
-
-  async function fetchCurrentImage(){
-    const code = getCode();
-    if(!code) return null;
-
-    const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/image-card/current?v=" + Date.now(), {
-      cache:"no-store"
-    });
-
-    if(!res.ok) return null;
-
-    const json = await res.json();
-    if(!json || !json.success || !json.image) return null;
-
-    const img = json.image;
-    const src = absUrl(img.image_url || img.public_path || img.public_url || "", img);
-    if(!src) return null;
-
-    return {
-      image: img,
-      src: src,
-      publicUrl: json.public_url || "/fm/image/" + encodeURIComponent(code)
-    };
-  }
-
-  function imagePreviewHtml(src, name){
-    return `
-      <div class="followme-image-main-preview-20260522">
-        <img src="${esc(src)}" alt="${esc(name || "Immagine")}" loading="lazy">
-      </div>
-    `;
-  }
-
-  function ensureCss(){
-    if(document.getElementById("followme-image-ghost-preview-hardfix-css-20260522")) return;
-
-    const style = document.createElement("style");
-    style.id = "followme-image-ghost-preview-hardfix-css-20260522";
-    style.textContent = `
-      .followme-image-main-preview-20260522{
-        width:100%;
-        height:100%;
-        min-height:120px;
-        border-radius:18px;
-        overflow:hidden;
-        background:linear-gradient(145deg, rgba(15,23,42,.08), rgba(22,101,52,.10));
-        display:flex;
-        align-items:center;
-        justify-content:center;
-      }
-
-      .followme-image-main-preview-20260522 img{
-        width:100%;
-        height:100%;
-        min-height:120px;
-        object-fit:cover;
-        display:block;
-      }
-
-      .premium-history-preview .followme-image-main-preview-20260522,
-      .premium-history-preview .followme-image-main-preview-20260522 img{
-        min-height:92px;
-        border-radius:16px;
-      }
-
-      .simple-preview-square .followme-image-main-preview-20260522,
-      .qr-auto-preview-frame .followme-image-main-preview-20260522,
-      .destination-preview-frame .followme-image-main-preview-20260522{
-        min-height:180px;
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  function isImageCardCandidate(card){
-    if(!card) return false;
-
-    const txt = String(card.textContent || "").toLowerCase();
-    const html = String(card.innerHTML || "").toLowerCase();
-    const cls = String(card.className || "").toLowerCase();
-    const id = String(card.id || "").toLowerCase();
-
-    return (
-      txt.includes("scatta o carica immagine") ||
-      txt.includes("immagine") && txt.includes("qr") ||
-      html.includes("fm-img-icon") ||
-      html.includes("image-card") ||
-      cls.includes("image") ||
-      id.includes("image")
-    );
-  }
-
-  function findMainPreviewTargets(){
-    const selectors = [
-      "#simpleDestinationPreviewFrame",
-      ".simple-preview-square iframe",
-      ".simple-preview-square",
-      ".qr-auto-preview-frame",
-      ".destination-preview-frame",
-      ".preview-frame",
-      "[id*='PreviewFrame']",
-      "[id*='previewFrame']"
-    ];
-
-    const out = [];
-
-    selectors.forEach(function(sel){
-      document.querySelectorAll(sel).forEach(function(el){
-        if(!el) return;
-        if(out.includes(el)) return;
-        out.push(el);
-      });
-    });
-
-    return out;
-  }
-
-  function injectIntoMainPreview(src, name){
-    const targets = findMainPreviewTargets();
-
-    targets.forEach(function(target){
-      try{
-        let box = target;
-
-        if(String(target.tagName || "").toLowerCase() === "iframe"){
-          box = target.parentElement || target;
-          target.style.display = "none";
-        }
-
-        if(!box || !box.innerHTML && String(box.tagName || "").toLowerCase() === "iframe") return;
-
-        box.innerHTML = imagePreviewHtml(src, name);
-        box.classList.add("followme-image-main-preview-holder-20260522");
-      }catch(e){}
-    });
-
-    const empty = document.getElementById("simpleDestinationPreviewEmpty");
-    if(empty) empty.style.display = "none";
-
-    const open = document.getElementById("simpleDestinationPreviewOpen");
-    if(open){
-      open.href = "/fm/image/" + encodeURIComponent(getCode());
-      open.style.opacity = "1";
-      open.style.pointerEvents = "auto";
-      open.textContent = "Apri immagine";
-    }
-  }
-
-  function injectIntoGhostCards(src, name){
-    const cards = Array.from(document.querySelectorAll(
-      ".premium-history-card, .premium-history-item, .premium-card, .history-card, .card, [class*='history'], [class*='premium']"
-    ));
-
-    cards.forEach(function(card){
-      try{
-        if(!isImageCardCandidate(card)) return;
-
-        let preview = card.querySelector(".premium-history-preview, .premium-card-preview, [class*='preview']");
-        if(!preview){
-          preview = document.createElement("div");
-          preview.className = "premium-history-preview";
-          card.insertBefore(preview, card.firstChild);
-        }
-
-        preview.innerHTML = imagePreviewHtml(src, name);
-        preview.classList.add("followme-image-main-preview-holder-20260522");
-
-        const title =
-          card.querySelector(".premium-history-title") ||
-          card.querySelector(".premium-title") ||
-          card.querySelector("[class*='title']");
-
-        if(title && /immagine|foto|scatta|carica/i.test(title.textContent || "")){
-          title.textContent = "Scatta o carica immagine";
-        }
-      }catch(e){}
-    });
-  }
-
-  async function renderImagePreviewEverywhere(){
-    try{
-      if(
-        typeof window.followmeIsImageReallyActive20260522 === "function" &&
-        !window.followmeIsImageReallyActive20260522()
-      ){
-        return;
-      }
-
-      ensureCss();
-
-      const current = await fetchCurrentImage();
-      if(!current) return;
-
-      const img = current.image;
-      const src = current.src;
-      const name = img.original_name || "Immagine";
-
-      injectIntoMainPreview(src, name);
-      injectIntoGhostCards(src, name);
-
-      log("preview immagine applicata", src);
-    }catch(e){
-      console.warn("[FollowMe Image Ghost Preview] errore:", e);
-    }
-  }
-
-  function scheduleRender(){
-    clearTimeout(window.__followmeImageGhostPreviewTimer20260522);
-    window.__followmeImageGhostPreviewTimer20260522 = setTimeout(renderImagePreviewEverywhere, 350);
-  }
-
-  window.followmeRenderImageCardPreviewEverywhere20260522 = renderImagePreviewEverywhere;
-
-  document.addEventListener("DOMContentLoaded", function(){
-    scheduleRender();
-});
-
-  window.addEventListener("load", function(){
-    scheduleRender();
-});
-
-  /*
-    STOP LOOP 20260522:
-    MutationObserver immagine rimosso.
-    Manteniamo solo i render iniziali e il render dopo upload.
-  */
-
-  /*
-    Dopo upload/disable immagine: refresh automatico Home.
-    Lo faccio solo se la chiamata API è andata a buon fine.
-  */
-  if(!window.__followmeImageUploadRefreshFetchPatched20260522){
-    window.__followmeImageUploadRefreshFetchPatched20260522 = true;
-
-    const oldFetch = window.fetch;
-    window.fetch = async function(){
-      const args = arguments;
-      const url = String(args[0] && args[0].url ? args[0].url : args[0] || "");
-
-      const res = await oldFetch.apply(this, args);
-
-      try{
-        if(
-          res &&
-          res.ok &&
-          (
-            url.includes("/image-card/upload") ||
-            url.includes("/image-card/disable")
-          )
-        ){
-          setTimeout(function(){
-            try{
-              const u = new URL(location.href);
-              u.searchParams.set("v", "image-" + Date.now());
-              /* location.replace disabilitato per evitare refresh loop */
-            }catch(e){
-              /* location.reload disabilitato per evitare refresh loop */
-            }
-          }, 650);
-        }
-      }catch(e){}
-
-      return res;
-    };
-  }
-
-})();
-</script>
 
 
 <script id="followme-card-change-preview-trigger-final-20260522">
@@ -30752,281 +30009,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 </script>
 
 
-<script id="followme-image-active-only-card-render-final-20260522">
-(function(){
-  "use strict";
-
-  /*
-    Questo script corregge due cose:
-    1) la foto non deve sovrascrivere preview URL/PDF;
-    2) quando la destinazione attiva è /fm/image/... deve comparire anche nelle card ufficiali/fantasma.
-  */
-
-  const STYLE_ID = "followme-image-active-only-card-render-css-20260522";
-
-  function code(){
-    try{
-      const p = new URLSearchParams(location.search);
-      return p.get("code") || p.get("qr") || p.get("c") || window.FOLLOWME_CODE || window.followMeCode || "FMDEMO";
-    }catch(e){
-      return window.FOLLOWME_CODE || window.followMeCode || "FMDEMO";
-    }
-  }
-
-  function esc(v){
-    return String(v == null ? "" : v).replace(/[&<>"']/g, function(c){
-      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
-    });
-  }
-
-  function isImageActive(){
-    const candidates = [
-      window.followMeCurrentActiveUrl,
-      window.currentFollowMeActiveUrl,
-      window.activeFollowMeUrl
-    ].map(v => String(v || ""));
-
-    return candidates.some(v => v.includes("/fm/image/"));
-  }
-
-  async function fetchCurrentImage(){
-    const c = code();
-    const res = await fetch("/api/followme/" + encodeURIComponent(c) + "/image-card/current?v=stable", {
-      cache: "no-store"
-    });
-
-    if(!res.ok) return null;
-
-    const j = await res.json();
-    if(!j || !j.success || !j.image) return null;
-
-    return {
-      image: j.image,
-      publicUrl: j.public_url || "/fm/image/" + encodeURIComponent(c)
-    };
-  }
-
-  function imageSrc(img){
-    const raw = String(img && (img.image_url || img.public_path || img.public_url || "") || "");
-    if(!raw) return "";
-
-    const version = String(
-      (img && (img.updated_at || img.created_at || img.id || img.stored_name)) ||
-      "stable"
-    ).replace(/[^a-zA-Z0-9_-]/g, "");
-
-    const base = /^https?:\/\//i.test(raw)
-      ? raw
-      : (raw.startsWith("/") ? raw : "/" + raw);
-
-    return base + (base.includes("?") ? "&" : "?") + "v=" + version;
-  }
-
-  function ensureCss(){
-    if(document.getElementById(STYLE_ID)) return;
-
-    const style = document.createElement("style");
-    style.id = STYLE_ID;
-    style.textContent = `
-      .followme-image-preview-stable-20260522{
-        width:100%;
-        height:100%;
-        min-height:120px;
-        border-radius:18px;
-        overflow:hidden;
-        background:linear-gradient(145deg, rgba(15,23,42,.10), rgba(22,101,52,.12));
-        display:flex;
-        align-items:center;
-        justify-content:center;
-      }
-
-      .followme-image-preview-stable-20260522 img{
-        width:100%;
-        height:100%;
-        min-height:120px;
-        object-fit:cover;
-        display:block;
-      }
-
-      .simple-preview-square .followme-image-preview-stable-20260522,
-      .qr-auto-preview-frame .followme-image-preview-stable-20260522,
-      .destination-preview-frame .followme-image-preview-stable-20260522{
-        min-height:180px;
-      }
-
-      .premium-history-preview .followme-image-preview-stable-20260522,
-      .premium-history-preview .followme-image-preview-stable-20260522 img,
-      .premium-card-preview-inner .followme-image-preview-stable-20260522,
-      .premium-card-preview-inner .followme-image-preview-stable-20260522 img{
-        min-height:92px;
-        height:104px;
-        border-radius:16px;
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  function html(src, name){
-    return '<div class="followme-image-preview-stable-20260522" data-followme-image-preview="1">' +
-      '<img src="' + esc(src) + '" alt="' + esc(name || "Immagine") + '" loading="lazy">' +
-    '</div>';
-  }
-
-  function renderMain(src, name, publicUrl){
-    const selectors = [
-      "#simpleDestinationPreviewFrame",
-      ".simple-preview-square iframe",
-      ".simple-preview-square",
-      ".qr-auto-preview-frame",
-      ".destination-preview-frame",
-      ".preview-frame",
-      "[id*='PreviewFrame']",
-      "[id*='previewFrame']"
-    ];
-
-    selectors.forEach(function(sel){
-      document.querySelectorAll(sel).forEach(function(target){
-        try{
-          let box = target;
-
-          if(String(target.tagName || "").toLowerCase() === "iframe"){
-            box = target.parentElement || target;
-            target.style.display = "none";
-          }
-
-          if(!box || String(box.tagName || "").toLowerCase() === "iframe") return;
-
-          const current = box.querySelector("[data-followme-image-preview='1'] img");
-          if(current && current.getAttribute("src") === src) return;
-
-          box.innerHTML = html(src, name);
-          box.classList.add("followme-image-main-preview-holder-20260522");
-        }catch(e){}
-      });
-    });
-
-    const empty = document.getElementById("simpleDestinationPreviewEmpty");
-    if(empty) empty.style.display = "none";
-
-    const open = document.getElementById("simpleDestinationPreviewOpen");
-    if(open){
-      open.href = publicUrl;
-      open.style.opacity = "1";
-      open.style.pointerEvents = "auto";
-      open.textContent = "Apri immagine";
-    }
-  }
-
-  function isImageCard(card){
-    if(!card) return false;
-
-    const txt = String(card.textContent || "").toLowerCase();
-    const htmlText = String(card.innerHTML || "").toLowerCase();
-    const cls = String(card.className || "").toLowerCase();
-    const id = String(card.id || "").toLowerCase();
-
-    const positive =
-      txt.includes("scatta o carica immagine") ||
-      txt.includes("carica immagine") ||
-      txt.includes("immagine") && txt.includes("qr") ||
-      htmlText.includes("image-card") ||
-      htmlText.includes("fm-img-icon") ||
-      cls.includes("image") ||
-      id.includes("image");
-
-    const negative =
-      txt.includes("documento pdf") ||
-      txt.includes("consegna documento") ||
-      htmlText.includes("followme-doc") ||
-      htmlText.includes("/fm/document/");
-
-    return positive && !negative;
-  }
-
-  function renderCards(src, name){
-    const cards = Array.from(document.querySelectorAll(
-      ".premium-history-card, .premium-history-item, .premium-card, .history-card, .destination-card, .card, [class*='history'], [class*='premium']"
-    ));
-
-    cards.forEach(function(card){
-      try{
-        if(!isImageCard(card)) return;
-
-        let preview = card.querySelector(".premium-history-preview, .premium-card-preview-inner, .premium-card-preview, [class*='preview']");
-        if(!preview){
-          preview = document.createElement("div");
-          preview.className = "premium-history-preview";
-          card.insertBefore(preview, card.firstChild);
-        }
-
-        const current = preview.querySelector("[data-followme-image-preview='1'] img");
-        if(current && current.getAttribute("src") === src) return;
-
-        preview.innerHTML = html(src, name);
-        preview.classList.add("followme-image-main-preview-holder-20260522");
-      }catch(e){}
-    });
-  }
-
-  async function render(){
-    try{
-      if(!isImageActive()) return;
-
-      ensureCss();
-
-      const current = await fetchCurrentImage();
-      if(!current || !current.image) return;
-
-      const img = current.image;
-      const src = imageSrc(img);
-      if(!src) return;
-
-      const name = img.original_name || img.stored_name || "Immagine";
-
-      renderMain(src, name, current.publicUrl);
-      renderCards(src, name);
-    }catch(e){
-      console.warn("[FollowMe Image Active Only Render] errore:", e);
-    }
-  }
-
-  window.followmeRenderActiveImagePreview20260522 = render;
-
-  document.addEventListener("DOMContentLoaded", function(){
-    setTimeout(render, 350);
-  });
-
-  window.addEventListener("load", function(){
-    setTimeout(render, 350);
-  });
-
-  /*
-    Dopo upload immagine: non ricarico la pagina.
-    Renderizzo una sola volta la preview corretta.
-  */
-  if(!window.__followmeActiveImageRenderFetchPatch20260522){
-    window.__followmeActiveImageRenderFetchPatch20260522 = true;
-
-    const oldFetch = window.fetch;
-    window.fetch = async function(){
-      const args = arguments;
-      const url = String(args[0] && args[0].url ? args[0].url : args[0] || "");
-      const res = await oldFetch.apply(this, args);
-
-      try{
-        if(res && res.ok && url.includes("/image-card/upload")){
-          window.followMeCurrentActiveUrl = "/fm/image/" + encodeURIComponent(code());
-          window.currentFollowMeActiveUrl = "/fm/image/" + encodeURIComponent(code());
-          window.activeFollowMeUrl = "/fm/image/" + encodeURIComponent(code());
-          setTimeout(render, 350);
-        }
-      }catch(e){}
-
-      return res;
-    };
-  }
-})();
-</script>
 
 
 
@@ -31821,6 +30803,273 @@ document.body.appendChild(input);
 </script>
 
 
+
+
+<script id="followme-official-image-card-final-20260522">
+(function(){
+  "use strict";
+
+  /*
+    Card ufficiale immagine:
+    - preview solo dentro #followmeImageOfficialCard20260522
+    - pulsante immagine dentro la stessa card
+    - nessuna ricerca generica su .card/.premium/.history
+    - nessun refresh
+  */
+
+  function code(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("app");
+      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
+
+      const p = new URLSearchParams(location.search);
+      return p.get("code") || p.get("qr") || p.get("c") ||
+        window.FOLLOWME_CODE ||
+        window.FOLLOWME_PROJECT_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        window.followMeProjectCode ||
+        "FMDEMO";
+    }catch(e){
+      return window.FOLLOWME_CODE ||
+        window.FOLLOWME_PROJECT_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        window.followMeProjectCode ||
+        "FMDEMO";
+    }
+  }
+
+  function esc(v){
+    return String(v == null ? "" : v).replace(/[&<>"']/g, function(c){
+      return ({
+        "&":"&amp;",
+        "<":"&lt;",
+        ">":"&gt;",
+        '"':"&quot;",
+        "'":"&#39;"
+      })[c];
+    });
+  }
+
+  function abs(path){
+    const raw = String(path || "").trim();
+    if(!raw) return "";
+    if(/^https?:\/\//i.test(raw)) return raw;
+    if(raw.startsWith("/")) return location.origin + raw;
+    return location.origin + "/" + raw.replace(/^\/+/, "");
+  }
+
+  function ensureCss(){
+    if(document.getElementById("followme-official-image-card-css-20260522")) return;
+
+    const style = document.createElement("style");
+    style.id = "followme-official-image-card-css-20260522";
+    style.textContent = `
+      #followmeImageOfficialCard20260522{
+        width:100% !important;
+        max-width:100% !important;
+        box-sizing:border-box !important;
+        margin:0 !important;
+        padding:0 !important;
+        display:flex !important;
+        flex-direction:column !important;
+        gap:10px !important;
+      }
+
+      #followmeImageOfficialPreview20260522{
+        width:100% !important;
+        height:112px !important;
+        min-height:112px !important;
+        border-radius:18px !important;
+        overflow:hidden !important;
+        background:linear-gradient(145deg, rgba(5,46,22,.14), rgba(94,231,255,.16)) !important;
+        box-shadow:
+          inset 0 0 0 1px rgba(255,255,255,.22),
+          0 10px 24px rgba(15,23,42,.10) !important;
+        display:none !important;
+        align-items:center !important;
+        justify-content:center !important;
+        box-sizing:border-box !important;
+      }
+
+      #followmeImageOfficialPreview20260522.show{
+        display:flex !important;
+      }
+
+      #followmeImageOfficialPreview20260522 img{
+        width:100% !important;
+        height:100% !important;
+        object-fit:cover !important;
+        display:block !important;
+      }
+
+      #followmeImageOfficialCard20260522 #followmeImageCardBtn20260522{
+        margin:0 !important;
+        width:100% !important;
+        max-width:100% !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function getButton(){
+    return document.getElementById("followmeImageCardBtn20260522");
+  }
+
+  function getStack(){
+    return document.getElementById("followmeHomeButtonsStack20260522") ||
+           document.getElementById("followmeOtherOptionsList") ||
+           document.querySelector(".followme-other-options-list") ||
+           document.querySelector("main") ||
+           document.body;
+  }
+
+  function ensureOfficialCard(){
+    ensureCss();
+
+    const btn = getButton();
+    const stack = getStack();
+
+    if(!btn || !stack) return null;
+
+    let card = document.getElementById("followmeImageOfficialCard20260522");
+
+    if(!card){
+      card = document.createElement("div");
+      card.id = "followmeImageOfficialCard20260522";
+      card.setAttribute("data-followme-official-image-card", "1");
+
+      /*
+        La card deve stare esattamente dove stava il pulsante immagine.
+      */
+      if(btn.parentElement){
+        btn.parentElement.insertBefore(card, btn);
+      }else{
+        stack.appendChild(card);
+      }
+
+      const preview = document.createElement("div");
+      preview.id = "followmeImageOfficialPreview20260522";
+      preview.setAttribute("data-followme-official-image-preview", "1");
+
+      card.appendChild(preview);
+    }
+
+    const preview = document.getElementById("followmeImageOfficialPreview20260522");
+    if(preview && preview.parentElement !== card){
+      card.insertBefore(preview, card.firstChild);
+    }
+
+    if(btn.parentElement !== card){
+      card.appendChild(btn);
+    }
+
+    /*
+      La card deve stare nello stack al posto del pulsante immagine.
+    */
+    if(card.parentElement !== stack){
+      stack.appendChild(card);
+    }
+
+    return card;
+  }
+
+  async function fetchImage(){
+    const c = code();
+    const res = await fetch("/api/followme/" + encodeURIComponent(c) + "/image-card/current?v=stable", {
+      cache:"no-store"
+    });
+
+    if(!res.ok) return null;
+
+    const j = await res.json().catch(function(){ return null; });
+    if(!j || !j.success || !j.image) return null;
+
+    const img = j.image;
+    const raw = img.image_url || img.public_path || img.public_url || "";
+    if(!raw) return null;
+
+    const version = String(img.updated_at || img.created_at || img.id || "stable").replace(/[^a-zA-Z0-9_-]/g, "");
+    const src = abs(raw) + (abs(raw).includes("?") ? "&" : "?") + "v=" + version;
+
+    return {
+      src: src,
+      name: img.original_name || img.stored_name || "Immagine"
+    };
+  }
+
+  async function render(){
+    try{
+      const card = ensureOfficialCard();
+      if(!card) return false;
+
+      const preview = document.getElementById("followmeImageOfficialPreview20260522");
+      if(!preview) return false;
+
+      const img = await fetchImage();
+
+      if(!img){
+        preview.classList.remove("show");
+        preview.innerHTML = "";
+        return false;
+      }
+
+      const current = preview.querySelector("img");
+      if(current && current.getAttribute("src") === img.src){
+        preview.classList.add("show");
+        return true;
+      }
+
+      preview.innerHTML = '<img src="' + esc(img.src) + '" alt="' + esc(img.name) + '" loading="lazy">';
+      preview.classList.add("show");
+
+      return true;
+    }catch(e){
+      console.warn("[FollowMe Official Image Card] errore:", e);
+      return false;
+    }
+  }
+
+  function boot(){
+    setTimeout(render, 500);
+    setTimeout(render, 1400);
+    setTimeout(render, 2800);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(render, 700);
+  });
+
+  if(!window.__followmeOfficialImageCardFetchPatch20260522){
+    window.__followmeOfficialImageCardFetchPatch20260522 = true;
+
+    const oldFetch = window.fetch;
+    window.fetch = async function(){
+      const args = arguments;
+      const url = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+      const res = await oldFetch.apply(this, args);
+
+      try{
+        if(res && res.ok && url.includes("/image-card/upload")){
+          setTimeout(render, 500);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  window.followmeRenderOfficialImageCard20260522 = render;
+})();
+</script>
 
 </body>
 </html>
