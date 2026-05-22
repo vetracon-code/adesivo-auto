@@ -31820,5 +31820,245 @@ document.body.appendChild(input);
 })();
 </script>
 
+
+<script id="followme-safe-image-card-mini-preview-final-20260522">
+(function(){
+  "use strict";
+
+  /*
+    Mini-preview immagine sicura:
+    - non cerca .card generiche
+    - non tocca preview grande
+    - non crea refresh
+    - si aggancia solo al pulsante #followmeImageCardBtn20260522
+  */
+
+  function getCode(){
+    try{
+      const p = new URLSearchParams(location.search);
+      return (
+        p.get("code") ||
+        p.get("qr") ||
+        p.get("c") ||
+        window.FOLLOWME_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        "FMDEMO"
+      );
+    }catch(e){
+      return window.FOLLOWME_CODE || window.followMeCode || window.followmeCode || "FMDEMO";
+    }
+  }
+
+  function esc(v){
+    return String(v == null ? "" : v).replace(/[&<>"']/g, function(c){
+      return ({
+        "&":"&amp;",
+        "<":"&lt;",
+        ">":"&gt;",
+        '"':"&quot;",
+        "'":"&#39;"
+      })[c];
+    });
+  }
+
+  function abs(path){
+    const raw = String(path || "").trim();
+    if(!raw) return "";
+    if(/^https?:\/\//i.test(raw)) return raw;
+    if(raw.startsWith("/")) return location.origin + raw;
+    return location.origin + "/" + raw.replace(/^\/+/, "");
+  }
+
+  async function fetchJson(url){
+    const res = await fetch(url, { cache:"no-store" });
+    if(!res.ok) return null;
+    try{ return await res.json(); }catch(e){ return null; }
+  }
+
+  async function getCurrentImage(){
+    const code = getCode();
+    const j = await fetchJson("/api/followme/" + encodeURIComponent(code) + "/image-card/current?v=stable");
+    if(!j || !j.success || !j.image) return null;
+
+    const img = j.image;
+    const raw = img.image_url || img.public_path || img.public_url || "";
+    if(!raw) return null;
+
+    const version = String(
+      img.updated_at || img.created_at || img.id || img.stored_name || "stable"
+    ).replace(/[^a-zA-Z0-9_-]/g, "");
+
+    const base = abs(raw);
+    const src = base + (base.includes("?") ? "&" : "?") + "v=" + version;
+
+    return {
+      src: src,
+      name: img.original_name || img.stored_name || "Immagine"
+    };
+  }
+
+  function ensureCss(){
+    if(document.getElementById("followme-safe-image-card-mini-preview-css-20260522")) return;
+
+    const style = document.createElement("style");
+    style.id = "followme-safe-image-card-mini-preview-css-20260522";
+    style.textContent = `
+      .followme-safe-image-card-mini-preview-20260522{
+        width:100% !important;
+        height:104px !important;
+        min-height:104px !important;
+        margin:0 0 10px 0 !important;
+        border-radius:18px !important;
+        overflow:hidden !important;
+        background:linear-gradient(145deg, rgba(5,46,22,.12), rgba(94,231,255,.16)) !important;
+        box-shadow:
+          inset 0 0 0 1px rgba(255,255,255,.18),
+          0 10px 24px rgba(15,23,42,.10) !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        box-sizing:border-box !important;
+      }
+
+      .followme-safe-image-card-mini-preview-20260522 img{
+        width:100% !important;
+        height:100% !important;
+        object-fit:cover !important;
+        display:block !important;
+      }
+
+      .followme-safe-image-card-mini-preview-20260522 .fallback{
+        width:100% !important;
+        height:100% !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        flex-direction:column !important;
+        gap:4px !important;
+        color:#052e16 !important;
+        font-weight:900 !important;
+        text-align:center !important;
+        padding:12px !important;
+        box-sizing:border-box !important;
+      }
+
+      .followme-safe-image-card-mini-preview-20260522 .fallback strong{
+        font-size:13px !important;
+        letter-spacing:.04em !important;
+      }
+
+      .followme-safe-image-card-mini-preview-20260522 .fallback span{
+        font-size:11px !important;
+        opacity:.75 !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function getButton(){
+    return document.getElementById("followmeImageCardBtn20260522");
+  }
+
+  function getHost(){
+    const btn = getButton();
+    if(!btn) return null;
+
+    /*
+      Se i pulsanti sono stati messi nello stack uniforme, usiamo quello.
+      Altrimenti usiamo il parent diretto del pulsante.
+    */
+    return document.getElementById("followmeHomeButtonsStack20260522") ||
+           btn.parentElement ||
+           null;
+  }
+
+  function renderPreview(img){
+    ensureCss();
+
+    const btn = getButton();
+    const host = getHost();
+
+    if(!btn || !host) return false;
+
+    let box = document.getElementById("followmeSafeImageCardMiniPreview20260522");
+
+    if(!box){
+      box = document.createElement("div");
+      box.id = "followmeSafeImageCardMiniPreview20260522";
+      box.className = "followme-safe-image-card-mini-preview-20260522";
+
+      /*
+        La mini-preview deve stare immediatamente prima del pulsante immagine.
+        Non la mettiamo sopra la preview grande.
+      */
+      host.insertBefore(box, btn);
+    }
+
+    const current = box.querySelector("img");
+    if(current && current.getAttribute("src") === img.src) return true;
+
+    box.innerHTML = `
+      <img src="${esc(img.src)}" alt="${esc(img.name)}" loading="lazy">
+    `;
+
+    return true;
+  }
+
+  async function run(){
+    try{
+      const img = await getCurrentImage();
+      if(!img) return false;
+
+      return renderPreview(img);
+    }catch(e){
+      console.warn("[FollowMe Safe Image Card Mini Preview] errore:", e);
+      return false;
+    }
+  }
+
+  window.followmeRenderSafeImageCardMiniPreview20260522 = run;
+
+  function boot(){
+    setTimeout(run, 500);
+    setTimeout(run, 1400);
+    setTimeout(run, 2600);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(run, 700);
+  });
+
+  /*
+    Dopo upload immagine: aggiorna solo la mini-preview, senza refresh.
+  */
+  if(!window.__followmeSafeImageMiniPreviewFetchPatch20260522){
+    window.__followmeSafeImageMiniPreviewFetchPatch20260522 = true;
+
+    const oldFetch = window.fetch;
+    window.fetch = async function(){
+      const args = arguments;
+      const url = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+
+      const res = await oldFetch.apply(this, args);
+
+      try{
+        if(res && res.ok && url.includes("/image-card/upload")){
+          setTimeout(run, 500);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+})();
+</script>
+
 </body>
 </html>
