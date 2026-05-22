@@ -9865,7 +9865,7 @@ function normalizeFollowMeDocumentForClient20260520(doc, extra = {}) {
   return {
     ...doc,
     thumbnail_data_url: doc.thumbnail_data_url || null,
-    thumbnail_url: doc.thumbnail_data_url || doc.thumbnail_path || null,
+    thumbnail_url: doc.thumbnail_path || doc.thumbnail_data_url || null,
     prepared: !!extra.prepared,
     published: !!extra.published,
     is_published: !!doc.is_published
