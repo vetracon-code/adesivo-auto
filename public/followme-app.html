@@ -31030,5 +31030,247 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 
 
+
+<script id="followme-image-button-force-visible-final-20260522">
+(function(){
+  "use strict";
+
+  /*
+    Fix prudente:
+    se il pulsante "Scatta o carica immagine" esiste nel codice ma non viene mostrato,
+    lo ricreo e lo aggancio vicino al blocco Consegna documento.
+    Non tocca preview, non fa refresh, non usa observer continui.
+  */
+
+  function getCode(){
+    try{
+      const p = new URLSearchParams(location.search);
+      return (
+        p.get("code") ||
+        p.get("qr") ||
+        p.get("c") ||
+        window.FOLLOWME_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        "FMDEMO"
+      );
+    }catch(e){
+      return window.FOLLOWME_CODE || window.followMeCode || window.followmeCode || "FMDEMO";
+    }
+  }
+
+  function ensureCss(){
+    if(document.getElementById("followme-image-button-force-visible-css-20260522")) return;
+
+    const style = document.createElement("style");
+    style.id = "followme-image-button-force-visible-css-20260522";
+    style.textContent = `
+      #followmeImageCardBtn20260522{
+        width:100% !important;
+        min-height:58px !important;
+        border:0 !important;
+        border-radius:20px !important;
+        margin:12px 0 0 0 !important;
+        padding:14px 16px !important;
+        box-sizing:border-box !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        gap:10px !important;
+        background:linear-gradient(135deg,#16a34a,#22c55e,#86efac) !important;
+        color:#052e16 !important;
+        font-weight:900 !important;
+        letter-spacing:-.01em !important;
+        box-shadow:0 14px 30px rgba(22,163,74,.24), inset 0 1px 0 rgba(255,255,255,.38) !important;
+        cursor:pointer !important;
+        text-decoration:none !important;
+        position:relative !important;
+        z-index:5 !important;
+        opacity:1 !important;
+        visibility:visible !important;
+        pointer-events:auto !important;
+      }
+
+      #followmeImageCardBtn20260522 .fm-img-icon{
+        width:28px !important;
+        height:28px !important;
+        display:block !important;
+        flex:0 0 auto !important;
+      }
+
+      #followmeImageCardBtn20260522 .fm-img-title{
+        font-size:15px !important;
+        line-height:1.1 !important;
+        display:block !important;
+      }
+
+      #followmeImageCardFileForce20260522{
+        display:none !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function createButton(){
+    let btn = document.getElementById("followmeImageCardBtn20260522");
+    if(btn) return btn;
+
+    btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "followmeImageCardBtn20260522";
+    btn.innerHTML = `
+      <svg class="fm-img-icon" viewBox="0 0 64 64" aria-hidden="true">
+        <defs>
+          <linearGradient id="fmForceCameraGrad20260522" x1="8" y1="8" x2="56" y2="56">
+            <stop offset="0" stop-color="#052e16"></stop>
+            <stop offset="1" stop-color="#166534"></stop>
+          </linearGradient>
+        </defs>
+        <path fill="url(#fmForceCameraGrad20260522)" d="M20 18.5c1.4 0 2.6-.7 3.3-1.9l1.4-2.4c.8-1.4 2.3-2.2 3.9-2.2h6.8c1.6 0 3.1.8 3.9 2.2l1.4 2.4c.7 1.2 1.9 1.9 3.3 1.9h3.8c4 0 7.2 3.2 7.2 7.2v20.1c0 4-3.2 7.2-7.2 7.2H16.2c-4 0-7.2-3.2-7.2-7.2V25.7c0-4 3.2-7.2 7.2-7.2H20z"></path>
+        <circle cx="32" cy="35" r="10.5" fill="rgba(255,255,255,.92)"></circle>
+        <circle cx="32" cy="35" r="6.4" fill="#052e16"></circle>
+        <circle cx="47" cy="26" r="2.6" fill="rgba(255,255,255,.92)"></circle>
+      </svg>
+      <span class="fm-img-title">Scatta o carica immagine</span>
+    `;
+
+    btn.addEventListener("click", function(){
+      let input = document.getElementById("followmeImageCardFileForce20260522");
+      if(!input){
+        input = document.createElement("input");
+        input.id = "followmeImageCardFileForce20260522";
+        input.type = "file";
+        input.accept = "image/*";
+        input.setAttribute("capture", "environment");
+        document.body.appendChild(input);
+
+        input.addEventListener("change", async function(){
+          const file = input.files && input.files[0];
+          if(!file) return;
+
+          try{
+            btn.classList.add("fm-uploading");
+            btn.disabled = true;
+
+            const fd = new FormData();
+            fd.append("image", file);
+
+            const code = getCode();
+            const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/image-card/upload", {
+              method:"POST",
+              body:fd
+            });
+
+            const json = await res.json().catch(function(){ return null; });
+
+            if(!res.ok || !json || !json.success){
+              throw new Error((json && json.error) || "Errore caricamento immagine.");
+            }
+
+            window.followMeCurrentActiveUrl = "/fm/image/" + encodeURIComponent(code);
+            window.currentFollowMeActiveUrl = "/fm/image/" + encodeURIComponent(code);
+            window.activeFollowMeUrl = "/fm/image/" + encodeURIComponent(code);
+
+            if(typeof window.followmeRenderActiveImagePreview20260522 === "function"){
+              setTimeout(window.followmeRenderActiveImagePreview20260522, 300);
+            }
+
+            alert("Immagine caricata e attivata.");
+          }catch(e){
+            alert("Errore: " + (e && e.message ? e.message : e));
+          }finally{
+            btn.classList.remove("fm-uploading");
+            btn.disabled = false;
+            input.value = "";
+          }
+        });
+      }
+
+      input.click();
+    });
+
+    return btn;
+  }
+
+  function textOf(el){
+    return String(el && el.textContent || "").toLowerCase();
+  }
+
+  function findDocumentButtonOrBlock(){
+    const all = Array.from(document.querySelectorAll("button, a, div, section, article"));
+
+    let exact = all.find(function(el){
+      const t = textOf(el);
+      return t.includes("consegna documento") || t.includes("documento pdf");
+    });
+
+    if(exact) return exact;
+
+    exact = document.getElementById("followme5OpenDoc20260520") ||
+            document.getElementById("followmeElegantQrPreviewOpen20260520");
+
+    return exact || null;
+  }
+
+  function place(){
+    ensureCss();
+
+    const btn = createButton();
+    btn.style.display = "flex";
+    btn.style.visibility = "visible";
+    btn.style.opacity = "1";
+
+    const doc = findDocumentButtonOrBlock();
+
+    if(doc && doc.parentElement){
+      const parent = doc.parentElement;
+
+      if(btn.parentElement !== parent){
+        if(doc.nextSibling){
+          parent.insertBefore(btn, doc.nextSibling);
+        }else{
+          parent.appendChild(btn);
+        }
+      }
+
+      return true;
+    }
+
+    /*
+      Fallback prudente: vicino al blocco principale, non sopra la preview.
+    */
+    const fallback =
+      document.querySelector("#followmeOtherOptions") ||
+      document.querySelector("[id*='OtherOptions']") ||
+      document.querySelector("main") ||
+      document.body;
+
+    if(btn.parentElement !== fallback){
+      fallback.appendChild(btn);
+    }
+
+    return true;
+  }
+
+  function boot(){
+    place();
+    setTimeout(place, 700);
+    setTimeout(place, 1800);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(place, 500);
+  });
+
+  window.followmeForceImageButtonVisible20260522 = place;
+})();
+</script>
+
 </body>
 </html>
