@@ -30805,16 +30805,18 @@ document.body.appendChild(input);
 
 
 
-<script id="followme-official-image-card-final-20260522">
+
+
+<script id="followme-image-preview-inside-button-final-20260522">
 (function(){
   "use strict";
 
   /*
-    Card ufficiale immagine:
-    - preview solo dentro #followmeImageOfficialCard20260522
-    - pulsante immagine dentro la stessa card
-    - nessuna ricerca generica su .card/.premium/.history
-    - nessun refresh
+    Preview immagine definitiva:
+    - NON crea frame esterni
+    - NON usa stack come contenitore preview
+    - NON cerca .card/.premium/.history
+    - inserisce la miniatura solo dentro #followmeImageCardBtn20260522
   */
 
   function code(){
@@ -30862,118 +30864,72 @@ document.body.appendChild(input);
   }
 
   function ensureCss(){
-    if(document.getElementById("followme-official-image-card-css-20260522")) return;
+    if(document.getElementById("followme-image-preview-inside-button-css-20260522")) return;
 
     const style = document.createElement("style");
-    style.id = "followme-official-image-card-css-20260522";
+    style.id = "followme-image-preview-inside-button-css-20260522";
     style.textContent = `
-      #followmeImageOfficialCard20260522{
-        width:100% !important;
-        max-width:100% !important;
-        box-sizing:border-box !important;
+      /*
+        Spegne eventuali residui del frame sbagliato anche se arrivano da cache/PWA.
+      */
+      #followmeImageOfficialCard20260522,
+      #followmeImageOfficialPreview20260522{
+        display:none !important;
+        visibility:hidden !important;
+        opacity:0 !important;
+        height:0 !important;
+        min-height:0 !important;
+        max-height:0 !important;
         margin:0 !important;
         padding:0 !important;
-        display:flex !important;
-        flex-direction:column !important;
-        gap:10px !important;
-      }
-
-      #followmeImageOfficialPreview20260522{
-        width:100% !important;
-        height:112px !important;
-        min-height:112px !important;
-        border-radius:18px !important;
         overflow:hidden !important;
-        background:linear-gradient(145deg, rgba(5,46,22,.14), rgba(94,231,255,.16)) !important;
+      }
+
+      #followmeImageCardBtn20260522 .followme-image-button-thumb-20260522{
+        width:32px !important;
+        height:32px !important;
+        min-width:32px !important;
+        max-width:32px !important;
+        flex:0 0 32px !important;
+        border-radius:10px !important;
+        overflow:hidden !important;
+        display:block !important;
         box-shadow:
-          inset 0 0 0 1px rgba(255,255,255,.22),
-          0 10px 24px rgba(15,23,42,.10) !important;
-        display:none !important;
-        align-items:center !important;
-        justify-content:center !important;
-        box-sizing:border-box !important;
+          inset 0 0 0 1px rgba(255,255,255,.55),
+          0 4px 10px rgba(15,23,42,.18) !important;
+        background:rgba(255,255,255,.20) !important;
       }
 
-      #followmeImageOfficialPreview20260522.show{
-        display:flex !important;
-      }
-
-      #followmeImageOfficialPreview20260522 img{
+      #followmeImageCardBtn20260522 .followme-image-button-thumb-20260522 img{
         width:100% !important;
         height:100% !important;
         object-fit:cover !important;
         display:block !important;
       }
 
-      #followmeImageOfficialCard20260522 #followmeImageCardBtn20260522{
-        margin:0 !important;
-        width:100% !important;
-        max-width:100% !important;
+      #followmeImageCardBtn20260522 .fm-img-icon.followme-hidden-by-thumb-20260522{
+        display:none !important;
       }
     `;
     document.head.appendChild(style);
   }
 
-  function getButton(){
-    return document.getElementById("followmeImageCardBtn20260522");
-  }
+  function removeWrongFrame(){
+    try{
+      const wrong = document.getElementById("followmeImageOfficialCard20260522");
+      if(!wrong) return;
 
-  function getStack(){
-    return document.getElementById("followmeHomeButtonsStack20260522") ||
-           document.getElementById("followmeOtherOptionsList") ||
-           document.querySelector(".followme-other-options-list") ||
-           document.querySelector("main") ||
-           document.body;
-  }
+      const btn = wrong.querySelector("#followmeImageCardBtn20260522");
+      const stack = document.getElementById("followmeHomeButtonsStack20260522") ||
+                    document.getElementById("followmeOtherOptionsList") ||
+                    wrong.parentElement;
 
-  function ensureOfficialCard(){
-    ensureCss();
-
-    const btn = getButton();
-    const stack = getStack();
-
-    if(!btn || !stack) return null;
-
-    let card = document.getElementById("followmeImageOfficialCard20260522");
-
-    if(!card){
-      card = document.createElement("div");
-      card.id = "followmeImageOfficialCard20260522";
-      card.setAttribute("data-followme-official-image-card", "1");
-
-      /*
-        La card deve stare esattamente dove stava il pulsante immagine.
-      */
-      if(btn.parentElement){
-        btn.parentElement.insertBefore(card, btn);
-      }else{
-        stack.appendChild(card);
+      if(btn && stack){
+        stack.appendChild(btn);
       }
 
-      const preview = document.createElement("div");
-      preview.id = "followmeImageOfficialPreview20260522";
-      preview.setAttribute("data-followme-official-image-preview", "1");
-
-      card.appendChild(preview);
-    }
-
-    const preview = document.getElementById("followmeImageOfficialPreview20260522");
-    if(preview && preview.parentElement !== card){
-      card.insertBefore(preview, card.firstChild);
-    }
-
-    if(btn.parentElement !== card){
-      card.appendChild(btn);
-    }
-
-    /*
-      La card deve stare nello stack al posto del pulsante immagine.
-    */
-    if(card.parentElement !== stack){
-      stack.appendChild(card);
-    }
-
-    return card;
+      wrong.remove();
+    }catch(e){}
   }
 
   async function fetchImage(){
@@ -30992,7 +30948,8 @@ document.body.appendChild(input);
     if(!raw) return null;
 
     const version = String(img.updated_at || img.created_at || img.id || "stable").replace(/[^a-zA-Z0-9_-]/g, "");
-    const src = abs(raw) + (abs(raw).includes("?") ? "&" : "?") + "v=" + version;
+    const base = abs(raw);
+    const src = base + (base.includes("?") ? "&" : "?") + "v=" + version;
 
     return {
       src: src,
@@ -31000,42 +30957,61 @@ document.body.appendChild(input);
     };
   }
 
-  async function render(){
-    try{
-      const card = ensureOfficialCard();
-      if(!card) return false;
+  function getButton(){
+    return document.getElementById("followmeImageCardBtn20260522");
+  }
 
-      const preview = document.getElementById("followmeImageOfficialPreview20260522");
-      if(!preview) return false;
+  function renderInsideButton(img){
+    const btn = getButton();
+    if(!btn || !img || !img.src) return false;
+
+    const icon = btn.querySelector(".fm-img-icon");
+    if(icon) icon.classList.add("followme-hidden-by-thumb-20260522");
+
+    let thumb = btn.querySelector(".followme-image-button-thumb-20260522");
+    if(!thumb){
+      thumb = document.createElement("span");
+      thumb.className = "followme-image-button-thumb-20260522";
+
+      if(icon && icon.parentElement === btn){
+        btn.insertBefore(thumb, icon);
+      }else{
+        btn.insertBefore(thumb, btn.firstChild);
+      }
+    }
+
+    const current = thumb.querySelector("img");
+    if(current && current.getAttribute("src") === img.src) return true;
+
+    thumb.innerHTML = '<img src="' + esc(img.src) + '" alt="' + esc(img.name) + '" loading="lazy">';
+    return true;
+  }
+
+  async function run(){
+    try{
+      ensureCss();
+      removeWrongFrame();
 
       const img = await fetchImage();
+      if(!img) return false;
 
-      if(!img){
-        preview.classList.remove("show");
-        preview.innerHTML = "";
-        return false;
-      }
-
-      const current = preview.querySelector("img");
-      if(current && current.getAttribute("src") === img.src){
-        preview.classList.add("show");
-        return true;
-      }
-
-      preview.innerHTML = '<img src="' + esc(img.src) + '" alt="' + esc(img.name) + '" loading="lazy">';
-      preview.classList.add("show");
-
-      return true;
+      return renderInsideButton(img);
     }catch(e){
-      console.warn("[FollowMe Official Image Card] errore:", e);
+      console.warn("[FollowMe Image Preview Inside Button] errore:", e);
       return false;
     }
   }
 
   function boot(){
-    setTimeout(render, 500);
-    setTimeout(render, 1400);
-    setTimeout(render, 2800);
+    removeWrongFrame();
+
+    /*
+      Attendo che gli script precedenti abbiano creato e normalizzato il pulsante.
+    */
+    setTimeout(run, 500);
+    setTimeout(run, 1400);
+    setTimeout(run, 2800);
+    setTimeout(run, 4500);
   }
 
   if(document.readyState === "loading"){
@@ -31045,11 +31021,11 @@ document.body.appendChild(input);
   }
 
   window.addEventListener("load", function(){
-    setTimeout(render, 700);
+    setTimeout(run, 800);
   });
 
-  if(!window.__followmeOfficialImageCardFetchPatch20260522){
-    window.__followmeOfficialImageCardFetchPatch20260522 = true;
+  if(!window.__followmeImagePreviewInsideButtonFetchPatch20260522){
+    window.__followmeImagePreviewInsideButtonFetchPatch20260522 = true;
 
     const oldFetch = window.fetch;
     window.fetch = async function(){
@@ -31059,7 +31035,7 @@ document.body.appendChild(input);
 
       try{
         if(res && res.ok && url.includes("/image-card/upload")){
-          setTimeout(render, 500);
+          setTimeout(run, 500);
         }
       }catch(e){}
 
@@ -31067,7 +31043,7 @@ document.body.appendChild(input);
     };
   }
 
-  window.followmeRenderOfficialImageCard20260522 = render;
+  window.followmeRenderImagePreviewInsideButton20260522 = run;
 })();
 </script>
 
