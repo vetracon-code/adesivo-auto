@@ -10794,7 +10794,7 @@ app.get('/fm/image/:code', async (req, res) => {
         <img src="${esc(imageUrl)}?v=${Date.now()}" alt="${title}">
       </div>
 
-      <a class="followme-public-image-download-btn-20260522" id="followmePublicImageDownloadBtn20260522" href="${esc(imageUrl)}?v=${Date.now()}" download target="_blank" rel="noopener">
+      <a class="followme-public-image-download-btn-20260522" id="followmePublicImageDownloadBtn20260522" href="${esc(imageUrl)}" data-original-image-url="${esc(imageUrl)}" download target="_blank" rel="noopener">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M12 3v10.2m0 0 4-4m-4 4-4-4M5 17.5V20h14v-2.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
@@ -10826,7 +10826,7 @@ app.get('/fm/image/:code', async (req, res) => {
     */
     if(btn && img){
       btn.removeAttribute("download");
-      btn.href = img.currentSrc || img.src || btn.href;
+      btn.href = btn.getAttribute("data-original-image-url") || img.currentSrc || img.src || btn.href;
       btn.target = "_blank";
       btn.rel = "noopener";
     }
