@@ -31272,5 +31272,258 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-home-buttons-uniform-style-final-20260522">
+(function(){
+  "use strict";
+
+  /*
+    Uniforma i pulsanti principali della Home:
+    - Importa con scansione QR
+    - Consegna documento
+    - Scatta o carica immagine
+    senza modificare la logica dei click.
+  */
+
+  function txt(el){
+    return String(el && el.textContent || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  }
+
+  function ensureCss(){
+    if(document.getElementById("followme-home-buttons-uniform-style-css-20260522")) return;
+
+    const style = document.createElement("style");
+    style.id = "followme-home-buttons-uniform-style-css-20260522";
+    style.textContent = `
+      .followme-home-uniform-button-20260522{
+        width:100% !important;
+        max-width:100% !important;
+        min-height:56px !important;
+        height:56px !important;
+        margin:10px 0 0 0 !important;
+        padding:0 18px !important;
+        box-sizing:border-box !important;
+
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        gap:10px !important;
+
+        border:0 !important;
+        border-radius:999px !important;
+        background:linear-gradient(135deg,#9bd61e,#5ee7ff) !important;
+        color:#101018 !important;
+
+        font-size:15px !important;
+        font-weight:950 !important;
+        line-height:1.05 !important;
+        letter-spacing:-.02em !important;
+        text-align:center !important;
+        text-decoration:none !important;
+
+        box-shadow:0 14px 32px rgba(34,120,42,.22) !important;
+        cursor:pointer !important;
+        -webkit-tap-highlight-color:transparent !important;
+
+        opacity:1 !important;
+        visibility:visible !important;
+        pointer-events:auto !important;
+        overflow:hidden !important;
+      }
+
+      .followme-home-uniform-button-20260522:first-child{
+        margin-top:0 !important;
+      }
+
+      .followme-home-uniform-button-20260522 svg,
+      .followme-home-uniform-button-20260522 img,
+      #followmeImageCardBtn20260522 .fm-img-icon{
+        width:25px !important;
+        height:25px !important;
+        min-width:25px !important;
+        max-width:25px !important;
+        flex:0 0 25px !important;
+        display:block !important;
+      }
+
+      .followme-home-uniform-button-20260522 span,
+      #followmeImageCardBtn20260522 .fm-img-title{
+        display:block !important;
+        font-size:15px !important;
+        font-weight:950 !important;
+        line-height:1.05 !important;
+        color:#101018 !important;
+        white-space:normal !important;
+      }
+
+      .followme-home-uniform-button-20260522:hover{
+        transform:translateY(-1px) !important;
+        box-shadow:
+          0 0 0 4px rgba(155,214,30,.18),
+          0 18px 38px rgba(34,120,42,.24) !important;
+      }
+
+      .followme-home-uniform-stack-20260522{
+        display:flex !important;
+        flex-direction:column !important;
+        gap:10px !important;
+        width:100% !important;
+        max-width:100% !important;
+      }
+
+      .followme-home-uniform-stack-20260522 > .followme-home-uniform-button-20260522{
+        margin-top:0 !important;
+      }
+
+      @media(max-width:520px){
+        .followme-home-uniform-button-20260522{
+          min-height:54px !important;
+          height:54px !important;
+          padding:0 16px !important;
+          font-size:14px !important;
+        }
+
+        .followme-home-uniform-button-20260522 span,
+        #followmeImageCardBtn20260522 .fm-img-title{
+          font-size:14px !important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function isTargetButton(el){
+    if(!el) return false;
+
+    const id = String(el.id || "");
+    const t = txt(el);
+
+    return (
+      id === "followmeImageCardBtn20260522" ||
+      id === "followmeConsegnaDocumentoBtn20260520" ||
+      t.includes("importa con scansione qr") ||
+      t.includes("importa qr") ||
+      t.includes("scansione qr") ||
+      t.includes("consegna documento") ||
+      t.includes("documento pdf") ||
+      t.includes("scatta o carica immagine")
+    );
+  }
+
+  function findButtons(){
+    const candidates = Array.from(document.querySelectorAll("button,a,.btn,[role='button']"));
+    const found = [];
+
+    candidates.forEach(function(el){
+      if(isTargetButton(el) && !found.includes(el)){
+        found.push(el);
+      }
+    });
+
+    /*
+      Ordine desiderato:
+      1 Importa QR
+      2 Consegna documento
+      3 Scatta/carica immagine
+    */
+    found.sort(function(a,b){
+      function rank(el){
+        const id = String(el.id || "");
+        const t = txt(el);
+
+        if(t.includes("importa") || t.includes("scansione qr")) return 1;
+        if(t.includes("consegna documento") || t.includes("documento pdf")) return 2;
+        if(id === "followmeImageCardBtn20260522" || t.includes("scatta o carica immagine")) return 3;
+
+        return 9;
+      }
+
+      return rank(a) - rank(b);
+    });
+
+    return found;
+  }
+
+  function getBestParent(buttons){
+    /*
+      Preferiamo il contenitore in cui c'è già la maggioranza dei pulsanti.
+    */
+    const counts = new Map();
+
+    buttons.forEach(function(btn){
+      if(!btn || !btn.parentElement) return;
+      const p = btn.parentElement;
+      counts.set(p, (counts.get(p) || 0) + 1);
+    });
+
+    let best = null;
+    let bestCount = 0;
+
+    counts.forEach(function(count, parent){
+      if(count > bestCount){
+        best = parent;
+        bestCount = count;
+      }
+    });
+
+    return best || document.getElementById("followmeOtherOptionsList") || null;
+  }
+
+  function normalize(){
+    ensureCss();
+
+    const buttons = findButtons();
+    if(!buttons.length) return false;
+
+    buttons.forEach(function(btn){
+      btn.classList.add("followme-home-uniform-button-20260522");
+      btn.style.width = "100%";
+      btn.style.maxWidth = "100%";
+      btn.style.minHeight = "56px";
+      btn.style.height = "56px";
+      btn.style.marginTop = "0";
+      btn.style.marginBottom = "0";
+    });
+
+    const parent = getBestParent(buttons);
+    if(parent){
+      parent.classList.add("followme-home-uniform-stack-20260522");
+
+      /*
+        Sposta solo il pulsante immagine se è finito fuori gruppo.
+        Gli altri li lasciamo dove sono per non rompere funzioni/ordine DOM.
+      */
+      const imgBtn = document.getElementById("followmeImageCardBtn20260522");
+      if(imgBtn && imgBtn.parentElement !== parent){
+        parent.appendChild(imgBtn);
+      }
+    }
+
+    return true;
+  }
+
+  function boot(){
+    normalize();
+    setTimeout(normalize, 600);
+    setTimeout(normalize, 1600);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(normalize, 500);
+  });
+
+  window.followmeNormalizeHomeButtons20260522 = normalize;
+})();
+</script>
+
 </body>
 </html>
