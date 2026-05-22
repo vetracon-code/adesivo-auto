@@ -29649,8 +29649,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       render immagine non ripetuto continuamente.
       Manteniamo solo due tentativi iniziali.
     */
-    setTimeout(renderAll, 500);
-    setTimeout(renderAll, 1500);
+    /* renderAll automatico rimosso: preview gestita dal single sync finale */
+    /* renderAll automatico rimosso: preview gestita dal single sync finale */
 
     /*
       Disabilitati focus/visibilitychange:
@@ -29922,14 +29922,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
   document.addEventListener("DOMContentLoaded", function(){
     scheduleRender();
-    setTimeout(scheduleRender, 1000);
-    setTimeout(scheduleRender, 2200);
-  });
+});
 
   window.addEventListener("load", function(){
     scheduleRender();
-    setTimeout(scheduleRender, 900);
-  });
+});
 
   /*
     STOP LOOP 20260522:
@@ -30275,6 +30272,407 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+
+<script id="followme-single-active-preview-sync-final-20260522">
+(function(){
+  "use strict";
+
+  /*
+    Sincronizzatore finale preview attiva.
+    Obiettivo:
+    - niente refresh pagina;
+    - niente tripli retry;
+    - un solo aggiornamento preview quando cambio destinazione/card;
+    - PDF e immagine restano su percorsi separati.
+  */
+
+  if(window.__followmeSingleActivePreviewSyncFinal20260522) return;
+  window.__followmeSingleActivePreviewSyncFinal20260522 = true;
+
+  let timer = null;
+  let lastSignature = "";
+
+  function getCode(){
+    try{
+      const p = new URLSearchParams(location.search);
+      return (
+        p.get("code") ||
+        p.get("qr") ||
+        p.get("c") ||
+        window.FOLLOWME_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        "FMDEMO"
+      );
+    }catch(e){
+      return window.FOLLOWME_CODE || window.followMeCode || window.followmeCode || "FMDEMO";
+    }
+  }
+
+  function abs(url){
+    const raw = String(url || "").trim();
+    if(!raw) return "";
+    if(/^https?:\/\//i.test(raw)) return raw;
+    if(raw.startsWith("/")) return location.origin + raw;
+    return location.origin + "/" + raw.replace(/^\/+/, "");
+  }
+
+  function esc(v){
+    return String(v == null ? "" : v).replace(/[&<>"']/g, function(c){
+      return ({
+        "&":"&amp;",
+        "<":"&lt;",
+        ">":"&gt;",
+        '"':"&quot;",
+        "'":"&#39;"
+      })[c];
+    });
+  }
+
+  async function json(url){
+    const res = await fetch(url, { cache:"no-store" });
+    if(!res.ok) return null;
+    return await res.json().catch(function(){ return null; });
+  }
+
+  function ensureCss(){
+    if(document.getElementById("followme-single-active-preview-sync-css-20260522")) return;
+
+    const style = document.createElement("style");
+    style.id = "followme-single-active-preview-sync-css-20260522";
+    style.textContent = `
+      .followme-active-preview-final-20260522{
+        width:100%;
+        height:100%;
+        min-height:210px;
+        border-radius:22px;
+        overflow:hidden;
+        background:linear-gradient(145deg,#06140d,#10271a);
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        box-shadow:inset 0 0 0 1px rgba(255,255,255,.10);
+      }
+
+      .followme-active-preview-final-20260522 img{
+        width:100%;
+        height:100%;
+        min-height:210px;
+        object-fit:cover;
+        display:block;
+      }
+
+      .followme-active-preview-final-20260522 iframe{
+        width:100%;
+        height:100%;
+        min-height:210px;
+        border:0;
+        display:block;
+        background:#fff;
+      }
+
+      .followme-active-preview-final-20260522 .fallback{
+        width:100%;
+        min-height:210px;
+        padding:22px;
+        box-sizing:border-box;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        flex-direction:column;
+        gap:8px;
+        text-align:center;
+        color:white;
+      }
+
+      .followme-active-preview-final-20260522 .fallback strong{
+        font-size:15px;
+        letter-spacing:.05em;
+      }
+
+      .followme-active-preview-final-20260522 .fallback span{
+        font-size:12px;
+        opacity:.82;
+        word-break:break-word;
+      }
+
+      .premium-history-preview .followme-active-preview-final-20260522,
+      .premium-history-preview .followme-active-preview-final-20260522 img,
+      .premium-card-preview-inner .followme-active-preview-final-20260522,
+      .premium-card-preview-inner .followme-active-preview-final-20260522 img{
+        min-height:92px;
+        height:104px;
+        border-radius:16px;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function topPreviewTarget(){
+    const selectors = [
+      "#simpleDestinationPreviewFrame",
+      ".simple-preview-square iframe",
+      ".simple-preview-square",
+      ".qr-auto-preview-frame",
+      ".destination-preview-frame",
+      ".preview-frame",
+      "#simpleDestinationPreviewBlock .simple-preview-square"
+    ];
+
+    for(const sel of selectors){
+      const el = document.querySelector(sel);
+      if(el) return el;
+    }
+
+    return null;
+  }
+
+  function setOpenButton(url, label){
+    const open = document.getElementById("simpleDestinationPreviewOpen");
+    if(!open) return;
+
+    open.href = url || "#";
+    open.textContent = label || "Apri pagina in nuova scheda";
+    open.style.opacity = url ? "1" : ".45";
+    open.style.pointerEvents = url ? "auto" : "none";
+  }
+
+  function renderTop(kind, src, label){
+    ensureCss();
+
+    const target = topPreviewTarget();
+    if(!target) return false;
+
+    const signature = kind + "|" + src + "|" + label;
+    if(signature === lastSignature) return true;
+    lastSignature = signature;
+
+    const box = document.createElement("div");
+    box.className = "followme-active-preview-final-20260522";
+
+    if(kind === "image" || kind === "pdf"){
+      box.innerHTML = '<img src="' + esc(src) + '" alt="' + esc(label || kind) + '">';
+    } else if(kind === "url"){
+      box.innerHTML = '<iframe src="' + esc(src) + '" loading="lazy"></iframe>';
+    } else {
+      box.innerHTML = '<div class="fallback"><strong>' + esc(kind || "DESTINAZIONE") + '</strong><span>' + esc(label || src || "") + '</span></div>';
+    }
+
+    let container = target;
+
+    if(String(target.tagName || "").toLowerCase() === "iframe"){
+      target.style.display = "none";
+      container = target.parentElement || target;
+    }
+
+    container.innerHTML = "";
+    container.appendChild(box);
+
+    const empty = document.getElementById("simpleDestinationPreviewEmpty");
+    if(empty) empty.style.display = "none";
+
+    const card = document.querySelector(".simple-preview-card");
+    if(card){
+      card.classList.add("show", "preview-loaded");
+      card.classList.remove("preview-loading");
+    }
+
+    return true;
+  }
+
+  async function readActiveUrlFromStatus(){
+    const code = getCode();
+
+    const candidates = [
+      "/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(),
+      "/api/followme/" + encodeURIComponent(code) + "/current?v=" + Date.now()
+    ];
+
+    for(const u of candidates){
+      try{
+        const j = await json(u);
+        if(!j) continue;
+
+        const value =
+          j.active_url ||
+          j.current_url ||
+          j.url ||
+          (j.project && (j.project.active_url || j.project.current_url || j.project.url)) ||
+          (j.data && (j.data.active_url || j.data.current_url || j.data.url)) ||
+          "";
+
+        if(value) return String(value);
+      }catch(e){}
+    }
+
+    return String(
+      window.followMeCurrentActiveUrl ||
+      window.currentFollowMeActiveUrl ||
+      window.activeFollowMeUrl ||
+      ""
+    );
+  }
+
+  async function renderPdf(){
+    const code = getCode();
+    const j = await json("/api/followme/" + encodeURIComponent(code) + "/document/current?v=" + Date.now());
+    const doc = j && j.document;
+
+    if(!doc) return false;
+
+    const thumb = doc.thumbnail_url || doc.thumbnail_path || doc.thumbnail_data_url || "";
+    const pdfUrl = j.public_url || "/fm/document/" + encodeURIComponent(code);
+    const src = thumb ? abs(thumb) + (String(thumb).includes("?") ? "&" : "?") + "v=" + Date.now() : "";
+
+    if(src){
+      renderTop("pdf", src, doc.original_name || "Documento PDF");
+    }else{
+      renderTop("PDF", "", doc.original_name || "Documento PDF");
+    }
+
+    setOpenButton(pdfUrl, "Apri documento");
+    return true;
+  }
+
+  async function renderImage(){
+    const code = getCode();
+    const j = await json("/api/followme/" + encodeURIComponent(code) + "/image-card/current?v=" + Date.now());
+    const img = j && j.image;
+
+    if(!img) return false;
+
+    const raw = img.image_url || img.public_path || img.public_url || "";
+    const imgUrl = j.public_url || "/fm/image/" + encodeURIComponent(code);
+    const src = raw ? abs(raw) + (String(raw).includes("?") ? "&" : "?") + "v=" + Date.now() : "";
+
+    if(src){
+      renderTop("image", src, img.original_name || "Immagine");
+    }else{
+      renderTop("IMMAGINE", "", img.original_name || "Immagine");
+    }
+
+    setOpenButton(imgUrl, "Apri immagine");
+    return true;
+  }
+
+  async function renderUrl(activeUrl){
+    const full = abs(activeUrl);
+    if(!full) return false;
+
+    renderTop("url", full, activeUrl);
+    setOpenButton(full, "Apri pagina in nuova scheda");
+    return true;
+  }
+
+  async function sync(reason){
+    try{
+      const active = await readActiveUrlFromStatus();
+      const clean = String(active || "");
+
+      if(clean.includes("/fm/document/")){
+        await renderPdf();
+        return;
+      }
+
+      if(clean.includes("/fm/image/")){
+        await renderImage();
+        return;
+      }
+
+      if(clean){
+        await renderUrl(clean);
+        return;
+      }
+
+      /*
+        Fallback: se non riesco a leggere active_url, non forzo nulla.
+        Questo evita loop e sfarfallii.
+      */
+    }catch(e){
+      console.warn("[FollowMe single preview sync] errore:", e);
+    }
+  }
+
+  function schedule(reason){
+    clearTimeout(timer);
+    timer = setTimeout(function(){
+      sync(reason || "scheduled");
+    }, 250);
+  }
+
+  /*
+    Hook unico sulle chiamate che cambiano destinazione.
+    Non ricarica la pagina: aggiorna solo la preview.
+  */
+  if(!window.__followmeSinglePreviewFetchPatch20260522){
+    window.__followmeSinglePreviewFetchPatch20260522 = true;
+
+    const oldFetch = window.fetch;
+    window.fetch = async function(){
+      const args = arguments;
+      const url = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+
+      const res = await oldFetch.apply(this, args);
+
+      try{
+        const relevant =
+          url.includes("/image-card/") ||
+          url.includes("/document/") ||
+          url.includes("/url") ||
+          url.includes("/history") ||
+          url.includes("/activate") ||
+          url.includes("/current");
+
+        if(relevant && res && res.ok){
+          schedule("fetch:" + url);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  /*
+    Anche sui click delle card: un solo aggiornamento dopo che gli script esistenti
+    hanno finito di cambiare destinazione.
+  */
+  document.addEventListener("click", function(ev){
+    const el = ev.target && ev.target.closest ? ev.target.closest("button,a,.card,.premium-history-card,.history-card,.premium-card") : null;
+    if(!el) return;
+
+    const txt = String(el.textContent || "").toLowerCase();
+    const href = String(el.getAttribute && el.getAttribute("href") || "").toLowerCase();
+    const cls = String(el.className || "").toLowerCase();
+
+    if(
+      txt.includes("attiva") ||
+      txt.includes("trasmetti") ||
+      txt.includes("documento") ||
+      txt.includes("immagine") ||
+      txt.includes("url") ||
+      href.includes("/fm/") ||
+      cls.includes("history") ||
+      cls.includes("premium")
+    ){
+      schedule("click");
+    }
+  }, true);
+
+  window.followmeSingleActivePreviewSync20260522 = function(){
+    schedule("manual");
+  };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", function(){ schedule("dom"); });
+  }else{
+    schedule("boot");
+  }
+
+  window.addEventListener("load", function(){ schedule("load"); });
+})();
+</script>
 
 </body>
 </html>
