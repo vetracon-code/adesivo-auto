@@ -9008,7 +9008,7 @@ app.get('/fm/app/:code', async (req, res) => {
          CASE WHEN regexp_replace(COALESCE(url,''), '/+$', '') = $2 THEN 0 ELSE 1 END,
          activated_at DESC NULLS LAST,
          last_used_at DESC NULLS LAST
-       LIMIT 10`,
+       LIMIT 20`,
       [project.id, activeUrl]
     );
 
