@@ -31452,5 +31452,189 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-carousel-20-card-scroll-final-20260522">
+(function(){
+  "use strict";
+
+  /*
+    Fix solo UI:
+    permette di vedere/scorrere fino a 20 card utilizzabili nel carosello/storico.
+    Non modifica upload, attivazione, QR, PDF, immagine o destinazioni.
+  */
+
+  function ensureCss(){
+    if(document.getElementById("followme-carousel-20-card-scroll-css-20260522")) return;
+
+    const style = document.createElement("style");
+    style.id = "followme-carousel-20-card-scroll-css-20260522";
+    style.textContent = `
+      /*
+        Contenitori probabili del carosello/card storiche.
+        Li rendiamo scrollabili, senza nascondere le card oltre la decima.
+      */
+      .premium-history-list,
+      .premium-history-grid,
+      .premium-history-carousel,
+      .premium-history-track,
+      .followme-history-list,
+      .followme-history-grid,
+      .followme-history-carousel,
+      .followme-history-track,
+      [id*="HistoryList"],
+      [id*="historyList"],
+      [id*="Carousel"],
+      [id*="carousel"]{
+        max-height:none !important;
+        overflow:visible !important;
+      }
+
+      /*
+        Se il layout è verticale, abilitiamo scroll verticale morbido.
+      */
+      .premium-history-list,
+      .followme-history-list,
+      [id*="HistoryList"],
+      [id*="historyList"]{
+        max-height:72vh !important;
+        overflow-y:auto !important;
+        overflow-x:hidden !important;
+        -webkit-overflow-scrolling:touch !important;
+        overscroll-behavior:contain !important;
+        padding-right:4px !important;
+      }
+
+      /*
+        Se il layout è un carosello orizzontale, abilitiamo scroll orizzontale.
+      */
+      .premium-history-carousel,
+      .premium-history-track,
+      .followme-history-carousel,
+      .followme-history-track,
+      [id*="Carousel"],
+      [id*="carousel"]{
+        overflow-x:auto !important;
+        overflow-y:visible !important;
+        -webkit-overflow-scrolling:touch !important;
+        scroll-snap-type:x proximity !important;
+      }
+
+      /*
+        Evita che le card vengano tagliate da wrapper con altezza fissa.
+      */
+      .premium-history-card,
+      .premium-history-item,
+      .premium-card,
+      .history-card,
+      .destination-card{
+        flex:0 0 auto !important;
+        visibility:visible !important;
+        opacity:1 !important;
+      }
+
+      /*
+        Piccolo scrollbar leggibile su desktop, invisivo su mobile.
+      */
+      .premium-history-list::-webkit-scrollbar,
+      .followme-history-list::-webkit-scrollbar,
+      [id*="HistoryList"]::-webkit-scrollbar,
+      [id*="historyList"]::-webkit-scrollbar{
+        width:6px;
+      }
+
+      .premium-history-list::-webkit-scrollbar-thumb,
+      .followme-history-list::-webkit-scrollbar-thumb,
+      [id*="HistoryList"]::-webkit-scrollbar-thumb,
+      [id*="historyList"]::-webkit-scrollbar-thumb{
+        background:rgba(255,255,255,.22);
+        border-radius:999px;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function revealCards(){
+    /*
+      Non creiamo card nuove.
+      Rimuoviamo solo eventuali display:none/hidden sulle card dalla 11 alla 20.
+    */
+    const cards = Array.from(document.querySelectorAll(
+      ".premium-history-card, .premium-history-item, .premium-card, .history-card, .destination-card"
+    ));
+
+    cards.slice(0, 20).forEach(function(card){
+      card.style.display = "";
+      card.style.visibility = "visible";
+      card.style.opacity = "1";
+      card.removeAttribute("hidden");
+      card.setAttribute("aria-hidden", "false");
+    });
+
+    /*
+      Se qualche script applica classi tipo hidden/collapsed oltre la decima,
+      le rimuoviamo solo dalle prime 20 card.
+    */
+    cards.slice(0, 20).forEach(function(card){
+      [
+        "hidden",
+        "is-hidden",
+        "collapsed",
+        "is-collapsed",
+        "d-none",
+        "display-none"
+      ].forEach(function(cls){
+        card.classList.remove(cls);
+      });
+    });
+  }
+
+  function patchLimits(){
+    /*
+      Alcuni script potrebbero usare data-limit o attributi simili.
+      Non tocchiamo dati server: allarghiamo solo limiti UI dichiarativi.
+    */
+    Array.from(document.querySelectorAll("[data-limit], [data-max], [data-visible], [data-page-size]")).forEach(function(el){
+      ["limit", "max", "visible", "pageSize"].forEach(function(k){
+        try{
+          if(el.dataset && el.dataset[k]){
+            const n = parseInt(el.dataset[k], 10);
+            if(Number.isFinite(n) && n < 20) el.dataset[k] = "20";
+          }
+        }catch(e){}
+      });
+    });
+  }
+
+  function run(){
+    ensureCss();
+    patchLimits();
+    revealCards();
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", function(){
+      setTimeout(run, 300);
+      setTimeout(run, 1200);
+      setTimeout(run, 2500);
+    });
+  }else{
+    setTimeout(run, 300);
+    setTimeout(run, 1200);
+    setTimeout(run, 2500);
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(run, 800);
+    setTimeout(run, 2200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(run, 800);
+  });
+
+  window.followmeEnable20CardCarouselScroll20260522 = run;
+})();
+</script>
+
 </body>
 </html>
