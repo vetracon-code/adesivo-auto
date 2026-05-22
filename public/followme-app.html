@@ -9006,7 +9006,7 @@ document.addEventListener("visibilitychange", function(){
 
     var badge = document.createElement("div");
     badge.className = "premium-history-badge";
-    badge.textContent = isActive ? "Attivo ora" : "Immagine";
+    badge.textContent = isActive ? "Attivo ora" : "Recente";
 
     var domain = document.createElement("div");
     domain.className = "premium-history-domain";
@@ -30918,92 +30918,175 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 </script>
 
 
-<script id="followme-image-card-label-green-final-20260522">
+
+
+<script id="followme-image-card-only-label-final-20260522">
 (function(){
   "use strict";
 
   /*
-    Micro-fix solo estetico/testuale card immagine:
-    - "Precedente" -> "Immagine"
-    - "Consegna diretta" -> "ULTIMA IMMAGINE UTILIZZATA"
-    - badge Immagine verde
-    Non tocca upload, preview, input file, pulsanti Home.
+    Correzione mirata:
+    - default globale resta "Recente"
+    - solo la card immagine mostra badge "Immagine"
+    - badge immagine verde sfumato con testo nero
+    - testo sotto: "ULTIMA IMMAGINE UTILIZZATA"
+    Non tocca upload, pulsanti, preview o input.
   */
 
-  function txt(el){
-    return String(el && el.textContent || "").replace(/\s+/g, " ").trim();
+  function cleanText(el){
+    return String(el && el.textContent || "")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
-  function isImageArea(el){
-    if(!el) return false;
-    const t = txt(el).toLowerCase();
-    const h = String(el.innerHTML || "").toLowerCase();
+  function lowerText(el){
+    return cleanText(el).toLowerCase();
+  }
+
+  function isPdfCard(card){
+    if(!card) return false;
+    const t = lowerText(card);
+    const h = String(card.innerHTML || "").toLowerCase();
+
+    return (
+      t.includes("documento pdf") ||
+      t.includes("consegna documento") ||
+      h.includes("followmedocument") ||
+      h.includes("document/current") ||
+      h.includes("/fm/document/")
+    );
+  }
+
+  function isImageCard(card){
+    if(!card) return false;
+
+    const t = lowerText(card);
+    const h = String(card.innerHTML || "").toLowerCase();
+
+    /*
+      Deve essere la card foto, NON una card generica.
+      Usiamo segnali specifici della funzione immagine.
+    */
     return (
       t.includes("scatta o carica immagine") ||
-      t.includes("ultima immagine") ||
-      t.includes("immagine caricata") ||
+      t.includes("ultima immagine utilizzata") ||
       h.includes("image-card") ||
-      h.includes("followmeimagecard")
-    );
+      h.includes("/fm/image/") ||
+      h.includes("followmeimagecard") ||
+      h.includes("followmeimage")
+    ) && !isPdfCard(card);
+  }
+
+  function findCardFromImageButton(){
+    const btn = document.getElementById("followmeImageCardBtn20260522");
+    if(!btn) return null;
+
+    return btn.closest(".premium-history-card, .premium-history-item, .premium-card, .history-card, .card, section, article, div");
+  }
+
+  function applyImageCard(card){
+    if(!card) return;
+
+    const badge =
+      card.querySelector(".premium-history-badge") ||
+      card.querySelector("[class*='badge']");
+
+    if(badge){
+      badge.textContent = "Immagine";
+      badge.style.background = "linear-gradient(135deg,#16a34a,#22c55e,#86efac)";
+      badge.style.color = "#101018";
+      badge.style.border = "1px solid rgba(22,163,74,.55)";
+      badge.style.borderRadius = "999px";
+      badge.style.boxShadow = "0 8px 18px rgba(22,163,74,.22), inset 0 1px 0 rgba(255,255,255,.32)";
+      badge.style.fontWeight = "950";
+    }
+
+    const domain =
+      card.querySelector(".premium-history-domain") ||
+      card.querySelector("[class*='domain']");
+
+    if(domain){
+      domain.textContent = "ULTIMA IMMAGINE UTILIZZATA";
+      domain.style.color = "rgba(15,23,42,.72)";
+      domain.style.fontWeight = "800";
+      domain.style.letterSpacing = ".01em";
+    }
+  }
+
+  function restoreGenericBadges(){
+    /*
+      Se la patch precedente ha lasciato "Immagine" su card non immagine,
+      le rimettiamo a "Recente", salvo PDF e card foto.
+    */
+    const cards = Array.from(document.querySelectorAll(
+      ".premium-history-card, .premium-history-item, .premium-card, .history-card, .card, section, article"
+    ));
+
+    cards.forEach(function(card){
+      const badge =
+        card.querySelector(".premium-history-badge") ||
+        card.querySelector("[class*='badge']");
+
+      if(!badge) return;
+
+      const badgeText = cleanText(badge).toLowerCase();
+
+      if(isImageCard(card)){
+        applyImageCard(card);
+        return;
+      }
+
+      if(isPdfCard(card)){
+        /*
+          La logica PDF esistente gestisce già "Documento PDF".
+          Non la tocchiamo.
+        */
+        return;
+      }
+
+      if(badgeText === "immagine"){
+        badge.textContent = "Recente";
+        badge.style.background = "";
+        badge.style.color = "";
+        badge.style.border = "";
+        badge.style.borderRadius = "";
+        badge.style.boxShadow = "";
+        badge.style.fontWeight = "";
+      }
+    });
+
+    const imageCard = findCardFromImageButton();
+    if(imageCard && isImageCard(imageCard)){
+      applyImageCard(imageCard);
+    }
   }
 
   function apply(){
     try{
-      const nodes = Array.from(document.querySelectorAll("button, a, div, span, small, p, strong"));
-
-      nodes.forEach(function(el){
-        const t = txt(el);
-
-        if(t === "Precedente"){
-          el.textContent = "Immagine";
-        }
-
-        if(t === "Consegna diretta"){
-          el.textContent = "ULTIMA IMMAGINE UTILIZZATA";
-        }
-      });
-
-      const candidates = Array.from(document.querySelectorAll(".card, section, article, div"));
-      candidates.forEach(function(card){
-        if(!isImageArea(card)) return;
-
-        Array.from(card.querySelectorAll("button, a, span, small, strong, div")).forEach(function(el){
-          if(txt(el).toLowerCase() === "immagine"){
-            el.style.background = "linear-gradient(135deg,#16a34a,#22c55e,#86efac)";
-            el.style.color = "#ffffff";
-            el.style.border = "1px solid rgba(22,163,74,.55)";
-            el.style.borderColor = "rgba(22,163,74,.55)";
-            el.style.borderRadius = "999px";
-            el.style.boxShadow = "0 8px 18px rgba(22,163,74,.22), inset 0 1px 0 rgba(255,255,255,.28)";
-            el.style.fontWeight = "900";
-          }
-        });
-
-        Array.from(card.querySelectorAll("p, small, div, span")).forEach(function(el){
-          if(txt(el) === "ULTIMA IMMAGINE UTILIZZATA"){
-            el.style.color = "rgba(15,23,42,.72)";
-            el.style.fontWeight = "700";
-          }
-        });
-      });
-    }catch(e){}
+      restoreGenericBadges();
+    }catch(e){
+      console.warn("[FollowMe Image Card Only Label] errore:", e);
+    }
   }
 
   if(document.readyState === "loading"){
     document.addEventListener("DOMContentLoaded", function(){
       setTimeout(apply, 300);
       setTimeout(apply, 1200);
+      setTimeout(apply, 2600);
     });
   }else{
     setTimeout(apply, 300);
     setTimeout(apply, 1200);
+    setTimeout(apply, 2600);
   }
 
   window.addEventListener("load", function(){
     setTimeout(apply, 700);
+    setTimeout(apply, 2200);
   });
 
-  window.followmeApplyImageCardLabels20260522 = apply;
+  window.followmeApplyImageCardOnlyLabel20260522 = apply;
 })();
 </script>
 
