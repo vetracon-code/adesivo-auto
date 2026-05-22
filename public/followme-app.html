@@ -29273,147 +29273,203 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 <script id="followme-image-card-preview-sync-final-20260522">
 (function(){
-  if(window.__FollowMeImageCardPreviewSyncFinal20260522) return;
-  window.__FollowMeImageCardPreviewSyncFinal20260522 = true;
+  "use strict";
 
+  const STYLE_ID = "followme-image-card-preview-style-final-20260522";
   let currentImage = null;
-  let currentStatus = null;
-
-  function code(){
-    try{
-      const parts = location.pathname.split("/").filter(Boolean);
-      const i = parts.indexOf("app");
-      if(i >= 0 && parts[i+1]) return decodeURIComponent(parts[i+1]);
-    }catch(e){}
-    return "FM-DEMO";
-  }
+  let refreshScheduled = false;
 
   function esc(v){
-    return String(v || "").replace(/[&<>"']/g, function(c){
-      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
-    });
+    return String(v == null ? "" : v)
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
   }
 
-  function clean(v){
-    return String(v || "").trim().replace(/\/+$/,"");
+  function getCode(){
+    const qs = new URLSearchParams(location.search);
+    return (
+      qs.get("code") ||
+      qs.get("qr") ||
+      qs.get("id") ||
+      window.followMeCode ||
+      window.FOLLOWME_CODE ||
+      "FMDEMO"
+    );
   }
 
-  async function fetchJson(url){
-    try{
-      const r = await fetch(url, { cache:"no-store" });
-      return await r.json().catch(() => null);
-    }catch(e){
-      return null;
-    }
+  function cleanUrl(url){
+    return String(url || "").trim();
   }
 
-  async function loadData(){
-    const c = code();
-
-    const st = await fetchJson("/api/followme/" + encodeURIComponent(c) + "/status?v=" + Date.now());
-    if(st && st.success) currentStatus = st;
-
-    const img = await fetchJson("/api/followme/" + encodeURIComponent(c) + "/image-card/current?v=" + Date.now());
-    if(img && img.success && img.image) currentImage = img.image;
-
-    return { image:currentImage, status:currentStatus };
-  }
-
-  function publicImageUrl(){
-    const publicId = currentStatus?.project?.public_id || code().replace(/-/g,"");
-    return "/fm/image/" + publicId;
-  }
-
-  function isImageActive(){
-    const active = clean(currentStatus?.project?.active_url || "");
-    return active.includes("/fm/image/") || active === clean(publicImageUrl());
+  function absoluteUrl(url){
+    const u = cleanUrl(url);
+    if(!u) return "";
+    if(/^https?:\/\//i.test(u)) return u;
+    if(u.startsWith("/")) return location.origin + u;
+    return location.origin + "/" + u.replace(/^\/+/, "");
   }
 
   function imageSrc(img){
     const raw = String(img && (img.image_url || img.public_path || img.public_url || "") || "");
     if(!raw) return "";
-    return raw + (raw.includes("?") ? "&" : "?") + "v=" + Date.now();
+    return absoluteUrl(raw) + (raw.includes("?") ? "&" : "?") + "v=" + Date.now();
+  }
+
+  function publicImageUrl(){
+    const code = getCode();
+    return "/fm/image/" + encodeURIComponent(code);
+  }
+
+  function activeLooksLikeImage(){
+    const active = String(
+      window.followMeCurrentActiveUrl ||
+      window.currentFollowMeActiveUrl ||
+      window.activeFollowMeUrl ||
+      ""
+    );
+    return active.includes("/fm/image/");
+  }
+
+  async function fetchJson(url, options){
+    const res = await fetch(url, options || {});
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch(e) {
+      console.warn("[FollowMe Image Preview] risposta non JSON", url, text.slice(0, 300));
+      return null;
+    }
+  }
+
+  async function getCurrentImage(){
+    const code = getCode();
+    const j = await fetchJson("/api/followme/" + encodeURIComponent(code) + "/image-card/current?v=" + Date.now());
+    if(j && j.success && j.image){
+      currentImage = j.image;
+      return currentImage;
+    }
+    return currentImage;
   }
 
   function ensureStyle(){
-    if(document.getElementById("followmeImagePreviewSyncStyle20260522")) return;
+    if(document.getElementById(STYLE_ID)) return;
 
-    const st = document.createElement("style");
-    st.id = "followmeImagePreviewSyncStyle20260522";
-    st.textContent = `
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = `
       .followme-image-main-preview-20260522{
         width:100%;
-        min-height:360px;
-        border-radius:28px;
+        height:100%;
+        min-height:210px;
+        border-radius:22px;
         overflow:hidden;
-        background:#05070d;
-        border:1px solid rgba(255,255,255,.10);
-        box-shadow:0 24px 70px rgba(0,0,0,.28);
+        background:linear-gradient(145deg,#06140d,#10271a);
         display:flex;
         align-items:center;
         justify-content:center;
-        padding:14px;
+        box-shadow:inset 0 0 0 1px rgba(255,255,255,.10);
       }
 
       .followme-image-main-preview-20260522 img{
-        max-width:100%;
-        max-height:70vh;
-        display:block;
-        border-radius:22px;
-        object-fit:contain;
-        box-shadow:0 20px 60px rgba(0,0,0,.34);
-        background:#000;
-      }
-
-      .followme-image-history-card-20260522{
-        border-color:rgba(200,255,46,.72) !important;
-        box-shadow:
-          0 0 0 1px rgba(200,255,46,.18) inset,
-          0 18px 42px rgba(200,255,46,.12),
-          0 16px 34px rgba(0,0,0,.24) !important;
-      }
-
-      .followme-image-history-thumb-20260522{
-        width:100%;
-        aspect-ratio:1 / 1;
-        min-height:118px;
-        border-radius:18px;
-        overflow:hidden;
-        display:grid;
-        place-items:center;
-        background:#05070d;
-        border:1px solid rgba(255,255,255,.10);
-        margin:10px 0 12px;
-      }
-
-      .followme-image-history-thumb-20260522 img{
         width:100%;
         height:100%;
+        object-fit:cover;
         display:block;
+      }
+
+      .premium-history-preview .followme-image-main-preview-20260522,
+      .premium-card-preview-inner .followme-image-main-preview-20260522{
+        min-height:92px;
+        height:104px;
+        border-radius:18px;
+      }
+
+      .premium-history-preview .followme-image-main-preview-20260522 img,
+      .premium-card-preview-inner .followme-image-main-preview-20260522 img{
         object-fit:cover;
       }
 
-      .followme-image-history-card-20260522 .premium-history-badge{
-        color:#101018 !important;
-        background:linear-gradient(135deg,#c8ff2e,#5ee7ff) !important;
-        border:0 !important;
+      .followme-image-fallback-20260522{
+        width:100%;
+        min-height:96px;
+        border-radius:18px;
+        background:linear-gradient(145deg,#052e16,#16a34a);
+        color:white;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        flex-direction:column;
+        gap:6px;
+        text-align:center;
+        padding:18px;
+        box-sizing:border-box;
+      }
+
+      .followme-image-fallback-20260522 strong{
+        font-size:15px;
+        letter-spacing:.04em;
+      }
+
+      .followme-image-fallback-20260522 span{
+        font-size:12px;
+        opacity:.84;
       }
     `;
-    document.head.appendChild(st);
+    document.head.appendChild(style);
   }
 
-  function findMainPreviewTarget(){
+  function buildImagePreview(img){
+    ensureStyle();
+
+    const src = imageSrc(img);
+    const name = img && (img.original_name || img.stored_name || "Immagine");
+
+    if(src){
+      const holder = document.createElement("div");
+      holder.className = "followme-image-main-preview-20260522";
+
+      const image = document.createElement("img");
+      image.src = src;
+      image.alt = name;
+      image.loading = "lazy";
+
+      holder.appendChild(image);
+      return holder;
+    }
+
+    const fallback = document.createElement("div");
+    fallback.className = "followme-image-fallback-20260522";
+    fallback.innerHTML = `<strong>IMMAGINE</strong><span>${esc(name)}</span>`;
+    return fallback;
+  }
+
+  function looksLikePreviewTarget(el){
+    if(!el || el.nodeType !== 1) return false;
+
+    const id = String(el.id || "").toLowerCase();
+    const cls = String(el.className || "").toLowerCase();
+
+    if(id.includes("preview") || cls.includes("preview")) return true;
+    if(id.includes("destination") || cls.includes("destination")) return true;
+    if(id.includes("frame") || cls.includes("frame")) return true;
+
+    return false;
+  }
+
+  function findTopPreviewTarget(){
     const selectors = [
-      "#followmeMainPreviewFrame",
-      "#followmePreviewFrame",
-      "#simplePreviewFrame",
-      "#destinationPreviewFrame",
-      "#followmeSimplePreviewFrame",
+      "#simpleDestinationPreviewFrame",
+      ".qr-auto-preview-frame",
       ".simple-preview-frame",
       ".destination-preview-frame",
       ".preview-frame",
-      "[id*='PreviewFrame']",
-      "[id*='previewFrame']"
+      "#previewFallbackBox",
+      "#simpleDestinationPreviewBlock .simple-preview-square",
+      ".simple-preview-square",
+      ".simple-preview-card"
     ];
 
     for(const sel of selectors){
@@ -29421,149 +29477,213 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       if(el) return el;
     }
 
-    const iframe = Array.from(document.querySelectorAll("iframe")).find(function(el){
-      const id = String(el.id || "").toLowerCase();
-      const cls = String(el.className || "").toLowerCase();
-      return id.includes("preview") || cls.includes("preview");
+    const all = Array.from(document.querySelectorAll("iframe, .card, section, div"));
+    return all.find(looksLikePreviewTarget) || null;
+  }
+
+  function renderTopPreview(img){
+    const target = findTopPreviewTarget();
+    if(!target) return false;
+
+    const node = buildImagePreview(img);
+
+    if(target.tagName === "IFRAME"){
+      const parent = target.parentElement;
+      if(!parent) return false;
+
+      target.style.display = "none";
+
+      let holder = parent.querySelector(".followme-image-main-preview-holder-20260522");
+      if(!holder){
+        holder = document.createElement("div");
+        holder.className = "followme-image-main-preview-holder-20260522";
+        parent.appendChild(holder);
+      }
+
+      holder.innerHTML = "";
+      holder.appendChild(node);
+      return true;
+    }
+
+    target.innerHTML = "";
+    target.appendChild(node);
+
+    const card = document.querySelector(".simple-preview-card");
+    if(card){
+      card.classList.add("show", "preview-loaded");
+      card.classList.remove("preview-loading");
+    }
+
+    const empty = document.getElementById("simpleDestinationPreviewEmpty");
+    if(empty) empty.style.display = "none";
+
+    const open = document.getElementById("simpleDestinationPreviewOpen");
+    if(open){
+      open.href = publicImageUrl();
+      open.style.opacity = "1";
+      open.style.pointerEvents = "auto";
+    }
+
+    return true;
+  }
+
+  function renderGhostCards(img){
+    const nodes = Array.from(document.querySelectorAll(".premium-history-preview, .premium-card-preview-inner, .premium-history-card, .premium-card, .history-card, .destination-card"));
+
+    nodes.forEach(card => {
+      const txt = String(card.textContent || "").toLowerCase();
+
+      const isImageCard =
+        txt.includes("scatta o carica immagine") ||
+        txt.includes("immagine") ||
+        txt.includes("/fm/image") ||
+        txt.includes("image-card");
+
+      const isPdfCard =
+        txt.includes("pdf") ||
+        txt.includes("documento");
+
+      if(!isImageCard || isPdfCard) return;
+
+      const preview =
+        card.querySelector(".premium-history-preview") ||
+        card.querySelector(".premium-card-preview-inner") ||
+        card;
+
+      preview.innerHTML = "";
+      preview.appendChild(buildImagePreview(img));
     });
-
-    return iframe || null;
   }
 
-  function updateLargePreview(img){
-    if(!img || !isImageActive()) return;
-
-    const src = imageSrc(img);
-    if(!src) return;
-
-    const target = findMainPreviewTarget();
-
-    if(target && target.tagName && target.tagName.toLowerCase() === "iframe"){
-      target.src = publicImageUrl() + "?v=" + Date.now();
-      return;
-    }
-
-    if(target){
-      target.innerHTML = `<div class="followme-image-main-preview-20260522"><img src="${esc(src)}" alt="${esc(img.original_name || "Immagine")}"></div>`;
-    }
-  }
-
-  function track(){
-    return document.getElementById("premiumHistoryTrack") ||
-           document.querySelector(".premium-history-track") ||
-           document.querySelector("#premiumHistoryCarousel") ||
-           null;
-  }
-
-  function upsertHistoryCard(img){
+  async function renderAll(){
+    const img = await getCurrentImage();
     if(!img) return;
 
-    const tr = track();
-    if(!tr) return;
+    renderTopPreview(img);
+    renderGhostCards(img);
 
-    let card = document.getElementById("followmeImageHistoryCard20260522");
-
-    const src = imageSrc(img);
-    const publicUrl = publicImageUrl();
-
-    const html = `
-      <div class="premium-history-badge">Immagine attiva</div>
-      <div class="followme-image-history-thumb-20260522">
-        <img src="${esc(src)}" alt="${esc(img.original_name || "Immagine")}">
-      </div>
-      <div class="premium-history-title">Scatta o carica immagine</div>
-      <div class="premium-history-domain">${esc(publicUrl)}</div>
-      <div class="premium-history-actions">
-        <a href="${esc(publicUrl)}" target="_blank" rel="noopener">Apri</a>
-      </div>
-    `;
-
-    if(!card){
-      card = document.createElement("article");
-      card.id = "followmeImageHistoryCard20260522";
-      card.className = "premium-history-card followme-image-history-card-20260522";
-      card.dataset.followmeImageCard = "1";
-      tr.prepend(card);
-    }
-
-    card.innerHTML = html;
-    card.classList.toggle("is-active", isImageActive());
+    window.followMeCurrentActiveUrl = publicImageUrl();
+    window.currentFollowMeActiveUrl = publicImageUrl();
+    window.activeFollowMeUrl = publicImageUrl();
   }
 
-  async function syncNow(reason){
-    ensureStyle();
+  function scheduleHomeRefresh(){
+    if(refreshScheduled) return;
+    refreshScheduled = true;
 
-    const data = await loadData();
-    const img = data.image;
+    setTimeout(function(){
+      try {
+        const homeBtns = Array.from(document.querySelectorAll("button, a, [role='button']"));
+        const home = homeBtns.find(el => {
+          const t = String(el.textContent || "").toLowerCase();
+          return t.includes("home") || t.includes("inizio") || t.includes("torna");
+        });
 
-    if(!img) return;
+        if(home && typeof home.click === "function"){
+          home.click();
+          setTimeout(renderAll, 350);
+          setTimeout(renderAll, 900);
+          return;
+        }
+      } catch(e) {}
 
-    updateLargePreview(img);
-    upsertHistoryCard(img);
+      renderAll();
+
+      /*
+        Refresh leggero della pagina solo dopo upload riuscito.
+        Serve perché alcune card Home vengono ricostruite da script precedenti
+        e non leggono subito il nuovo stato immagine.
+      */
+      setTimeout(function(){
+        try {
+          const url = new URL(location.href);
+          url.searchParams.set("refresh", Date.now());
+          location.replace(url.toString());
+        } catch(e) {
+          location.reload();
+        }
+      }, 900);
+    }, 250);
   }
 
   function patchFetch(){
-    if(window.__FollowMeImageCardFetchPatch20260522) return;
-    window.__FollowMeImageCardFetchPatch20260522 = true;
+    if(window.__followmeImageCardFetchPatched20260522) return;
+    window.__followmeImageCardFetchPatched20260522 = true;
 
-    const originalFetch = window.fetch.bind(window);
-
+    const originalFetch = window.fetch;
     window.fetch = async function(input, init){
-      const res = await originalFetch(input, init);
+      const res = await originalFetch.apply(this, arguments);
 
-      try{
-        const url = typeof input === "string" ? input : String(input && input.url || "");
-
+      try {
+        const url = typeof input === "string" ? input : (input && input.url) || "";
         if(
-          url.includes("/api/followme/") &&
-          (
-            url.includes("/image-card/upload") ||
-            url.includes("/image-card/disable") ||
-            url.includes("/document/publish") ||
-            url.includes("/url") ||
-            url.includes("/activate") ||
-            url.includes("/redirect") ||
-            url.includes("/destination") ||
-            url.includes("/history")
-          )
+          url.includes("/image-card/upload") ||
+          url.includes("/image-card/disable")
         ){
-          setTimeout(function(){ syncNow("fetch:" + url); }, 250);
-          setTimeout(function(){ syncNow("fetch-late:" + url); }, 1200);
+          const clone = res.clone();
+          clone.json().then(function(j){
+            if(j && j.success){
+              if(j.image) currentImage = j.image;
+              scheduleHomeRefresh();
+            }
+          }).catch(function(){
+            scheduleHomeRefresh();
+          });
         }
-      }catch(e){}
+      } catch(e) {}
 
       return res;
     };
   }
 
-  function boot(){
-    patchFetch();
-    setTimeout(function(){ syncNow("boot"); }, 500);
-    setTimeout(function(){ syncNow("late"); }, 1600);
-    setTimeout(function(){ syncNow("late2"); }, 3000);
+  function patchXHR(){
+    if(window.__followmeImageCardXHRPatched20260522) return;
+    window.__followmeImageCardXHRPatched20260522 = true;
+
+    const open = XMLHttpRequest.prototype.open;
+    const send = XMLHttpRequest.prototype.send;
+
+    XMLHttpRequest.prototype.open = function(method, url){
+      this.__followmeImageCardUrl20260522 = String(url || "");
+      return open.apply(this, arguments);
+    };
+
+    XMLHttpRequest.prototype.send = function(){
+      this.addEventListener("load", function(){
+        const url = this.__followmeImageCardUrl20260522 || "";
+        if(
+          url.includes("/image-card/upload") ||
+          url.includes("/image-card/disable")
+        ){
+          scheduleHomeRefresh();
+        }
+      });
+      return send.apply(this, arguments);
+    };
   }
 
-  window.fmImageCardPreviewSync20260522 = {
-    boot,
-    syncNow,
-    updateLargePreview,
-    upsertHistoryCard
-  };
+  function boot(){
+    patchFetch();
+    patchXHR();
 
-  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
-  else boot();
+    setTimeout(renderAll, 400);
+    setTimeout(renderAll, 1200);
+    setTimeout(renderAll, 2400);
 
-  window.addEventListener("load", function(){
-    setTimeout(boot, 350);
-  });
+    document.addEventListener("visibilitychange", function(){
+      if(!document.hidden) renderAll();
+    });
 
-  window.addEventListener("pageshow", function(){
-    setTimeout(function(){ syncNow("pageshow"); }, 350);
-  });
+    window.addEventListener("focus", renderAll);
+  }
 
-  document.addEventListener("click", function(){
-    setTimeout(function(){ syncNow("click"); }, 700);
-  }, true);
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
+
+  window.followMeRenderImageCardPreview20260522 = renderAll;
 })();
 </script>
 
