@@ -29687,5 +29687,324 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-image-card-ghost-preview-hardfix-20260522">
+(function(){
+  "use strict";
+
+  const DEBUG = false;
+
+  function log(){
+    if(DEBUG) console.log.apply(console, ["[FollowMe Image Ghost Preview]"].concat([].slice.call(arguments)));
+  }
+
+  function getCode(){
+    try{
+      const p = new URLSearchParams(location.search);
+      return (
+        p.get("code") ||
+        p.get("qr") ||
+        p.get("c") ||
+        window.FOLLOWME_CODE ||
+        window.followmeCode ||
+        "FMDEMO"
+      );
+    }catch(e){
+      return window.FOLLOWME_CODE || window.followmeCode || "FMDEMO";
+    }
+  }
+
+  function esc(v){
+    return String(v || "").replace(/[&<>"']/g, function(c){
+      return ({
+        "&":"&amp;",
+        "<":"&lt;",
+        ">":"&gt;",
+        '"':"&quot;",
+        "'":"&#39;"
+      })[c];
+    });
+  }
+
+  function absUrl(path){
+    const raw = String(path || "");
+    if(!raw) return "";
+    if(/^https?:\/\//i.test(raw)) return raw;
+    if(raw.startsWith("/")) return raw + (raw.includes("?") ? "&" : "?") + "v=" + Date.now();
+    return "/" + raw + (raw.includes("?") ? "&" : "?") + "v=" + Date.now();
+  }
+
+  async function fetchCurrentImage(){
+    const code = getCode();
+    if(!code) return null;
+
+    const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/image-card/current?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    if(!res.ok) return null;
+
+    const json = await res.json();
+    if(!json || !json.success || !json.image) return null;
+
+    const img = json.image;
+    const src = absUrl(img.image_url || img.public_path || img.public_url || "");
+    if(!src) return null;
+
+    return {
+      image: img,
+      src: src,
+      publicUrl: json.public_url || "/fm/image/" + encodeURIComponent(code)
+    };
+  }
+
+  function imagePreviewHtml(src, name){
+    return `
+      <div class="followme-image-main-preview-20260522">
+        <img src="${esc(src)}" alt="${esc(name || "Immagine")}" loading="lazy">
+      </div>
+    `;
+  }
+
+  function ensureCss(){
+    if(document.getElementById("followme-image-ghost-preview-hardfix-css-20260522")) return;
+
+    const style = document.createElement("style");
+    style.id = "followme-image-ghost-preview-hardfix-css-20260522";
+    style.textContent = `
+      .followme-image-main-preview-20260522{
+        width:100%;
+        height:100%;
+        min-height:120px;
+        border-radius:18px;
+        overflow:hidden;
+        background:linear-gradient(145deg, rgba(15,23,42,.08), rgba(22,101,52,.10));
+        display:flex;
+        align-items:center;
+        justify-content:center;
+      }
+
+      .followme-image-main-preview-20260522 img{
+        width:100%;
+        height:100%;
+        min-height:120px;
+        object-fit:cover;
+        display:block;
+      }
+
+      .premium-history-preview .followme-image-main-preview-20260522,
+      .premium-history-preview .followme-image-main-preview-20260522 img{
+        min-height:92px;
+        border-radius:16px;
+      }
+
+      .simple-preview-square .followme-image-main-preview-20260522,
+      .qr-auto-preview-frame .followme-image-main-preview-20260522,
+      .destination-preview-frame .followme-image-main-preview-20260522{
+        min-height:180px;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function isImageCardCandidate(card){
+    if(!card) return false;
+
+    const txt = String(card.textContent || "").toLowerCase();
+    const html = String(card.innerHTML || "").toLowerCase();
+    const cls = String(card.className || "").toLowerCase();
+    const id = String(card.id || "").toLowerCase();
+
+    return (
+      txt.includes("scatta o carica immagine") ||
+      txt.includes("immagine") && txt.includes("qr") ||
+      html.includes("fm-img-icon") ||
+      html.includes("image-card") ||
+      cls.includes("image") ||
+      id.includes("image")
+    );
+  }
+
+  function findMainPreviewTargets(){
+    const selectors = [
+      "#simpleDestinationPreviewFrame",
+      ".simple-preview-square iframe",
+      ".simple-preview-square",
+      ".qr-auto-preview-frame",
+      ".destination-preview-frame",
+      ".preview-frame",
+      "[id*='PreviewFrame']",
+      "[id*='previewFrame']"
+    ];
+
+    const out = [];
+
+    selectors.forEach(function(sel){
+      document.querySelectorAll(sel).forEach(function(el){
+        if(!el) return;
+        if(out.includes(el)) return;
+        out.push(el);
+      });
+    });
+
+    return out;
+  }
+
+  function injectIntoMainPreview(src, name){
+    const targets = findMainPreviewTargets();
+
+    targets.forEach(function(target){
+      try{
+        let box = target;
+
+        if(String(target.tagName || "").toLowerCase() === "iframe"){
+          box = target.parentElement || target;
+          target.style.display = "none";
+        }
+
+        if(!box || !box.innerHTML && String(box.tagName || "").toLowerCase() === "iframe") return;
+
+        box.innerHTML = imagePreviewHtml(src, name);
+        box.classList.add("followme-image-main-preview-holder-20260522");
+      }catch(e){}
+    });
+
+    const empty = document.getElementById("simpleDestinationPreviewEmpty");
+    if(empty) empty.style.display = "none";
+
+    const open = document.getElementById("simpleDestinationPreviewOpen");
+    if(open){
+      open.href = "/fm/image/" + encodeURIComponent(getCode());
+      open.style.opacity = "1";
+      open.style.pointerEvents = "auto";
+      open.textContent = "Apri immagine";
+    }
+  }
+
+  function injectIntoGhostCards(src, name){
+    const cards = Array.from(document.querySelectorAll(
+      ".premium-history-card, .premium-history-item, .premium-card, .history-card, .card, [class*='history'], [class*='premium']"
+    ));
+
+    cards.forEach(function(card){
+      try{
+        if(!isImageCardCandidate(card)) return;
+
+        let preview = card.querySelector(".premium-history-preview, .premium-card-preview, [class*='preview']");
+        if(!preview){
+          preview = document.createElement("div");
+          preview.className = "premium-history-preview";
+          card.insertBefore(preview, card.firstChild);
+        }
+
+        preview.innerHTML = imagePreviewHtml(src, name);
+        preview.classList.add("followme-image-main-preview-holder-20260522");
+
+        const title =
+          card.querySelector(".premium-history-title") ||
+          card.querySelector(".premium-title") ||
+          card.querySelector("[class*='title']");
+
+        if(title && /immagine|foto|scatta|carica/i.test(title.textContent || "")){
+          title.textContent = "Scatta o carica immagine";
+        }
+      }catch(e){}
+    });
+  }
+
+  async function renderImagePreviewEverywhere(){
+    try{
+      ensureCss();
+
+      const current = await fetchCurrentImage();
+      if(!current) return;
+
+      const img = current.image;
+      const src = current.src;
+      const name = img.original_name || "Immagine";
+
+      injectIntoMainPreview(src, name);
+      injectIntoGhostCards(src, name);
+
+      log("preview immagine applicata", src);
+    }catch(e){
+      console.warn("[FollowMe Image Ghost Preview] errore:", e);
+    }
+  }
+
+  function scheduleRender(){
+    clearTimeout(window.__followmeImageGhostPreviewTimer20260522);
+    window.__followmeImageGhostPreviewTimer20260522 = setTimeout(renderImagePreviewEverywhere, 350);
+  }
+
+  window.followmeRenderImageCardPreviewEverywhere20260522 = renderImagePreviewEverywhere;
+
+  document.addEventListener("DOMContentLoaded", function(){
+    scheduleRender();
+    setTimeout(scheduleRender, 1000);
+    setTimeout(scheduleRender, 2200);
+  });
+
+  window.addEventListener("load", function(){
+    scheduleRender();
+    setTimeout(scheduleRender, 900);
+  });
+
+  /*
+    Quando altri script ricostruiscono la Home/card, reinietto la preview.
+  */
+  const obs = new MutationObserver(function(){
+    scheduleRender();
+  });
+
+  try{
+    obs.observe(document.body, {
+      childList:true,
+      subtree:true
+    });
+  }catch(e){}
+
+  /*
+    Dopo upload/disable immagine: refresh automatico Home.
+    Lo faccio solo se la chiamata API è andata a buon fine.
+  */
+  if(!window.__followmeImageUploadRefreshFetchPatched20260522){
+    window.__followmeImageUploadRefreshFetchPatched20260522 = true;
+
+    const oldFetch = window.fetch;
+    window.fetch = async function(){
+      const args = arguments;
+      const url = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+
+      const res = await oldFetch.apply(this, args);
+
+      try{
+        if(
+          res &&
+          res.ok &&
+          (
+            url.includes("/image-card/upload") ||
+            url.includes("/image-card/disable")
+          )
+        ){
+          setTimeout(function(){
+            try{
+              const u = new URL(location.href);
+              u.searchParams.set("v", "image-" + Date.now());
+              location.replace(u.toString());
+            }catch(e){
+              location.reload();
+            }
+          }, 650);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+})();
+</script>
+
 </body>
 </html>
