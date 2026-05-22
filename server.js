@@ -10769,6 +10769,21 @@ app.get('/fm/image/:code', async (req, res) => {
     height:22px;
     flex:0 0 22px;
   }
+
+  .followme-ios-save-note-20260522{
+    display:none;
+    width:min(420px, calc(100vw - 32px));
+    margin:10px auto 0 auto;
+    color:rgba(255,255,255,.82);
+    font-size:12px;
+    line-height:1.35;
+    font-weight:700;
+    text-align:center;
+  }
+
+  body.followme-ios-device-20260522 .followme-ios-save-note-20260522{
+    display:block;
+  }
 </style>
 
 </head>
@@ -10780,13 +10795,45 @@ app.get('/fm/image/:code', async (req, res) => {
       </div>
 
       <a class="followme-public-image-download-btn-20260522" id="followmePublicImageDownloadBtn20260522" href="${esc(imageUrl)}?v=${Date.now()}" download target="_blank" rel="noopener">
-  <svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M12 3v10.2m0 0 4-4m-4 4-4-4M5 17.5V20h14v-2.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>
-  <span>Download</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3v10.2m0 0 4-4m-4 4-4-4M5 17.5V20h14v-2.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>Salva immagine</span>
       </a>
+
+      <div class="followme-ios-save-note-20260522" id="followmeIosSaveNote20260522">
+        Su iPhone: apri l’immagine, tieni premuto e scegli “Salva in Foto”.
+      </div>
     </section>
   </main>
+
+<script id="followme-public-image-save-ux-final-20260522">
+(function(){
+  "use strict";
+
+  var ua = navigator.userAgent || "";
+  var isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+  if(isIOS){
+    document.body.classList.add("followme-ios-device-20260522");
+
+    var btn = document.getElementById("followmePublicImageDownloadBtn20260522");
+    var img = document.querySelector(".image img");
+
+    /*
+      iOS Safari non permette a una pagina web di salvare direttamente nel rullino.
+      Apriamo l'immagine reale: l'utente usa pressione lunga / condividi / Salva in Foto.
+    */
+    if(btn && img){
+      btn.removeAttribute("download");
+      btn.href = img.currentSrc || img.src || btn.href;
+      btn.target = "_blank";
+      btn.rel = "noopener";
+    }
+  }
+})();
+</script>
+
 </body>
 </html>`);
   } catch(err) {
