@@ -29979,5 +29979,301 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-card-change-preview-trigger-final-20260522">
+(function(){
+  "use strict";
+
+  /*
+    Fix cambio card senza refresh:
+    - niente location.reload
+    - niente location.replace
+    - niente MutationObserver globale
+    - aggiorna la preview alta solo dopo click/cambio destinazione
+  */
+
+  let lastActive = "";
+  let timer = null;
+
+  function getCode(){
+    try{
+      const qs = new URLSearchParams(location.search);
+      return (
+        qs.get("code") ||
+        qs.get("qr") ||
+        qs.get("id") ||
+        window.followMeCode ||
+        window.FOLLOWME_CODE ||
+        "FMDEMO"
+      );
+    }catch(e){
+      return window.followMeCode || window.FOLLOWME_CODE || "FMDEMO";
+    }
+  }
+
+  function abs(path){
+    const raw = String(path || "").trim();
+    if(!raw) return "";
+    if(/^https?:\/\//i.test(raw)) return raw;
+    if(raw.startsWith("/")) return location.origin + raw;
+    return location.origin + "/" + raw.replace(/^\/+/, "");
+  }
+
+  function cacheBust(url){
+    if(!url) return "";
+    return url + (url.includes("?") ? "&" : "?") + "v=" + Date.now();
+  }
+
+  function esc(v){
+    return String(v == null ? "" : v).replace(/[&<>"']/g, function(c){
+      return ({
+        "&":"&amp;",
+        "<":"&lt;",
+        ">":"&gt;",
+        '"':"&quot;",
+        "'":"&#39;"
+      })[c];
+    });
+  }
+
+  async function fetchJson(url){
+    const res = await fetch(url, { cache:"no-store" });
+    if(!res.ok) return null;
+    return await res.json().catch(function(){ return null; });
+  }
+
+  function topPreviewBox(){
+    const iframe =
+      document.getElementById("simpleDestinationPreviewFrame") ||
+      document.querySelector(".simple-preview-square iframe") ||
+      document.querySelector(".qr-auto-preview-frame iframe");
+
+    if(iframe && iframe.parentElement){
+      iframe.style.display = "none";
+      return iframe.parentElement;
+    }
+
+    return (
+      document.querySelector(".simple-preview-square") ||
+      document.querySelector(".qr-auto-preview-frame") ||
+      document.querySelector(".destination-preview-frame") ||
+      document.querySelector(".simple-preview-card")
+    );
+  }
+
+  function setOpenButton(url, label){
+    const open = document.getElementById("simpleDestinationPreviewOpen");
+    if(open){
+      open.href = url || "#";
+      open.style.opacity = url ? "1" : ".45";
+      open.style.pointerEvents = url ? "auto" : "none";
+      if(label) open.textContent = label;
+    }
+  }
+
+  function showTopImage(src, name, openUrl){
+    const box = topPreviewBox();
+    if(!box || !src) return false;
+
+    box.innerHTML = `
+      <div class="followme-image-main-preview-20260522" style="width:100%;height:100%;min-height:180px;border-radius:22px;overflow:hidden;background:linear-gradient(145deg,#06140d,#10271a);display:flex;align-items:center;justify-content:center;">
+        <img src="${esc(cacheBust(abs(src)))}" alt="${esc(name || "Immagine")}" style="width:100%;height:100%;min-height:180px;object-fit:cover;display:block;">
+      </div>
+    `;
+
+    const card = document.querySelector(".simple-preview-card");
+    if(card){
+      card.classList.add("show", "preview-loaded");
+      card.classList.remove("preview-loading");
+    }
+
+    const empty = document.getElementById("simpleDestinationPreviewEmpty");
+    if(empty) empty.style.display = "none";
+
+    setOpenButton(openUrl || src, "Apri immagine");
+    return true;
+  }
+
+  function showTopPdf(src, name, openUrl){
+    const box = topPreviewBox();
+    if(!box) return false;
+
+    if(src){
+      box.innerHTML = `
+        <div class="followme-pdf-preview-inside-20260520" style="width:100%;height:100%;min-height:180px;border-radius:22px;overflow:hidden;background:#f8fafc;display:flex;align-items:center;justify-content:center;">
+          <img src="${esc(cacheBust(abs(src)))}" alt="${esc(name || "Documento PDF")}" style="width:100%;height:100%;min-height:180px;object-fit:cover;display:block;">
+        </div>
+      `;
+    }else{
+      box.innerHTML = `
+        <div class="followme-pdf-preview-inside-20260520" style="width:100%;min-height:180px;border-radius:22px;background:linear-gradient(145deg,#111827,#374151);color:white;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;text-align:center;padding:18px;box-sizing:border-box;">
+          <strong>PDF</strong>
+          <span>${esc(name || "Documento PDF")}</span>
+        </div>
+      `;
+    }
+
+    const card = document.querySelector(".simple-preview-card");
+    if(card){
+      card.classList.add("show", "preview-loaded");
+      card.classList.remove("preview-loading");
+    }
+
+    const empty = document.getElementById("simpleDestinationPreviewEmpty");
+    if(empty) empty.style.display = "none";
+
+    setOpenButton(openUrl || "/fm/document/" + encodeURIComponent(getCode()), "Apri documento");
+    return true;
+  }
+
+  function activeUrlFromKnownPlaces(){
+    const values = [
+      window.followMeCurrentActiveUrl,
+      window.currentFollowMeActiveUrl,
+      window.activeFollowMeUrl
+    ].filter(Boolean);
+
+    const open = document.getElementById("simpleDestinationPreviewOpen");
+    if(open && open.getAttribute("href") && open.getAttribute("href") !== "#"){
+      values.push(open.getAttribute("href"));
+    }
+
+    return String(values[0] || "").trim();
+  }
+
+  async function renderByActiveUrl(reason){
+    const code = getCode();
+
+    let active = activeUrlFromKnownPlaces();
+
+    /*
+      Fallback: provo a leggere lo stato se esiste già lato server.
+      Se l'endpoint non esiste o non dà active_url, non rompo nulla.
+    */
+    try{
+      const status = await fetchJson("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now());
+      const possible =
+        status?.active_url ||
+        status?.project?.active_url ||
+        status?.current_url ||
+        status?.url ||
+        "";
+      if(possible) active = possible;
+    }catch(e){}
+
+    const clean = String(active || "");
+
+    if(clean === lastActive && reason !== "force") return;
+    lastActive = clean;
+
+    if(clean.includes("/fm/image/") || clean.includes("/image-card")){
+      const j = await fetchJson("/api/followme/" + encodeURIComponent(code) + "/image-card/current?v=" + Date.now());
+      const img = j && j.image;
+      if(img){
+        showTopImage(
+          img.image_url || img.public_path || img.public_url,
+          img.original_name || img.stored_name || "Immagine",
+          j.public_url || "/fm/image/" + encodeURIComponent(code)
+        );
+      }
+      return;
+    }
+
+    if(clean.includes("/fm/document/") || clean.includes("documento.pdf") || clean.includes("/document/")){
+      const j = await fetchJson("/api/followme/" + encodeURIComponent(code) + "/document/current?v=" + Date.now());
+      const doc = j && j.document;
+      if(doc){
+        showTopPdf(
+          doc.thumbnail_url || doc.thumbnail_path || doc.thumbnail_data_url || "",
+          doc.original_name || "Documento PDF",
+          j.public_url || "/fm/document/" + encodeURIComponent(code)
+        );
+      }
+      return;
+    }
+
+    /*
+      URL normale: lascio lavorare la preview esistente.
+      Qui non forzo nulla per evitare di sovrascrivere iframe/fallback già corretti.
+    */
+  }
+
+  function schedule(reason){
+    clearTimeout(timer);
+    timer = setTimeout(function(){
+      renderByActiveUrl(reason || "scheduled");
+    }, 350);
+
+    setTimeout(function(){ renderByActiveUrl("retry-1"); }, 900);
+    setTimeout(function(){ renderByActiveUrl("retry-2"); }, 1600);
+  }
+
+  document.addEventListener("click", function(ev){
+    const el = ev.target && ev.target.closest ? ev.target.closest("button,a,.card,.premium-history-card,.history-card,.destination-card") : null;
+    if(!el) return;
+
+    const txt = String(el.textContent || "").toLowerCase();
+    const href = String(el.getAttribute && el.getAttribute("href") || "").toLowerCase();
+
+    if(
+      txt.includes("attiva") ||
+      txt.includes("trasmetti") ||
+      txt.includes("documento") ||
+      txt.includes("pdf") ||
+      txt.includes("immagine") ||
+      txt.includes("scatta") ||
+      txt.includes("carica") ||
+      href.includes("/fm/document/") ||
+      href.includes("/fm/image/")
+    ){
+      schedule("click");
+    }
+  }, true);
+
+  if(!window.__followmeCardChangePreviewFetchPatch20260522){
+    window.__followmeCardChangePreviewFetchPatch20260522 = true;
+
+    const oldFetch = window.fetch;
+    window.fetch = async function(){
+      const args = arguments;
+      const url = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+
+      const res = await oldFetch.apply(this, args);
+
+      try{
+        if(
+          res &&
+          res.ok &&
+          (
+            url.includes("/activate") ||
+            url.includes("/reactivate") ||
+            url.includes("/document") ||
+            url.includes("/image-card") ||
+            url.includes("/url")
+          )
+        ){
+          schedule("fetch");
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  window.followmeRefreshTopPreviewAfterCardChange20260522 = function(){
+    renderByActiveUrl("force");
+  };
+
+  document.addEventListener("DOMContentLoaded", function(){
+    setTimeout(function(){ renderByActiveUrl("force"); }, 800);
+  });
+
+  window.addEventListener("load", function(){
+    setTimeout(function(){ renderByActiveUrl("force"); }, 1200);
+  });
+})();
+</script>
+
+
 </body>
 </html>
