@@ -29347,7 +29347,20 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   function imageSrc(img){
     const raw = String(img && (img.image_url || img.public_path || img.public_url || "") || "");
     if(!raw) return "";
-    return absoluteUrl(raw) + (raw.includes("?") ? "&" : "?") + "v=" + Date.now();
+
+    /*
+      FIX 20260522:
+      niente Date.now qui.
+      Se cambia a ogni render, il browser ricarica l'immagine di continuo e la preview sfarfalla.
+      Usiamo una versione stabile legata al record immagine.
+    */
+    const version = String(
+      (img && (img.updated_at || img.created_at || img.id || img.stored_name)) ||
+      "stable"
+    ).replace(/[^a-zA-Z0-9_-]/g, "");
+
+    const abs = absoluteUrl(raw);
+    return abs + (abs.includes("?") ? "&" : "?") + "v=" + version;
   }
 
   function publicImageUrl(){
@@ -29748,12 +29761,24 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     });
   }
 
-  function absUrl(path){
+  function absUrl(path, img){
     const raw = String(path || "");
     if(!raw) return "";
-    if(/^https?:\/\//i.test(raw)) return raw;
-    if(raw.startsWith("/")) return raw + (raw.includes("?") ? "&" : "?") + "v=" + Date.now();
-    return "/" + raw + (raw.includes("?") ? "&" : "?") + "v=" + Date.now();
+
+    /*
+      FIX 20260522:
+      versione stabile, non Date.now, altrimenti ogni reiniezione ricarica la foto.
+    */
+    const version = String(
+      (img && (img.updated_at || img.created_at || img.id || img.stored_name)) ||
+      "stable"
+    ).replace(/[^a-zA-Z0-9_-]/g, "");
+
+    const base = /^https?:\/\//i.test(raw)
+      ? raw
+      : (raw.startsWith("/") ? raw : "/" + raw);
+
+    return base + (base.includes("?") ? "&" : "?") + "v=" + version;
   }
 
   async function fetchCurrentImage(){
@@ -29770,7 +29795,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     if(!json || !json.success || !json.image) return null;
 
     const img = json.image;
-    const src = absUrl(img.image_url || img.public_path || img.public_url || "");
+    const src = absUrl(img.image_url || img.public_path || img.public_url || "", img);
     if(!src) return null;
 
     return {
@@ -30066,7 +30091,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
   function cacheBust(url){
     if(!url) return "";
-    return url + (url.includes("?") ? "&" : "?") + "v=" + Date.now();
+    /*
+      FIX 20260522:
+      versione stabile per evitare ricaricamento continuo della preview immagine.
+    */
+    return url + (url.includes("?") ? "&" : "?") + "v=stable";
   }
 
   function esc(v){
@@ -30593,7 +30622,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
     const raw = img.image_url || img.public_path || img.public_url || "";
     const imgUrl = j.public_url || "/fm/image/" + encodeURIComponent(code);
-    const src = raw ? abs(raw) + (String(raw).includes("?") ? "&" : "?") + "v=" + Date.now() : "";
+    const src = raw ? abs(raw) + (String(raw).includes("?") ? "&" : "?") + "v=stable" : "";
 
     if(src){
       renderTop("image", src, img.original_name || "Immagine");
@@ -30719,6 +30748,283 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   }
 
   window.addEventListener("load", function(){ schedule("load"); });
+})();
+</script>
+
+
+<script id="followme-image-active-only-card-render-final-20260522">
+(function(){
+  "use strict";
+
+  /*
+    Questo script corregge due cose:
+    1) la foto non deve sovrascrivere preview URL/PDF;
+    2) quando la destinazione attiva è /fm/image/... deve comparire anche nelle card ufficiali/fantasma.
+  */
+
+  const STYLE_ID = "followme-image-active-only-card-render-css-20260522";
+
+  function code(){
+    try{
+      const p = new URLSearchParams(location.search);
+      return p.get("code") || p.get("qr") || p.get("c") || window.FOLLOWME_CODE || window.followMeCode || "FMDEMO";
+    }catch(e){
+      return window.FOLLOWME_CODE || window.followMeCode || "FMDEMO";
+    }
+  }
+
+  function esc(v){
+    return String(v == null ? "" : v).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+
+  function isImageActive(){
+    const candidates = [
+      window.followMeCurrentActiveUrl,
+      window.currentFollowMeActiveUrl,
+      window.activeFollowMeUrl
+    ].map(v => String(v || ""));
+
+    return candidates.some(v => v.includes("/fm/image/"));
+  }
+
+  async function fetchCurrentImage(){
+    const c = code();
+    const res = await fetch("/api/followme/" + encodeURIComponent(c) + "/image-card/current?v=stable", {
+      cache: "no-store"
+    });
+
+    if(!res.ok) return null;
+
+    const j = await res.json();
+    if(!j || !j.success || !j.image) return null;
+
+    return {
+      image: j.image,
+      publicUrl: j.public_url || "/fm/image/" + encodeURIComponent(c)
+    };
+  }
+
+  function imageSrc(img){
+    const raw = String(img && (img.image_url || img.public_path || img.public_url || "") || "");
+    if(!raw) return "";
+
+    const version = String(
+      (img && (img.updated_at || img.created_at || img.id || img.stored_name)) ||
+      "stable"
+    ).replace(/[^a-zA-Z0-9_-]/g, "");
+
+    const base = /^https?:\/\//i.test(raw)
+      ? raw
+      : (raw.startsWith("/") ? raw : "/" + raw);
+
+    return base + (base.includes("?") ? "&" : "?") + "v=" + version;
+  }
+
+  function ensureCss(){
+    if(document.getElementById(STYLE_ID)) return;
+
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = `
+      .followme-image-preview-stable-20260522{
+        width:100%;
+        height:100%;
+        min-height:120px;
+        border-radius:18px;
+        overflow:hidden;
+        background:linear-gradient(145deg, rgba(15,23,42,.10), rgba(22,101,52,.12));
+        display:flex;
+        align-items:center;
+        justify-content:center;
+      }
+
+      .followme-image-preview-stable-20260522 img{
+        width:100%;
+        height:100%;
+        min-height:120px;
+        object-fit:cover;
+        display:block;
+      }
+
+      .simple-preview-square .followme-image-preview-stable-20260522,
+      .qr-auto-preview-frame .followme-image-preview-stable-20260522,
+      .destination-preview-frame .followme-image-preview-stable-20260522{
+        min-height:180px;
+      }
+
+      .premium-history-preview .followme-image-preview-stable-20260522,
+      .premium-history-preview .followme-image-preview-stable-20260522 img,
+      .premium-card-preview-inner .followme-image-preview-stable-20260522,
+      .premium-card-preview-inner .followme-image-preview-stable-20260522 img{
+        min-height:92px;
+        height:104px;
+        border-radius:16px;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function html(src, name){
+    return '<div class="followme-image-preview-stable-20260522" data-followme-image-preview="1">' +
+      '<img src="' + esc(src) + '" alt="' + esc(name || "Immagine") + '" loading="lazy">' +
+    '</div>';
+  }
+
+  function renderMain(src, name, publicUrl){
+    const selectors = [
+      "#simpleDestinationPreviewFrame",
+      ".simple-preview-square iframe",
+      ".simple-preview-square",
+      ".qr-auto-preview-frame",
+      ".destination-preview-frame",
+      ".preview-frame",
+      "[id*='PreviewFrame']",
+      "[id*='previewFrame']"
+    ];
+
+    selectors.forEach(function(sel){
+      document.querySelectorAll(sel).forEach(function(target){
+        try{
+          let box = target;
+
+          if(String(target.tagName || "").toLowerCase() === "iframe"){
+            box = target.parentElement || target;
+            target.style.display = "none";
+          }
+
+          if(!box || String(box.tagName || "").toLowerCase() === "iframe") return;
+
+          const current = box.querySelector("[data-followme-image-preview='1'] img");
+          if(current && current.getAttribute("src") === src) return;
+
+          box.innerHTML = html(src, name);
+          box.classList.add("followme-image-main-preview-holder-20260522");
+        }catch(e){}
+      });
+    });
+
+    const empty = document.getElementById("simpleDestinationPreviewEmpty");
+    if(empty) empty.style.display = "none";
+
+    const open = document.getElementById("simpleDestinationPreviewOpen");
+    if(open){
+      open.href = publicUrl;
+      open.style.opacity = "1";
+      open.style.pointerEvents = "auto";
+      open.textContent = "Apri immagine";
+    }
+  }
+
+  function isImageCard(card){
+    if(!card) return false;
+
+    const txt = String(card.textContent || "").toLowerCase();
+    const htmlText = String(card.innerHTML || "").toLowerCase();
+    const cls = String(card.className || "").toLowerCase();
+    const id = String(card.id || "").toLowerCase();
+
+    const positive =
+      txt.includes("scatta o carica immagine") ||
+      txt.includes("carica immagine") ||
+      txt.includes("immagine") && txt.includes("qr") ||
+      htmlText.includes("image-card") ||
+      htmlText.includes("fm-img-icon") ||
+      cls.includes("image") ||
+      id.includes("image");
+
+    const negative =
+      txt.includes("documento pdf") ||
+      txt.includes("consegna documento") ||
+      htmlText.includes("followme-doc") ||
+      htmlText.includes("/fm/document/");
+
+    return positive && !negative;
+  }
+
+  function renderCards(src, name){
+    const cards = Array.from(document.querySelectorAll(
+      ".premium-history-card, .premium-history-item, .premium-card, .history-card, .destination-card, .card, [class*='history'], [class*='premium']"
+    ));
+
+    cards.forEach(function(card){
+      try{
+        if(!isImageCard(card)) return;
+
+        let preview = card.querySelector(".premium-history-preview, .premium-card-preview-inner, .premium-card-preview, [class*='preview']");
+        if(!preview){
+          preview = document.createElement("div");
+          preview.className = "premium-history-preview";
+          card.insertBefore(preview, card.firstChild);
+        }
+
+        const current = preview.querySelector("[data-followme-image-preview='1'] img");
+        if(current && current.getAttribute("src") === src) return;
+
+        preview.innerHTML = html(src, name);
+        preview.classList.add("followme-image-main-preview-holder-20260522");
+      }catch(e){}
+    });
+  }
+
+  async function render(){
+    try{
+      if(!isImageActive()) return;
+
+      ensureCss();
+
+      const current = await fetchCurrentImage();
+      if(!current || !current.image) return;
+
+      const img = current.image;
+      const src = imageSrc(img);
+      if(!src) return;
+
+      const name = img.original_name || img.stored_name || "Immagine";
+
+      renderMain(src, name, current.publicUrl);
+      renderCards(src, name);
+    }catch(e){
+      console.warn("[FollowMe Image Active Only Render] errore:", e);
+    }
+  }
+
+  window.followmeRenderActiveImagePreview20260522 = render;
+
+  document.addEventListener("DOMContentLoaded", function(){
+    setTimeout(render, 350);
+  });
+
+  window.addEventListener("load", function(){
+    setTimeout(render, 350);
+  });
+
+  /*
+    Dopo upload immagine: non ricarico la pagina.
+    Renderizzo una sola volta la preview corretta.
+  */
+  if(!window.__followmeActiveImageRenderFetchPatch20260522){
+    window.__followmeActiveImageRenderFetchPatch20260522 = true;
+
+    const oldFetch = window.fetch;
+    window.fetch = async function(){
+      const args = arguments;
+      const url = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+      const res = await oldFetch.apply(this, args);
+
+      try{
+        if(res && res.ok && url.includes("/image-card/upload")){
+          window.followMeCurrentActiveUrl = "/fm/image/" + encodeURIComponent(code());
+          window.currentFollowMeActiveUrl = "/fm/image/" + encodeURIComponent(code());
+          window.activeFollowMeUrl = "/fm/image/" + encodeURIComponent(code());
+          setTimeout(render, 350);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
 })();
 </script>
 
