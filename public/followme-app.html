@@ -30572,17 +30572,25 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 
 
-<script id="followme-official-image-button-placement-guard-20260522">
+
+
+
+
+<script id="followme-final-visible-image-upload-button-20260522">
 (function(){
   "use strict";
 
   /*
-    Guard definitivo di posizionamento:
-    - NON crea un pulsante nuovo con grafica diversa
-    - usa il pulsante ufficiale #followmeImageCardBtn20260522
-    - richiama lo script ufficiale se il pulsante non è ancora stato creato
-    - lo inserisce nello stack pulsanti Home, dopo Consegna documento
+    FIX DEFINITIVO PULSANTE FOTO VISIBILE
+    - non inventa una nuova funzione
+    - usa l'upload ufficiale se disponibile
+    - ricrea il pulsante solo se non è nel DOM
+    - nessun capture: il dispositivo sceglie Camera/Galleria con UI nativa
+    - nessuna mini-preview dentro il pulsante
   */
+
+  const BTN_ID = "followmeImageCardBtn20260522";
+  const INPUT_ID = "followmeImageCardUploadInput20260522";
 
   function txt(el){
     return String(el && el.textContent || "")
@@ -30591,19 +30599,209 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       .toLowerCase();
   }
 
-  function getButton(){
-    return document.getElementById("followmeImageCardBtn20260522");
+  function ensureCss(){
+    if(document.getElementById("followme-final-visible-image-upload-button-css-20260522")) return;
+
+    const style = document.createElement("style");
+    style.id = "followme-final-visible-image-upload-button-css-20260522";
+    style.textContent = `
+      #${BTN_ID}{
+        display:flex !important;
+        visibility:visible !important;
+        opacity:1 !important;
+        pointer-events:auto !important;
+        width:100% !important;
+        max-width:100% !important;
+        min-height:56px !important;
+        height:56px !important;
+        margin:0 !important;
+        padding:0 18px !important;
+        box-sizing:border-box !important;
+        align-items:center !important;
+        justify-content:center !important;
+        gap:10px !important;
+        border:0 !important;
+        border-radius:999px !important;
+        background:linear-gradient(135deg,#9bd61e,#5ee7ff) !important;
+        color:#101018 !important;
+        font-size:15px !important;
+        font-weight:950 !important;
+        line-height:1.05 !important;
+        letter-spacing:-.02em !important;
+        text-align:center !important;
+        text-decoration:none !important;
+        box-shadow:0 14px 32px rgba(34,120,42,.22) !important;
+        cursor:pointer !important;
+        -webkit-tap-highlight-color:transparent !important;
+        overflow:hidden !important;
+        position:relative !important;
+        z-index:10 !important;
+      }
+
+      #${BTN_ID} .fm-img-icon{
+        width:25px !important;
+        height:25px !important;
+        min-width:25px !important;
+        max-width:25px !important;
+        flex:0 0 25px !important;
+        display:block !important;
+      }
+
+      #${BTN_ID} .fm-img-title{
+        display:block !important;
+        font-size:15px !important;
+        font-weight:950 !important;
+        line-height:1.05 !important;
+        color:#101018 !important;
+      }
+
+      #${INPUT_ID}{
+        display:none !important;
+      }
+    `;
+    document.head.appendChild(style);
   }
 
-  function callOfficialBoot(){
+  function extractOfficialIcon(){
     try{
-      if(window.fmImageCardHomeButton20260522 && typeof window.fmImageCardHomeButton20260522.boot === "function"){
-        window.fmImageCardHomeButton20260522.boot();
-      }
-      if(window.fmImageCardHomeButton20260522 && typeof window.fmImageCardHomeButton20260522.placeButton === "function"){
-        window.fmImageCardHomeButton20260522.placeButton();
+      const script = document.getElementById("followme-image-card-home-button-final-20260522");
+      const src = String(script && script.textContent || "");
+
+      const m = src.match(/function\s+iconSvg\s*\(\)\s*{[\s\S]*?return\s*`([\s\S]*?)`;\s*}/);
+      if(m && m[1] && m[1].includes("fm-img-icon")){
+        return m[1];
       }
     }catch(e){}
+
+    /*
+      Fallback solo se il parser non trova l'icona nel blocco ufficiale.
+      Mantiene la stessa classe fm-img-icon e viene uniformato dallo stile esistente.
+    */
+    return `
+      <svg class="fm-img-icon" viewBox="0 0 64 64" aria-hidden="true">
+        <defs>
+          <linearGradient id="fmImageCardIconGradFinal20260522" x1="8" y1="8" x2="56" y2="56">
+            <stop offset="0%" stop-color="#020617"/>
+            <stop offset="52%" stop-color="#475569"/>
+            <stop offset="100%" stop-color="#9bd61e"/>
+          </linearGradient>
+        </defs>
+        <rect x="8" y="12" width="48" height="40" rx="11" fill="none" stroke="url(#fmImageCardIconGradFinal20260522)" stroke-width="4"/>
+        <rect x="15" y="20" width="20" height="22" rx="5" fill="none" stroke="#020617" stroke-width="3.4"/>
+        <circle cx="22" cy="27" r="3.4" fill="#020617"/>
+        <path d="M17 39l7-7 5 5 4-5" fill="none" stroke="#020617" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M40 24h10M40 32h10M40 40h8" fill="none" stroke="#020617" stroke-width="3.4" stroke-linecap="round"/>
+      </svg>
+    `;
+  }
+
+  function code(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("app");
+      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
+
+      const p = new URLSearchParams(location.search);
+      return p.get("code") || p.get("qr") || p.get("c") ||
+        window.FOLLOWME_CODE ||
+        window.FOLLOWME_PROJECT_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        window.followMeProjectCode ||
+        "FMDEMO";
+    }catch(e){
+      return window.FOLLOWME_CODE ||
+        window.FOLLOWME_PROJECT_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        window.followMeProjectCode ||
+        "FMDEMO";
+    }
+  }
+
+  function ensureInput(){
+    let input = document.getElementById(INPUT_ID);
+    if(input) return input;
+
+    input = document.createElement("input");
+    input.id = INPUT_ID;
+    input.type = "file";
+    input.accept = "image/*";
+    input.setAttribute("aria-hidden", "true");
+
+    /*
+      NIENTE capture:
+      iPhone/Android mostrano il pannello nativo Camera / Libreria / File.
+    */
+
+    input.addEventListener("change", async function(){
+      const file = input.files && input.files[0];
+      input.value = "";
+
+      if(!file) return;
+
+      const btn = document.getElementById(BTN_ID);
+
+      try{
+        if(btn) btn.classList.add("fm-uploading");
+
+        if(
+          window.fmImageCardHomeButton20260522 &&
+          typeof window.fmImageCardHomeButton20260522.uploadImageCard === "function"
+        ){
+          await window.fmImageCardHomeButton20260522.uploadImageCard(file);
+          return;
+        }
+
+        /*
+          Fallback di sicurezza se per qualche motivo l'API ufficiale non è esposta.
+        */
+        const fd = new FormData();
+        fd.append("image", file, file.name || "immagine");
+
+        const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/image-card/upload", {
+          method:"POST",
+          body:fd
+        });
+
+        const json = await res.json().catch(function(){ return null; });
+
+        if(!res.ok || !json || !json.success){
+          throw new Error((json && json.error) || "Caricamento immagine non riuscito.");
+        }
+
+        alert("Immagine pubblicata correttamente sul QR.");
+      }catch(e){
+        alert("Errore: " + (e && e.message ? e.message : e));
+      }finally{
+        if(btn) btn.classList.remove("fm-uploading");
+      }
+    });
+
+    document.body.appendChild(input);
+    return input;
+  }
+
+  function createButtonIfMissing(){
+    let btn = document.getElementById(BTN_ID);
+    if(btn) return btn;
+
+    btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = BTN_ID;
+    btn.className = "followme-home-uniform-button-20260522 followme-identical-home-button-20260522";
+    btn.innerHTML = `
+      ${extractOfficialIcon()}
+      <span class="fm-img-title">Scatta o carica immagine</span>
+    `;
+
+    btn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ensureInput().click();
+    });
+
+    return btn;
   }
 
   function findImportButton(){
@@ -30624,14 +30822,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       }) || null;
   }
 
-  function ensureStack(importBtn, docBtn, imgBtn){
+  function ensureStack(anchor){
     let stack = document.getElementById("followmeHomeButtonsStack20260522");
-
     if(stack) return stack;
 
-    const anchor = importBtn || docBtn || imgBtn;
     const parent = anchor && anchor.parentElement ? anchor.parentElement : null;
-
     if(!parent) return null;
 
     stack = document.createElement("div");
@@ -30639,54 +30834,45 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     stack.className = "followme-home-uniform-stack-20260522";
 
     parent.insertBefore(stack, anchor);
-
-    if(importBtn) stack.appendChild(importBtn);
-    if(docBtn && docBtn !== importBtn) stack.appendChild(docBtn);
-
     return stack;
   }
 
-  function normalize(btn){
-    if(!btn) return;
-
-    btn.classList.add(
-      "followme-home-uniform-button-20260522",
-      "followme-identical-home-button-20260522"
-    );
-
-    btn.style.display = "flex";
-    btn.style.visibility = "visible";
-    btn.style.opacity = "1";
-    btn.style.pointerEvents = "auto";
-    btn.style.width = "100%";
-    btn.style.maxWidth = "100%";
-  }
-
   function place(){
-    callOfficialBoot();
+    ensureCss();
+    ensureInput();
 
-    const imgBtn = getButton();
-    if(!imgBtn) return false;
+    /*
+      Prima provo a far lavorare lo script ufficiale.
+    */
+    try{
+      if(window.fmImageCardHomeButton20260522 && typeof window.fmImageCardHomeButton20260522.boot === "function"){
+        window.fmImageCardHomeButton20260522.boot();
+      }
+    }catch(e){}
 
     const importBtn = findImportButton();
     const docBtn = findDocumentButton();
+    const btn = createButtonIfMissing();
 
-    const stack = ensureStack(importBtn, docBtn, imgBtn);
+    const anchor = importBtn || docBtn || btn;
+    const stack = ensureStack(anchor);
+
     if(!stack) return false;
 
-    /*
-      Ordine corretto:
-      1. Importa con scansione QR
-      2. Consegna documento
-      3. Scatta o carica immagine
-    */
     if(importBtn && importBtn.parentElement !== stack) stack.appendChild(importBtn);
     if(docBtn && docBtn.parentElement !== stack) stack.appendChild(docBtn);
-    if(imgBtn.parentElement !== stack) stack.appendChild(imgBtn);
+    if(btn.parentElement !== stack) stack.appendChild(btn);
 
-    normalize(importBtn);
-    normalize(docBtn);
-    normalize(imgBtn);
+    [importBtn, docBtn, btn].forEach(function(el){
+      if(!el) return;
+      el.classList.add("followme-home-uniform-button-20260522", "followme-identical-home-button-20260522");
+      el.style.display = "flex";
+      el.style.visibility = "visible";
+      el.style.opacity = "1";
+      el.style.pointerEvents = "auto";
+      el.style.width = "100%";
+      el.style.maxWidth = "100%";
+    });
 
     if(typeof window.followmeNormalizeIdenticalHomeButtons20260522 === "function"){
       try{ window.followmeNormalizeIdenticalHomeButtons20260522(); }catch(e){}
@@ -30705,6 +30891,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     setTimeout(place, 900);
     setTimeout(place, 1800);
     setTimeout(place, 3200);
+    setTimeout(place, 5000);
   }
 
   if(document.readyState === "loading"){
@@ -30715,14 +30902,18 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
   window.addEventListener("load", function(){
     setTimeout(place, 500);
-    setTimeout(place, 1500);
+    setTimeout(place, 1600);
   });
 
   window.addEventListener("pageshow", function(){
     setTimeout(place, 500);
   });
 
-  window.followmePlaceOfficialImageButton20260522 = place;
+  window.addEventListener("visibilitychange", function(){
+    if(!document.hidden) setTimeout(place, 500);
+  });
+
+  window.followmeFinalPlaceImageUploadButton20260522 = place;
 })();
 </script>
 
