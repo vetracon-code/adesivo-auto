@@ -9654,7 +9654,13 @@ async function saveFollowMeDocumentThumbnail20260520(projectId, documentId, thum
   const img = followmeCleanBase64Image20260520(thumbnailBase64);
   if (!img || !img.buffer || !img.buffer.length) return null;
 
-  const dir = path.join(__dirname, 'public', 'followme-documents');
+  /*
+    Thumbnail PDF FollowMe persistente:
+    usa lo stesso storage del PDF principale.
+    In locale: public/uploads/followme-documents/thumbs
+    Su Render: /var/data/uploads/followme-documents/thumbs se FOLLOWME_STORAGE_DIR=/var/data
+  */
+  const dir = path.join(FOLLOWME_DOCUMENTS_DISK_DIR, 'thumbs');
   await fs.promises.mkdir(dir, { recursive:true });
 
   /*
@@ -9667,7 +9673,7 @@ async function saveFollowMeDocumentThumbnail20260520(projectId, documentId, thum
 
   await fs.promises.writeFile(full, img.buffer);
 
-  return `/followme-documents/${filename}`;
+  return `/uploads/followme-documents/thumbs/${filename}`;
 }
 
 function escapeFollowMeSvg20260520(value) {
@@ -9679,7 +9685,11 @@ function escapeFollowMeSvg20260520(value) {
 }
 
 async function createFollowMeDocumentFallbackThumbnail20260520(projectId, documentId, originalName, pageCount) {
-  const dir = path.join(__dirname, 'public', 'followme-documents');
+  /*
+    Fallback thumbnail persistente:
+    non deve stare in public/followme-documents perché Render può cancellarla al redeploy.
+  */
+  const dir = path.join(FOLLOWME_DOCUMENTS_DISK_DIR, 'thumbs');
   await fs.promises.mkdir(dir, { recursive:true });
 
   const cleanName = String(originalName || 'Documento PDF')
@@ -9739,7 +9749,7 @@ async function createFollowMeDocumentFallbackThumbnail20260520(projectId, docume
 </svg>`;
 
   await fs.promises.writeFile(full, svg, 'utf8');
-  return `/followme-documents/${filename}`;
+  return `/uploads/followme-documents/thumbs/${filename}`;
 }
 // end-followme-document-thumbnail-server-final-20260520
 
