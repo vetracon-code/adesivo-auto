@@ -10727,30 +10727,7 @@ app.get('/fm/image/:code', async (req, res) => {
       box-shadow:0 28px 90px rgba(0,0,0,.42);
       backdrop-filter:blur(18px);
       -webkit-backdrop-filter:blur(18px);
-    }
-    .head{
-      padding:18px 18px 14px;
-    }
-    .kicker{
-      display:inline-flex;
-      min-height:25px;
-      align-items:center;
-      padding:0 11px;
-      border-radius:999px;
-      background:rgba(200,255,46,.14);
-      color:#d9ff77;
-      font-size:11px;
-      font-weight:950;
-      letter-spacing:.08em;
-      text-transform:uppercase;
-      margin-bottom:10px;
-    }
-    h1{
-      margin:0;
-      font-size:clamp(24px,7vw,38px);
-      line-height:1.02;
-      letter-spacing:-.055em;
-      font-weight:950;
+      padding-bottom:18px;
     }
     .image{
       width:100%;
@@ -10762,28 +10739,52 @@ app.get('/fm/image/:code', async (req, res) => {
       height:auto;
       display:block;
     }
-    .foot{
-      padding:15px 18px 18px;
-      color:var(--muted);
-      font-size:13px;
-      line-height:1.4;
-      font-weight:700;
-    }
   </style>
+
+<style id="followme-public-image-download-only-css-20260522">
+  .followme-public-image-download-btn-20260522{
+    width:min(420px, calc(100vw - 32px));
+    min-height:54px;
+    margin:18px auto 0 auto;
+    padding:0 20px;
+    border:0;
+    border-radius:999px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    background:linear-gradient(135deg,#9bd61e,#5ee7ff);
+    color:#101018;
+    font-size:15px;
+    font-weight:950;
+    line-height:1.05;
+    text-decoration:none;
+    box-shadow:0 14px 32px rgba(34,120,42,.22);
+    box-sizing:border-box;
+    cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .followme-public-image-download-btn-20260522 svg{
+    width:22px;
+    height:22px;
+    flex:0 0 22px;
+  }
+</style>
+
 </head>
 <body>
   <main class="wrap">
     <section class="card">
-      <div class="head">
-        <div class="kicker">FollowMe Immagine</div>
-        <h1>${title}</h1>
-      </div>
       <div class="image">
         <img src="${esc(imageUrl)}?v=${Date.now()}" alt="${title}">
       </div>
-      <div class="foot">
-        Immagine trasmessa dal QR FollowMe.
-      </div>
+
+      <a class="followme-public-image-download-btn-20260522" id="followmePublicImageDownloadBtn20260522" href="${esc(imageUrl)}?v=${Date.now()}" download target="_blank" rel="noopener">
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 3v10.2m0 0 4-4m-4 4-4-4M5 17.5V20h14v-2.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <span>Download</span>
+      </a>
     </section>
   </main>
 </body>
