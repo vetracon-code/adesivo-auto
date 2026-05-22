@@ -31090,5 +31090,367 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-image-preview-click-download-final-20260522">
+(function(){
+  "use strict";
+
+  /*
+    Solo per card/foto attiva:
+    - click sulla preview grande immagine -> attiva/apre il pulsante "Apri anteprima QR"
+    - sotto la preview grande immagine aggiunge pulsante "Download immagine"
+    Non tocca PDF, URL, upload, input file o pulsanti Home.
+  */
+
+  function getCode(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("app");
+      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
+
+      const p = new URLSearchParams(location.search);
+      return p.get("code") || p.get("qr") || p.get("c") ||
+        window.FOLLOWME_CODE ||
+        window.FOLLOWME_PROJECT_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        window.followMeProjectCode ||
+        "FMDEMO";
+    }catch(e){
+      return window.FOLLOWME_CODE ||
+        window.FOLLOWME_PROJECT_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        window.followMeProjectCode ||
+        "FMDEMO";
+    }
+  }
+
+  function abs(path){
+    const raw = String(path || "").trim();
+    if(!raw) return "";
+    if(/^https?:\/\//i.test(raw)) return raw;
+    if(raw.startsWith("/")) return location.origin + raw;
+    return location.origin + "/" + raw.replace(/^\/+/, "");
+  }
+
+  async function fetchJson(url){
+    const res = await fetch(url, { cache:"no-store" });
+    if(!res.ok) return null;
+    return await res.json().catch(function(){ return null; });
+  }
+
+  async function getActiveStatus(){
+    const code = getCode();
+
+    const status = await fetchJson("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now());
+    const active = String(
+      status && (
+        status.active_url ||
+        status.current_url ||
+        status.url ||
+        status.destination_url ||
+        status.public_url ||
+        ""
+      ) || ""
+    );
+
+    return {
+      code: code,
+      active: active
+    };
+  }
+
+  async function getCurrentImage(){
+    const code = getCode();
+
+    const j = await fetchJson("/api/followme/" + encodeURIComponent(code) + "/image-card/current?v=" + Date.now());
+    if(!j || !j.success || !j.image) return null;
+
+    const img = j.image;
+    const raw = img.image_url || img.public_path || img.public_url || "";
+    if(!raw) return null;
+
+    const src = abs(raw);
+    const version = String(img.updated_at || img.created_at || img.id || "stable").replace(/[^a-zA-Z0-9_-]/g, "");
+
+    return {
+      code: code,
+      img: img,
+      src: src + (src.includes("?") ? "&" : "?") + "v=" + version,
+      rawSrc: src,
+      publicUrl: j.public_url || "/fm/image/" + encodeURIComponent(code),
+      name: img.original_name || img.stored_name || "immagine.jpg"
+    };
+  }
+
+  function isImageActive(active, publicUrl){
+    const a = String(active || "").toLowerCase();
+    const p = String(publicUrl || "").toLowerCase();
+
+    return (
+      a.includes("/fm/image/") ||
+      a.includes("/image-card") ||
+      (p && a.includes(p))
+    );
+  }
+
+  function findMainPreviewBox(){
+    const selectors = [
+      "#simpleDestinationPreviewBlock .simple-preview-square",
+      "#simpleDestinationPreviewBlock",
+      ".simple-preview-square",
+      ".qr-auto-preview-frame",
+      ".destination-preview-frame",
+      ".preview-frame"
+    ];
+
+    for(const sel of selectors){
+      const el = document.querySelector(sel);
+      if(el) return el;
+    }
+
+    return null;
+  }
+
+  function findPreviewImage(){
+    const box = findMainPreviewBox();
+    if(!box) return null;
+
+    return box.querySelector(
+      ".followme-image-preview-stable-20260522 img," +
+      ".followme-image-main-preview-20260522 img," +
+      "[data-followme-image-preview='1'] img," +
+      "img"
+    );
+  }
+
+  function findOpenQrButton(){
+    /*
+      Pulsante corretto già esistente: "Apri anteprima QR".
+    */
+    return document.getElementById("openQrPreview") ||
+      document.getElementById("followmeOtherOpenQrPreview") ||
+      Array.from(document.querySelectorAll("a,button")).find(function(el){
+        const t = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+        return t.includes("apri anteprima qr") || t.includes("apri qr");
+      }) ||
+      null;
+  }
+
+  function ensureCss(){
+    if(document.getElementById("followme-image-preview-click-download-css-20260522")) return;
+
+    const style = document.createElement("style");
+    style.id = "followme-image-preview-click-download-css-20260522";
+    style.textContent = `
+      .followme-image-preview-clickable-20260522{
+        cursor:pointer !important;
+      }
+
+      .followme-image-preview-clickable-20260522::after{
+        content:"";
+      }
+
+      #followmeImagePreviewDownloadBtn20260522{
+        width:100% !important;
+        min-height:48px !important;
+        margin:10px 0 0 0 !important;
+        padding:0 16px !important;
+        border:0 !important;
+        border-radius:999px !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        gap:8px !important;
+        background:linear-gradient(135deg,#9bd61e,#5ee7ff) !important;
+        color:#101018 !important;
+        font-size:14px !important;
+        font-weight:950 !important;
+        line-height:1.05 !important;
+        text-decoration:none !important;
+        box-shadow:0 12px 26px rgba(34,120,42,.20) !important;
+        box-sizing:border-box !important;
+        cursor:pointer !important;
+      }
+
+      #followmeImagePreviewDownloadBtn20260522 svg{
+        width:20px !important;
+        height:20px !important;
+        flex:0 0 20px !important;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function setOpenQrTarget(publicUrl){
+    const btn = findOpenQrButton();
+    if(!btn) return;
+
+    if(String(btn.tagName || "").toLowerCase() === "a"){
+      btn.href = publicUrl;
+      btn.target = "_blank";
+      btn.rel = "noopener";
+    }
+
+    btn.style.opacity = "1";
+    btn.style.pointerEvents = "auto";
+    btn.removeAttribute("disabled");
+    btn.classList.remove("disabled");
+  }
+
+  function triggerOpenQr(publicUrl){
+    const btn = findOpenQrButton();
+
+    if(btn){
+      setOpenQrTarget(publicUrl);
+
+      try{
+        btn.click();
+        return;
+      }catch(e){}
+    }
+
+    window.open(publicUrl, "_blank", "noopener");
+  }
+
+  function ensureDownloadButton(info){
+    const box = findMainPreviewBox();
+    if(!box || !info || !info.rawSrc) return;
+
+    let btn = document.getElementById("followmeImagePreviewDownloadBtn20260522");
+
+    if(!btn){
+      btn = document.createElement("a");
+      btn.id = "followmeImagePreviewDownloadBtn20260522";
+      btn.innerHTML = `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3v10.2m0 0 4-4m-4 4-4-4M5 17.5V20h14v-2.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>Download immagine</span>
+      `;
+
+      /*
+        Lo inseriamo sotto il riquadro preview, non dentro l'immagine.
+      */
+      const container =
+        document.getElementById("simpleDestinationPreviewBlock") ||
+        box.parentElement ||
+        box;
+
+      const openBtn = document.getElementById("simpleDestinationPreviewOpen");
+
+      if(openBtn && openBtn.parentElement === container){
+        container.insertBefore(btn, openBtn);
+      }else{
+        container.appendChild(btn);
+      }
+    }
+
+    btn.href = info.rawSrc;
+    btn.download = info.name || "immagine.jpg";
+    btn.target = "_blank";
+    btn.rel = "noopener";
+  }
+
+  function removeDownloadButton(){
+    const btn = document.getElementById("followmeImagePreviewDownloadBtn20260522");
+    if(btn) btn.remove();
+
+    const img = findPreviewImage();
+    if(img){
+      img.classList.remove("followme-image-preview-clickable-20260522");
+      img.onclick = null;
+    }
+  }
+
+  async function apply(){
+    try{
+      ensureCss();
+
+      const info = await getCurrentImage();
+      if(!info){
+        removeDownloadButton();
+        return;
+      }
+
+      const st = await getActiveStatus();
+
+      if(!isImageActive(st.active, info.publicUrl)){
+        removeDownloadButton();
+        return;
+      }
+
+      setOpenQrTarget(info.publicUrl);
+
+      const img = findPreviewImage();
+      if(img){
+        img.classList.add("followme-image-preview-clickable-20260522");
+        img.onclick = function(ev){
+          ev.preventDefault();
+          ev.stopPropagation();
+          triggerOpenQr(info.publicUrl);
+        };
+      }
+
+      ensureDownloadButton(info);
+    }catch(e){
+      console.warn("[FollowMe Image Preview Click Download] errore:", e);
+    }
+  }
+
+  function boot(){
+    setTimeout(apply, 400);
+    setTimeout(apply, 1300);
+    setTimeout(apply, 2800);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", function(){
+    setTimeout(apply, 700);
+    setTimeout(apply, 2200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(apply, 700);
+  });
+
+  if(!window.__followmeImagePreviewClickDownloadFetchPatch20260522){
+    window.__followmeImagePreviewClickDownloadFetchPatch20260522 = true;
+
+    const oldFetch = window.fetch;
+    window.fetch = async function(){
+      const args = arguments;
+      const url = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+      const res = await oldFetch.apply(this, args);
+
+      try{
+        if(
+          res &&
+          res.ok &&
+          (
+            url.includes("/image-card/upload") ||
+            url.includes("/image-card/current") ||
+            url.includes("/status")
+          )
+        ){
+          setTimeout(apply, 600);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  window.followmeApplyImagePreviewClickDownload20260522 = apply;
+})();
+</script>
+
 </body>
 </html>
