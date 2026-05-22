@@ -10294,6 +10294,509 @@ app.get('/api/followme/document/:document_id/download', async (req, res) => {
 });
 
 
+
+
+// followme-image-card-single-upload-final-20260522
+const followmeImageCardUploadMulter20260522 = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 12 * 1024 * 1024,
+    files: 1
+  },
+  fileFilter: (req, file, cb) => {
+    const mime = String(file.mimetype || '').toLowerCase();
+    const name = String(file.originalname || '').toLowerCase();
+
+    const allowedMime = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/gif'
+    ];
+
+    const allowedExt = [
+      '.jpg',
+      '.jpeg',
+      '.png',
+      '.webp',
+      '.gif'
+    ];
+
+    const extOk = allowedExt.some(ext => name.endsWith(ext));
+    const mimeOk = allowedMime.includes(mime);
+
+    if (!mimeOk && !extOk) {
+      return cb(new Error('Formato non supportato. Carica una immagine JPG, PNG, WEBP o GIF.'));
+    }
+
+    cb(null, true);
+  }
+});
+
+async function ensureFollowMeImageCardTable20260522() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS followme_image_cards (
+      id BIGSERIAL PRIMARY KEY,
+      project_id BIGINT NOT NULL,
+      original_name TEXT NOT NULL,
+      stored_name TEXT NOT NULL,
+      public_path TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      size_bytes BIGINT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      views_count BIGINT NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS followme_image_cards_project_status_idx
+    ON followme_image_cards(project_id, status, id DESC)
+  `);
+}
+
+function sanitizeFollowMeImageName20260522(name) {
+  return String(name || 'immagine')
+    .replace(/[^\\w.\\-]+/g, '_')
+    .replace(/_+/g, '_')
+    .slice(0, 120) || 'immagine';
+}
+
+function followMeImageExtFromMime20260522(mime, originalName) {
+  const cleanMime = String(mime || '').toLowerCase().split(';')[0].trim();
+  const name = String(originalName || '').toLowerCase();
+
+  if (cleanMime === 'image/jpeg') return 'jpg';
+  if (cleanMime === 'image/png') return 'png';
+  if (cleanMime === 'image/webp') return 'webp';
+  if (cleanMime === 'image/gif') return 'gif';
+
+  if (name.endsWith('.jpeg') || name.endsWith('.jpg')) return 'jpg';
+  if (name.endsWith('.png')) return 'png';
+  if (name.endsWith('.webp')) return 'webp';
+  if (name.endsWith('.gif')) return 'gif';
+
+  return '';
+}
+
+function isLikelySupportedImageBuffer20260522(buffer, ext) {
+  if (!buffer || !Buffer.isBuffer(buffer) || buffer.length < 12) return false;
+
+  const head = buffer.slice(0, 16);
+
+  if (ext === 'jpg') {
+    return head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff;
+  }
+
+  if (ext === 'png') {
+    return head.slice(0, 8).equals(Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]));
+  }
+
+  if (ext === 'webp') {
+    return head.slice(0, 4).toString('ascii') === 'RIFF' &&
+           buffer.slice(8, 12).toString('ascii') === 'WEBP';
+  }
+
+  if (ext === 'gif') {
+    const h = head.slice(0, 6).toString('ascii');
+    return h === 'GIF87a' || h === 'GIF89a';
+  }
+
+  return false;
+}
+
+function normalizeFollowMeImageCardForClient20260522(row) {
+  if (!row) return null;
+
+  return {
+    ...row,
+    image_url: row.public_path || null,
+    public_url: row.public_path || null,
+    title: 'Immagine',
+    card_type: 'image'
+  };
+}
+
+app.post('/api/followme/:code/image-card/upload', followmeImageCardUploadMulter20260522.single('image'), async (req, res) => {
+  try {
+    await ensureFollowMeImageCardTable20260522();
+
+    const code = String(req.params.code || '').trim();
+    const project = await getFollowMeProjectByCode20260520(code);
+
+    if (!project) {
+      return res.status(404).json({ success:false, error:'Progetto non trovato.' });
+    }
+
+    const file = req.file;
+
+    if (!file || !file.buffer) {
+      return res.status(400).json({ success:false, error:'Immagine mancante.' });
+    }
+
+    const originalName = sanitizeFollowMeImageName20260522(file.originalname || 'immagine');
+    const buffer = file.buffer;
+    const ext = followMeImageExtFromMime20260522(file.mimetype, originalName);
+
+    if (!ext) {
+      return res.status(415).json({
+        success:false,
+        error:'Formato immagine non supportato. Usa JPG, PNG, WEBP o GIF.'
+      });
+    }
+
+    const maxBytes = 12 * 1024 * 1024;
+    if (buffer.length > maxBytes) {
+      return res.status(413).json({
+        success:false,
+        error:'Immagine troppo pesante. Limite attuale: 12 MB.'
+      });
+    }
+
+    if (!isLikelySupportedImageBuffer20260522(buffer, ext)) {
+      return res.status(415).json({
+        success:false,
+        error:'Controllo sicurezza fallito: il file non sembra una immagine valida.'
+      });
+    }
+
+    const qrFolder = String(project.code || code || '')
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9_-]/g, '') || String(project.id);
+
+    const projectImageDir = followmeDocumentPath.join(FOLLOWME_DOCUMENT_UPLOAD_DIR, qrFolder, 'image');
+    await followmeDocumentFsp.mkdir(projectImageDir, { recursive:true });
+
+    /*
+      Una sola immagine attiva per QR:
+      prima cancelliamo eventuali immagini precedenti con estensione diversa.
+    */
+    try {
+      const files = await followmeDocumentFsp.readdir(projectImageDir).catch(() => []);
+      await Promise.all(
+        files
+          .filter(name => /^immagine\\.(jpg|jpeg|png|webp|gif)$/i.test(name))
+          .map(name => followmeDocumentFsp.unlink(followmeDocumentPath.join(projectImageDir, name)).catch(() => null))
+      );
+    } catch(e) {}
+
+    const storedName = `immagine.${ext}`;
+    const diskPath = followmeDocumentPath.join(projectImageDir, storedName);
+    const publicPath = `/uploads/followme-documents/${qrFolder}/image/${storedName}`;
+
+    await followmeDocumentFsp.writeFile(diskPath, buffer);
+
+    await pool.query(
+      `UPDATE followme_image_cards
+       SET status = 'replaced',
+           updated_at = NOW()
+       WHERE project_id = $1
+         AND status = 'active'`,
+      [project.id]
+    );
+
+    const inserted = await pool.query(
+      `INSERT INTO followme_image_cards
+       (project_id, original_name, stored_name, public_path, mime_type, size_bytes, status, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,'active',NOW(),NOW())
+       RETURNING id, project_id, original_name, stored_name, public_path, mime_type, size_bytes, status, views_count, created_at, updated_at`,
+      [project.id, originalName, storedName, publicPath, file.mimetype || `image/${ext}`, buffer.length]
+    );
+
+    const publicUrl = `/fm/image/${project.public_id || project.code}`;
+
+    /*
+      Per la prova la rendiamo subito destinazione attiva.
+      Così il QR trasmette immediatamente la card immagine.
+    */
+    await pool.query(
+      `UPDATE followme_projects
+       SET active_url = $2,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [project.id, publicUrl]
+    );
+
+    await pool.query(
+      `INSERT INTO followme_url_history (project_id, url, activated_at, last_used_at, scan_count)
+       VALUES ($1, $2, NOW(), NULL, 0)
+       ON CONFLICT (project_id, url)
+       DO UPDATE SET activated_at = NOW()`,
+      [project.id, publicUrl]
+    );
+
+    const image = normalizeFollowMeImageCardForClient20260522(inserted.rows[0]);
+
+    return res.json({
+      success:true,
+      published:true,
+      image,
+      image_url: image.image_url,
+      public_url: publicUrl
+    });
+
+  } catch(err) {
+    console.error('followme image card upload error:', err);
+
+    if (err && err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({
+        success:false,
+        error:'Immagine troppo pesante. Limite attuale: 12 MB.'
+      });
+    }
+
+    return res.status(500).json({
+      success:false,
+      error: err.message || 'Errore caricamento immagine.'
+    });
+  }
+});
+
+app.get('/api/followme/:code/image-card/current', async (req, res) => {
+  try {
+    await ensureFollowMeImageCardTable20260522();
+
+    const code = String(req.params.code || '').trim();
+    const project = await getFollowMeProjectByCode20260520(code);
+
+    if (!project) {
+      return res.status(404).json({ success:false, error:'Progetto non trovato.' });
+    }
+
+    const r = await pool.query(
+      `SELECT id, project_id, original_name, stored_name, public_path, mime_type, size_bytes, status, views_count, created_at, updated_at
+       FROM followme_image_cards
+       WHERE project_id = $1
+         AND status = 'active'
+       ORDER BY id DESC
+       LIMIT 1`,
+      [project.id]
+    );
+
+    return res.json({
+      success:true,
+      image:normalizeFollowMeImageCardForClient20260522(r.rows[0] || null),
+      public_url:`/fm/image/${project.public_id || project.code}`
+    });
+
+  } catch(err) {
+    console.error('followme image card current error:', err);
+    return res.status(500).json({ success:false, error:'Errore lettura immagine.' });
+  }
+});
+
+app.post('/api/followme/:code/image-card/disable', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeImageCardTable20260522();
+
+    const code = String(req.params.code || '').trim();
+    const project = await getFollowMeProjectByCode20260520(code);
+
+    if (!project) {
+      return res.status(404).json({ success:false, error:'Progetto non trovato.' });
+    }
+
+    await pool.query(
+      `UPDATE followme_image_cards
+       SET status = 'disabled',
+           updated_at = NOW()
+       WHERE project_id = $1
+         AND status = 'active'`,
+      [project.id]
+    );
+
+    return res.json({ success:true });
+
+  } catch(err) {
+    console.error('followme image card disable error:', err);
+    return res.status(500).json({ success:false, error:'Errore spegnimento immagine.' });
+  }
+});
+
+app.post('/api/followme/image-card/:image_id/view', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeImageCardTable20260522();
+
+    const id = Number(req.params.image_id || 0);
+    if (!id) return res.status(400).json({ success:false });
+
+    const r = await pool.query(
+      `UPDATE followme_image_cards
+       SET views_count = views_count + 1,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING views_count`,
+      [id]
+    );
+
+    return res.json({ success:true, views_count:r.rows[0]?.views_count || 0 });
+  } catch(err) {
+    return res.status(500).json({ success:false });
+  }
+});
+
+app.get('/fm/image/:code', async (req, res) => {
+  try {
+    await ensureFollowMeImageCardTable20260522();
+
+    const code = String(req.params.code || '').trim();
+    const project = await getFollowMeProjectByCode20260520(code);
+
+    if (!project) {
+      return res.status(404).send('Immagine non disponibile.');
+    }
+
+    const r = await pool.query(
+      `SELECT id, original_name, public_path, mime_type, size_bytes, views_count
+       FROM followme_image_cards
+       WHERE project_id = $1
+         AND status = 'active'
+       ORDER BY id DESC
+       LIMIT 1`,
+      [project.id]
+    );
+
+    if (!r.rows.length) {
+      return res.redirect(302, '/fm/document-closed');
+    }
+
+    const img = r.rows[0];
+
+    await pool.query(
+      `UPDATE followme_image_cards
+       SET views_count = views_count + 1,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [img.id]
+    ).catch(() => null);
+
+    const esc = (v) => String(v || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    const imageUrl = String(img.public_path || '');
+    const title = esc(String(img.original_name || 'Immagine').replace(/\\.(jpg|jpeg|png|webp|gif)$/i, ''));
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+
+    return res.send(`<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow">
+  <title>${title}</title>
+  <style>
+    :root{
+      --bg:#05070d;
+      --card:#101018;
+      --text:#ffffff;
+      --muted:rgba(255,255,255,.68);
+      --line:rgba(255,255,255,.12);
+      --accent:#c8ff2e;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%}
+    body{
+      min-height:100vh;
+      padding:18px;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(200,255,46,.16), transparent 32%),
+        radial-gradient(circle at 90% 8%, rgba(94,231,255,.12), transparent 30%),
+        linear-gradient(145deg,#020617,#0f172a 48%,#020617);
+      color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .wrap{
+      width:min(520px,100%);
+    }
+    .card{
+      overflow:hidden;
+      border-radius:34px;
+      background:rgba(255,255,255,.06);
+      border:1px solid var(--line);
+      box-shadow:0 28px 90px rgba(0,0,0,.42);
+      backdrop-filter:blur(18px);
+      -webkit-backdrop-filter:blur(18px);
+    }
+    .head{
+      padding:18px 18px 14px;
+    }
+    .kicker{
+      display:inline-flex;
+      min-height:25px;
+      align-items:center;
+      padding:0 11px;
+      border-radius:999px;
+      background:rgba(200,255,46,.14);
+      color:#d9ff77;
+      font-size:11px;
+      font-weight:950;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      margin-bottom:10px;
+    }
+    h1{
+      margin:0;
+      font-size:clamp(24px,7vw,38px);
+      line-height:1.02;
+      letter-spacing:-.055em;
+      font-weight:950;
+    }
+    .image{
+      width:100%;
+      background:#000;
+      display:block;
+    }
+    .image img{
+      width:100%;
+      height:auto;
+      display:block;
+    }
+    .foot{
+      padding:15px 18px 18px;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.4;
+      font-weight:700;
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="card">
+      <div class="head">
+        <div class="kicker">FollowMe Immagine</div>
+        <h1>${title}</h1>
+      </div>
+      <div class="image">
+        <img src="${esc(imageUrl)}?v=${Date.now()}" alt="${title}">
+      </div>
+      <div class="foot">
+        Immagine trasmessa dal QR FollowMe.
+      </div>
+    </section>
+  </main>
+</body>
+</html>`);
+  } catch(err) {
+    console.error('followme image public page error:', err);
+    return res.status(500).send('Errore apertura immagine.');
+  }
+});
+// end-followme-image-card-single-upload-final-20260522
+
+
+
 // followme-document-closed-page-final-exact-20260520
 app.get('/fm/document-closed', (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
