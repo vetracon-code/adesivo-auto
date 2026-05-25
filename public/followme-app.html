@@ -31915,5 +31915,233 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-fast-url-switch-preview-final-20260522">
+(function(){
+  "use strict";
+
+  /*
+    Fix percezione lentezza cambio URL:
+    quando /update-url risponde OK, aggiorna SUBITO la preview alta e i link principali,
+    senza aspettare il render completo delle 20 card/history.
+    Non modifica salvataggi, upload, PDF, immagini o logiche server.
+  */
+
+  function clean(v){
+    return String(v || "").trim();
+  }
+
+  function getUrlFromFetchArgs(args){
+    try{
+      const opts = args[1] || {};
+      let body = opts.body;
+
+      if(!body) return "";
+
+      if(typeof body === "string"){
+        try{
+          const j = JSON.parse(body);
+          return clean(
+            j.url ||
+            j.active_url ||
+            j.destination_url ||
+            j.new_url ||
+            j.link ||
+            ""
+          );
+        }catch(e){
+          return "";
+        }
+      }
+
+      if(body instanceof FormData){
+        return clean(
+          body.get("url") ||
+          body.get("active_url") ||
+          body.get("destination_url") ||
+          body.get("new_url") ||
+          body.get("link") ||
+          ""
+        );
+      }
+    }catch(e){}
+
+    return "";
+  }
+
+  function absUrl(url){
+    const raw = clean(url);
+    if(!raw) return "";
+    if(/^https?:\/\//i.test(raw)) return raw;
+    if(raw.startsWith("/")) return raw;
+    return "https://" + raw;
+  }
+
+  function setText(id, value){
+    const el = document.getElementById(id);
+    if(el) el.textContent = value;
+  }
+
+  function setInput(id, value){
+    const el = document.getElementById(id);
+    if(el) el.value = value;
+  }
+
+  function updateOpenButton(url){
+    const full = absUrl(url);
+
+    const candidates = [
+      document.getElementById("simpleDestinationPreviewOpen"),
+      document.getElementById("openQrPreview"),
+      document.getElementById("followmeOtherOpenQrPreview")
+    ].filter(Boolean);
+
+    candidates.forEach(function(btn){
+      try{
+        if(String(btn.tagName || "").toLowerCase() === "a"){
+          btn.href = full;
+          btn.target = "_blank";
+          btn.rel = "noopener";
+        }
+        btn.style.opacity = "1";
+        btn.style.pointerEvents = "auto";
+        btn.removeAttribute("disabled");
+        btn.classList.remove("disabled");
+      }catch(e){}
+    });
+  }
+
+  function updateIframePreview(url){
+    const full = absUrl(url);
+    if(!full) return;
+
+    const frame =
+      document.getElementById("simpleDestinationPreviewFrame") ||
+      document.querySelector(".simple-preview-square iframe") ||
+      document.querySelector(".destination-preview-frame iframe") ||
+      document.querySelector("iframe[id*='Preview']");
+
+    const empty = document.getElementById("simpleDestinationPreviewEmpty");
+
+    if(empty) empty.style.display = "none";
+
+    if(frame){
+      try{
+        /*
+          Cambio immediato: non aspettiamo history/card.
+          Se l'URL blocca iframe, il pulsante Apri pagina resta comunque corretto.
+        */
+        if(frame.src !== full){
+          frame.src = full;
+        }
+        frame.style.display = "block";
+      }catch(e){}
+      return;
+    }
+
+    /*
+      Fallback: se non trovo iframe, uso la funzione già esistente.
+    */
+    try{
+      if(typeof window.updateSimpleDestinationPreview === "function"){
+        window.updateSimpleDestinationPreview(full);
+      }
+    }catch(e){}
+  }
+
+  function updateGlobals(url){
+    const full = absUrl(url);
+
+    try{ window.__followMeActiveUrl = full; }catch(e){}
+    try{ window.followMeCurrentActiveUrl = full; }catch(e){}
+    try{ window.currentFollowMeActiveUrl = full; }catch(e){}
+    try{ window.activeFollowMeUrl = full; }catch(e){}
+  }
+
+  function fastApply(url){
+    const full = absUrl(url);
+    if(!full) return;
+
+    updateGlobals(full);
+
+    setInput("newUrl", full);
+    setText("activeUrl", full);
+
+    updateOpenButton(full);
+    updateIframePreview(full);
+
+    /*
+      Se esiste già una funzione ufficiale, la lanciamo subito ma NON aspettiamo.
+    */
+    try{
+      if(typeof window.forceFollowMePreview === "function"){
+        window.forceFollowMePreview(full);
+      }
+    }catch(e){}
+
+    try{
+      if(typeof window.updateSimpleDestinationPreview === "function"){
+        window.updateSimpleDestinationPreview(full);
+      }
+    }catch(e){}
+  }
+
+  if(!window.__followmeFastUrlSwitchFetchPatch20260522){
+    window.__followmeFastUrlSwitchFetchPatch20260522 = true;
+
+    const oldFetch = window.fetch;
+
+    window.fetch = async function(){
+      const args = arguments;
+      const requestUrl = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+      const wantedUrl = requestUrl.includes("/update-url") ? getUrlFromFetchArgs(args) : "";
+
+      /*
+        Ottimismo controllato: appena parte la richiesta, aggiorno visivamente.
+        Se la risposta fallisce, i vecchi script mostreranno errore/toast.
+      */
+      if(wantedUrl){
+        setTimeout(function(){ fastApply(wantedUrl); }, 0);
+      }
+
+      const res = await oldFetch.apply(this, args);
+
+      try{
+        if(res && res.ok && requestUrl.includes("/update-url")){
+          if(wantedUrl){
+            setTimeout(function(){ fastApply(wantedUrl); }, 30);
+            setTimeout(function(){ fastApply(wantedUrl); }, 250);
+          }
+
+          /*
+            Il refresh completo della history può arrivare dopo.
+            Non deve bloccare la percezione del cambio.
+          */
+          setTimeout(function(){
+            try{
+              if(typeof window.loadStatus === "function") window.loadStatus();
+            }catch(e){}
+
+            try{
+              if(typeof window.loadFollowMeStatus === "function") window.loadFollowMeStatus();
+            }catch(e){}
+
+            try{
+              if(typeof window.followmeNormalizeUniformPremiumCards20260522 === "function"){
+                window.followmeNormalizeUniformPremiumCards20260522();
+              }
+            }catch(e){}
+          }, 900);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  window.followmeFastApplyUrlSwitch20260522 = fastApply;
+})();
+</script>
+
 </body>
 </html>
