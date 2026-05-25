@@ -9840,90 +9840,66 @@ function escapeFollowMeSvg20260520(value) {
     .replace(/"/g, '&quot;');
 }
 
-async function createFollowMeDocumentFallbackThumbnail20260520(projectId, documentId, originalName, pageCount) {
+async function createFollowMeDocumentFallbackThumbnail20260520(projectId, documentId, originalName, pageCount, qrFolder) {
   /*
-    Fallback thumbnail persistente:
-    non deve stare in public/followme-documents perché Render può cancellarla al redeploy.
+    Preview documento FollowMe.
+    Nuova regola:
+    - se conosciamo il codice QR, la preview vive nello stesso spazio del QR:
+      /uploads/followme-documents/CODICE/document-preview.svg
+    - fallback compatibile:
+      /uploads/followme-documents/thumbs/project-ID/preview.svg
   */
-  const projectThumbDirName = `project-${projectId}`;
-  const dir = path.join(FOLLOWME_DOCUMENTS_DISK_DIR, 'thumbs', projectThumbDirName);
-  await fs.promises.mkdir(dir, { recursive:true });
+  const safeQrFolder = String(qrFolder || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, '');
 
-  const cleanName = String(originalName || 'Documento PDF')
-    .replace(/\.pdf$/i, '')
-    .replace(/[_-]+/g, ' ')
-    .trim();
+  const safeName = String(originalName || 'Documento PDF')
+    .replace(/[<>&"]/g, '')
+    .slice(0, 90);
 
-  const shortName = cleanName.length > 42 ? cleanName.slice(0, 39) + '…' : cleanName;
-  const pages = pageCount ? `${pageCount} pagine` : 'Documento PDF';
+  const pagesText = pageCount ? `${pageCount} pag.` : 'PDF';
 
-  try {
-    const files = await fs.promises.readdir(dir).catch(() => []);
-    await Promise.all(
-      files
-        .filter(file => /^preview\.(jpg|jpeg|png|webp|svg)$/i.test(file))
-        .map(file => fs.promises.unlink(path.join(dir, file)).catch(() => null))
-    );
+  let thumbDir;
+  let publicPath;
 
-    const legacyDir = path.join(FOLLOWME_DOCUMENTS_DISK_DIR, 'thumbs');
-    const legacyFiles = await fs.promises.readdir(legacyDir).catch(() => []);
-    await Promise.all(
-      legacyFiles
-        .filter(file => file.startsWith(`followme-doc-${projectId}-`) && /-thumb\.(jpg|jpeg|png|webp|svg)$/i.test(file))
-        .map(file => fs.promises.unlink(path.join(legacyDir, file)).catch(() => null))
-    );
-  } catch(e) {}
+  if (safeQrFolder) {
+    thumbDir = followmeDocumentPath.join(FOLLOWME_DOCUMENT_UPLOAD_DIR, safeQrFolder);
+    publicPath = `/uploads/followme-documents/${safeQrFolder}/document-preview.svg`;
+  } else {
+    thumbDir = followmeDocumentPath.join(FOLLOWME_DOCUMENT_UPLOAD_DIR, 'thumbs', `project-${projectId}`);
+    publicPath = `/uploads/followme-documents/thumbs/project-${projectId}/preview.svg`;
+  }
 
-  const filename = `preview.svg`;
-  const full = path.join(dir, filename);
+  await followmeDocumentFsp.mkdir(thumbDir, { recursive:true });
 
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg width="900" height="1200" viewBox="0 0 900 1200" xmlns="http://www.w3.org/2000/svg">
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="440" viewBox="0 0 720 440">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#101018"/>
-      <stop offset="55%" stop-color="#172033"/>
-      <stop offset="100%" stop-color="#05070d"/>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#111827"/>
+      <stop offset="1" stop-color="#020617"/>
     </linearGradient>
-    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#c8ff2e"/>
-      <stop offset="100%" stop-color="#5ee7ff"/>
+    <linearGradient id="accent" x1="0" x2="1">
+      <stop offset="0" stop-color="#c8ff2e"/>
+      <stop offset="1" stop-color="#5ee7ff"/>
     </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="28" stdDeviation="32" flood-color="#000000" flood-opacity="0.38"/>
-    </filter>
   </defs>
-
-  <rect width="900" height="1200" rx="70" fill="url(#bg)"/>
-  <circle cx="150" cy="120" r="190" fill="#c8ff2e" opacity="0.12"/>
-  <circle cx="760" cy="70" r="210" fill="#5ee7ff" opacity="0.10"/>
-
-  <rect x="115" y="145" width="670" height="910" rx="42" fill="#ffffff" filter="url(#shadow)"/>
-  <rect x="165" y="210" width="570" height="24" rx="12" fill="#e5e7eb"/>
-  <rect x="165" y="270" width="420" height="18" rx="9" fill="#d1d5db"/>
-  <rect x="165" y="326" width="540" height="14" rx="7" fill="#e5e7eb"/>
-  <rect x="165" y="370" width="510" height="14" rx="7" fill="#e5e7eb"/>
-  <rect x="165" y="414" width="545" height="14" rx="7" fill="#e5e7eb"/>
-  <rect x="165" y="458" width="390" height="14" rx="7" fill="#e5e7eb"/>
-
-  <rect x="165" y="560" width="570" height="260" rx="28" fill="#f3f4f6"/>
-  <path d="M300 715 L397 620 L480 705 L538 650 L650 775 H250 Z" fill="#d1d5db"/>
-  <circle cx="610" cy="625" r="34" fill="#cbd5e1"/>
-
-  <rect x="165" y="880" width="570" height="18" rx="9" fill="#e5e7eb"/>
-  <rect x="165" y="925" width="470" height="18" rx="9" fill="#e5e7eb"/>
-
-  <rect x="115" y="145" width="670" height="910" rx="42" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="2"/>
-
-  <rect x="95" y="70" width="260" height="54" rx="27" fill="url(#accent)"/>
-  <text x="225" y="105" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="900" fill="#101018">DOCUMENTO PDF</text>
-
-  <text x="450" y="1110" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="900" fill="#ffffff">${escapeFollowMeSvg20260520(shortName)}</text>
-  <text x="450" y="1154" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#94a3b8">${escapeFollowMeSvg20260520(pages)}</text>
+  <rect width="720" height="440" rx="34" fill="url(#bg)"/>
+  <rect x="34" y="34" width="652" height="372" rx="28" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.14)"/>
+  <rect x="70" y="70" width="88" height="110" rx="14" fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.18)"/>
+  <path d="M94 102h40M94 126h40M94 150h28" stroke="#ffffff" stroke-width="8" stroke-linecap="round" opacity=".72"/>
+  <text x="188" y="112" fill="#c8ff2e" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Arial" font-size="24" font-weight="900" letter-spacing="2">DOCUMENTO PDF</text>
+  <text x="188" y="162" fill="#ffffff" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Arial" font-size="34" font-weight="900">${safeName}</text>
+  <text x="188" y="210" fill="rgba(255,255,255,.62)" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Arial" font-size="22" font-weight="700">${pagesText} • pronto per la consultazione</text>
+  <rect x="70" y="316" width="580" height="12" rx="6" fill="rgba(255,255,255,.12)"/>
+  <rect x="70" y="316" width="260" height="12" rx="6" fill="url(#accent)"/>
 </svg>`;
 
-  await fs.promises.writeFile(full, svg, 'utf8');
-  return `/uploads/followme-documents/thumbs/${projectThumbDirName}/${filename}`;
+  const filePath = followmeDocumentPath.join(thumbDir, safeQrFolder ? 'document-preview.svg' : 'preview.svg');
+  await followmeDocumentFsp.writeFile(filePath, svg, 'utf8');
+
+  return publicPath;
 }
 // end-followme-document-thumbnail-server-final-20260520
 
@@ -10241,7 +10217,8 @@ app.post('/api/followme/:code/document/upload', followmeDocumentUploadMulter2026
           project.id,
           insertedDoc.id,
           insertedDoc.original_name,
-          insertedDoc.page_count
+          insertedDoc.page_count,
+          qrFolder
         );
 
         const updThumb = await pool.query(
@@ -10340,7 +10317,8 @@ app.get('/api/followme/:code/document/current', async (req, res) => {
           project.id,
           doc.id,
           doc.original_name,
-          doc.page_count
+          doc.page_count,
+          qrFolder
         );
 
         const updThumb = await pool.query(
