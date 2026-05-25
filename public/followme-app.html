@@ -32421,5 +32421,347 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-fast-pdf-upload-preview-final-20260525">
+(function(){
+  "use strict";
+
+  /*
+    Fix percezione lentezza PDF:
+    dopo upload/pubblicazione documento aggiorna subito preview alta e destinazione attiva,
+    senza aspettare refresh manuale o render completo delle 20 card.
+    Non modifica server, salvataggio, upload, immagini o URL.
+  */
+
+  function code(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("app");
+      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
+
+      const p = new URLSearchParams(location.search);
+      return p.get("code") || p.get("qr") || p.get("c") ||
+        window.FOLLOWME_CODE ||
+        window.FOLLOWME_PROJECT_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        window.followMeProjectCode ||
+        "FMDEMO";
+    }catch(e){
+      return window.FOLLOWME_CODE ||
+        window.FOLLOWME_PROJECT_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        window.followMeProjectCode ||
+        "FMDEMO";
+    }
+  }
+
+  function abs(path){
+    const raw = String(path || "").trim();
+    if(!raw) return "";
+    if(/^https?:\/\//i.test(raw)) return raw;
+    if(raw.startsWith("/")) return location.origin + raw;
+    return location.origin + "/" + raw.replace(/^\/+/, "");
+  }
+
+  function esc(v){
+    return String(v || "")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
+  }
+
+  function getDocFromResponse(data){
+    if(!data) return {};
+    return data.document || data.doc || data.file || data.data || {};
+  }
+
+  function pdfFileUrlFromResponse(data){
+    if(!data) return "";
+
+    const doc = getDocFromResponse(data);
+
+    return (
+      doc.public_url ||
+      doc.public_path ||
+      doc.url ||
+      doc.file_url ||
+      data.public_url ||
+      data.public_path ||
+      data.url ||
+      data.file_url ||
+      ""
+    );
+  }
+
+  function pdfPageUrl(fileUrl){
+    const raw = String(fileUrl || "").trim();
+
+    /*
+      Se abbiamo un PDF diretto, usiamo il viewer interno quando disponibile.
+      Così la preview/anteprima resta coerente e sfogliabile.
+    */
+    if(raw){
+      return "/pdf-viewer.html?file=" + encodeURIComponent(raw);
+    }
+
+    return "/fm/document/" + encodeURIComponent(code());
+  }
+
+  function versionFromResponse(data){
+    const doc = getDocFromResponse(data);
+    return String(
+      doc.id ||
+      doc.updated_at ||
+      doc.created_at ||
+      Date.now()
+    ).replace(/[^a-zA-Z0-9_-]/g, "");
+  }
+
+  function ensureCss(){
+    if(document.getElementById("followme-fast-pdf-upload-preview-css-20260525")) return;
+
+    const style = document.createElement("style");
+    style.id = "followme-fast-pdf-upload-preview-css-20260525";
+    style.textContent = `
+      .followme-fast-pdf-preview-box-20260525{
+        width:100% !important;
+        min-height:220px !important;
+        height:100% !important;
+        border-radius:18px !important;
+        overflow:hidden !important;
+        background:linear-gradient(145deg,#101018,#171724) !important;
+        border:1px solid rgba(255,255,255,.10) !important;
+        display:grid !important;
+        place-items:center !important;
+        box-sizing:border-box !important;
+        padding:18px !important;
+      }
+
+      .followme-fast-pdf-preview-card-20260525{
+        width:100% !important;
+        max-width:360px !important;
+        min-height:170px !important;
+        border-radius:22px !important;
+        background:rgba(255,255,255,.06) !important;
+        border:1px solid rgba(255,255,255,.12) !important;
+        box-shadow:0 18px 44px rgba(0,0,0,.28) !important;
+        display:flex !important;
+        flex-direction:column !important;
+        align-items:center !important;
+        justify-content:center !important;
+        gap:10px !important;
+        text-align:center !important;
+        padding:18px !important;
+      }
+
+      .followme-fast-pdf-preview-card-20260525 strong{
+        color:#101018 !important;
+        background:linear-gradient(135deg,#9bd61e,#5ee7ff) !important;
+        border-radius:999px !important;
+        padding:8px 15px !important;
+        font-size:13px !important;
+        font-weight:950 !important;
+        letter-spacing:.02em !important;
+      }
+
+      .followme-fast-pdf-preview-card-20260525 span{
+        color:#fff !important;
+        font-size:14px !important;
+        font-weight:850 !important;
+        line-height:1.25 !important;
+        max-width:100% !important;
+        overflow:hidden !important;
+        text-overflow:ellipsis !important;
+        display:-webkit-box !important;
+        -webkit-line-clamp:2 !important;
+        -webkit-box-orient:vertical !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function renderPdfHtml(name){
+    return '' +
+      '<div class="followme-fast-pdf-preview-box-20260525" data-followme-fast-pdf-preview="1">' +
+        '<div class="followme-fast-pdf-preview-card-20260525">' +
+          '<strong>Documento PDF</strong>' +
+          '<span>' + esc(name || "Documento pubblicato") + '</span>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function findMainPreviewBox(){
+    return document.getElementById("simpleDestinationPreviewFrame") ||
+      document.querySelector(".simple-preview-square iframe") ||
+      document.querySelector(".simple-preview-square") ||
+      document.querySelector(".destination-preview-frame") ||
+      document.querySelector(".qr-auto-preview-frame") ||
+      document.querySelector("[id*='PreviewFrame']") ||
+      document.querySelector("[id*='previewFrame']");
+  }
+
+  function updateOpenButton(pageUrl, fileUrl){
+    const candidates = [
+      document.getElementById("simpleDestinationPreviewOpen"),
+      document.getElementById("openQrPreview"),
+      document.getElementById("followmeOtherOpenQrPreview"),
+      document.getElementById("followme5PreviewDoc20260520")
+    ].filter(Boolean);
+
+    candidates.forEach(function(btn){
+      try{
+        if(String(btn.tagName || "").toLowerCase() === "a"){
+          btn.href = pageUrl || fileUrl;
+          btn.target = "_blank";
+          btn.rel = "noopener";
+        }
+
+        if(btn.id !== "followme5PreviewDoc20260520"){
+          btn.textContent = "Apri documento";
+        }
+
+        btn.style.opacity = "1";
+        btn.style.pointerEvents = "auto";
+        btn.removeAttribute("disabled");
+        btn.classList.remove("disabled");
+      }catch(e){}
+    });
+  }
+
+  function setActiveGlobals(pageUrl){
+    try{ window.__followMeActiveUrl = pageUrl; }catch(e){}
+    try{ window.followMeCurrentActiveUrl = pageUrl; }catch(e){}
+    try{ window.currentFollowMeActiveUrl = pageUrl; }catch(e){}
+    try{ window.activeFollowMeUrl = pageUrl; }catch(e){}
+  }
+
+  function updateInputAndText(pageUrl){
+    const activeText = document.getElementById("activeUrl");
+    if(activeText) activeText.textContent = pageUrl;
+
+    const newUrl = document.getElementById("newUrl");
+    if(newUrl && document.activeElement !== newUrl){
+      newUrl.value = pageUrl;
+    }
+  }
+
+  function renderPreview(name){
+    ensureCss();
+
+    const box = findMainPreviewBox();
+
+    const empty = document.getElementById("simpleDestinationPreviewEmpty");
+    if(empty) empty.style.display = "none";
+
+    if(!box) return;
+
+    try{
+      let target = box;
+
+      if(String(box.tagName || "").toLowerCase() === "iframe"){
+        target = box.parentElement || box;
+        box.style.display = "none";
+      }
+
+      target.innerHTML = renderPdfHtml(name || "Documento pubblicato");
+      target.classList.add("followme-fast-pdf-preview-holder-20260525");
+      target.style.display = "";
+    }catch(e){}
+  }
+
+  function applyFromPdfResponse(data){
+    try{
+      if(!data || data.success === false) return;
+
+      const doc = getDocFromResponse(data);
+      const rawFile = pdfFileUrlFromResponse(data);
+
+      /*
+        Alcune risposte PDF non contengono subito public_url.
+        In quel caso aggiorno comunque la preview con la pagina documento.
+      */
+      const version = versionFromResponse(data);
+      const fileUrl = rawFile ? (abs(rawFile) + (String(rawFile).includes("?") ? "&" : "?") + "v=" + version)) : "";
+      const pageUrl = rawFile ? pdfPageUrl(rawFile) : ("/fm/document/" + encodeURIComponent(code()));
+      const name = doc.original_name || doc.name || doc.filename || "Documento pubblicato";
+
+      setActiveGlobals(pageUrl);
+      updateInputAndText(pageUrl);
+      updateOpenButton(pageUrl, fileUrl);
+      renderPreview(name);
+
+      /*
+        Richiamo eventuali renderer ufficiali dopo, senza bloccare l'aggiornamento immediato.
+      */
+      setTimeout(function(){
+        try{
+          if(typeof window.followmeRenderPdfActivePreview20260521 === "function"){
+            window.followmeRenderPdfActivePreview20260521();
+          }
+        }catch(e){}
+
+        try{
+          if(typeof window.followmeSyncPdfPreview20260521 === "function"){
+            window.followmeSyncPdfPreview20260521();
+          }
+        }catch(e){}
+
+        try{
+          if(typeof window.followmeNormalizeUniformPremiumCards20260522 === "function"){
+            window.followmeNormalizeUniformPremiumCards20260522();
+          }
+        }catch(e){}
+      }, 650);
+
+    }catch(e){
+      console.warn("[FollowMe Fast PDF Upload Preview] errore:", e);
+    }
+  }
+
+  function requestLooksLikePdfEndpoint(url){
+    const u = String(url || "");
+    return (
+      u.includes("/document/upload") ||
+      u.includes("/document/publish") ||
+      u.includes("/document/activate") ||
+      u.includes("/document/force") ||
+      u.includes("/document/current")
+    );
+  }
+
+  if(!window.__followmeFastPdfUploadFetchPatch20260525){
+    window.__followmeFastPdfUploadFetchPatch20260525 = true;
+
+    const oldFetch = window.fetch;
+
+    window.fetch = async function(){
+      const args = arguments;
+      const requestUrl = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+
+      const res = await oldFetch.apply(this, args);
+
+      try{
+        if(res && res.ok && requestLooksLikePdfEndpoint(requestUrl)){
+          const clone = res.clone();
+          clone.json().then(function(data){
+            applyFromPdfResponse(data);
+            setTimeout(function(){ applyFromPdfResponse(data); }, 250);
+            setTimeout(function(){ applyFromPdfResponse(data); }, 900);
+          }).catch(function(){});
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  window.followmeFastPdfUploadPreview20260525 = applyFromPdfResponse;
+})();
+</script>
+
 </body>
 </html>
