@@ -5602,6 +5602,71 @@ app.post('/api/admin/trial-request/:id/regenerate-otp', requireAdmin, async (req
 
 
 
+
+// start-admin-followme-projects-api-20260525
+app.get('/api/admin/followme/projects', requireAdmin, async (req, res) => {
+  try {
+    const q = await pool.query(`
+      SELECT
+        p.id,
+        p.code,
+        p.public_id,
+        p.label,
+        p.active_url,
+        p.status,
+        p.created_at,
+        p.updated_at,
+        COALESCE(scan_stats.total_scans, 0)::int AS total_scans,
+        COALESCE(current_stats.current_url_scans, 0)::int AS current_url_scans,
+        scan_stats.last_scan_at,
+        COALESCE(history_stats.history_count, 0)::int AS history_count
+      FROM followme_projects p
+      LEFT JOIN (
+        SELECT
+          project_id,
+          COUNT(*)::int AS total_scans,
+          MAX(created_at) AS last_scan_at
+        FROM followme_scan_logs
+        GROUP BY project_id
+      ) scan_stats ON scan_stats.project_id = p.id
+      LEFT JOIN (
+        SELECT
+          project_id,
+          url,
+          COALESCE(scan_count, 0)::int AS current_url_scans
+        FROM followme_url_history
+      ) current_stats
+        ON current_stats.project_id = p.id
+       AND LOWER(TRIM(COALESCE(current_stats.url,''))) = LOWER(TRIM(COALESCE(p.active_url,'')))
+      LEFT JOIN (
+        SELECT
+          project_id,
+          COUNT(*)::int AS history_count
+        FROM followme_url_history
+        GROUP BY project_id
+      ) history_stats ON history_stats.project_id = p.id
+      ORDER BY
+        p.updated_at DESC NULLS LAST,
+        p.created_at DESC NULLS LAST,
+        p.id DESC
+      LIMIT 200
+    `);
+
+    return res.json({
+      success: true,
+      projects: q.rows
+    });
+  } catch (err) {
+    console.error('admin followme projects error:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Errore caricamento progetti FollowMe.'
+    });
+  }
+});
+// end-admin-followme-projects-api-20260525
+
+
 app.get('/api/admin/list-stickers', requireAdmin, async (req, res) => {
   try {
     const q = String(req.query.q || '').trim().toUpperCase();

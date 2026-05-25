@@ -3456,12 +3456,148 @@ function setDeadlineCleanupFlag(enabled){
       <button type="button" class="fm-admin-btn danger" disabled>Blocchi e revisioni</button>
     </div>
 
-    <div class="fm-admin-note">
-      Modulo contenitore pronto. Nessun QR specifico è scritto in questa pagina: i dati reali verranno caricati successivamente dal backend admin FollowMe.
+    <div class="fm-admin-note" id="adminFollowMeNote20260525">
+      Modulo contenitore pronto. Nessun QR specifico è scritto in questa pagina: i dati reali verranno caricati dal backend admin FollowMe.
+    </div>
+
+    <div id="adminFollowMeProjects20260525" style="margin-top:16px;display:grid;gap:10px;">
+      <div style="padding:14px;border-radius:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.72);font-size:13px;font-weight:750;">
+        Premi “Carica richieste” per visualizzare i QR FollowMe registrati.
+      </div>
     </div>
   </div>
 </section>
 <!-- end-admin-followme-frame-20260525 -->
+
+
+<script id="admin-followme-projects-ui-20260525">
+(function(){
+  "use strict";
+
+  function esc(v){
+    return String(v == null ? "" : v)
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
+  }
+
+  function shortUrl(url){
+    url = String(url || "").trim();
+    if(!url) return "Nessuna destinazione";
+    try{
+      const u = new URL(url, location.origin);
+      return u.hostname + (u.pathname && u.pathname !== "/" ? u.pathname : "");
+    }catch(e){
+      return url.length > 72 ? url.slice(0,72) + "…" : url;
+    }
+  }
+
+  function fmtDate(v){
+    if(!v) return "—";
+    try{
+      return new Date(v).toLocaleString("it-IT", {
+        day:"2-digit",
+        month:"2-digit",
+        year:"2-digit",
+        hour:"2-digit",
+        minute:"2-digit"
+      });
+    }catch(e){
+      return "—";
+    }
+  }
+
+  function projectCard(p){
+    const code = p.code || p.public_id || "";
+    const qrUrl = "/fm/" + encodeURIComponent(code);
+    const appUrl = "/followme-app.html?code=" + encodeURIComponent(code);
+
+    return ''
+      + '<details class="fm-admin-project-detail" style="border-radius:20px;background:rgba(255,255,255,.075);border:1px solid rgba(255,255,255,.13);overflow:hidden;">'
+      + '  <summary style="cursor:pointer;list-style:none;padding:15px 16px;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;">'
+      + '    <div>'
+      + '      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
+      + '        <strong style="color:#fff;font-size:16px;font-weight:950;">' + esc(code || "QR senza codice") + '</strong>'
+      + '        <span style="display:inline-flex;align-items:center;min-height:22px;padding:0 9px;border-radius:999px;background:rgba(200,255,46,.15);color:#c8ff2e;font-size:11px;font-weight:900;text-transform:uppercase;">' + esc(p.status || "active") + '</span>'
+      + '      </div>'
+      + '      <div style="margin-top:5px;color:rgba(255,255,255,.68);font-size:12px;font-weight:750;">' + esc(p.label || "FollowMe QR") + '</div>'
+      + '      <div style="margin-top:4px;color:rgba(255,255,255,.52);font-size:12px;font-weight:700;">' + esc(shortUrl(p.active_url)) + '</div>'
+      + '    </div>'
+      + '    <div style="text-align:right;">'
+      + '      <div style="color:#c8ff2e;font-size:20px;font-weight:950;line-height:1;">' + Number(p.total_scans || 0) + '</div>'
+      + '      <div style="color:rgba(255,255,255,.56);font-size:11px;font-weight:800;">scansioni</div>'
+      + '    </div>'
+      + '  </summary>'
+      + '  <div style="padding:0 16px 16px 16px;">'
+      + '    <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-bottom:12px;">'
+      + '      <div style="padding:10px;border-radius:14px;background:rgba(0,0,0,.18);"><b style="color:#fff;">' + Number(p.current_url_scans || 0) + '</b><br><span style="color:rgba(255,255,255,.58);font-size:11px;font-weight:750;">scan URL attuale</span></div>'
+      + '      <div style="padding:10px;border-radius:14px;background:rgba(0,0,0,.18);"><b style="color:#fff;">' + Number(p.history_count || 0) + '</b><br><span style="color:rgba(255,255,255,.58);font-size:11px;font-weight:750;">link storico</span></div>'
+      + '      <div style="padding:10px;border-radius:14px;background:rgba(0,0,0,.18);"><b style="color:#fff;">' + esc(fmtDate(p.last_scan_at)) + '</b><br><span style="color:rgba(255,255,255,.58);font-size:11px;font-weight:750;">ultimo scan</span></div>'
+      + '      <div style="padding:10px;border-radius:14px;background:rgba(0,0,0,.18);"><b style="color:#fff;">' + esc(fmtDate(p.updated_at)) + '</b><br><span style="color:rgba(255,255,255,.58);font-size:11px;font-weight:750;">aggiornato</span></div>'
+      + '    </div>'
+      + '    <div style="display:flex;flex-wrap:wrap;gap:8px;">'
+      + '      <a href="' + esc(qrUrl) + '" target="_blank" rel="noopener" class="fm-admin-btn primary" style="display:inline-flex;align-items:center;text-decoration:none;">Apri QR</a>'
+      + '      <a href="' + esc(appUrl) + '" target="_blank" rel="noopener" class="fm-admin-btn" style="display:inline-flex;align-items:center;text-decoration:none;">Apri gestione</a>'
+      + '      <button type="button" class="fm-admin-btn" data-fm-close-detail>Chiudi</button>'
+      + '      <button type="button" class="fm-admin-btn danger" disabled>Blocca QR</button>'
+      + '    </div>'
+      + '  </div>'
+      + '</details>';
+  }
+
+  async function loadProjects(){
+    const box = document.getElementById("adminFollowMeProjects20260525");
+    const note = document.getElementById("adminFollowMeNote20260525");
+    if(!box) return;
+
+    box.innerHTML = '<div style="padding:14px;border-radius:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.72);font-size:13px;font-weight:750;">Carico progetti FollowMe...</div>';
+
+    try{
+      const res = await fetch("/api/admin/followme/projects", { credentials:"same-origin" });
+      const data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Errore caricamento.");
+      }
+
+      const rows = Array.isArray(data.projects) ? data.projects : [];
+
+      if(note){
+        note.textContent = "Progetti FollowMe caricati: " + rows.length + ". I dati sono letti dal backend admin, nessun QR è scritto fisso nell’HTML.";
+      }
+
+      if(!rows.length){
+        box.innerHTML = '<div style="padding:14px;border-radius:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.72);font-size:13px;font-weight:750;">Nessun progetto FollowMe trovato.</div>';
+        return;
+      }
+
+      box.innerHTML = rows.map(projectCard).join("");
+
+    }catch(err){
+      box.innerHTML = '<div style="padding:14px;border-radius:18px;background:rgba(255,90,111,.12);border:1px solid rgba(255,90,111,.26);color:#ffb4bf;font-size:13px;font-weight:800;">' + esc(err.message || "Errore caricamento progetti FollowMe.") + '</div>';
+    }
+  }
+
+  document.addEventListener("click", function(ev){
+    const loadBtn = ev.target && ev.target.closest ? ev.target.closest("#adminFollowMeFrame20260525 .fm-admin-btn.primary") : null;
+    if(loadBtn && String(loadBtn.textContent || "").toLowerCase().includes("carica")){
+      ev.preventDefault();
+      loadProjects();
+      return;
+    }
+
+    const closeBtn = ev.target && ev.target.closest ? ev.target.closest("[data-fm-close-detail]") : null;
+    if(closeBtn){
+      const d = closeBtn.closest("details");
+      if(d) d.open = false;
+    }
+  });
+
+  window.adminFollowMeLoadProjects20260525 = loadProjects;
+})();
+</script>
 
 </body>
 </html>
