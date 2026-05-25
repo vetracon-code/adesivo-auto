@@ -14513,6 +14513,98 @@ app.get('/fm/u/:public_id', async (req, res) => {
 });
 
 
+
+// start-followme-public-fm-code-route-20260525
+/*
+  Route pubblica QR FollowMe:
+  /fm/CODICE
+
+  Serve per i QR stampati. Legge active_url dal progetto e redirige.
+  Se la destinazione è PDF, apre il viewer interno.
+*/
+app.get('/fm/:code', async (req, res) => {
+  try {
+    const code = String(req.params.code || '').trim();
+
+    if (!code) {
+      return res.status(404).send('QR FollowMe non trovato.');
+    }
+
+    const project = await getFollowMeProjectByCode20260520(code);
+
+    if (!project) {
+      return res.status(404).send('QR FollowMe non trovato.');
+    }
+
+    const activeUrl = normalizeUrlForFollowMe
+      ? normalizeUrlForFollowMe(project.active_url || '')
+      : String(project.active_url || '').trim();
+
+    if (!activeUrl) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(404).send(`<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>FollowMe</title>
+</head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#05070d;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center;">
+  <div>
+    <h1>QR FollowMe non ancora attivo</h1>
+    <p>Questo QR non ha ancora una destinazione impostata.</p>
+  </div>
+</body>
+</html>`);
+    }
+
+    try {
+      await pool.query(
+        `INSERT INTO followme_scan_logs
+          (project_id, url, ip_address, user_agent, referrer)
+         VALUES
+          ($1, $2, $3, $4, $5)`,
+        [
+          project.id,
+          activeUrl,
+          req.ip || '',
+          req.get('user-agent') || '',
+          req.get('referer') || ''
+        ]
+      ).catch(() => null);
+
+      await pool.query(
+        `INSERT INTO followme_url_history
+          (project_id, url, activated_at, last_used_at, scan_count)
+         VALUES
+          ($1, $2, NOW(), NOW(), 1)
+         ON CONFLICT DO NOTHING`,
+        [project.id, activeUrl]
+      ).catch(() => null);
+    } catch(e) {}
+
+    const activeUrlLower = String(activeUrl || '').toLowerCase();
+
+    if (
+      (activeUrlLower.includes('/uploads/followme-documents/') && activeUrlLower.includes('.pdf')) ||
+      activeUrlLower.includes('/uploads/followme-docs/') ||
+      activeUrlLower.includes('/api/followme/document/') ||
+      activeUrlLower.endsWith('.pdf')
+    ) {
+      const viewerUrl = '/pdf-viewer.html?file=' + encodeURIComponent(activeUrl);
+      return res.redirect(302, viewerUrl);
+    }
+
+    return res.redirect(302, activeUrl);
+
+  } catch (err) {
+    console.error('followme public /fm/:code route error:', err);
+    return res.status(500).send('Errore apertura QR FollowMe.');
+  }
+});
+// end-followme-public-fm-code-route-20260525
+
+
 async function cleanupFollowMeUrlHistory(projectId, activeUrl) {
   try {
     const normalizedActiveUrl = normalizeUrlForFollowMe(activeUrl || '');
