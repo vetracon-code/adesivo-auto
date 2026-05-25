@@ -6208,7 +6208,12 @@ app.post('/api/followme/trial/:id/verify', express.json({ limit:'20kb' }), async
       return res.status(500).json({ success:false, error:'Impossibile generare un QR univoco.' });
     }
 
-    const initialUrl = normalizeUrlForFollowMe(trial.initial_url || '') || 'https://771717.appmecard.it/communication';
+    const rawInitialUrl = String(trial.initial_url || '').trim();
+    let initialUrl = rawInitialUrl || 'https://771717.appmecard.it/communication';
+
+    if (initialUrl && !/^https?:\/\//i.test(initialUrl) && !initialUrl.startsWith('/')) {
+      initialUrl = 'https://' + initialUrl;
+    }
     const trialStartedAt = new Date();
     const trialExpiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
 
