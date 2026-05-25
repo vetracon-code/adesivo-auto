@@ -33395,5 +33395,134 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-persistent-image-carousel-preview-final-20260525">
+(function(){
+  "use strict";
+
+  /*
+    Rende persistente la preview immagine nella card carosello.
+    Il file è già su disco; altri renderer ridisegnano le card e cancellano la preview.
+    Questo observer si aggancia solo al carosello e riapplica la miniatura quando necessario.
+  */
+
+  function safeRun(){
+    try{
+      if(typeof window.followmeRenderImageCarouselCardPreview20260525 === "function"){
+        window.followmeRenderImageCarouselCardPreview20260525();
+      }
+    }catch(e){}
+  }
+
+  function schedule(){
+    clearTimeout(window.__followmePersistentImageCarouselTimer20260525);
+    window.__followmePersistentImageCarouselTimer20260525 = setTimeout(safeRun, 180);
+  }
+
+  function findTrack(){
+    return document.getElementById("premiumHistoryTrack") ||
+      document.querySelector(".premium-history-track") ||
+      document.querySelector("[id*='HistoryTrack']") ||
+      document.querySelector("[id*='historyTrack']");
+  }
+
+  function observeTrack(){
+    if(window.__followmePersistentImageCarouselObserver20260525) return;
+
+    const track = findTrack();
+    if(!track){
+      setTimeout(observeTrack, 600);
+      return;
+    }
+
+    try{
+      const observer = new MutationObserver(function(mutations){
+        let relevant = false;
+
+        mutations.forEach(function(m){
+          if(m.type === "childList") relevant = true;
+          if(m.type === "attributes" && (m.attributeName === "class" || m.attributeName === "style")) relevant = true;
+        });
+
+        if(relevant) schedule();
+      });
+
+      observer.observe(track, {
+        childList:true,
+        subtree:true,
+        attributes:true,
+        attributeFilter:["class","style"]
+      });
+
+      window.__followmePersistentImageCarouselObserver20260525 = observer;
+
+      schedule();
+      setTimeout(safeRun, 700);
+      setTimeout(safeRun, 1800);
+    }catch(e){}
+  }
+
+  if(!window.__followmePersistentImageCarouselFetchPatch20260525){
+    window.__followmePersistentImageCarouselFetchPatch20260525 = true;
+
+    const oldFetch = window.fetch;
+
+    window.fetch = async function(){
+      const args = arguments;
+      const url = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+
+      const res = await oldFetch.apply(this, args);
+
+      try{
+        if(
+          res &&
+          res.ok &&
+          (
+            url.includes("/image-card/current") ||
+            url.includes("/image-card/upload") ||
+            url.includes("/update-url") ||
+            url.includes("/history") ||
+            url.includes("/status")
+          )
+        ){
+          setTimeout(schedule, 120);
+          setTimeout(schedule, 650);
+          setTimeout(schedule, 1400);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", function(){
+      observeTrack();
+      setTimeout(safeRun, 600);
+      setTimeout(safeRun, 1600);
+      setTimeout(safeRun, 3200);
+    });
+  }else{
+    observeTrack();
+    setTimeout(safeRun, 600);
+    setTimeout(safeRun, 1600);
+    setTimeout(safeRun, 3200);
+  }
+
+  window.addEventListener("load", function(){
+    observeTrack();
+    setTimeout(safeRun, 800);
+    setTimeout(safeRun, 2200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    observeTrack();
+    setTimeout(safeRun, 700);
+  });
+
+  window.followmePersistImageCarouselPreview20260525 = safeRun;
+})();
+</script>
+
 </body>
 </html>
