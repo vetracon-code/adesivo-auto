@@ -5666,6 +5666,79 @@ app.get('/api/admin/followme/projects', requireAdmin, async (req, res) => {
 });
 // end-admin-followme-projects-api-20260525
 
+// start-admin-followme-delete-project-api-20260525
+app.post('/api/admin/followme/project/:code/delete', requireAdmin, express.json(), async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const code = String(req.params.code || '').trim();
+
+    if (!code) {
+      return res.status(400).json({ success:false, error:'Codice QR mancante.' });
+    }
+
+    await client.query('BEGIN');
+
+    const projectRes = await client.query(
+      `SELECT id, code, public_id, label, active_url
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!projectRes.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success:false, error:'QR FollowMe non trovato.' });
+    }
+
+    const project = projectRes.rows[0];
+
+    const safeDelete = async (sql, params) => {
+      try {
+        await client.query(sql, params);
+      } catch (e) {
+        console.warn('followme delete optional table warning:', e.message);
+      }
+    };
+
+    await safeDelete(`DELETE FROM followme_content_reviews WHERE project_id = $1`, [project.id]);
+    await safeDelete(`DELETE FROM followme_usage_events WHERE project_id = $1`, [project.id]);
+    await safeDelete(`DELETE FROM followme_scan_logs WHERE project_id = $1`, [project.id]);
+    await safeDelete(`DELETE FROM followme_url_history WHERE project_id = $1`, [project.id]);
+    await safeDelete(`DELETE FROM followme_documents WHERE project_id = $1`, [project.id]);
+    await safeDelete(`DELETE FROM followme_image_cards WHERE project_id = $1`, [project.id]);
+    await safeDelete(`DELETE FROM followme_chat_messages WHERE project_id = $1`, [project.id]);
+    await safeDelete(`DELETE FROM followme_chat_sessions WHERE project_id = $1`, [project.id]);
+
+    await client.query(`DELETE FROM followme_projects WHERE id = $1`, [project.id]);
+
+    await client.query('COMMIT');
+
+    return res.json({
+      success:true,
+      deleted:true,
+      project:{
+        id:project.id,
+        code:project.code,
+        public_id:project.public_id,
+        label:project.label
+      }
+    });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch(e) {}
+    console.error('admin followme delete project error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore eliminazione definitiva QR FollowMe.'
+    });
+  } finally {
+    client.release();
+  }
+});
+// end-admin-followme-delete-project-api-20260525
+
+
 
 app.get('/api/admin/list-stickers', requireAdmin, async (req, res) => {
   try {
