@@ -33145,5 +33145,255 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-image-carousel-card-preview-final-20260525">
+(function(){
+  "use strict";
+
+  /*
+    Mostra la miniatura dell'immagine nella card immagine del carosello.
+    Non tocca PDF, URL normali, upload o pulsanti.
+  */
+
+  function code(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("app");
+      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
+
+      const p = new URLSearchParams(location.search);
+      return p.get("code") || p.get("qr") || p.get("c") ||
+        window.FOLLOWME_CODE ||
+        window.FOLLOWME_PROJECT_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        window.followMeProjectCode ||
+        "FMDEMO";
+    }catch(e){
+      return window.FOLLOWME_CODE ||
+        window.FOLLOWME_PROJECT_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        window.followMeProjectCode ||
+        "FMDEMO";
+    }
+  }
+
+  function clean(v){
+    return String(v || "").trim();
+  }
+
+  function abs(path){
+    const raw = clean(path);
+    if(!raw) return "";
+    if(/^https?:\/\//i.test(raw)) return raw;
+    if(raw.startsWith("/")) return location.origin + raw;
+    return location.origin + "/" + raw.replace(/^\/+/, "");
+  }
+
+  function esc(v){
+    return String(v || "")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
+  }
+
+  function isPdfText(t){
+    const x = clean(t).toLowerCase();
+    return x.includes("documento pdf") || x.includes("pdf") || x.includes("/fm/document/") || x.includes(".pdf");
+  }
+
+  function cardLooksLikeImage(card){
+    if(!card) return false;
+
+    const txt = clean(card.textContent).toLowerCase();
+
+    if(isPdfText(txt)) return false;
+
+    if(
+      txt.includes("immagine") ||
+      txt.includes("ultima immagine utilizzata") ||
+      txt.includes("foto") ||
+      txt.includes("/fm/image/")
+    ){
+      return true;
+    }
+
+    const links = Array.from(card.querySelectorAll("a[href]"));
+    return links.some(function(a){
+      const href = clean(a.getAttribute("href")).toLowerCase();
+      return href.includes("/fm/image/") || href.includes("/image-card") || href.includes("/image/");
+    });
+  }
+
+  async function fetchCurrentImage(){
+    try{
+      const c = code();
+      const res = await fetch("/api/followme/" + encodeURIComponent(c) + "/image-card/current?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      if(!res.ok) return null;
+
+      const data = await res.json().catch(function(){ return null; });
+      if(!data) return null;
+
+      const img = data.image || data.data || data;
+
+      const raw =
+        img.public_path ||
+        img.public_url ||
+        img.image_url ||
+        data.public_path ||
+        data.public_url ||
+        data.image_url ||
+        "";
+
+      if(!raw) return null;
+
+      const version = img.id || img.updated_at || img.created_at || Date.now();
+
+      return {
+        src: abs(raw) + (String(raw).includes("?") ? "&" : "?") + "v=" + version,
+        name: img.original_name || img.stored_name || "Immagine"
+      };
+    }catch(e){
+      return null;
+    }
+  }
+
+  function ensureCss(){
+    if(document.getElementById("followme-image-carousel-card-preview-css-20260525")) return;
+
+    const style = document.createElement("style");
+    style.id = "followme-image-carousel-card-preview-css-20260525";
+    style.textContent = `
+      .premium-history-card .followme-image-carousel-preview-20260525{
+        width:100% !important;
+        height:100% !important;
+        min-height:100% !important;
+        display:block !important;
+        overflow:hidden !important;
+        border-radius:inherit !important;
+        background:#05070d !important;
+      }
+
+      .premium-history-card .followme-image-carousel-preview-20260525 img{
+        width:100% !important;
+        height:100% !important;
+        min-height:100% !important;
+        display:block !important;
+        object-fit:cover !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function renderIntoCard(card, image){
+    if(!card || !image || !image.src) return;
+
+    const preview =
+      card.querySelector(".premium-history-preview") ||
+      card.querySelector(".premium-card-preview-inner") ||
+      card.querySelector("[class*='preview']");
+
+    if(!preview) return;
+
+    preview.innerHTML =
+      '<div class="followme-image-carousel-preview-20260525" data-followme-image-carousel-preview="1">' +
+        '<img src="' + esc(image.src) + '" alt="' + esc(image.name || "Immagine") + '">' +
+      '</div>';
+
+    preview.classList.add("followme-image-carousel-preview-holder-20260525");
+
+    const badge = card.querySelector(".premium-history-badge");
+    if(badge && clean(badge.textContent).toLowerCase() !== "attivo ora"){
+      badge.textContent = "Immagine";
+    }
+
+    const domain = card.querySelector(".premium-history-domain");
+    if(domain){
+      domain.textContent = "ULTIMA IMMAGINE UTILIZZATA";
+    }
+  }
+
+  async function run(){
+    ensureCss();
+
+    const cards = Array.from(document.querySelectorAll(".premium-history-card,.history-card,.premium-card"));
+    const imageCards = cards.filter(cardLooksLikeImage);
+
+    if(!imageCards.length) return;
+
+    const image = await fetchCurrentImage();
+    if(!image || !image.src) return;
+
+    imageCards.forEach(function(card){
+      renderIntoCard(card, image);
+    });
+
+    try{
+      if(typeof window.followmeNormalizeUniformPremiumCards20260522 === "function"){
+        window.followmeNormalizeUniformPremiumCards20260522();
+      }
+    }catch(e){}
+  }
+
+  function schedule(){
+    clearTimeout(window.__followmeImageCarouselPreviewTimer20260525);
+    window.__followmeImageCarouselPreviewTimer20260525 = setTimeout(run, 250);
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    setTimeout(run, 500);
+    setTimeout(run, 1500);
+    setTimeout(run, 3000);
+  });
+
+  window.addEventListener("load", function(){
+    setTimeout(run, 800);
+    setTimeout(run, 2200);
+  });
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(run, 800);
+  });
+
+  if(!window.__followmeImageCarouselFetchPatch20260525){
+    window.__followmeImageCarouselFetchPatch20260525 = true;
+
+    const oldFetch = window.fetch;
+
+    window.fetch = async function(){
+      const args = arguments;
+      const requestUrl = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+
+      const res = await oldFetch.apply(this, args);
+
+      try{
+        if(
+          res &&
+          res.ok &&
+          (
+            requestUrl.includes("/image-card/upload") ||
+            requestUrl.includes("/update-url") ||
+            requestUrl.includes("/history")
+          )
+        ){
+          setTimeout(run, 350);
+          setTimeout(run, 1100);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  window.followmeRenderImageCarouselCardPreview20260525 = run;
+})();
+</script>
+
 </body>
 </html>
