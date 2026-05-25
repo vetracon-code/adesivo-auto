@@ -5712,6 +5712,103 @@ function makeFollowMeTrialOtp20260525() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
+
+// followme-trial-admin-push-20260525
+async function sendFollowMeTrialRequestAdminPush20260525(req, trialRow) {
+  try {
+    const requestId = trialRow?.id;
+    if (!requestId) return;
+
+    const baseUrl = getPublicBaseUrl(req);
+    const targetUrl = `/admin.html?followmeTrialRequest=${encodeURIComponent(requestId)}#adminFollowMeFrame20260525`;
+    const absoluteTargetUrl = `${baseUrl.replace(/\/$/, '')}${targetUrl}`;
+
+    const fullName = String(trialRow.full_name || '').trim();
+    const phone = String(trialRow.phone || '').trim();
+    const email = String(trialRow.email || '').trim();
+
+    const bodyParts = [
+      fullName || 'Nuova richiesta',
+      phone || null,
+      email || null
+    ].filter(Boolean);
+
+    const payload = {
+      title: 'Richiesta nuova prova FollowMe QR',
+      body: bodyParts.join(' · ') || 'Nuova richiesta prova FollowMe',
+      url: targetUrl,
+      target_url: targetUrl,
+      absolute_url: absoluteTargetUrl,
+      tag: `followme-trial-request-${requestId}`,
+      data: {
+        type: 'followme_trial_request',
+        request_id: requestId,
+        url: targetUrl,
+        target_url: targetUrl,
+        absolute_url: absoluteTargetUrl
+      }
+    };
+
+    /*
+      Riutilizzo canale push admin già esistente dove possibile.
+      Se in futuro creeremo una tabella push dedicata admin, basterà sostituire questo blocco.
+    */
+    const trialPushCode = 'AMC-E8493C7F';
+    const trialPushPlate = 'GL740CH';
+
+    try {
+      await pool.query(
+        `INSERT INTO owner_messages
+         (code, plate, title, message_text, created_at)
+         VALUES ($1,$2,$3,$4,NOW())`,
+        [
+          trialPushCode,
+          trialPushPlate,
+          payload.title,
+          [
+            payload.body,
+            '',
+            `Apri admin: ${absoluteTargetUrl}`
+          ].join('\n')
+        ]
+      ).catch(() => null);
+    } catch(e) {}
+
+    if (typeof sendPushToOwnerDevices === 'function') {
+      try {
+        await sendPushToOwnerDevices(trialPushCode, trialPushPlate, payload);
+        return;
+      } catch(pushErr) {
+        console.error('followme trial admin push sendPushToOwnerDevices error:', pushErr.statusCode || '', pushErr.body || pushErr.message || pushErr);
+      }
+    }
+
+    if (typeof sendPushNotificationToCodePlate === 'function') {
+      try {
+        await sendPushNotificationToCodePlate(trialPushCode, trialPushPlate, payload);
+        return;
+      } catch(pushErr) {
+        console.error('followme trial admin push sendPushNotificationToCodePlate error:', pushErr.statusCode || '', pushErr.body || pushErr.message || pushErr);
+      }
+    }
+
+    if (typeof sendOwnerPush === 'function') {
+      try {
+        await sendOwnerPush(trialPushCode, trialPushPlate, payload);
+        return;
+      } catch(pushErr) {
+        console.error('followme trial admin push sendOwnerPush error:', pushErr.statusCode || '', pushErr.body || pushErr.message || pushErr);
+      }
+    }
+
+    console.warn('followme trial admin push: nessuna funzione push compatibile trovata.');
+  } catch(err) {
+    console.error('followme trial admin push error:', err.message || err);
+  }
+}
+// end-followme-trial-admin-push-20260525
+
+
 app.post('/api/followme/trial/request', express.json({ limit:'80kb' }), async (req, res) => {
   try {
     await ensureFollowMeTrialRequestsTable20260525();
@@ -5752,6 +5849,60 @@ app.post('/api/followme/trial/request', express.json({ limit:'80kb' }), async (r
       return res.status(400).json({
         success:false,
         error:'Devi accettare privacy e condizioni d’uso per richiedere la prova.'
+      });
+    }
+
+    /*
+      Protezioni anti-bot / anti-abuso:
+      - max 5 richieste dallo stesso IP in 24 ore
+      - max 2 richieste con stessa email in 30 giorni
+      - max 2 richieste con stesso telefono in 30 giorni
+      - blocco invii troppo rapidi già gestito sopra
+    */
+    const ipAddress = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
+
+    const ipLimit = await pool.query(
+      `SELECT COUNT(*)::int AS n
+       FROM followme_trial_requests
+       WHERE ip_address = $1
+         AND created_at > NOW() - INTERVAL '24 hours'`,
+      [ipAddress || null]
+    );
+
+    if ((ipLimit.rows[0]?.n || 0) >= 5) {
+      return res.status(429).json({
+        success:false,
+        error:'Troppe richieste da questa connessione. Riprova più tardi.'
+      });
+    }
+
+    const emailLimit = await pool.query(
+      `SELECT COUNT(*)::int AS n
+       FROM followme_trial_requests
+       WHERE LOWER(email) = LOWER($1)
+         AND created_at > NOW() - INTERVAL '30 days'`,
+      [email]
+    );
+
+    if ((emailLimit.rows[0]?.n || 0) >= 2) {
+      return res.status(409).json({
+        success:false,
+        error:'Hai già richiesto la prova con questa email. Contattaci su WhatsApp per proseguire.'
+      });
+    }
+
+    const phoneLimit = await pool.query(
+      `SELECT COUNT(*)::int AS n
+       FROM followme_trial_requests
+       WHERE (phone = $1 OR phone_whatsapp = $2)
+         AND created_at > NOW() - INTERVAL '30 days'`,
+      [phoneNorm.e164, phoneNorm.whatsapp]
+    );
+
+    if ((phoneLimit.rows[0]?.n || 0) >= 2) {
+      return res.status(409).json({
+        success:false,
+        error:'Hai già richiesto la prova con questo numero WhatsApp. Contattaci per proseguire.'
       });
     }
 
@@ -5808,10 +5959,17 @@ app.post('/api/followme/trial/request', express.json({ limit:'80kb' }), async (r
         termsConsent,
         marketingConsent,
         elapsedMs > 0 ? 1 : 0,
-        req.headers['x-forwarded-for'] || req.socket?.remoteAddress || null,
+        ipAddress || null,
         req.headers['user-agent'] || null
       ]
     );
+
+    sendFollowMeTrialRequestAdminPush20260525(req, {
+      ...inserted.rows[0],
+      full_name: fullName || null,
+      email,
+      phone: phoneNorm.e164
+    }).catch(() => null);
 
     return res.json({
       success:true,

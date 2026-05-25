@@ -4018,7 +4018,7 @@ function setDeadlineCleanupFlag(enabled){
       const verifyUrl = item.verify_url || "";
 
       return ''
-        + '<article style="border-radius:22px;padding:14px;background:rgba(255,255,255,.075);border:1px solid rgba(255,255,255,.12);box-shadow:0 16px 40px rgba(0,0,0,.16);">'
+        + '<article data-followme-trial-request-id="' + esc(id) + '" style="border-radius:22px;padding:14px;background:rgba(255,255,255,.075);border:1px solid rgba(255,255,255,.12);box-shadow:0 16px 40px rgba(0,0,0,.16);">'
         + '  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">'
         + '    <div>'
         + '      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
@@ -4148,6 +4148,79 @@ function setDeadlineCleanupFlag(enabled){
   });
 
   window.adminFollowMeLoadTrialRequests20260525 = loadTrials;
+})();
+</script>
+
+
+<script id="admin-followme-trial-deeplink-20260525">
+(function(){
+  "use strict";
+
+  function getTrialRequestId(){
+    try{
+      const params = new URLSearchParams(window.location.search || "");
+      return params.get("followmeTrialRequest") || "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function highlightTrialRequest(id){
+    if(!id) return false;
+
+    const el = document.querySelector('[data-followme-trial-request-id="' + CSS.escape(String(id)) + '"]');
+    if(!el) return false;
+
+    try{
+      el.scrollIntoView({ behavior:"smooth", block:"center" });
+      el.style.outline = "3px solid rgba(200,255,46,.85)";
+      el.style.outlineOffset = "7px";
+      el.style.boxShadow = "0 0 0 1px rgba(200,255,46,.35), 0 24px 70px rgba(200,255,46,.16)";
+      setTimeout(function(){
+        el.style.outline = "";
+        el.style.outlineOffset = "";
+        el.style.boxShadow = "";
+      }, 2800);
+    }catch(e){}
+    return true;
+  }
+
+  async function openFollowMeTrialDeepLink(){
+    const id = getTrialRequestId();
+    if(!id) return;
+
+    const frame = document.getElementById("adminFollowMeFrame20260525");
+    if(frame){
+      try{
+        frame.scrollIntoView({ behavior:"smooth", block:"start" });
+      }catch(e){}
+    }
+
+    let loaded = false;
+
+    try{
+      if(typeof window.adminFollowMeLoadTrialRequests20260525 === "function"){
+        window.adminFollowMeLoadTrialRequests20260525();
+        loaded = true;
+      }
+    }catch(e){}
+
+    let attempts = 0;
+    const timer = setInterval(function(){
+      attempts += 1;
+      if(highlightTrialRequest(id) || attempts >= 25){
+        clearInterval(timer);
+      }
+    }, loaded ? 350 : 500);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", function(){
+      setTimeout(openFollowMeTrialDeepLink, 600);
+    });
+  }else{
+    setTimeout(openFollowMeTrialDeepLink, 600);
+  }
 })();
 </script>
 
