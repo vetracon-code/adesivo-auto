@@ -5746,8 +5746,7 @@ async function sendFollowMeTrialRequestAdminPush20260525(req, trialRow) {
       email ? `Email: ${email}` : null,
       `Richiesta ID: ${requestId}`,
       `Apri admin: ${absoluteTargetUrl}`
-    ].filter(Boolean).join('
-');
+    ].filter(Boolean).join('\\n');
 
     try {
       const insertedMsg = await pool.query(
