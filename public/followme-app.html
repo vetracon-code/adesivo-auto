@@ -32763,5 +32763,387 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-fast-pdf-reactivate-final-20260525">
+(function(){
+  "use strict";
+
+  /*
+    Fix lentezza pulsante "Riattiva" su card PDF:
+    appena l'utente clicca Riattiva su una card PDF/documento, aggiorna subito
+    preview alta e pulsanti, senza attendere il refresh completo della history.
+    Non modifica server, upload, immagini o URL normali.
+  */
+
+  function clean(v){
+    return String(v || "").trim();
+  }
+
+  function absUrl(url){
+    const raw = clean(url);
+    if(!raw) return "";
+    if(/^https?:\/\//i.test(raw)) return raw;
+    if(raw.startsWith("/")) return raw;
+    return "https://" + raw;
+  }
+
+  function isPdfUrl(url){
+    const u = clean(url).toLowerCase();
+    return (
+      u.includes("/uploads/followme-documents/") ||
+      u.includes("/uploads/followme-docs/") ||
+      u.includes("/api/followme/document/") ||
+      u.includes("/fm/document/") ||
+      u.includes("/pdf-viewer.html") ||
+      u.endsWith(".pdf") ||
+      u.includes(".pdf?")
+    );
+  }
+
+  function pdfViewerUrl(url){
+    const raw = clean(url);
+    if(!raw) return "";
+
+    if(raw.includes("/pdf-viewer.html")) return raw;
+
+    /*
+      Se ho un PDF/file diretto, uso il viewer interno.
+      Se ho già una rotta /fm/document, la lascio.
+    */
+    if(raw.includes("/fm/document/")) return raw;
+
+    return "/pdf-viewer.html?file=" + encodeURIComponent(raw);
+  }
+
+  function esc(v){
+    return String(v || "")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
+  }
+
+  function ensureCss(){
+    if(document.getElementById("followme-fast-pdf-reactivate-css-20260525")) return;
+
+    const style = document.createElement("style");
+    style.id = "followme-fast-pdf-reactivate-css-20260525";
+    style.textContent = `
+      .followme-fast-pdf-reactivate-preview-20260525{
+        width:100% !important;
+        min-height:220px !important;
+        height:100% !important;
+        border-radius:18px !important;
+        overflow:hidden !important;
+        background:linear-gradient(145deg,#101018,#171724) !important;
+        border:1px solid rgba(255,255,255,.10) !important;
+        display:grid !important;
+        place-items:center !important;
+        box-sizing:border-box !important;
+        padding:18px !important;
+      }
+
+      .followme-fast-pdf-reactivate-preview-20260525 .inner{
+        width:100% !important;
+        max-width:360px !important;
+        min-height:170px !important;
+        border-radius:22px !important;
+        background:rgba(255,255,255,.06) !important;
+        border:1px solid rgba(255,255,255,.12) !important;
+        box-shadow:0 18px 44px rgba(0,0,0,.28) !important;
+        display:flex !important;
+        flex-direction:column !important;
+        align-items:center !important;
+        justify-content:center !important;
+        gap:10px !important;
+        text-align:center !important;
+        padding:18px !important;
+      }
+
+      .followme-fast-pdf-reactivate-preview-20260525 strong{
+        color:#101018 !important;
+        background:linear-gradient(135deg,#9bd61e,#5ee7ff) !important;
+        border-radius:999px !important;
+        padding:8px 15px !important;
+        font-size:13px !important;
+        font-weight:950 !important;
+      }
+
+      .followme-fast-pdf-reactivate-preview-20260525 span{
+        color:#fff !important;
+        font-size:14px !important;
+        font-weight:850 !important;
+        line-height:1.25 !important;
+        max-width:100% !important;
+        overflow:hidden !important;
+        text-overflow:ellipsis !important;
+        display:-webkit-box !important;
+        -webkit-line-clamp:2 !important;
+        -webkit-box-orient:vertical !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function renderHtml(name){
+    return '' +
+      '<div class="followme-fast-pdf-reactivate-preview-20260525" data-followme-fast-pdf-reactivate="1">' +
+        '<div class="inner">' +
+          '<strong>Documento PDF</strong>' +
+          '<span>' + esc(name || "Documento riattivato") + '</span>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function findMainPreviewBox(){
+    return document.getElementById("simpleDestinationPreviewFrame") ||
+      document.querySelector(".simple-preview-square iframe") ||
+      document.querySelector(".simple-preview-square") ||
+      document.querySelector(".destination-preview-frame") ||
+      document.querySelector(".qr-auto-preview-frame") ||
+      document.querySelector("[id*='PreviewFrame']") ||
+      document.querySelector("[id*='previewFrame']");
+  }
+
+  function updateOpenButton(viewerUrl, rawUrl){
+    const candidates = [
+      document.getElementById("simpleDestinationPreviewOpen"),
+      document.getElementById("openQrPreview"),
+      document.getElementById("followmeOtherOpenQrPreview"),
+      document.getElementById("followme5PreviewDoc20260520")
+    ].filter(Boolean);
+
+    candidates.forEach(function(btn){
+      try{
+        if(String(btn.tagName || "").toLowerCase() === "a"){
+          btn.href = viewerUrl || rawUrl;
+          btn.target = "_blank";
+          btn.rel = "noopener";
+        }
+
+        if(btn.id !== "followme5PreviewDoc20260520"){
+          btn.textContent = "Apri documento";
+        }
+
+        btn.style.opacity = "1";
+        btn.style.pointerEvents = "auto";
+        btn.removeAttribute("disabled");
+        btn.classList.remove("disabled");
+      }catch(e){}
+    });
+  }
+
+  function setGlobals(url){
+    try{ window.__followMeActiveUrl = url; }catch(e){}
+    try{ window.followMeCurrentActiveUrl = url; }catch(e){}
+    try{ window.currentFollowMeActiveUrl = url; }catch(e){}
+    try{ window.activeFollowMeUrl = url; }catch(e){}
+  }
+
+  function setInputAndText(url){
+    const activeText = document.getElementById("activeUrl");
+    if(activeText) activeText.textContent = url;
+
+    const newUrl = document.getElementById("newUrl");
+    if(newUrl && document.activeElement !== newUrl){
+      newUrl.value = url;
+    }
+  }
+
+  function renderPreview(name){
+    ensureCss();
+
+    const box = findMainPreviewBox();
+    const empty = document.getElementById("simpleDestinationPreviewEmpty");
+    if(empty) empty.style.display = "none";
+
+    if(!box) return;
+
+    try{
+      let target = box;
+
+      if(String(box.tagName || "").toLowerCase() === "iframe"){
+        target = box.parentElement || box;
+        box.style.display = "none";
+      }
+
+      target.innerHTML = renderHtml(name || "Documento riattivato");
+      target.classList.add("followme-fast-pdf-reactivate-holder-20260525");
+      target.style.display = "";
+    }catch(e){}
+  }
+
+  function cardText(card){
+    return String(card && card.textContent || "").replace(/\s+/g," ").trim();
+  }
+
+  function urlFromCard(card){
+    if(!card) return "";
+
+    const attrs = [
+      "data-followme-url",
+      "data-url",
+      "data-destination-url",
+      "data-active-url",
+      "href"
+    ];
+
+    for(const a of attrs){
+      const v = card.getAttribute && card.getAttribute(a);
+      if(v && isPdfUrl(v)) return clean(v);
+    }
+
+    const link = card.querySelector && card.querySelector("a[href]");
+    if(link){
+      const href = link.getAttribute("href") || "";
+      if(isPdfUrl(href)) return clean(href);
+    }
+
+    const urlEl = card.querySelector && card.querySelector(".premium-history-url,.history-url,[class*='url']");
+    if(urlEl){
+      const t = clean(urlEl.textContent);
+      if(isPdfUrl(t)) return t;
+    }
+
+    return "";
+  }
+
+  function nameFromCard(card){
+    if(!card) return "Documento PDF";
+
+    const urlEl = card.querySelector(".premium-history-url,.history-url");
+    const domain = card.querySelector(".premium-history-domain");
+    const badge = card.querySelector(".premium-history-badge");
+
+    const candidates = [
+      urlEl && urlEl.textContent,
+      domain && domain.textContent,
+      badge && badge.textContent,
+      cardText(card)
+    ].map(clean).filter(Boolean);
+
+    const found = candidates.find(function(t){
+      return t && !/riattiva|elimina|attivo ora|scansioni|ultimo/i.test(t);
+    });
+
+    return found || "Documento PDF";
+  }
+
+  function applyPdf(url, name){
+    const raw = clean(url);
+    if(!raw || !isPdfUrl(raw)) return false;
+
+    const viewer = pdfViewerUrl(raw);
+
+    setGlobals(viewer);
+    setInputAndText(viewer);
+    updateOpenButton(viewer, raw);
+    renderPreview(name || "Documento PDF");
+
+    try{
+      if(typeof window.followmeFastPdfUploadPreview20260525 === "function"){
+        window.followmeFastPdfUploadPreview20260525({
+          success:true,
+          document:{
+            public_url: raw,
+            original_name: name || "Documento PDF"
+          }
+        });
+      }
+    }catch(e){}
+
+    setTimeout(function(){
+      try{
+        if(typeof window.followmeNormalizeUniformPremiumCards20260522 === "function"){
+          window.followmeNormalizeUniformPremiumCards20260522();
+        }
+      }catch(e){}
+    }, 700);
+
+    return true;
+  }
+
+  /*
+    Click ottimistico: appena clicchi Riattiva su una card PDF,
+    aggiorna subito la preview prima ancora che la fetch finisca.
+  */
+  document.addEventListener("click", function(ev){
+    try{
+      const btn = ev.target && ev.target.closest ? ev.target.closest("button,a") : null;
+      if(!btn) return;
+
+      const t = String(btn.textContent || "").toLowerCase();
+      if(!t.includes("riattiva")) return;
+
+      const card = btn.closest(".premium-history-card,.history-item,.history-card,.premium-card");
+      if(!card) return;
+
+      const url = urlFromCard(card);
+      if(!url) return;
+
+      applyPdf(url, nameFromCard(card));
+    }catch(e){}
+  }, true);
+
+  /*
+    Risposta server: se una fetch di update/history/reactivate finisce OK
+    e riguarda un PDF, riapplica la preview immediata.
+  */
+  if(!window.__followmeFastPdfReactivateFetchPatch20260525){
+    window.__followmeFastPdfReactivateFetchPatch20260525 = true;
+
+    const oldFetch = window.fetch;
+
+    window.fetch = async function(){
+      const args = arguments;
+      const requestUrl = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+
+      let wantedUrl = "";
+
+      try{
+        const opts = args[1] || {};
+        const body = opts.body;
+
+        if(typeof body === "string"){
+          const j = JSON.parse(body);
+          wantedUrl = clean(j.url || j.active_url || j.destination_url || j.new_url || "");
+        }else if(body instanceof FormData){
+          wantedUrl = clean(body.get("url") || body.get("active_url") || body.get("destination_url") || body.get("new_url") || "");
+        }
+      }catch(e){}
+
+      if(wantedUrl && isPdfUrl(wantedUrl)){
+        setTimeout(function(){ applyPdf(wantedUrl, "Documento PDF"); }, 0);
+      }
+
+      const res = await oldFetch.apply(this, args);
+
+      try{
+        if(
+          res &&
+          res.ok &&
+          (
+            requestUrl.includes("/update-url") ||
+            requestUrl.includes("/history") ||
+            requestUrl.includes("/document/publish") ||
+            requestUrl.includes("/document/activate")
+          )
+        ){
+          if(wantedUrl && isPdfUrl(wantedUrl)){
+            setTimeout(function(){ applyPdf(wantedUrl, "Documento PDF"); }, 40);
+            setTimeout(function(){ applyPdf(wantedUrl, "Documento PDF"); }, 300);
+          }
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  window.followmeFastPdfReactivate20260525 = applyPdf;
+})();
+</script>
+
 </body>
 </html>
