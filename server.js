@@ -6003,7 +6003,9 @@ app.get('/api/admin/followme/trial-requests', requireAdmin, async (req, res) => 
        LIMIT 120`
     );
 
-    const baseUrl = getPublicBaseUrl(req);
+    const baseUrl = (typeof getPublicBaseUrl === 'function')
+      ? getPublicBaseUrl(req)
+      : ((req.protocol || 'https') + '://' + (req.get('host') || 'adesivo-auto.onrender.com'));
 
     const rows = r.rows.map(item => {
       const whatsappNumber = item.phone_whatsapp || String(item.phone || '').replace(/\D/g, '');
@@ -6036,7 +6038,8 @@ app.get('/api/admin/followme/trial-requests', requireAdmin, async (req, res) => 
     console.error('admin followme trial requests error:', err);
     return res.status(500).json({
       success:false,
-      error:'Errore caricamento richieste prova FollowMe.'
+      error:'Errore caricamento richieste prova FollowMe.',
+      detail: err && err.message ? err.message : String(err || '')
     });
   }
 });
