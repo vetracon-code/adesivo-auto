@@ -10228,7 +10228,7 @@ app.post('/api/followme/:code/document/upload', followmeDocumentUploadMulter2026
     const inserted = await pool.query(
       `INSERT INTO followme_documents
        (project_id, original_name, stored_name, public_path, mime_type, size_bytes, page_count, status, is_published, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,'application/pdf',$5,$6,'active',FALSE,NOW(),NOW())
+       VALUES ($1,$2,$3,$4,'application/pdf',$5,$6,'active',TRUE,NOW(),NOW())
        RETURNING id, project_id, original_name, public_path, mime_type, size_bytes, page_count, status, is_published, published_at, views_count, downloads_count, thumbnail_path, thumbnail_data_url, created_at, updated_at`,
       [project.id, originalName, storedName, publicPath, buffer.length, pageCount]
     );
@@ -10259,11 +10259,37 @@ app.post('/api/followme/:code/document/upload', followmeDocumentUploadMulter2026
       }
     }
 
+    const activeDocumentUrl = `/fm/document/${project.public_id || project.code}`;
+
+    /*
+      Pubblicazione immediata:
+      - il PDF reale è salvato nello spazio riservato del QR
+      - il QR viene puntato alla route controllata /fm/document/CODICE
+      - la history registra la destinazione documento
+    */
+    await pool.query(
+      `UPDATE followme_projects
+       SET active_url = $1,
+           updated_at = NOW()
+       WHERE id = $2`,
+      [activeDocumentUrl, project.id]
+    );
+
+    await pool.query(
+      `INSERT INTO followme_url_history
+        (project_id, url, activated_at, last_used_at, scan_count)
+       VALUES
+        ($1, $2, NOW(), NOW(), 0)
+       ON CONFLICT DO NOTHING`,
+      [project.id, activeDocumentUrl]
+    ).catch(() => null);
+
     return res.json({
       success:true,
       prepared:true,
-      published:false,
-      document:normalizeFollowMeDocumentForClient20260520(insertedDoc, { prepared:true, published:false }),
+      published:true,
+      active_url:activeDocumentUrl,
+      document:normalizeFollowMeDocumentForClient20260520(insertedDoc, { prepared:true, published:true }),
       public_url:`/fm/document/${project.public_id || project.code}`
     });
 
@@ -11156,16 +11182,17 @@ app.post('/api/followme/document/:document_id/thumbnail', express.json({ limit:'
 app.get('/fm/document/:code', async (req, res) => {
   try {
     await ensureFollowMeDocumentTable20260520();
+    await ensureFollowMeDocumentPreparedColumns20260520();
 
     const code = String(req.params.code || '').trim();
     const project = await getFollowMeProjectByCode20260520(code);
 
     if (!project) {
-      return res.status(404).send('Documento non disponibile.');
+      return res.redirect(302, '/fm/document-closed');
     }
 
     const r = await pool.query(
-      `SELECT id, original_name, public_path, size_bytes, page_count, views_count, downloads_count
+      `SELECT id, original_name, public_path, mime_type, size_bytes, views_count
        FROM followme_documents
        WHERE project_id = $1
          AND status = 'active'
@@ -11175,689 +11202,35 @@ app.get('/fm/document/:code', async (req, res) => {
     );
 
     if (!r.rows.length) {
-      return res.status(404).send('Documento non disponibile.');
+      return res.redirect(302, '/fm/document-closed');
     }
 
     const doc = r.rows[0];
 
-    // Incremento visualizzazione reale quando viene aperta la pagina pubblica del documento.
-    try {
-      await pool.query(
-        `UPDATE followme_documents
-         SET views_count = COALESCE(views_count, 0) + 1,
-             updated_at = NOW()
-         WHERE id = $1`,
-        [doc.id]
-      );
-    } catch(viewErr) {
-      console.error('followme public document view increment error:', viewErr);
+    await pool.query(
+      `UPDATE followme_documents
+       SET views_count = views_count + 1,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [doc.id]
+    ).catch(() => null);
+
+    const fileUrl = String(doc.public_path || '');
+
+    if (!fileUrl) {
+      return res.redirect(302, '/fm/document-closed');
     }
 
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-store');
+    const viewerUrl = '/pdf-viewer.html?file=' + encodeURIComponent(fileUrl);
+    return res.redirect(302, viewerUrl);
 
-    return res.send(`<!doctype html>
-<html lang="it">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="robots" content="noindex,nofollow">
-  <title>${String(doc.original_name || 'Documento').replace(/[<>&"]/g, '')}</title>
-  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.mjs" type="module"></script>
-  <style>
-    html,body{
-      margin:0;
-      padding:0;
-      min-height:100%;
-      background:#020617;
-      color:#f8fafc;
-      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
-      overflow:hidden;
-    }
-
-    body{
-      min-height:100vh;
-      background:
-        radial-gradient(circle at 50% 12%, rgba(59,130,246,.22), transparent 30%),
-        linear-gradient(145deg,#020617,#0f172a 48%,#020617);
-    }
-
-    .app{
-      height:100vh;
-      display:flex;
-      flex-direction:column;
-      box-sizing:border-box;
-      padding:14px;
-    }
-
-    .top{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      padding:4px 2px 12px;
-    }
-
-    .brand{
-      min-width:0;
-    }
-
-    .kicker{
-      font-size:11px;
-      text-transform:uppercase;
-      letter-spacing:.08em;
-      color:#93c5fd;
-      font-weight:950;
-    }
-
-    h1{
-      margin:3px 0 0;
-      font-size:17px;
-      line-height:1.1;
-      max-width:62vw;
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-      letter-spacing:-.035em;
-    }
-
-    .page-indicator{
-      flex:0 0 auto;
-      border-radius:999px;
-      padding:8px 11px;
-      background:rgba(255,255,255,.09);
-      border:1px solid rgba(255,255,255,.12);
-      color:#e5e7eb;
-      font-size:12px;
-      font-weight:950;
-    }
-
-    .viewer{
-      position:relative;
-      flex:1;
-      min-height:0;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      overflow:hidden;
-      border-radius:26px;
-      background:rgba(15,23,42,.76);
-      border:1px solid rgba(255,255,255,.10);
-      box-shadow:0 24px 80px rgba(0,0,0,.34);
-      touch-action:pan-y;
-    }
-
-    canvas{
-      max-width:100%;
-      max-height:100%;
-      border-radius:14px;
-      background:white;
-      box-shadow:0 18px 50px rgba(0,0,0,.34);
-      transition:transform .22s ease, opacity .22s ease;
-    }
-
-    .viewer.loading canvas{
-      opacity:.35;
-      transform:scale(.985);
-    }
-
-    .nav{
-      position:absolute;
-      top:50%;
-      transform:translateY(-50%);
-      width:42px;
-      height:42px;
-      border:0;
-      border-radius:999px;
-      background:rgba(255,255,255,.11);
-      color:#fff;
-      font-size:26px;
-      font-weight:800;
-      cursor:pointer;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      backdrop-filter:blur(12px);
-    }
-
-    .nav.prev{ left:10px; }
-    .nav.next{ right:10px; }
-
-    .bottom{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      padding:12px 2px 0;
-    }
-
-    .bottom button,
-    .bottom a{
-      border:0;
-      border-radius:999px;
-      padding:11px 14px;
-      font-weight:950;
-      font-size:13px;
-      cursor:pointer;
-      text-decoration:none;
-      white-space:nowrap;
-    }
-
-    .pages-btn{
-      background:rgba(255,255,255,.10);
-      color:#fff;
-      border:1px solid rgba(255,255,255,.12) !important;
-    }
-
-    .download{
-      background:#ffffff;
-      color:#020617;
-      box-shadow:0 12px 34px rgba(255,255,255,.12);
-    }
-
-    .drawer{
-      display:none;
-      position:fixed;
-      left:14px;
-      right:14px;
-      bottom:72px;
-      z-index:20;
-      max-height:45vh;
-      overflow:auto;
-      border-radius:22px;
-      padding:10px;
-      background:rgba(15,23,42,.96);
-      border:1px solid rgba(255,255,255,.12);
-      box-shadow:0 24px 80px rgba(0,0,0,.42);
-    }
-
-    .drawer.open{
-      display:grid;
-      grid-template-columns:repeat(auto-fill,minmax(70px,1fr));
-      gap:8px;
-    }
-
-    .drawer button{
-      border:0;
-      border-radius:14px;
-      min-height:44px;
-      background:rgba(255,255,255,.08);
-      color:#fff;
-      font-weight:950;
-      cursor:pointer;
-    }
-
-    .drawer button.active{
-      background:#fff;
-      color:#020617;
-    }
-
-    .hint{
-      position:absolute;
-      left:50%;
-      bottom:14px;
-      transform:translateX(-50%);
-      padding:8px 11px;
-      border-radius:999px;
-      background:rgba(2,6,23,.62);
-      color:#cbd5e1;
-      font-size:12px;
-      font-weight:800;
-      pointer-events:none;
-    }
-
-    .viewer.zoomed{
-      cursor:grab;
-      touch-action:none;
-    }
-
-    .viewer.zoomed canvas{
-      cursor:grab;
-      max-width:none;
-      max-height:none;
-    }
-
-    .zoom-tools{
-      position:absolute;
-      top:12px;
-      right:12px;
-      display:flex;
-      gap:7px;
-      z-index:12;
-    }
-
-    .zoom-tools button{
-      width:38px;
-      height:38px;
-      border:0;
-      border-radius:999px;
-      background:rgba(255,255,255,.12);
-      color:#fff;
-      font-size:18px;
-      font-weight:950;
-      cursor:pointer;
-      backdrop-filter:blur(12px);
-      -webkit-backdrop-filter:blur(12px);
-    }
-
-    .bottom{
-      position:fixed;
-      left:14px;
-      right:14px;
-      bottom:calc(env(safe-area-inset-bottom) + 16px);
-      z-index:30;
-      padding:0;
-      background:rgba(2,6,23,.58);
-      border:1px solid rgba(255,255,255,.10);
-      border-radius:999px;
-      padding:8px;
-      backdrop-filter:blur(16px);
-      -webkit-backdrop-filter:blur(16px);
-      box-shadow:0 18px 60px rgba(0,0,0,.30);
-    }
-
-    .drawer{
-      bottom:calc(env(safe-area-inset-bottom) + 86px);
-    }
-
-    .app{
-      padding-bottom:calc(env(safe-area-inset-bottom) + 92px);
-    }
-
-    @media(max-width:560px){
-      .app{ padding:10px 10px calc(env(safe-area-inset-bottom) + 96px); }
-      .nav{ display:none; }
-      h1{ max-width:55vw; }
-      .bottom{
-        left:10px;
-        right:10px;
-        bottom:calc(env(safe-area-inset-bottom) + 14px);
-      }
-      .bottom button,.bottom a{ padding:10px 12px; }
-    }
-  </style>
-</head>
-<body>
-  <div class="app">
-    <header class="top">
-      <div class="brand">
-        <div class="kicker">Consegna Documento</div>
-        <h1>${String(doc.original_name || 'Documento').replace(/[<>&"]/g, '')}</h1>
-      </div>
-      <div class="page-indicator" id="pageIndicator">1 / …</div>
-    </header>
-
-    <main class="viewer loading" id="viewer">
-      <canvas id="pdfCanvas"></canvas>
-      <button class="nav prev" id="prevBtn" type="button">‹</button>
-      <button class="nav next" id="nextBtn" type="button">›</button>
-      <div class="zoom-tools">
-        <button type="button" id="zoomOutBtn" aria-label="Riduci zoom">−</button>
-        <button type="button" id="zoomInBtn" aria-label="Aumenta zoom">+</button>
-      </div>
-      <div class="hint" id="hint">Sfoglia con un gesto · doppio tap per zoom</div>
-    </main>
-
-    <div class="drawer" id="pagesDrawer"></div>
-
-    <footer class="bottom">
-      <button class="pages-btn" id="pagesBtn" type="button" style="display:none">Pagine</button>
-      <a class="download" id="downloadBtn" href="/api/followme/document/${doc.id}/download">Scarica documento</a>
-      <button class="pages-btn" id="closeDocBtn" type="button">Chiudi</button>
-    </footer>
-  </div>
-
-  <script type="module">
-    import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.mjs";
-
-    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.worker.min.mjs";
-
-    const DOCUMENT_ID = ${doc.id};
-    const PDF_URL = ${JSON.stringify(doc.public_path)};
-
-    // Incrementa una sola visualizzazione quando la pagina pubblica del documento viene aperta.
-    // Usa sendBeacon quando disponibile, con fallback fetch.
-    (function registerDocumentView(){
-      try {
-        const viewUrl = "/api/followme/document/" + encodeURIComponent(DOCUMENT_ID) + "/view";
-
-        if (navigator.sendBeacon) {
-          const blob = new Blob(["{}"], { type: "application/json" });
-          navigator.sendBeacon(viewUrl, blob);
-          return;
-        }
-
-        fetch(viewUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: "{}",
-          cache: "no-store",
-          keepalive: true
-        }).catch(function(){});
-      } catch(e) {}
-    })();
-    const viewer = document.getElementById("viewer");
-    const canvas = document.getElementById("pdfCanvas");
-    const ctx = canvas.getContext("2d");
-    const indicator = document.getElementById("pageIndicator");
-    const prevBtn = document.getElementById("prevBtn");
-    const nextBtn = document.getElementById("nextBtn");
-    const pagesBtn = document.getElementById("pagesBtn");
-    const drawer = document.getElementById("pagesDrawer");
-    const hint = document.getElementById("hint");
-    const zoomInBtn = document.getElementById("zoomInBtn");
-    const zoomOutBtn = document.getElementById("zoomOutBtn");
-
-    let pdf = null;
-    let pageNum = 1;
-    let totalPages = 1;
-    let rendering = false;
-    let startX = 0;
-    let startY = 0;
-    let tracking = false;
-    let zoom = 1;
-    let panX = 0;
-    let panY = 0;
-    let draggingPan = false;
-    let lastTapAt = 0;
-    let lastMouseClickAt = 0;
-
-    function renderIndicator(){
-      indicator.textContent = pageNum + " / " + totalPages;
-    }
-
-    function buildDrawer(){
-      drawer.innerHTML = "";
-
-      if(totalPages <= 6){
-        pagesBtn.style.display = "none";
-        return;
-      }
-
-      pagesBtn.style.display = "";
-
-      for(let i=1;i<=totalPages;i++){
-        const b = document.createElement("button");
-        b.type = "button";
-        b.textContent = "Pag. " + i;
-        if(i === pageNum) b.classList.add("active");
-        b.onclick = function(){
-          drawer.classList.remove("open");
-          goToPage(i);
-        };
-        drawer.appendChild(b);
-      }
-    }
-
-    function applyTransform(){
-      canvas.style.transform = "translate(" + panX + "px," + panY + "px) scale(" + zoom + ")";
-      viewer.classList.toggle("zoomed", zoom > 1.01);
-    }
-
-    function setZoom(nextZoom, cx, cy){
-      const old = zoom;
-      zoom = Math.max(1, Math.min(3, nextZoom));
-
-      if(zoom <= 1.01){
-        zoom = 1;
-        panX = 0;
-        panY = 0;
-      }else if(cx != null && cy != null && old !== zoom){
-        /*
-          Piccolo aggiustamento: mantiene il punto più o meno sotto il dito/click.
-        */
-        const rect = viewer.getBoundingClientRect();
-        const dx = cx - rect.left - rect.width / 2;
-        const dy = cy - rect.top - rect.height / 2;
-        panX -= dx * (zoom - old) / zoom;
-        panY -= dy * (zoom - old) / zoom;
-      }
-
-      applyTransform();
-    }
-
-    function toggleZoom(cx, cy){
-      if(zoom > 1.01) setZoom(1);
-      else setZoom(2, cx, cy);
-    }
-
-    async function renderPage(num, direction){
-      if(rendering || !pdf) return;
-      rendering = true;
-      viewer.classList.add("loading");
-
-      try{
-        const page = await pdf.getPage(num);
-        const baseViewport = page.getViewport({ scale:1 });
-
-        const maxW = viewer.clientWidth * 0.94;
-        const maxH = viewer.clientHeight * 0.94;
-
-        /*
-          FIX QUALITÀ REALE 20260520:
-          Manteniamo lo stesso viewer e lo stesso sfoglio,
-          ma renderizziamo il canvas in alta definizione usando devicePixelRatio.
-          Prima il PDF veniva disegnato a risoluzione CSS, poi lo zoom ingrandiva pixel già poveri.
-        */
-        const cssScale = Math.min(maxW / baseViewport.width, maxH / baseViewport.height, 2.2);
-        const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
-        const renderScale = cssScale * dpr;
-
-        const renderViewport = page.getViewport({ scale:renderScale });
-        const cssViewport = page.getViewport({ scale:cssScale });
-
-        canvas.width = Math.floor(renderViewport.width);
-        canvas.height = Math.floor(renderViewport.height);
-
-        canvas.style.width = Math.floor(cssViewport.width) + "px";
-        canvas.style.height = Math.floor(cssViewport.height) + "px";
-
-        ctx.setTransform(1,0,0,1,0,0);
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = "high";
-
-        zoom = 1;
-        panX = 0;
-        panY = 0;
-        viewer.classList.remove("zoomed");
-        canvas.style.transform = direction === "next" ? "translateX(22px)" : direction === "prev" ? "translateX(-22px)" : "translateX(0)";
-
-        await page.render({
-          canvasContext:ctx,
-          viewport:renderViewport,
-          intent:"display",
-          renderInteractiveForms:true
-        }).promise;
-
-        requestAnimationFrame(() => {
-          canvas.style.transform = "translateX(0)";
-          canvas.style.opacity = "1";
-          viewer.classList.remove("loading");
-        });
-
-        renderIndicator();
-        buildDrawer();
-
-        setTimeout(() => {
-          if(hint) hint.style.opacity = "0";
-        }, 1800);
-
-      }catch(e){
-        console.error(e);
-        viewer.classList.remove("loading");
-      }finally{
-        rendering = false;
-      }
-    }
-
-    function goToPage(n, direction){
-      const next = Math.max(1, Math.min(totalPages, n));
-      if(next === pageNum && pdf) return;
-      const dir = direction || (next > pageNum ? "next" : "prev");
-      pageNum = next;
-      renderPage(pageNum, dir);
-    }
-
-    function nextPage(){
-      if(pageNum < totalPages) goToPage(pageNum + 1, "next");
-    }
-
-    function prevPage(){
-      if(pageNum > 1) goToPage(pageNum - 1, "prev");
-    }
-
-    prevBtn.onclick = prevPage;
-    nextBtn.onclick = nextPage;
-
-    pagesBtn.onclick = function(){
-      drawer.classList.toggle("open");
-    };
-
-    const closeDocBtn = document.getElementById("closeDocBtn");
-    closeDocBtn.onclick = function(){
-      const ok = confirm("Vuoi chiudere il documento?");
-      if(!ok) return;
-
-      /*
-        FIX FOLLOWME MOBILE PDF EXIT 20260520:
-        se il documento è stato aperto dalla Web App FollowMe, torna alla Home dell'App.
-        Evitiamo di bloccare l'utente sulla pagina saluti.
-      */
-      const appUrl = "/fm/app/${String(project.code || code).replace(/"/g, '\"')}?from=document&v=" + Date.now();
-      location.replace(appUrl);
-    };
-
-    viewer.addEventListener("touchstart", function(ev){
-      const t = ev.touches && ev.touches[0];
-      if(!t) return;
-
-      tracking = true;
-      draggingPan = zoom > 1.01;
-      startX = t.clientX;
-      startY = t.clientY;
-
-      const now = Date.now();
-      if(now - lastTapAt < 310){
-        ev.preventDefault();
-        toggleZoom(t.clientX, t.clientY);
-        tracking = false;
-      }
-      lastTapAt = now;
-    }, { passive:false });
-
-    viewer.addEventListener("touchmove", function(ev){
-      if(!tracking || zoom <= 1.01) return;
-      const t = ev.touches && ev.touches[0];
-      if(!t) return;
-
-      ev.preventDefault();
-      const dx = t.clientX - startX;
-      const dy = t.clientY - startY;
-      startX = t.clientX;
-      startY = t.clientY;
-
-      panX += dx;
-      panY += dy;
-      applyTransform();
-    }, { passive:false });
-
-    viewer.addEventListener("touchend", function(ev){
-      if(!tracking) return;
-      tracking = false;
-
-      const t = ev.changedTouches && ev.changedTouches[0];
-      if(!t) return;
-
-      const dx = t.clientX - startX;
-      const dy = t.clientY - startY;
-
-      /*
-        Se siamo zoomati, il gesto serve a spostare il documento, non a cambiare pagina.
-      */
-      if(zoom > 1.01 || draggingPan) return;
-
-      if(Math.abs(dx) < 42 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
-
-      if(dx < 0) nextPage();
-      else prevPage();
-    }, { passive:true });
-
-    viewer.addEventListener("mousedown", function(ev){
-      tracking = true;
-      draggingPan = zoom > 1.01;
-      startX = ev.clientX;
-      startY = ev.clientY;
-
-      const now = Date.now();
-      if(now - lastMouseClickAt < 320){
-        toggleZoom(ev.clientX, ev.clientY);
-        tracking = false;
-      }
-      lastMouseClickAt = now;
-    });
-
-    viewer.addEventListener("mousemove", function(ev){
-      if(!tracking || zoom <= 1.01) return;
-
-      const dx = ev.clientX - startX;
-      const dy = ev.clientY - startY;
-      startX = ev.clientX;
-      startY = ev.clientY;
-
-      panX += dx;
-      panY += dy;
-      applyTransform();
-    });
-
-    viewer.addEventListener("mouseup", function(ev){
-      if(!tracking) return;
-      tracking = false;
-
-      const dx = ev.clientX - startX;
-      const dy = ev.clientY - startY;
-
-      if(zoom > 1.01 || draggingPan) return;
-
-      if(Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
-
-      if(dx < 0) nextPage();
-      else prevPage();
-    });
-
-    zoomInBtn.onclick = function(){
-      setZoom(zoom + .4);
-    };
-
-    zoomOutBtn.onclick = function(){
-      setZoom(zoom - .4);
-    };
-
-    window.addEventListener("keydown", function(ev){
-      if(ev.key === "ArrowRight") nextPage();
-      if(ev.key === "ArrowLeft") prevPage();
-    });
-
-    window.addEventListener("resize", function(){
-      clearTimeout(window.__fmDocResize);
-      window.__fmDocResize = setTimeout(() => renderPage(pageNum), 200);
-    });
-
-    pdf = await pdfjsLib.getDocument(PDF_URL).promise;
-    totalPages = pdf.numPages || 1;
-    renderIndicator();
-    buildDrawer();
-    renderPage(1);
-  </script>
-</body>
-</html>`);
   } catch(err) {
-    console.error('followme document public page error:', err);
+    console.error('followme document public route error:', err);
     return res.status(500).send('Errore apertura documento.');
   }
 });
-// end-followme-consegna-documento-premium-final-20260520
 
-// followme-document-user-close-elegant-final-20260520
+
 app.get('/fm/document/closed', (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
