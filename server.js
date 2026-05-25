@@ -5606,6 +5606,8 @@ app.post('/api/admin/trial-request/:id/regenerate-otp', requireAdmin, async (req
 // start-admin-followme-projects-api-20260525
 app.get('/api/admin/followme/projects', requireAdmin, async (req, res) => {
   try {
+    await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS blocked_reason TEXT`).catch(() => null);
+    await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS blocked_at TIMESTAMPTZ`).catch(() => null);
     const q = await pool.query(`
       SELECT
         p.id,
@@ -5665,6 +5667,70 @@ app.get('/api/admin/followme/projects', requireAdmin, async (req, res) => {
   }
 });
 // end-admin-followme-projects-api-20260525
+
+// start-admin-followme-block-unblock-api-20260525
+app.post('/api/admin/followme/project/:code/block', requireAdmin, express.json(), async (req, res) => {
+  try {
+    const code = String(req.params.code || '').trim();
+    const reason = String(req.body?.reason || '').trim();
+
+    if (!code) {
+      return res.status(400).json({ success:false, error:'Codice QR mancante.' });
+    }
+
+    const q = await pool.query(
+      `UPDATE followme_projects
+       SET status = 'blocked',
+           blocked_reason = COALESCE(NULLIF($2,''), blocked_reason),
+           blocked_at = NOW(),
+           updated_at = NOW()
+       WHERE code = $1 OR public_id = $1
+       RETURNING id, code, public_id, label, active_url, status, blocked_reason, blocked_at`,
+      [code, reason]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).json({ success:false, error:'QR FollowMe non trovato.' });
+    }
+
+    return res.json({ success:true, project:q.rows[0] });
+  } catch (err) {
+    console.error('admin followme block error:', err);
+    return res.status(500).json({ success:false, error:'Errore blocco QR FollowMe.' });
+  }
+});
+
+app.post('/api/admin/followme/project/:code/unblock', requireAdmin, express.json(), async (req, res) => {
+  try {
+    const code = String(req.params.code || '').trim();
+
+    if (!code) {
+      return res.status(400).json({ success:false, error:'Codice QR mancante.' });
+    }
+
+    const q = await pool.query(
+      `UPDATE followme_projects
+       SET status = 'active',
+           blocked_reason = NULL,
+           blocked_at = NULL,
+           updated_at = NOW()
+       WHERE code = $1 OR public_id = $1
+       RETURNING id, code, public_id, label, active_url, status, blocked_reason, blocked_at`,
+      [code]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).json({ success:false, error:'QR FollowMe non trovato.' });
+    }
+
+    return res.json({ success:true, project:q.rows[0] });
+  } catch (err) {
+    console.error('admin followme unblock error:', err);
+    return res.status(500).json({ success:false, error:'Errore sblocco QR FollowMe.' });
+  }
+});
+// end-admin-followme-block-unblock-api-20260525
+
 
 // start-admin-followme-delete-project-api-20260525
 app.post('/api/admin/followme/project/:code/delete', requireAdmin, express.json(), async (req, res) => {
@@ -13946,7 +14012,6 @@ app.get('/fm/u/:public_id', async (req, res) => {
       `SELECT *
        FROM followme_projects
        WHERE (public_id = $1 OR code = $1)
-         AND COALESCE(status,'active') = 'active'
        LIMIT 1`,
       [publicId]
     );
@@ -13956,6 +14021,11 @@ app.get('/fm/u/:public_id', async (req, res) => {
     }
 
     const project = q.rows[0];
+
+    if (String(project.status || 'active').toLowerCase() === 'blocked') {
+      return sendFollowMeBlockedPage20260525(res);
+    }
+
     const activeUrl = normalizeUrlForFollowMe(project.active_url);
 
     await pool.query(
@@ -14018,6 +14088,82 @@ app.get('/fm/u/:public_id', async (req, res) => {
   }
 });
 
+
+
+
+// followme-public-blocked-page-20260525
+function sendFollowMeBlockedPage20260525(res) {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+
+  return res.status(403).send(`<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>QR bloccato</title>
+  <style>
+    body{
+      margin:0;
+      min-height:100vh;
+      display:grid;
+      place-items:center;
+      padding:24px;
+      box-sizing:border-box;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(255,90,111,.22), transparent 34%),
+        linear-gradient(145deg,#07070d,#111323 58%,#050508);
+      color:#fff;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+      text-align:center;
+    }
+    .card{
+      width:min(520px,100%);
+      border-radius:30px;
+      padding:34px 24px;
+      background:rgba(255,255,255,.07);
+      border:1px solid rgba(255,255,255,.13);
+      box-shadow:0 28px 80px rgba(0,0,0,.38);
+    }
+    .badge{
+      display:inline-flex;
+      min-height:30px;
+      align-items:center;
+      padding:0 13px;
+      border-radius:999px;
+      background:rgba(255,90,111,.18);
+      color:#ffb4bf;
+      font-size:12px;
+      font-weight:950;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+    }
+    h1{
+      margin:16px 0 8px;
+      font-size:34px;
+      line-height:1;
+      letter-spacing:-.05em;
+    }
+    p{
+      margin:0 auto;
+      max-width:360px;
+      color:rgba(255,255,255,.68);
+      font-size:15px;
+      line-height:1.45;
+      font-weight:650;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="badge">Bloccato</div>
+    <h1>QR temporaneamente bloccato</h1>
+    <p>Questo contenuto non è al momento disponibile perché è stato bloccato dal sistema.</p>
+  </main>
+</body>
+</html>`);
+}
 
 
 // start-followme-public-fm-code-route-20260525
