@@ -6139,6 +6139,141 @@ app.post('/api/admin/followme/trial-request/:id/delete', requireAdmin, express.j
 });
 // end-admin-followme-trial-requests-api-20260525
 
+// start-followme-trial-verify-api-20260525
+app.post('/api/followme/trial/:id/verify', express.json({ limit:'20kb' }), async (req, res) => {
+  try {
+    await ensureFollowMeTrialRequestsTable20260525();
+
+    const id = Number(req.params.id || 0);
+    const otp = String(req.body?.otp || '').trim().replace(/\D/g, '');
+
+    if (!id || !otp) {
+      return res.status(400).json({ success:false, error:'Inserisci il codice ricevuto via WhatsApp.' });
+    }
+
+    const trialRes = await pool.query(
+      `SELECT *
+       FROM followme_trial_requests
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+
+    const trial = trialRes.rows[0];
+
+    if (!trial) {
+      return res.status(404).json({ success:false, error:'Richiesta non trovata.' });
+    }
+
+    if (trial.code && trial.public_id && trial.status === 'active') {
+      return res.json({
+        success:true,
+        already_active:true,
+        code:trial.code,
+        public_id:trial.public_id,
+        public_url:`/fm/${trial.public_id || trial.code}`,
+        manage_url:`/followme-app.html?code=${encodeURIComponent(trial.code)}`
+      });
+    }
+
+    if (!trial.otp_code || String(trial.otp_code).trim() !== otp) {
+      return res.status(400).json({ success:false, error:'Codice non corretto.' });
+    }
+
+    if (trial.otp_expires_at && new Date(trial.otp_expires_at) < new Date()) {
+      return res.status(400).json({ success:false, error:'Codice scaduto. Richiedi un nuovo codice.' });
+    }
+
+    const baseCode = 'FMTRIAL';
+    let code = null;
+    let publicId = null;
+
+    for (let i = 0; i < 40; i++) {
+      const suffix = Math.random().toString(36).slice(2, 8).toUpperCase().replace(/[^A-Z0-9]/g, '');
+      code = `${baseCode}${suffix}`;
+      publicId = code;
+
+      const exists = await pool.query(
+        `SELECT 1 FROM followme_projects WHERE code = $1 OR public_id = $2 LIMIT 1`,
+        [code, publicId]
+      );
+
+      if (!exists.rows.length) break;
+
+      code = null;
+      publicId = null;
+    }
+
+    if (!code || !publicId) {
+      return res.status(500).json({ success:false, error:'Impossibile generare un QR univoco.' });
+    }
+
+    const initialUrl = normalizeUrlForFollowMe(trial.initial_url || '') || 'https://771717.appmecard.it/communication';
+    const trialStartedAt = new Date();
+    const trialExpiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+
+    await pool.query('BEGIN');
+
+    const projectIns = await pool.query(
+      `INSERT INTO followme_projects
+       (code, public_id, label, active_url, status, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,'active',NOW(),NOW())
+       RETURNING id, code, public_id, active_url`,
+      [
+        code,
+        publicId,
+        trial.full_name ? `Prova - ${trial.full_name}` : 'Prova FollowMe',
+        initialUrl
+      ]
+    );
+
+    await pool.query(
+      `INSERT INTO followme_url_history
+       (project_id, url, activated_at, last_used_at, scan_count)
+       VALUES ($1,$2,NOW(),NULL,0)
+       ON CONFLICT DO NOTHING`,
+      [projectIns.rows[0].id, initialUrl]
+    ).catch(() => null);
+
+    await pool.query(
+      `UPDATE followme_trial_requests
+       SET otp_verified_at = NOW(),
+           otp_status = 'verified',
+           status = 'active',
+           code = $2,
+           public_id = $3,
+           trial_started_at = $4,
+           trial_expires_at = $5,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [id, code, publicId, trialStartedAt, trialExpiresAt]
+    );
+
+    await pool.query('COMMIT');
+
+    return res.json({
+      success:true,
+      active:true,
+      code,
+      public_id:publicId,
+      public_url:`/fm/${publicId}`,
+      manage_url:`/followme-app.html?code=${encodeURIComponent(code)}`,
+      trial_expires_at:trialExpiresAt.toISOString()
+    });
+
+  } catch (err) {
+    try { await pool.query('ROLLBACK'); } catch(e) {}
+    console.error('followme trial verify error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore attivazione prova FollowMe.',
+      detail: err && err.message ? err.message : String(err || '')
+    });
+  }
+});
+// end-followme-trial-verify-api-20260525
+
+
 
 
 app.get('/api/admin/followme/projects', requireAdmin, async (req, res) => {

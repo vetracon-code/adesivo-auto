@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Verifica FollowMe</title>
+  <style>
+    :root{
+      --bg:#06070d;
+      --panel:rgba(255,255,255,.075);
+      --line:rgba(255,255,255,.14);
+      --text:#fff;
+      --muted:rgba(255,255,255,.66);
+      --accent:#c8ff2e;
+      --cyan:#5ee7ff;
+      --danger:#ff5a6f;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+    body{
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:22px;
+      background:
+        radial-gradient(circle at 12% 0%, rgba(200,255,46,.18), transparent 32%),
+        radial-gradient(circle at 86% 8%, rgba(94,231,255,.17), transparent 32%),
+        linear-gradient(145deg,#05060b,#111424 58%,#05060b);
+    }
+    .card{
+      width:min(560px,100%);
+      border-radius:34px;
+      padding:28px;
+      background:rgba(255,255,255,.075);
+      border:1px solid rgba(255,255,255,.14);
+      box-shadow:0 28px 90px rgba(0,0,0,.36);
+      backdrop-filter:blur(18px);
+      -webkit-backdrop-filter:blur(18px);
+    }
+    .kicker{
+      display:inline-flex;
+      padding:8px 12px;
+      border-radius:999px;
+      background:rgba(200,255,46,.14);
+      border:1px solid rgba(200,255,46,.28);
+      color:var(--accent);
+      font-size:12px;
+      font-weight:950;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+    }
+    h1{margin:18px 0 8px;font-size:34px;line-height:1.02;letter-spacing:-.055em}
+    p{margin:0;color:var(--muted);font-size:15px;line-height:1.5;font-weight:650}
+    form{margin-top:22px;display:grid;gap:13px}
+    label{font-size:12px;font-weight:950;color:rgba(255,255,255,.78);text-transform:uppercase;letter-spacing:.05em}
+    input{
+      width:100%;
+      min-height:58px;
+      border:1px solid rgba(255,255,255,.15);
+      border-radius:18px;
+      background:rgba(0,0,0,.25);
+      color:#fff;
+      font-size:22px;
+      font-weight:950;
+      letter-spacing:.18em;
+      text-align:center;
+      outline:none;
+      padding:0 15px;
+    }
+    input:focus{border-color:rgba(200,255,46,.65);box-shadow:0 0 0 4px rgba(200,255,46,.12)}
+    button{
+      border:0;
+      border-radius:20px;
+      min-height:58px;
+      background:linear-gradient(135deg,var(--accent),var(--cyan));
+      color:#080b10;
+      font-weight:1000;
+      font-size:16px;
+      cursor:pointer;
+      box-shadow:0 18px 46px rgba(94,231,255,.18);
+    }
+    button:disabled{opacity:.55;cursor:not-allowed}
+    .msg{
+      display:none;
+      margin-top:16px;
+      padding:13px;
+      border-radius:18px;
+      font-size:13px;
+      font-weight:850;
+      line-height:1.4;
+    }
+    .msg.ok{display:block;background:rgba(200,255,46,.13);border:1px solid rgba(200,255,46,.28);color:#dfff7b}
+    .msg.err{display:block;background:rgba(255,90,111,.12);border:1px solid rgba(255,90,111,.26);color:#ffbac4}
+    .small{margin-top:16px;font-size:12px;color:rgba(255,255,255,.48)}
+    .app-link{
+      display:none;
+      margin-top:16px;
+      text-align:center;
+      text-decoration:none;
+      border-radius:20px;
+      padding:17px 18px;
+      background:rgba(255,255,255,.1);
+      border:1px solid rgba(255,255,255,.16);
+      color:#fff;
+      font-weight:950;
+    }
+    .app-link.show{display:block}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <span class="kicker">FollowMe QR</span>
+    <h1>Verifica il codice</h1>
+    <p>Inserisci il codice ricevuto via WhatsApp per attivare la prova gratuita del tuo QR dinamico.</p>
+
+    <form id="verifyForm">
+      <div>
+        <label for="otp">Codice verifica</label>
+        <input id="otp" name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" required>
+      </div>
+      <button id="submitBtn" type="submit">Attiva prova gratuita</button>
+    </form>
+
+    <div id="msg" class="msg"></div>
+    <a id="appLink" class="app-link" href="#">Apri la tua Web App FollowMe</a>
+    <div class="small">La prova gratuita dura 14 giorni dalla verifica.</div>
+  </main>
+
+  <script>
+    (function(){
+      const params = new URLSearchParams(location.search);
+      const id = params.get("id") || "";
+      const form = document.getElementById("verifyForm");
+      const otp = document.getElementById("otp");
+      const btn = document.getElementById("submitBtn");
+      const msg = document.getElementById("msg");
+      const appLink = document.getElementById("appLink");
+
+      function show(type, text){
+        msg.className = "msg " + type;
+        msg.textContent = text;
+      }
+
+      otp.addEventListener("input", function(){
+        otp.value = otp.value.replace(/\D/g, "").slice(0,6);
+      });
+
+      form.addEventListener("submit", async function(ev){
+        ev.preventDefault();
+
+        if(!id){
+          show("err", "Richiesta non valida: ID mancante.");
+          return;
+        }
+
+        const code = otp.value.replace(/\D/g, "");
+        if(code.length !== 6){
+          show("err", "Inserisci il codice di 6 cifre ricevuto via WhatsApp.");
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = "Verifico...";
+
+        try{
+          const res = await fetch("/api/followme/trial/" + encodeURIComponent(id) + "/verify", {
+            method:"POST",
+            headers:{ "Content-Type":"application/json" },
+            body:JSON.stringify({ otp:code })
+          });
+
+          const data = await res.json().catch(() => null);
+
+          if(!res.ok || !data || !data.success){
+            throw new Error((data && data.error) || "Codice non valido.");
+          }
+
+          show("ok", "Prova FollowMe attivata correttamente.");
+          if(data.manage_url){
+            appLink.href = data.manage_url;
+            appLink.classList.add("show");
+            setTimeout(() => { location.href = data.manage_url; }, 900);
+          }
+        }catch(err){
+          show("err", err && err.message ? err.message : "Errore verifica codice.");
+        }finally{
+          btn.disabled = false;
+          btn.textContent = "Attiva prova gratuita";
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
