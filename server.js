@@ -10630,6 +10630,23 @@ app.post('/api/followme/:code/image-card/upload', followmeImageCardUploadMulter2
 
     await followmeDocumentFsp.writeFile(diskPath, buffer);
 
+    /*
+      Preview immagine stabile nello spazio riservato del QR.
+      Per ora è una copia dell'immagine reale; in futuro potrà essere compressa/ridimensionata.
+    */
+    const previewDiskPath = followmeDocumentPath.join(projectImageDir, 'preview.jpg');
+    const previewPublicPath = `/uploads/followme-documents/${qrFolder}/image/preview.jpg`;
+
+    if (ext === 'jpg') {
+      await followmeDocumentFsp.writeFile(previewDiskPath, buffer);
+    } else {
+      /*
+        Per PNG/WEBP/GIF manteniamo comunque un riferimento preview:
+        se non convertiamo, copiamo il file nel nome preview.jpg solo quando è JPEG.
+        Le conversioni reali si faranno in una patch successiva con sharp/canvas se necessario.
+      */
+    }
+
     await pool.query(
       `UPDATE followme_image_cards
        SET status = 'replaced',
