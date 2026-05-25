@@ -5719,7 +5719,12 @@ async function sendFollowMeTrialRequestAdminPush20260525(req, trialRow) {
     const requestId = trialRow?.id;
     if (!requestId) return;
 
-    const baseUrl = getPublicBaseUrl(req);
+    const baseUrl = String(
+      (typeof getPublicBaseUrl === 'function')
+        ? getPublicBaseUrl(req)
+        : ((req.protocol || 'https') + '://' + (req.get('host') || 'adesivo-auto.onrender.com'))
+    ).replace(/^http:\/\//i, 'https://');
+
     const targetUrl = `/admin.html?followmeTrialRequest=${encodeURIComponent(requestId)}#adminFollowMeFrame20260525`;
     const absoluteTargetUrl = `${baseUrl.replace(/\/$/, '')}${targetUrl}`;
 
@@ -5727,83 +5732,83 @@ async function sendFollowMeTrialRequestAdminPush20260525(req, trialRow) {
     const phone = String(trialRow.phone || '').trim();
     const email = String(trialRow.email || '').trim();
 
-    const bodyParts = [
-      fullName || 'Nuova richiesta',
-      phone || null,
-      email || null
-    ].filter(Boolean);
-
-    const payload = {
-      title: 'Richiesta nuova prova FollowMe QR',
-      body: bodyParts.join(' · ') || 'Nuova richiesta prova FollowMe',
-      url: targetUrl,
-      target_url: targetUrl,
-      absolute_url: absoluteTargetUrl,
-      tag: `followme-trial-request-${requestId}`,
-      data: {
-        type: 'followme_trial_request',
-        request_id: requestId,
-        url: targetUrl,
-        target_url: targetUrl,
-        absolute_url: absoluteTargetUrl
-      }
-    };
-
-    /*
-      Riutilizzo canale push admin già esistente dove possibile.
-      Se in futuro creeremo una tabella push dedicata admin, basterà sostituire questo blocco.
-    */
     const trialPushCode = 'AMC-E8493C7F';
     const trialPushPlate = 'GL740CH';
+    const nowLabel = new Date().toLocaleString('it-IT');
+
+    let insertedMessageId = null;
+
+    const msgText = [
+      'Richiesta nuova prova FollowMe QR',
+      `Data e ora: ${nowLabel}`,
+      fullName ? `Nome: ${fullName}` : null,
+      phone ? `WhatsApp: ${phone}` : null,
+      email ? `Email: ${email}` : null,
+      `Richiesta ID: ${requestId}`,
+      `Apri admin: ${absoluteTargetUrl}`
+    ].filter(Boolean).join('
+');
 
     try {
-      await pool.query(
-        `INSERT INTO owner_messages
-         (code, plate, title, message_text, created_at)
-         VALUES ($1,$2,$3,$4,NOW())`,
-        [
-          trialPushCode,
-          trialPushPlate,
-          payload.title,
-          [
-            payload.body,
-            '',
-            `Apri admin: ${absoluteTargetUrl}`
-          ].join('\n')
-        ]
-      ).catch(() => null);
-    } catch(e) {}
+      const insertedMsg = await pool.query(
+        `INSERT INTO contact_message_logs
+         (code, plate, reason, message_text, location_shared, created_at)
+         VALUES ($1, $2, $3, $4, FALSE, NOW())
+         RETURNING id`,
+        [trialPushCode, trialPushPlate, 'Richiesta nuova prova FollowMe QR', msgText]
+      );
 
-    if (typeof sendPushToOwnerDevices === 'function') {
-      try {
-        await sendPushToOwnerDevices(trialPushCode, trialPushPlate, payload);
-        return;
-      } catch(pushErr) {
-        console.error('followme trial admin push sendPushToOwnerDevices error:', pushErr.statusCode || '', pushErr.body || pushErr.message || pushErr);
-      }
+      insertedMessageId = insertedMsg.rows?.[0]?.id || null;
+    } catch (msgErr) {
+      console.error('followme trial admin log message error:', msgErr);
     }
 
-    if (typeof sendPushNotificationToCodePlate === 'function') {
-      try {
-        await sendPushNotificationToCodePlate(trialPushCode, trialPushPlate, payload);
-        return;
-      } catch(pushErr) {
-        console.error('followme trial admin push sendPushNotificationToCodePlate error:', pushErr.statusCode || '', pushErr.body || pushErr.message || pushErr);
-      }
+    if (!vapidPublicKey || !vapidPrivateKey) {
+      console.warn('followme trial admin push skipped: VAPID non configurate.');
+      return;
     }
 
-    if (typeof sendOwnerPush === 'function') {
+    const subs = await pool.query(
+      `SELECT endpoint, p256dh, auth
+       FROM push_subscriptions
+       WHERE code = $1
+         AND COALESCE(plate,'') = COALESCE($2,'')
+         AND is_active = TRUE`,
+      [trialPushCode, trialPushPlate]
+    );
+
+    console.log('followme trial admin push subscriptions:', subs.rows.length);
+
+    for (const sub of subs.rows || []) {
       try {
-        await sendOwnerPush(trialPushCode, trialPushPlate, payload);
-        return;
-      } catch(pushErr) {
-        console.error('followme trial admin push sendOwnerPush error:', pushErr.statusCode || '', pushErr.body || pushErr.message || pushErr);
+        await webpush.sendNotification(
+          {
+            endpoint: sub.endpoint,
+            keys: {
+              p256dh: sub.p256dh,
+              auth: sub.auth
+            }
+          },
+          JSON.stringify({
+            title: 'Richiesta nuova prova FollowMe QR',
+            body: [fullName || 'Nuova richiesta', phone || email || ''].filter(Boolean).join(' · '),
+            url: targetUrl,
+            targetUrl,
+            messageId: insertedMessageId,
+            trialRequestId: requestId,
+            channel: 'followme-trial-request-alert'
+          })
+        );
+      } catch (pushErr) {
+        console.error('followme trial admin push error:', pushErr.statusCode || '', pushErr.body || pushErr.message || pushErr);
+
+        if (pushErr && (pushErr.statusCode === 404 || pushErr.statusCode === 410)) {
+          await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]).catch(() => null);
+        }
       }
     }
-
-    console.warn('followme trial admin push: nessuna funzione push compatibile trovata.');
   } catch(err) {
-    console.error('followme trial admin push error:', err.message || err);
+    console.error('followme trial admin push block error:', err.message || err);
   }
 }
 // end-followme-trial-admin-push-20260525
