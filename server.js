@@ -5829,6 +5829,150 @@ app.post('/api/followme/trial/request', express.json({ limit:'80kb' }), async (r
 });
 // end-followme-trial-request-backend-20260525
 
+// start-admin-followme-trial-requests-api-20260525
+app.get('/api/admin/followme/trial-requests', requireAdmin, async (req, res) => {
+  try {
+    await ensureFollowMeTrialRequestsTable20260525();
+
+    const r = await pool.query(
+      `SELECT id, full_name, email, phone, phone_whatsapp, initial_url,
+              otp_code, otp_expires_at, otp_sent_at, otp_verified_at,
+              otp_status, status, code, public_id,
+              trial_started_at, trial_expires_at, plan_override,
+              admin_notes, created_at, updated_at
+       FROM followme_trial_requests
+       ORDER BY created_at DESC, id DESC
+       LIMIT 120`
+    );
+
+    const baseUrl = getPublicBaseUrl(req);
+
+    const rows = r.rows.map(item => {
+      const whatsappNumber = item.phone_whatsapp || String(item.phone || '').replace(/\D/g, '');
+      const verifyUrl = `${baseUrl.replace(/\/$/, '')}/followme-verifica.html?id=${encodeURIComponent(item.id)}`;
+
+      const whatsappText = [
+        'Ciao, per completare l’attivazione della prova gratuita FollowMe inserisci questo codice:',
+        '',
+        String(item.otp_code || ''),
+        '',
+        'Link verifica:',
+        verifyUrl,
+        '',
+        'La prova dura 14 giorni. Dopo la prova potrai acquistare FollowMe al prezzo lancio di 9,90 € / anno.'
+      ].join('\n');
+
+      return {
+        ...item,
+        whatsapp_number: whatsappNumber,
+        whatsapp_text: whatsappText,
+        whatsapp_url: whatsappNumber
+          ? `https://wa.me/${encodeURIComponent(whatsappNumber)}?text=${encodeURIComponent(whatsappText)}`
+          : '',
+        verify_url: verifyUrl
+      };
+    });
+
+    return res.json({ success:true, requests:rows });
+  } catch (err) {
+    console.error('admin followme trial requests error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore caricamento richieste prova FollowMe.'
+    });
+  }
+});
+
+app.post('/api/admin/followme/trial-request/:id/mark-otp-sent', requireAdmin, express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeTrialRequestsTable20260525();
+
+    const id = Number(req.params.id || 0);
+    if (!id) return res.status(400).json({ success:false, error:'ID richiesta mancante.' });
+
+    const r = await pool.query(
+      `UPDATE followme_trial_requests
+       SET otp_sent_at = NOW(),
+           otp_status = 'otp_sent',
+           status = CASE WHEN status = 'pending_otp' THEN 'otp_sent' ELSE status END,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [id]
+    );
+
+    if (!r.rows.length) {
+      return res.status(404).json({ success:false, error:'Richiesta non trovata.' });
+    }
+
+    return res.json({ success:true, request:r.rows[0] });
+  } catch (err) {
+    console.error('admin followme mark otp sent error:', err);
+    return res.status(500).json({ success:false, error:'Errore aggiornamento invio codice.' });
+  }
+});
+
+app.post('/api/admin/followme/trial-request/:id/regenerate-otp', requireAdmin, express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeTrialRequestsTable20260525();
+
+    const id = Number(req.params.id || 0);
+    if (!id) return res.status(400).json({ success:false, error:'ID richiesta mancante.' });
+
+    const otpCode = makeFollowMeTrialOtp20260525();
+    const otpExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
+
+    const r = await pool.query(
+      `UPDATE followme_trial_requests
+       SET otp_code = $2,
+           otp_expires_at = $3,
+           otp_sent_at = NULL,
+           otp_status = 'pending_otp',
+           status = 'pending_otp',
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [id, otpCode, otpExpiresAt]
+    );
+
+    if (!r.rows.length) {
+      return res.status(404).json({ success:false, error:'Richiesta non trovata.' });
+    }
+
+    return res.json({ success:true, request:r.rows[0] });
+  } catch (err) {
+    console.error('admin followme regenerate otp error:', err);
+    return res.status(500).json({ success:false, error:'Errore rigenerazione codice.' });
+  }
+});
+
+app.post('/api/admin/followme/trial-request/:id/delete', requireAdmin, express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeTrialRequestsTable20260525();
+
+    const id = Number(req.params.id || 0);
+    if (!id) return res.status(400).json({ success:false, error:'ID richiesta mancante.' });
+
+    const r = await pool.query(
+      `DELETE FROM followme_trial_requests
+       WHERE id = $1
+       RETURNING id`,
+      [id]
+    );
+
+    if (!r.rows.length) {
+      return res.status(404).json({ success:false, error:'Richiesta non trovata.' });
+    }
+
+    return res.json({ success:true, deleted:true, id });
+  } catch (err) {
+    console.error('admin followme delete trial request error:', err);
+    return res.status(500).json({ success:false, error:'Errore eliminazione richiesta.' });
+  }
+});
+// end-admin-followme-trial-requests-api-20260525
+
+
 
 app.get('/api/admin/followme/projects', requireAdmin, async (req, res) => {
   try {

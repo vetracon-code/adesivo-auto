@@ -3794,6 +3794,22 @@ function setDeadlineCleanupFlag(enabled){
         Premi “Carica richieste” per visualizzare i QR FollowMe registrati.
       </div>
     </div>
+
+    <div style="margin-top:22px;padding-top:18px;border-top:1px solid rgba(255,255,255,.12);">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div>
+          <strong style="display:block;color:#fff;font-size:18px;letter-spacing:-.03em;">Richieste prova FollowMe</strong>
+          <span style="display:block;margin-top:4px;color:rgba(255,255,255,.62);font-size:12px;font-weight:750;">Codice WhatsApp, verifica e attivazione prova 14 giorni.</span>
+        </div>
+        <button type="button" class="fm-admin-btn primary" id="adminFollowMeLoadTrialBtn20260525">Carica prove</button>
+      </div>
+
+      <div id="adminFollowMeTrialRequests20260525" style="margin-top:14px;display:grid;gap:10px;">
+        <div style="padding:14px;border-radius:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.72);font-size:13px;font-weight:750;">
+          Premi “Carica prove” per visualizzare le richieste ricevute dalla pagina pubblica FollowMe.
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 <!-- end-admin-followme-frame-20260525 -->
@@ -3932,6 +3948,206 @@ function setDeadlineCleanupFlag(enabled){
       setTimeout(loadProjects, 600);
     }
   });
+})();
+</script>
+
+
+<script id="admin-followme-trial-requests-ui-20260525">
+(function(){
+  "use strict";
+
+  let trialRows = [];
+
+  function esc(v){
+    return String(v == null ? "" : v)
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+
+  function dateShort(v){
+    if(!v) return "-";
+    try{
+      return new Date(v).toLocaleString("it-IT", {
+        day:"2-digit", month:"2-digit", year:"2-digit",
+        hour:"2-digit", minute:"2-digit"
+      });
+    }catch(e){ return String(v); }
+  }
+
+  async function copyText(text){
+    try{
+      await navigator.clipboard.writeText(text || "");
+      alert("Testo copiato.");
+    }catch(e){
+      prompt("Copia il testo:", text || "");
+    }
+  }
+
+  function statusBadge(item){
+    const st = String(item.status || item.otp_status || "pending_otp").toLowerCase();
+    const blocked = st.includes("reject") || st.includes("delete");
+    const ok = st.includes("verified") || st.includes("active");
+    const bg = ok ? "rgba(200,255,46,.15)" : (blocked ? "rgba(255,90,111,.18)" : "rgba(94,231,255,.14)");
+    const color = ok ? "#c8ff2e" : (blocked ? "#ffb4bf" : "#8eefff");
+    return '<span style="display:inline-flex;align-items:center;min-height:22px;padding:0 9px;border-radius:999px;background:' + bg + ';color:' + color + ';font-size:11px;font-weight:950;text-transform:uppercase;">' + esc(st) + '</span>';
+  }
+
+  function renderRows(rows){
+    const box = document.getElementById("adminFollowMeTrialRequests20260525");
+    if(!box) return;
+
+    trialRows = rows || [];
+
+    if(!trialRows.length){
+      box.innerHTML = '<div style="padding:14px;border-radius:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.72);font-size:13px;font-weight:750;">Nessuna richiesta prova FollowMe trovata.</div>';
+      return;
+    }
+
+    box.innerHTML = trialRows.map(function(item){
+      const id = item.id;
+      const name = item.full_name || "Senza nome";
+      const phone = item.phone || "";
+      const email = item.email || "";
+      const initialUrl = item.initial_url || "";
+      const otp = item.otp_code || "";
+      const waUrl = item.whatsapp_url || "";
+      const waText = item.whatsapp_text || "";
+      const verifyUrl = item.verify_url || "";
+
+      return ''
+        + '<article style="border-radius:22px;padding:14px;background:rgba(255,255,255,.075);border:1px solid rgba(255,255,255,.12);box-shadow:0 16px 40px rgba(0,0,0,.16);">'
+        + '  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">'
+        + '    <div>'
+        + '      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+        + '        <strong style="color:#fff;font-size:16px;">#' + esc(id) + ' · ' + esc(name) + '</strong>'
+        +          statusBadge(item)
+        + '      </div>'
+        + '      <div style="margin-top:6px;color:rgba(255,255,255,.68);font-size:12px;font-weight:750;line-height:1.45;">'
+        + '        Email: ' + esc(email) + '<br>'
+        + '        WhatsApp: ' + esc(phone) + '<br>'
+        + '        Link iniziale: ' + (initialUrl ? '<span style="color:#c8ff2e;">' + esc(initialUrl) + '</span>' : '-') + '<br>'
+        + '        Richiesta: ' + esc(dateShort(item.created_at)) + '<br>'
+        + '        Codice OTP: <strong style="color:#fff;font-size:14px;">' + esc(otp) + '</strong>'
+        + '      </div>'
+        + '    </div>'
+        + '    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">'
+        + '      <button type="button" class="fm-admin-btn" data-fm-copy-wa="' + esc(id) + '">Copia testo WhatsApp</button>'
+        + '      <a class="fm-admin-btn primary" href="' + esc(waUrl) + '" target="_blank" rel="noopener">Apri WhatsApp</a>'
+        + '      <button type="button" class="fm-admin-btn" data-fm-mark-sent="' + esc(id) + '">Segna inviato</button>'
+        + '      <button type="button" class="fm-admin-btn" data-fm-regenerate-otp="' + esc(id) + '">Rigenera codice</button>'
+        + '      <button type="button" class="fm-admin-btn danger" data-fm-delete-trial="' + esc(id) + '">Elimina</button>'
+        + '    </div>'
+        + '  </div>'
+        + '  <details style="margin-top:12px;">'
+        + '    <summary style="cursor:pointer;color:#c8ff2e;font-size:12px;font-weight:900;">Mostra testo WhatsApp e link verifica</summary>'
+        + '    <pre style="white-space:pre-wrap;margin:10px 0 0;padding:12px;border-radius:16px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.10);color:rgba(255,255,255,.78);font-size:12px;line-height:1.45;">' + esc(waText) + '</pre>'
+        + '    <div style="margin-top:8px;color:rgba(255,255,255,.58);font-size:12px;">Link verifica: ' + esc(verifyUrl) + '</div>'
+        + '  </details>'
+        + '</article>';
+    }).join("");
+  }
+
+  async function loadTrials(){
+    const box = document.getElementById("adminFollowMeTrialRequests20260525");
+    if(box){
+      box.innerHTML = '<div style="padding:14px;border-radius:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.72);font-size:13px;font-weight:750;">Carico richieste prova FollowMe...</div>';
+    }
+
+    try{
+      const res = await fetch("/api/admin/followme/trial-requests", { credentials:"same-origin" });
+      const data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Errore caricamento prove FollowMe.");
+      }
+
+      renderRows(data.requests || []);
+    }catch(err){
+      if(box){
+        box.innerHTML = '<div style="padding:14px;border-radius:18px;background:rgba(255,90,111,.12);border:1px solid rgba(255,90,111,.26);color:#ffb4bf;font-size:13px;font-weight:800;">' + esc(err.message || "Errore caricamento prove FollowMe.") + '</div>';
+      }
+    }
+  }
+
+  function rowById(id){
+    return trialRows.find(function(x){ return String(x.id) === String(id); }) || null;
+  }
+
+  async function postAction(id, action){
+    const res = await fetch("/api/admin/followme/trial-request/" + encodeURIComponent(id) + "/" + action, {
+      method:"POST",
+      credentials:"same-origin",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({})
+    });
+
+    const data = await res.json().catch(function(){ return null; });
+    if(!res.ok || !data || !data.success){
+      throw new Error((data && data.error) || "Errore operazione.");
+    }
+
+    return data;
+  }
+
+  document.addEventListener("click", async function(ev){
+    const loadBtn = ev.target && ev.target.closest ? ev.target.closest("#adminFollowMeLoadTrialBtn20260525") : null;
+    if(loadBtn){
+      ev.preventDefault();
+      loadTrials();
+      return;
+    }
+
+    const copyBtn = ev.target && ev.target.closest ? ev.target.closest("[data-fm-copy-wa]") : null;
+    if(copyBtn){
+      ev.preventDefault();
+      const row = rowById(copyBtn.getAttribute("data-fm-copy-wa"));
+      if(row) copyText(row.whatsapp_text || "");
+      return;
+    }
+
+    const markBtn = ev.target && ev.target.closest ? ev.target.closest("[data-fm-mark-sent]") : null;
+    if(markBtn){
+      ev.preventDefault();
+      const id = markBtn.getAttribute("data-fm-mark-sent");
+      try{
+        await postAction(id, "mark-otp-sent");
+        alert("Codice segnato come inviato.");
+        loadTrials();
+      }catch(err){ alert(err.message || "Errore."); }
+      return;
+    }
+
+    const regenBtn = ev.target && ev.target.closest ? ev.target.closest("[data-fm-regenerate-otp]") : null;
+    if(regenBtn){
+      ev.preventDefault();
+      const id = regenBtn.getAttribute("data-fm-regenerate-otp");
+      if(!confirm("Rigenerare il codice WhatsApp per questa richiesta?")) return;
+      try{
+        await postAction(id, "regenerate-otp");
+        alert("Codice rigenerato.");
+        loadTrials();
+      }catch(err){ alert(err.message || "Errore."); }
+      return;
+    }
+
+    const delBtn = ev.target && ev.target.closest ? ev.target.closest("[data-fm-delete-trial]") : null;
+    if(delBtn){
+      ev.preventDefault();
+      const id = delBtn.getAttribute("data-fm-delete-trial");
+      if(!confirm("Eliminare definitivamente questa richiesta FollowMe?")) return;
+      try{
+        await postAction(id, "delete");
+        alert("Richiesta eliminata.");
+        loadTrials();
+      }catch(err){ alert(err.message || "Errore."); }
+      return;
+    }
+  });
+
+  window.adminFollowMeLoadTrialRequests20260525 = loadTrials;
 })();
 </script>
 
