@@ -5604,6 +5604,232 @@ app.post('/api/admin/trial-request/:id/regenerate-otp', requireAdmin, async (req
 
 
 // start-admin-followme-projects-api-20260525
+
+// start-followme-trial-request-backend-20260525
+async function ensureFollowMeTrialRequestsTable20260525() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS followme_trial_requests (
+      id BIGSERIAL PRIMARY KEY,
+      full_name TEXT,
+      email TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      phone_whatsapp TEXT,
+      initial_url TEXT,
+      otp_code TEXT NOT NULL,
+      otp_expires_at TIMESTAMPTZ NOT NULL,
+      otp_sent_at TIMESTAMPTZ,
+      otp_verified_at TIMESTAMPTZ,
+      otp_status TEXT NOT NULL DEFAULT 'pending_otp',
+      status TEXT NOT NULL DEFAULT 'pending_otp',
+      privacy_consent BOOLEAN NOT NULL DEFAULT FALSE,
+      terms_consent BOOLEAN NOT NULL DEFAULT FALSE,
+      marketing_consent BOOLEAN NOT NULL DEFAULT FALSE,
+      anti_bot_score INTEGER NOT NULL DEFAULT 0,
+      ip_address TEXT,
+      user_agent TEXT,
+      source TEXT DEFAULT 'followme-prova',
+      code TEXT,
+      public_id TEXT,
+      trial_started_at TIMESTAMPTZ,
+      trial_expires_at TIMESTAMPTZ,
+      plan_override TEXT,
+      admin_notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`ALTER TABLE followme_trial_requests ADD COLUMN IF NOT EXISTS phone_whatsapp TEXT`);
+  await pool.query(`ALTER TABLE followme_trial_requests ADD COLUMN IF NOT EXISTS initial_url TEXT`);
+  await pool.query(`ALTER TABLE followme_trial_requests ADD COLUMN IF NOT EXISTS otp_sent_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE followme_trial_requests ADD COLUMN IF NOT EXISTS otp_verified_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE followme_trial_requests ADD COLUMN IF NOT EXISTS otp_status TEXT`);
+  await pool.query(`ALTER TABLE followme_trial_requests ADD COLUMN IF NOT EXISTS status TEXT`);
+  await pool.query(`ALTER TABLE followme_trial_requests ADD COLUMN IF NOT EXISTS code TEXT`);
+  await pool.query(`ALTER TABLE followme_trial_requests ADD COLUMN IF NOT EXISTS public_id TEXT`);
+  await pool.query(`ALTER TABLE followme_trial_requests ADD COLUMN IF NOT EXISTS trial_started_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE followme_trial_requests ADD COLUMN IF NOT EXISTS trial_expires_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE followme_trial_requests ADD COLUMN IF NOT EXISTS plan_override TEXT`);
+  await pool.query(`ALTER TABLE followme_trial_requests ADD COLUMN IF NOT EXISTS admin_notes TEXT`);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS followme_trial_requests_status_idx
+    ON followme_trial_requests(status, created_at DESC)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS followme_trial_requests_email_phone_idx
+    ON followme_trial_requests(LOWER(email), phone)
+  `);
+}
+
+function normalizeFollowMeTrialEmail20260525(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizeFollowMeTrialPhone20260525(value) {
+  const raw = String(value || '').trim();
+  const digits = raw.replace(/\D/g, '');
+
+  if (!digits) {
+    return { raw, e164:'', whatsapp:'', isValid:false };
+  }
+
+  let e164 = '';
+
+  if (digits.startsWith('39') && digits.length >= 11) {
+    e164 = '+' + digits;
+  } else if (digits.startsWith('0039') && digits.length >= 13) {
+    e164 = '+' + digits.slice(2);
+  } else if (digits.length >= 9 && digits.length <= 11) {
+    e164 = '+39' + digits;
+  } else {
+    e164 = '+' + digits;
+  }
+
+  const whatsapp = e164.replace(/\D/g, '');
+  const isValid = whatsapp.length >= 10 && whatsapp.length <= 15;
+
+  return { raw, e164, whatsapp, isValid };
+}
+
+function normalizeFollowMeInitialUrl20260525(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  try {
+    const withProtocol = /^https?:\/\//i.test(raw) ? raw : 'https://' + raw;
+    const u = new URL(withProtocol);
+
+    if (!['http:', 'https:'].includes(u.protocol)) return '';
+    return u.toString();
+  } catch(e) {
+    return '';
+  }
+}
+
+function makeFollowMeTrialOtp20260525() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+app.post('/api/followme/trial/request', express.json({ limit:'80kb' }), async (req, res) => {
+  try {
+    await ensureFollowMeTrialRequestsTable20260525();
+
+    const startedAt = Number(req.body?.started_at || 0);
+    const now = Date.now();
+    const elapsedMs = startedAt ? now - startedAt : 0;
+
+    const honeypot = String(req.body?.company_website || '').trim();
+    if (honeypot) {
+      return res.status(200).json({ success:true, message:'Richiesta ricevuta.' });
+    }
+
+    if (elapsedMs > 0 && elapsedMs < 2500) {
+      return res.status(429).json({
+        success:false,
+        error:'Invio troppo rapido. Riprova tra qualche secondo.'
+      });
+    }
+
+    const fullName = String(req.body?.full_name || '').trim().slice(0, 120);
+    const email = normalizeFollowMeTrialEmail20260525(req.body?.email);
+    const phoneNorm = normalizeFollowMeTrialPhone20260525(req.body?.phone);
+    const initialUrl = normalizeFollowMeInitialUrl20260525(req.body?.initial_url);
+    const privacyConsent = !!req.body?.privacy_consent;
+    const termsConsent = !!req.body?.terms_consent;
+    const marketingConsent = !!req.body?.marketing_consent;
+
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ success:false, error:'Inserisci una email valida.' });
+    }
+
+    if (!phoneNorm.isValid) {
+      return res.status(400).json({ success:false, error:'Inserisci un numero WhatsApp valido.' });
+    }
+
+    if (!privacyConsent || !termsConsent) {
+      return res.status(400).json({
+        success:false,
+        error:'Devi accettare privacy e condizioni d’uso per richiedere la prova.'
+      });
+    }
+
+    /*
+      Regola prova:
+      - una richiesta per email/telefono può esistere;
+      - se già attiva o verificata, non creiamo duplicati.
+      In futuro qui applicheremo la regola: prova concessa una sola volta.
+    */
+    const existing = await pool.query(
+      `SELECT id, status, otp_status, code, trial_expires_at
+       FROM followme_trial_requests
+       WHERE LOWER(email) = LOWER($1)
+          OR phone = $2
+          OR phone_whatsapp = $3
+       ORDER BY id DESC
+       LIMIT 1`,
+      [email, phoneNorm.e164, phoneNorm.whatsapp]
+    );
+
+    if (existing.rows.length) {
+      const ex = existing.rows[0];
+      if (['verified','active','pending_otp','otp_sent'].includes(String(ex.status || '').toLowerCase())) {
+        return res.status(409).json({
+          success:false,
+          error:'Esiste già una richiesta FollowMe per questa email o questo numero. Contattaci su WhatsApp per proseguire.'
+        });
+      }
+    }
+
+    const otpCode = makeFollowMeTrialOtp20260525();
+    const otpExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
+
+    const inserted = await pool.query(
+      `INSERT INTO followme_trial_requests
+       (full_name, email, phone, phone_whatsapp, initial_url,
+        otp_code, otp_expires_at, otp_status, status,
+        privacy_consent, terms_consent, marketing_consent,
+        anti_bot_score, ip_address, user_agent, source,
+        created_at, updated_at)
+       VALUES
+       ($1,$2,$3,$4,$5,$6,$7,'pending_otp','pending_otp',
+        $8,$9,$10,$11,$12,$13,'followme-prova',NOW(),NOW())
+       RETURNING id, email, phone, phone_whatsapp, otp_status, status, created_at`,
+      [
+        fullName || null,
+        email,
+        phoneNorm.e164,
+        phoneNorm.whatsapp,
+        initialUrl || null,
+        otpCode,
+        otpExpiresAt,
+        privacyConsent,
+        termsConsent,
+        marketingConsent,
+        elapsedMs > 0 ? 1 : 0,
+        req.headers['x-forwarded-for'] || req.socket?.remoteAddress || null,
+        req.headers['user-agent'] || null
+      ]
+    );
+
+    return res.json({
+      success:true,
+      message:'Richiesta ricevuta. Riceverai un codice di verifica via WhatsApp.',
+      request_id: inserted.rows[0].id
+    });
+
+  } catch (err) {
+    console.error('followme trial request error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore invio richiesta prova FollowMe.'
+    });
+  }
+});
+// end-followme-trial-request-backend-20260525
+
+
 app.get('/api/admin/followme/projects', requireAdmin, async (req, res) => {
   try {
     await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS blocked_reason TEXT`).catch(() => null);
