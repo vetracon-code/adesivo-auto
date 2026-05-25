@@ -32143,5 +32143,283 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-fast-image-upload-preview-final-20260525">
+(function(){
+  "use strict";
+
+  /*
+    Fix percezione lentezza upload immagine:
+    dopo /image-card/upload OK aggiorna subito preview alta e destinazione attiva,
+    senza aspettare refresh manuale o render completo delle 20 card.
+  */
+
+  function code(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("app");
+      if(idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
+
+      const p = new URLSearchParams(location.search);
+      return p.get("code") || p.get("qr") || p.get("c") ||
+        window.FOLLOWME_CODE ||
+        window.FOLLOWME_PROJECT_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        window.followMeProjectCode ||
+        "FMDEMO";
+    }catch(e){
+      return window.FOLLOWME_CODE ||
+        window.FOLLOWME_PROJECT_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        window.followMeProjectCode ||
+        "FMDEMO";
+    }
+  }
+
+  function abs(path){
+    const raw = String(path || "").trim();
+    if(!raw) return "";
+    if(/^https?:\/\//i.test(raw)) return raw;
+    if(raw.startsWith("/")) return location.origin + raw;
+    return location.origin + "/" + raw.replace(/^\/+/, "");
+  }
+
+  function esc(v){
+    return String(v || "")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
+  }
+
+  function imageFileUrlFromResponse(data){
+    if(!data) return "";
+
+    const img = data.image || data.data || {};
+    return (
+      img.image_url ||
+      img.public_path ||
+      img.public_url ||
+      data.image_url ||
+      data.public_path ||
+      data.public_url ||
+      ""
+    );
+  }
+
+  function imagePageUrl(){
+    return "/fm/image/" + encodeURIComponent(code());
+  }
+
+  function currentVersion(data){
+    const img = data && (data.image || data.data || {});
+    return String(
+      (img && (img.id || img.updated_at || img.created_at)) ||
+      Date.now()
+    ).replace(/[^a-zA-Z0-9_-]/g, "");
+  }
+
+  function renderImageHtml(src, name){
+    return '' +
+      '<div class="followme-fast-image-preview-box-20260525" data-followme-fast-image-preview="1">' +
+        '<img src="' + esc(src) + '" alt="' + esc(name || "Immagine caricata") + '">' +
+      '</div>';
+  }
+
+  function ensureCss(){
+    if(document.getElementById("followme-fast-image-upload-preview-css-20260525")) return;
+
+    const style = document.createElement("style");
+    style.id = "followme-fast-image-upload-preview-css-20260525";
+    style.textContent = `
+      .followme-fast-image-preview-box-20260525{
+        width:100% !important;
+        min-height:220px !important;
+        height:100% !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        overflow:hidden !important;
+        border-radius:18px !important;
+        background:#05070d !important;
+      }
+
+      .followme-fast-image-preview-box-20260525 img{
+        width:100% !important;
+        height:100% !important;
+        min-height:220px !important;
+        object-fit:cover !important;
+        display:block !important;
+      }
+
+      .simple-preview-square .followme-fast-image-preview-box-20260525,
+      .destination-preview-frame .followme-fast-image-preview-box-20260525,
+      .qr-auto-preview-frame .followme-fast-image-preview-box-20260525{
+        min-height:220px !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function findMainPreviewBox(){
+    return document.getElementById("simpleDestinationPreviewFrame") ||
+      document.querySelector(".simple-preview-square iframe") ||
+      document.querySelector(".simple-preview-square") ||
+      document.querySelector(".destination-preview-frame") ||
+      document.querySelector(".qr-auto-preview-frame") ||
+      document.querySelector("[id*='PreviewFrame']") ||
+      document.querySelector("[id*='previewFrame']");
+  }
+
+  function updateOpenButton(pageUrl, fileUrl){
+    const candidates = [
+      document.getElementById("simpleDestinationPreviewOpen"),
+      document.getElementById("openQrPreview"),
+      document.getElementById("followmeOtherOpenQrPreview")
+    ].filter(Boolean);
+
+    candidates.forEach(function(btn){
+      try{
+        if(String(btn.tagName || "").toLowerCase() === "a"){
+          btn.href = pageUrl || fileUrl;
+          btn.target = "_blank";
+          btn.rel = "noopener";
+        }
+
+        btn.textContent = "Apri immagine";
+        btn.style.opacity = "1";
+        btn.style.pointerEvents = "auto";
+        btn.removeAttribute("disabled");
+        btn.classList.remove("disabled");
+      }catch(e){}
+    });
+  }
+
+  function setActiveGlobals(pageUrl){
+    try{ window.__followMeActiveUrl = pageUrl; }catch(e){}
+    try{ window.followMeCurrentActiveUrl = pageUrl; }catch(e){}
+    try{ window.currentFollowMeActiveUrl = pageUrl; }catch(e){}
+    try{ window.activeFollowMeUrl = pageUrl; }catch(e){}
+  }
+
+  function updateInputAndText(pageUrl){
+    const activeText = document.getElementById("activeUrl");
+    if(activeText) activeText.textContent = pageUrl;
+
+    /*
+      Non sovrascrivo newUrl con /fm/image se l'utente sta digitando:
+      lo aggiorno solo se non è in focus.
+    */
+    const newUrl = document.getElementById("newUrl");
+    if(newUrl && document.activeElement !== newUrl){
+      newUrl.value = pageUrl;
+    }
+  }
+
+  function renderPreview(fileUrl, name){
+    ensureCss();
+
+    const src = fileUrl;
+    const box = findMainPreviewBox();
+
+    const empty = document.getElementById("simpleDestinationPreviewEmpty");
+    if(empty) empty.style.display = "none";
+
+    if(!box) return;
+
+    try{
+      let target = box;
+
+      if(String(box.tagName || "").toLowerCase() === "iframe"){
+        target = box.parentElement || box;
+        box.style.display = "none";
+      }
+
+      target.innerHTML = renderImageHtml(src, name || "Immagine caricata");
+      target.classList.add("followme-fast-image-preview-holder-20260525");
+      target.style.display = "";
+    }catch(e){}
+  }
+
+  function applyFromUploadResponse(data){
+    try{
+      if(!data || data.success === false) return;
+
+      const rawFile = imageFileUrlFromResponse(data);
+      if(!rawFile) return;
+
+      const version = currentVersion(data);
+      const fileUrl = abs(rawFile) + (String(rawFile).includes("?") ? "&" : "?") + "v=" + version;
+      const pageUrl = imagePageUrl();
+
+      const img = data.image || data.data || {};
+      const name = img.original_name || img.stored_name || "Immagine caricata";
+
+      setActiveGlobals(pageUrl);
+      updateInputAndText(pageUrl);
+      updateOpenButton(pageUrl, fileUrl);
+      renderPreview(fileUrl, name);
+
+      /*
+        Renderer specifici, se presenti, li richiamo dopo ma non blocco la preview immediata.
+      */
+      setTimeout(function(){
+        try{
+          if(typeof window.followmeRenderImagePreviewInsideButton20260522 === "function"){
+            window.followmeRenderImagePreviewInsideButton20260522();
+          }
+        }catch(e){}
+
+        try{
+          if(typeof window.followmeRenderActiveImagePreview20260522 === "function"){
+            window.followmeRenderActiveImagePreview20260522();
+          }
+        }catch(e){}
+
+        try{
+          if(typeof window.followmeNormalizeUniformPremiumCards20260522 === "function"){
+            window.followmeNormalizeUniformPremiumCards20260522();
+          }
+        }catch(e){}
+      }, 650);
+
+    }catch(e){
+      console.warn("[FollowMe Fast Image Upload Preview] errore:", e);
+    }
+  }
+
+  if(!window.__followmeFastImageUploadFetchPatch20260525){
+    window.__followmeFastImageUploadFetchPatch20260525 = true;
+
+    const oldFetch = window.fetch;
+
+    window.fetch = async function(){
+      const args = arguments;
+      const requestUrl = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+
+      const res = await oldFetch.apply(this, args);
+
+      try{
+        if(res && res.ok && requestUrl.includes("/image-card/upload")){
+          const clone = res.clone();
+          clone.json().then(function(data){
+            applyFromUploadResponse(data);
+            setTimeout(function(){ applyFromUploadResponse(data); }, 250);
+            setTimeout(function(){ applyFromUploadResponse(data); }, 900);
+          }).catch(function(){});
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  window.followmeFastImageUploadPreview20260525 = applyFromUploadResponse;
+})();
+</script>
+
 </body>
 </html>
