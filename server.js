@@ -6003,9 +6003,11 @@ app.get('/api/admin/followme/trial-requests', requireAdmin, async (req, res) => 
        LIMIT 120`
     );
 
-    const baseUrl = (typeof getPublicBaseUrl === 'function')
+    let baseUrl = (typeof getPublicBaseUrl === 'function')
       ? getPublicBaseUrl(req)
       : ((req.protocol || 'https') + '://' + (req.get('host') || 'adesivo-auto.onrender.com'));
+
+    baseUrl = String(baseUrl || 'https://adesivo-auto.onrender.com').replace(/^http:\/\//i, 'https://');
 
     const rows = r.rows.map(item => {
       const whatsappNumber = item.phone_whatsapp || String(item.phone || '').replace(/\D/g, '');
