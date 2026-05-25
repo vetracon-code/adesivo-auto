@@ -6165,7 +6165,7 @@ app.post('/api/followme/trial/:id/verify', express.json({ limit:'20kb' }), async
       return res.status(404).json({ success:false, error:'Richiesta non trovata.' });
     }
 
-    if (trial.code && trial.public_id && trial.status === 'active') {
+    if (trial.code && trial.public_id) {
       return res.json({
         success:true,
         already_active:true,
@@ -6217,8 +6217,6 @@ app.post('/api/followme/trial/:id/verify', express.json({ limit:'20kb' }), async
     const trialStartedAt = new Date();
     const trialExpiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
 
-    await pool.query('BEGIN');
-
     const projectIns = await pool.query(
       `INSERT INTO followme_projects
        (code, public_id, label, active_url, status, created_at, updated_at)
@@ -6254,8 +6252,6 @@ app.post('/api/followme/trial/:id/verify', express.json({ limit:'20kb' }), async
       [id, code, publicId, trialStartedAt, trialExpiresAt]
     );
 
-    await pool.query('COMMIT');
-
     return res.json({
       success:true,
       active:true,
@@ -6267,7 +6263,6 @@ app.post('/api/followme/trial/:id/verify', express.json({ limit:'20kb' }), async
     });
 
   } catch (err) {
-    try { await pool.query('ROLLBACK'); } catch(e) {}
     console.error('followme trial verify error:', err);
     return res.status(500).json({
       success:false,
