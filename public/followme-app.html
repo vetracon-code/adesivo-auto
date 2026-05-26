@@ -9107,6 +9107,13 @@ document.addEventListener("visibilitychange", function(){
       */
       fastMarkActiveLocal(url);
 
+      /* fast-top-preview-called-from-native-reactivate-20260526 */
+      try{
+        if(typeof window.followmeFastReactivateTopPreview20260526 === "function"){
+          window.followmeFastReactivateTopPreview20260526(url, null);
+        }
+      }catch(e){}
+
       var input = document.getElementById("newUrl");
       if(input) input.value = url;
 
@@ -35569,6 +35576,406 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   }
 
   window.followmeRenderFinalImagePreviewAfterUpload20260526 = renderFromUploadResponse;
+})();
+</script>
+
+
+<script id="followme-fast-reactivate-top-preview-20260526">
+/*
+  Preview alta immediata quando si clicca Riattiva.
+  Obiettivo: non aspettare iframe/loadStatus/history.
+*/
+(function(){
+  if(window.__followmeFastReactivateTopPreview20260526) return;
+  window.__followmeFastReactivateTopPreview20260526 = true;
+
+  let lastImageCache = null;
+
+  function clean(v){ return String(v || "").trim(); }
+
+  function code(){
+    try{
+      const p = new URLSearchParams(location.search);
+      return p.get("code") || p.get("qr") || p.get("c") ||
+        window.FOLLOWME_CODE ||
+        window.FOLLOWME_PROJECT_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        window.followMeProjectCode ||
+        "FMDEMO";
+    }catch(e){
+      return "FMDEMO";
+    }
+  }
+
+  function esc(v){
+    return String(v || "")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
+  }
+
+  function abs(path){
+    const raw = clean(path);
+    if(!raw) return "";
+    if(/^https?:\/\//i.test(raw)) return raw;
+    if(raw.startsWith("/")) return location.origin + raw;
+    return location.origin + "/" + raw.replace(/^\/+/, "");
+  }
+
+  function isImageUrl(url){
+    const u = clean(url).toLowerCase();
+    return u.includes("/fm/image/") || u.includes("/image-card") || (u.includes("/uploads/followme-documents/") && u.includes("/image/"));
+  }
+
+  function isPdfUrl(url){
+    const u = clean(url).toLowerCase();
+    return u.includes("/fm/document/") || u.includes(".pdf") || u.includes("documento.pdf") || u.includes("/document/");
+  }
+
+  function isNormalUrl(url){
+    return /^https?:\/\//i.test(clean(url));
+  }
+
+  function mainTarget(){
+    const frame = document.getElementById("simpleDestinationPreviewFrame");
+    if(frame){
+      frame.style.display = "none";
+      return frame.parentElement;
+    }
+
+    return document.querySelector(".simple-preview-square") ||
+      document.querySelector(".destination-preview-frame") ||
+      document.querySelector(".qr-auto-preview-frame");
+  }
+
+  function hideFallbacks(){
+    try{
+      const empty = document.getElementById("simpleDestinationPreviewEmpty");
+      if(empty) empty.style.display = "none";
+
+      const fallback = document.getElementById("previewFallbackBox");
+      if(fallback) fallback.style.display = "none";
+    }catch(e){}
+  }
+
+  function ensureCss(){
+    if(document.getElementById("followme-fast-reactivate-top-preview-css-20260526")) return;
+
+    const style = document.createElement("style");
+    style.id = "followme-fast-reactivate-top-preview-css-20260526";
+    style.textContent = `
+      .followme-reactivate-preview-box-20260526{
+        width:100% !important;
+        height:100% !important;
+        min-height:220px !important;
+        border-radius:18px !important;
+        overflow:hidden !important;
+        background:
+          radial-gradient(circle at 20% 10%, rgba(200,255,46,.16), transparent 34%),
+          radial-gradient(circle at 88% 0%, rgba(94,231,255,.15), transparent 30%),
+          #101018 !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        text-align:center !important;
+        padding:0 !important;
+      }
+
+      .followme-reactivate-preview-box-20260526 img{
+        width:100% !important;
+        height:100% !important;
+        min-height:220px !important;
+        object-fit:cover !important;
+        display:block !important;
+      }
+
+      .followme-reactivate-url-preview-20260526{
+        display:grid !important;
+        place-items:center !important;
+        gap:12px !important;
+        width:100% !important;
+        height:100% !important;
+        min-height:220px !important;
+        padding:20px !important;
+      }
+
+      .followme-reactivate-url-icon-20260526{
+        width:78px !important;
+        height:78px !important;
+        border-radius:24px !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        background:rgba(255,255,255,.08) !important;
+        border:1px solid rgba(255,255,255,.12) !important;
+        box-shadow:0 16px 38px rgba(0,0,0,.22) !important;
+        overflow:hidden !important;
+      }
+
+      .followme-reactivate-url-icon-20260526 img{
+        width:48px !important;
+        height:48px !important;
+        min-height:0 !important;
+        object-fit:contain !important;
+      }
+
+      .followme-reactivate-url-domain-20260526{
+        color:#fff !important;
+        font-size:18px !important;
+        line-height:1.1 !important;
+        font-weight:950 !important;
+        letter-spacing:-.03em !important;
+        max-width:100% !important;
+        overflow:hidden !important;
+        text-overflow:ellipsis !important;
+        white-space:nowrap !important;
+      }
+
+      .followme-reactivate-loading-20260526{
+        min-height:30px !important;
+        padding:0 12px !important;
+        border-radius:999px !important;
+        display:inline-flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        color:#101018 !important;
+        background:linear-gradient(135deg,#c8ff2e,#5ee7ff) !important;
+        font-size:11px !important;
+        font-weight:950 !important;
+        letter-spacing:.04em !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function renderBox(html){
+    ensureCss();
+    hideFallbacks();
+
+    const target = mainTarget();
+    if(!target) return;
+
+    target.innerHTML = '<div class="followme-reactivate-preview-box-20260526">' + html + '</div>';
+    target.style.display = "";
+  }
+
+  function domainOf(url){
+    try{
+      const u = new URL(clean(url));
+      return u.hostname.replace(/^www\./, "");
+    }catch(e){
+      return clean(url) || "Destinazione";
+    }
+  }
+
+  function faviconFor(url){
+    try{
+      const u = new URL(clean(url));
+      return u.origin + "/favicon.ico";
+    }catch(e){
+      return "/images/followme/favicon-search-fallback.gif";
+    }
+  }
+
+  function renderUrl(url){
+    const domain = domainOf(url);
+    const fav = faviconFor(url);
+
+    renderBox(
+      '<div class="followme-reactivate-url-preview-20260526">' +
+        '<div class="followme-reactivate-url-icon-20260526">' +
+          '<img src="' + esc(fav) + '" alt="">' +
+        '</div>' +
+        '<div class="followme-reactivate-url-domain-20260526">' + esc(domain) + '</div>' +
+        '<div class="followme-reactivate-loading-20260526">ATTIVO ORA</div>' +
+      '</div>'
+    );
+
+    updateOpenButton(url, "Apri pagina");
+  }
+
+  function updateOpenButton(url, text){
+    const buttons = [
+      document.getElementById("simpleDestinationPreviewOpen"),
+      document.getElementById("openQrPreview"),
+      document.getElementById("followmeOtherOpenQrPreview")
+    ].filter(Boolean);
+
+    buttons.forEach(function(a){
+      try{
+        a.href = url;
+        a.textContent = text || "Apri";
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.style.opacity = "1";
+        a.style.pointerEvents = "auto";
+        a.removeAttribute("disabled");
+      }catch(e){}
+    });
+  }
+
+  async function getCurrentImage(){
+    try{
+      if(lastImageCache) return lastImageCache;
+
+      const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/image-card/current?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+      const img = data && (data.image || data.data || {});
+      const raw = img && (img.image_url || img.public_path || img.public_url);
+
+      if(!raw) return null;
+
+      const version = String(img.id || img.updated_at || img.created_at || Date.now()).replace(/[^a-zA-Z0-9_-]/g,"");
+      const src = abs(raw) + (String(raw).includes("?") ? "&" : "?") + "v=" + version;
+
+      lastImageCache = {
+        src,
+        name: img.original_name || img.stored_name || "Immagine",
+        publicUrl: data.public_url || ("/fm/image/" + encodeURIComponent(code()))
+      };
+
+      return lastImageCache;
+    }catch(e){
+      return null;
+    }
+  }
+
+  function renderImageImmediateFromCard(card){
+    if(!card) return false;
+
+    const img = card.querySelector("img");
+    const src = img && (img.currentSrc || img.src || img.getAttribute("src"));
+
+    if(!src) return false;
+
+    renderBox('<img src="' + esc(src) + '" alt="Immagine">');
+    updateOpenButton("/fm/image/" + encodeURIComponent(code()), "Apri immagine");
+    return true;
+  }
+
+  async function renderImage(url, card){
+    const fromCard = renderImageImmediateFromCard(card);
+
+    if(!fromCard){
+      renderBox(
+        '<div class="followme-reactivate-url-preview-20260526">' +
+          '<div class="followme-reactivate-loading-20260526">CARICO IMMAGINE...</div>' +
+        '</div>'
+      );
+    }
+
+    const img = await getCurrentImage();
+    if(img && img.src){
+      renderBox('<img src="' + esc(img.src) + '" alt="' + esc(img.name || "Immagine") + '">');
+      updateOpenButton(img.publicUrl || url || ("/fm/image/" + encodeURIComponent(code())), "Apri immagine");
+    }
+  }
+
+  function renderPdf(url){
+    try{
+      if(typeof window.followmeFastPdfReactivate20260525 === "function"){
+        window.followmeFastPdfReactivate20260525(url, "Documento PDF");
+        updateOpenButton(url, "Apri documento");
+        return;
+      }
+    }catch(e){}
+
+    renderBox(
+      '<div class="followme-reactivate-url-preview-20260526">' +
+        '<div class="followme-reactivate-url-icon-20260526"><strong>PDF</strong></div>' +
+        '<div class="followme-reactivate-url-domain-20260526">Documento PDF</div>' +
+        '<div class="followme-reactivate-loading-20260526">ATTIVO ORA</div>' +
+      '</div>'
+    );
+
+    updateOpenButton(url, "Apri documento");
+  }
+
+  function cardOf(el){
+    return el && el.closest ? el.closest(".premium-history-card,.history-card,.premium-card,.destination-card") : null;
+  }
+
+  function urlOfCard(card){
+    if(!card) return "";
+    const dataUrl = clean(card.dataset && card.dataset.url);
+    if(dataUrl) return dataUrl;
+
+    const urlEl = card.querySelector(".premium-history-url,.premium-card-url,.url,.mono,code");
+    if(urlEl && clean(urlEl.textContent)) return clean(urlEl.textContent);
+
+    const a = Array.from(card.querySelectorAll("a[href]")).find(function(x){
+      const href = clean(x.getAttribute("href"));
+      return href && !href.startsWith("#") && !href.startsWith("javascript:");
+    });
+
+    return a ? clean(a.getAttribute("href")) : "";
+  }
+
+  function isReactivateButton(el){
+    if(!el) return false;
+    const txt = clean(el.innerText || el.textContent).toLowerCase();
+    const html = String(el.outerHTML || "").toLowerCase();
+
+    return (
+      txt.includes("riattiva") ||
+      txt.includes("attivalo") ||
+      html.includes("premium-history-reactivate") ||
+      html.includes("activateurlfrompremium") ||
+      html.includes("reactivateurl")
+    );
+  }
+
+  function renderFast(url, card){
+    if(!url) return;
+
+    /*
+      Invalido cache immagine solo se riattivo una immagine,
+      così prendo l'ultima immagine corrente.
+    */
+    if(isImageUrl(url)){
+      lastImageCache = null;
+      renderImage(url, card);
+      return;
+    }
+
+    if(isPdfUrl(url)){
+      renderPdf(url);
+      return;
+    }
+
+    if(isNormalUrl(url)){
+      renderUrl(url);
+      return;
+    }
+
+    renderUrl(url);
+  }
+
+  /*
+    Click capture: la preview alta cambia subito prima del backend.
+  */
+  document.addEventListener("click", function(ev){
+    const btn = ev.target && ev.target.closest ? ev.target.closest("button,a") : null;
+    if(!btn || !isReactivateButton(btn)) return;
+
+    const card = cardOf(btn);
+    const url = urlOfCard(card);
+
+    if(!url) return;
+
+    renderFast(url, card);
+  }, true);
+
+  /*
+    Esposto per la funzione nativa activateUrlFromPremium.
+  */
+  window.followmeFastReactivateTopPreview20260526 = renderFast;
 })();
 </script>
 
