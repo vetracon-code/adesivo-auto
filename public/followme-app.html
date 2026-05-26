@@ -33591,5 +33591,182 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-doc-preview-anti-flicker-20260526">
+/*
+  Anti-sfarfallio preview documento FollowMe.
+  Motivo: più moduli legacy aggiornano thumbnail_url/current/upload/publish in rapida sequenza.
+  Questo filtro:
+  - evita ricarichi se src è uguale;
+  - non svuota mai la preview;
+  - applica la nuova immagine solo dopo preload completato;
+  - aggiunge cache-busting stabile per documento, non per ogni refresh.
+*/
+(function(){
+  if(window.__followmeDocPreviewAntiFlicker20260526) return;
+  window.__followmeDocPreviewAntiFlicker20260526 = true;
+
+  const state = {
+    lastBaseSrc:"",
+    lastAppliedSrc:"",
+    timer:null,
+    loading:false
+  };
+
+  function cleanSrc(src){
+    src = String(src || "").trim();
+    if(!src) return "";
+    try{
+      const u = new URL(src, location.origin);
+      u.searchParams.delete("v");
+      u.searchParams.delete("_");
+      u.searchParams.delete("t");
+      return u.pathname + (u.search ? u.search : "");
+    }catch(e){
+      return src.replace(/[?&](v|_|t)=\d+/g, "");
+    }
+  }
+
+  function stableSrc(src){
+    const base = cleanSrc(src);
+    if(!base) return "";
+    /*
+      Versione stabile: cambia solo quando cambia percorso reale.
+      Evita Date.now() multipli che causano 3/4 ricarichi visivi.
+    */
+    const sep = base.includes("?") ? "&" : "?";
+    return base + sep + "stablePreview=1";
+  }
+
+  function isDocPreviewImage(img){
+    if(!img || !img.tagName || img.tagName.toLowerCase() !== "img") return false;
+
+    const id = img.id || "";
+    const cls = img.className || "";
+    const src = img.getAttribute("src") || "";
+
+    return (
+      id.includes("Doc") ||
+      id.includes("Preview") ||
+      cls.includes("doc") ||
+      cls.includes("preview") ||
+      src.includes("/followme-documents/") ||
+      src.includes("document-preview") ||
+      src.includes("preview.svg")
+    );
+  }
+
+  function applyStable(img, nextRaw){
+    const base = cleanSrc(nextRaw);
+    if(!base) return;
+
+    const next = stableSrc(nextRaw);
+    const currentBase = cleanSrc(img.getAttribute("src") || "");
+
+    if(base === state.lastBaseSrc || base === currentBase){
+      return;
+    }
+
+    state.lastBaseSrc = base;
+
+    clearTimeout(state.timer);
+    state.timer = setTimeout(function(){
+      const pre = new Image();
+
+      state.loading = true;
+
+      pre.onload = function(){
+        if(state.lastAppliedSrc === next) return;
+
+        img.style.transition = img.style.transition || "opacity .18s ease";
+        img.style.opacity = "1";
+        img.setAttribute("src", next);
+
+        state.lastAppliedSrc = next;
+        state.loading = false;
+      };
+
+      pre.onerror = function(){
+        state.loading = false;
+      };
+
+      pre.src = next;
+    }, 120);
+  }
+
+  const srcDesc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src");
+
+  if(srcDesc && srcDesc.set && srcDesc.get){
+    Object.defineProperty(HTMLImageElement.prototype, "src", {
+      configurable:true,
+      enumerable:srcDesc.enumerable,
+      get:function(){
+        return srcDesc.get.call(this);
+      },
+      set:function(value){
+        if(isDocPreviewImage(this)){
+          const old = this.getAttribute("src") || "";
+          const cleanOld = cleanSrc(old);
+          const cleanNew = cleanSrc(value);
+
+          if(cleanNew && cleanOld && cleanNew === cleanOld){
+            return;
+          }
+
+          if(cleanNew && (
+            cleanNew.includes("/followme-documents/") ||
+            cleanNew.includes("document-preview") ||
+            cleanNew.includes("preview.svg")
+          )){
+            applyStable(this, value);
+            return;
+          }
+        }
+
+        return srcDesc.set.call(this, value);
+      }
+    });
+  }
+
+  const originalSetAttribute = Element.prototype.setAttribute;
+  Element.prototype.setAttribute = function(name, value){
+    if(String(name).toLowerCase() === "src" && isDocPreviewImage(this)){
+      const cleanOld = cleanSrc(this.getAttribute("src") || "");
+      const cleanNew = cleanSrc(value);
+
+      if(cleanNew && cleanOld && cleanNew === cleanOld){
+        return;
+      }
+
+      if(cleanNew && (
+        cleanNew.includes("/followme-documents/") ||
+        cleanNew.includes("document-preview") ||
+        cleanNew.includes("preview.svg")
+      )){
+        applyStable(this, value);
+        return;
+      }
+    }
+
+    return originalSetAttribute.call(this, name, value);
+  };
+
+  /*
+    Riduce anche micro-lampi CSS sulle immagini preview già presenti.
+  */
+  const style = document.createElement("style");
+  style.textContent = `
+    img[src*="/followme-documents/"],
+    img[src*="document-preview"],
+    img[src*="preview.svg"]{
+      backface-visibility:hidden;
+      transform:translateZ(0);
+      image-rendering:auto;
+    }
+  `;
+  document.head.appendChild(style);
+})();
+</script>
+
 </body>
 </html>
