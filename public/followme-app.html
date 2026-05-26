@@ -35582,20 +35582,25 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 
 
-<script id="followme-real-url-preview-on-reactivate-20260526">
+
+
+<script id="followme-stable-top-preview-on-reactivate-20260526">
 /*
-  Riattiva: preview alta reale e immediata.
-  - URL normale: iframe con indirizzo reale, non favicon.
-  - PDF: renderer PDF veloce se disponibile.
-  - Immagine: immagine reale.
-  - Blocca per pochi secondi i vecchi script che alternano preview di altre card.
+  Preview alta stabile su Riattiva.
+  Fix flash/blocco quando si passa da URL a IMMAGINE o viceversa.
+  Regole:
+  - niente loop difensivi;
+  - niente alternanza forzata;
+  - ogni click riattiva sostituisce completamente la preview precedente;
+  - URL = iframe reale;
+  - IMMAGINE = img reale;
+  - PDF = preview PDF/placeholder.
 */
 (function(){
-  if(window.__followmeRealUrlPreviewOnReactivate20260526) return;
-  window.__followmeRealUrlPreviewOnReactivate20260526 = true;
+  if(window.__followmeStableTopPreviewOnReactivate20260526) return;
+  window.__followmeStableTopPreviewOnReactivate20260526 = true;
 
-  let ownerUntil = 0;
-  let ownedUrl = "";
+  let renderSeq = 0;
 
   function clean(v){ return String(v || "").trim(); }
 
@@ -35633,56 +35638,34 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
   function isImageUrl(url){
     const u = clean(url).toLowerCase();
-    return u.includes("/fm/image/") || u.includes("/image-card") || (u.includes("/uploads/followme-documents/") && u.includes("/image/"));
+    return (
+      u.includes("/fm/image/") ||
+      u.includes("/image-card") ||
+      (u.includes("/uploads/followme-documents/") && u.includes("/image/"))
+    );
   }
 
   function isPdfUrl(url){
     const u = clean(url).toLowerCase();
-    return u.includes("/fm/document/") || u.includes(".pdf") || u.includes("documento.pdf") || u.includes("/document/");
+    return (
+      u.includes("/fm/document/") ||
+      u.includes(".pdf") ||
+      u.includes("documento.pdf") ||
+      u.includes("/document/")
+    );
   }
 
   function isHttpUrl(url){
     return /^https?:\/\//i.test(clean(url));
   }
 
-  function lock(url){
-    ownedUrl = clean(url);
-    ownerUntil = Date.now() + 3200;
-    window.__followmeTopPreviewOwnerUrl20260526 = ownedUrl;
-    window.__followmeTopPreviewOwnerUntil20260526 = ownerUntil;
-  }
-
-  function isOwned(){
-    return ownedUrl && Date.now() < ownerUntil;
-  }
-
-  function square(){
-    return document.querySelector(".simple-preview-square") ||
-      document.querySelector(".destination-preview-frame") ||
-      document.querySelector(".qr-auto-preview-frame");
-  }
-
-  function iframe(){
-    return document.getElementById("simpleDestinationPreviewFrame");
-  }
-
-  function hideFallbacks(){
-    try{
-      const empty = document.getElementById("simpleDestinationPreviewEmpty");
-      if(empty) empty.style.display = "none";
-
-      const fallback = document.getElementById("previewFallbackBox");
-      if(fallback) fallback.style.display = "none";
-    }catch(e){}
-  }
-
   function ensureCss(){
-    if(document.getElementById("followme-real-url-preview-on-reactivate-css-20260526")) return;
+    if(document.getElementById("followme-stable-top-preview-on-reactivate-css-20260526")) return;
 
     const style = document.createElement("style");
-    style.id = "followme-real-url-preview-on-reactivate-css-20260526";
+    style.id = "followme-stable-top-preview-on-reactivate-css-20260526";
     style.textContent = `
-      .followme-reactivate-owned-preview-20260526{
+      .followme-stable-top-preview-box-20260526{
         width:100% !important;
         height:100% !important;
         min-height:220px !important;
@@ -35693,21 +35676,23 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
         align-items:center !important;
         justify-content:center !important;
         padding:0 !important;
-        position:relative !important;
       }
 
-      .followme-reactivate-owned-preview-20260526 iframe,
-      .followme-reactivate-owned-preview-20260526 img{
+      .followme-stable-top-preview-box-20260526 iframe,
+      .followme-stable-top-preview-box-20260526 img{
         width:100% !important;
         height:100% !important;
         min-height:220px !important;
         border:0 !important;
         display:block !important;
         object-fit:cover !important;
+      }
+
+      .followme-stable-top-preview-box-20260526 iframe{
         background:#fff !important;
       }
 
-      .followme-reactivate-owned-loading-20260526{
+      .followme-stable-top-preview-loader-20260526{
         min-height:32px !important;
         padding:0 13px !important;
         border-radius:999px !important;
@@ -35721,9 +35706,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
         letter-spacing:.04em !important;
       }
 
-      .followme-reactivate-owned-pdf-20260526{
+      .followme-stable-top-preview-pdf-20260526{
         width:100% !important;
-        height:100% !important;
         min-height:220px !important;
         display:grid !important;
         place-items:center !important;
@@ -35735,12 +35719,28 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
           #101018 !important;
       }
 
-      .followme-reactivate-owned-pdf-20260526 strong{
+      .followme-stable-top-preview-pdf-20260526 strong{
         font-size:34px !important;
         letter-spacing:-.04em !important;
       }
     `;
     document.head.appendChild(style);
+  }
+
+  function square(){
+    return document.querySelector(".simple-preview-square") ||
+      document.querySelector(".destination-preview-frame") ||
+      document.querySelector(".qr-auto-preview-frame");
+  }
+
+  function hideFallbacks(){
+    try{
+      const empty = document.getElementById("simpleDestinationPreviewEmpty");
+      if(empty) empty.style.display = "none";
+
+      const fallback = document.getElementById("previewFallbackBox");
+      if(fallback) fallback.style.display = "none";
+    }catch(e){}
   }
 
   function setOpenButton(url, label){
@@ -35761,66 +35761,39 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     });
   }
 
-  function hardClearSquare(){
-    const sq = square();
-    if(!sq) return null;
-
-    /*
-      Non elimino il frame se lo uso per URL reali.
-      Pulisco fallback e vecchie preview custom.
-    */
-    Array.from(sq.querySelectorAll(
-      ".followme-reactivate-preview-box-20260526," +
-      ".followme-final-image-preview-box-20260526," +
-      ".followme-local-image-preview-box-20260526," +
-      ".followme-fast-image-preview-box-20260525," +
-      ".followme-fast-image-preview-box-20260526"
-    )).forEach(function(el){
-      try{ el.remove(); }catch(e){}
-    });
-
-    return sq;
-  }
-
-  function renderRealUrl(url){
+  function replaceTop(html){
     ensureCss();
-    lock(url);
     hideFallbacks();
 
-    const sq = hardClearSquare();
+    const sq = square();
     if(!sq) return;
 
-    let fr = iframe();
-    if(!fr){
-      fr = document.createElement("iframe");
-      fr.id = "simpleDestinationPreviewFrame";
-      fr.loading = "eager";
-      sq.insertBefore(fr, sq.firstChild);
-    }
-
-    fr.style.display = "block";
-    fr.style.width = "100%";
-    fr.style.height = "100%";
-    fr.style.minHeight = "220px";
-    fr.style.border = "0";
-    fr.style.background = "#fff";
-
     /*
-      Cache bypass leggero solo per il container, senza alterare destinazione reale.
+      Punto chiave: rimuove completamente iframe/preview precedenti.
+      Così URL e immagine non possono alternarsi.
     */
-    fr.src = url;
-
-    setOpenButton(url, "Apri pagina");
+    sq.innerHTML = '<div class="followme-stable-top-preview-box-20260526">' + html + '</div>';
+    sq.style.display = "";
   }
 
-  async function currentImage(){
+  function renderUrl(url){
+    const u = clean(url);
+    if(!u) return;
+
+    replaceTop('<iframe src="' + esc(u) + '" loading="eager"></iframe>');
+    setOpenButton(u, "Apri pagina");
+  }
+
+  async function fetchCurrentImage(seq){
     try{
       const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/image-card/current?v=" + Date.now(), {
         cache:"no-store"
       });
+
       const data = await res.json().catch(function(){ return null; });
       const img = data && (data.image || data.data || {});
       const raw = img && (img.image_url || img.public_path || img.public_url);
+
       if(!raw) return null;
 
       const version = String(img.id || img.updated_at || img.created_at || Date.now()).replace(/[^a-zA-Z0-9_-]/g,"");
@@ -35836,47 +35809,41 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     }
   }
 
-  async function renderImage(url, card){
-    ensureCss();
-    lock(url);
-    hideFallbacks();
-
-    const sq = hardClearSquare();
-    if(!sq) return;
-
-    const fr = iframe();
-    if(fr) fr.style.display = "none";
-
-    let immediate = "";
+  function findImageInCard(card){
     try{
       const img = card && card.querySelector && card.querySelector("img");
-      immediate = img && (img.currentSrc || img.src || img.getAttribute("src")) || "";
-    }catch(e){}
+      const src = img && (img.currentSrc || img.src || img.getAttribute("src"));
+      return clean(src);
+    }catch(e){
+      return "";
+    }
+  }
 
-    sq.innerHTML =
-      '<div class="followme-reactivate-owned-preview-20260526">' +
-        (immediate
-          ? '<img src="' + esc(immediate) + '" alt="Immagine">'
-          : '<div class="followme-reactivate-owned-loading-20260526">CARICO IMMAGINE...</div>') +
-      '</div>';
+  async function renderImage(url, card, seq){
+    const immediate = findImageInCard(card);
+
+    if(immediate){
+      replaceTop('<img src="' + esc(immediate) + '" alt="Immagine">');
+    }else{
+      replaceTop('<div class="followme-stable-top-preview-loader-20260526">CARICO IMMAGINE...</div>');
+    }
 
     setOpenButton("/fm/image/" + encodeURIComponent(code()), "Apri immagine");
 
-    const img = await currentImage();
-    if(img && img.src && isOwned()){
-      sq.innerHTML =
-        '<div class="followme-reactivate-owned-preview-20260526">' +
-          '<img src="' + esc(img.src) + '" alt="' + esc(img.name || "Immagine") + '">' +
-        '</div>';
-      setOpenButton(img.publicUrl || url, "Apri immagine");
+    const img = await fetchCurrentImage(seq);
+
+    /*
+      Se nel frattempo l’utente ha cliccato un’altra card, non sovrascrivo.
+    */
+    if(seq !== renderSeq) return;
+
+    if(img && img.src){
+      replaceTop('<img src="' + esc(img.src) + '" alt="' + esc(img.name || "Immagine") + '">');
+      setOpenButton(img.publicUrl || url || ("/fm/image/" + encodeURIComponent(code())), "Apri immagine");
     }
   }
 
   function renderPdf(url){
-    ensureCss();
-    lock(url);
-    hideFallbacks();
-
     try{
       if(typeof window.followmeFastPdfReactivate20260525 === "function"){
         window.followmeFastPdfReactivate20260525(url, "Documento PDF");
@@ -35885,20 +35852,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       }
     }catch(e){}
 
-    const sq = hardClearSquare();
-    if(!sq) return;
-
-    const fr = iframe();
-    if(fr) fr.style.display = "none";
-
-    sq.innerHTML =
-      '<div class="followme-reactivate-owned-preview-20260526">' +
-        '<div class="followme-reactivate-owned-pdf-20260526">' +
-          '<strong>PDF</strong>' +
-          '<span>Documento PDF</span>' +
-          '<div class="followme-reactivate-owned-loading-20260526">ATTIVO ORA</div>' +
-        '</div>' +
-      '</div>';
+    replaceTop(
+      '<div class="followme-stable-top-preview-pdf-20260526">' +
+        '<strong>PDF</strong>' +
+        '<span>Documento PDF</span>' +
+        '<div class="followme-stable-top-preview-loader-20260526">ATTIVO ORA</div>' +
+      '</div>'
+    );
 
     setOpenButton(url, "Apri documento");
   }
@@ -35907,8 +35867,17 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     const u = clean(url);
     if(!u) return;
 
+    renderSeq += 1;
+    const seq = renderSeq;
+
+    /*
+      Disattiva i vecchi owner/guard.
+    */
+    window.__followmeTopPreviewOwnerUrl20260526 = "";
+    window.__followmeTopPreviewOwnerUntil20260526 = 0;
+
     if(isImageUrl(u)){
-      renderImage(u, card);
+      renderImage(u, card, seq);
       return;
     }
 
@@ -35918,15 +35887,14 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     }
 
     /*
-      Punto richiesto: per URL normali deve apparire l’indirizzo reale in preview grande,
-      non la favicon.
+      URL normale: preview reale dell’indirizzo, non favicon.
     */
     if(isHttpUrl(u)){
-      renderRealUrl(u);
+      renderUrl(u);
       return;
     }
 
-    renderRealUrl(u);
+    renderUrl(u);
   }
 
   function cardOf(el){
@@ -35964,9 +35932,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     );
   }
 
-  /*
-    Click: preview reale immediata.
-  */
   document.addEventListener("click", function(ev){
     const btn = ev.target && ev.target.closest ? ev.target.closest("button,a") : null;
     if(!btn || !isReactivateButton(btn)) return;
@@ -35977,31 +35942,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
     render(url, card);
   }, true);
-
-  /*
-    Difesa: se nei 3 secondi successivi vecchi script riscrivono la preview,
-    la rimettiamo sull’URL proprietario, evitando alternanze con altre card.
-  */
-  const oldFetch = window.fetch;
-  if(oldFetch && !window.__followmeRealUrlPreviewFetchGuard20260526){
-    window.__followmeRealUrlPreviewFetchGuard20260526 = true;
-
-    window.fetch = async function(){
-      const args = arguments;
-      const res = await oldFetch.apply(this, args);
-
-      try{
-        if(isOwned()){
-          const url = ownedUrl;
-          setTimeout(function(){ if(isOwned()) render(url, null); }, 120);
-          setTimeout(function(){ if(isOwned()) render(url, null); }, 650);
-          setTimeout(function(){ if(isOwned()) render(url, null); }, 1400);
-        }
-      }catch(e){}
-
-      return res;
-    };
-  }
 
   window.followmeFastReactivateTopPreview20260526 = render;
 })();
