@@ -1479,8 +1479,8 @@
                 <button class="mini" onclick="printQrHd('${item.code}')">Solo QR HD</button>
                 <button class="mini" onclick="openEdit('${item.code}')">Modifica</button>
                 <button class="mini" onclick="fixQrUrl('${item.code}')">Correggi URL</button>
-                <button class="mini" onclick="setStatus('${item.code}','disabled')">Disattiva</button>
-                <button class="mini" onclick="setStatus('${item.code}','used')">Riattiva</button>
+                <button class="mini" onclick="setStatus('${item.code}','disabled', this)">Disattiva</button>
+                <button class="mini" onclick="setStatus('${item.code}','used', this)">Riattiva</button>
                 <button class="mini" onclick="deleteSticker('${item.code}')">Elimina</button>
               </div>
             </td>
@@ -1702,29 +1702,76 @@ window.fixQrUrl = async function(code){
       loadAdmin(searchEl.value.trim());
     }
 
-    window.setStatus = async function(code, status){
-      const res = await fetch('/api/admin/set-status', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ code, status })
-      });
-      const data = await res.json();
-      alert(data.success ? 'Stato aggiornato.' : (data.error || 'Errore stato.'));
-      loadAdmin(searchEl.value.trim());
-    }
+    window.setStatus = async function(code, status, btn){
+      const oldText = btn ? btn.textContent : '';
+      const row = btn ? btn.closest('tr') : null;
 
-    document.getElementById('saveEditBtn').addEventListener('click', async () => {
-      const payload = {
-        code: document.getElementById('editCode').value,
-        brand: document.getElementById('editBrand').value,
-        plate: document.getElementById('editPlate').value,
-        vehicle_model: document.getElementById('editModel').value,
-        color: document.getElementById('editColor').value,
-        offered_by: document.getElementById('editOfferedBy').value,
-        phone: document.getElementById('editPhone').value,
-        plan_type: document.getElementById('editPlanType').value,
-        expires_at: document.getElementById('editExpiresAt').value || null
-      };
+      try {
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = 'Aggiorno...';
+          btn.style.opacity = '.65';
+          btn.style.pointerEvents = 'none';
+        }
+
+        const res = await fetch('/api/admin/set-status', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          credentials:'same-origin',
+          body:JSON.stringify({ code, status })
+        });
+
+        const data = await res.json().catch(() => null);
+
+        if (!res.ok || !data || !data.success) {
+          throw new Error((data && data.error) ? data.error : 'Errore cambio stato.');
+        }
+
+        /*
+          Aggiornamento rapido:
+          invece di ricaricare tutta la tabella, aggiorniamo visivamente solo la riga.
+          Così passando da una card/riga all'altra il pulsante risponde subito.
+        */
+        if (row) {
+          const statusEl = row.querySelector('.status');
+          if (statusEl) {
+            statusEl.className = 'status ' + String(status || '').toLowerCase();
+            statusEl.textContent =
+              status === 'used' ? 'Attivo' :
+              status === 'new' ? 'Nuovo' :
+              status === 'disabled' ? 'Disabilitato' :
+              status === 'reactivated' ? 'Riattivato' :
+              status;
+          }
+
+          row.dataset.status = status;
+
+          if (btn) {
+            btn.textContent = status === 'used' ? 'Attivo' : 'Aggiornato';
+            btn.style.background = 'rgba(157,226,167,.14)';
+            btn.style.borderColor = 'rgba(157,226,167,.30)';
+            btn.style.color = '#9de2a7';
+          }
+
+          return;
+        }
+
+        // Fallback se non siamo in una riga tabellare.
+        if (typeof loadData === 'function') {
+          await loadData();
+        }
+
+      } catch (err) {
+        alert(err && err.message ? err.message : 'Errore cambio stato.');
+
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = oldText || 'Riattiva';
+          btn.style.opacity = '';
+          btn.style.pointerEvents = '';
+        }
+      }
+    };
 
       const res = await fetch('/api/admin/update-sticker', {
         method:'POST',
