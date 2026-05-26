@@ -36339,9 +36339,12 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 
 
+
+
 <script id="followme-scroll-to-preview-after-reactivate-20260526">
 /*
   SOLO scroll verso preview alta dopo click Riattiva/Attivalo.
+  Versione robusta per Web App/PWA: gestisce window + container scrollabili.
   Non modifica URL, preview, card, input, stato o backend.
 */
 (function(){
@@ -36373,19 +36376,90 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       document.querySelector(".simple-preview-square");
   }
 
+  function isScrollable(el){
+    if(!el) return false;
+    try{
+      const st = window.getComputedStyle(el);
+      const oy = st.overflowY;
+      return (
+        (oy === "auto" || oy === "scroll" || oy === "overlay") &&
+        el.scrollHeight > el.clientHeight + 20
+      );
+    }catch(e){
+      return false;
+    }
+  }
+
+  function scrollParentsToElement(el){
+    try{
+      let node = el.parentElement;
+
+      while(node && node !== document.body && node !== document.documentElement){
+        if(isScrollable(node)){
+          const nr = node.getBoundingClientRect();
+          const er = el.getBoundingClientRect();
+          const delta = er.top - nr.top - 10;
+          node.scrollTo({
+            top: node.scrollTop + delta,
+            behavior: "smooth"
+          });
+        }
+        node = node.parentElement;
+      }
+    }catch(e){}
+  }
+
+  function forceWindowScroll(el){
+    try{
+      const y = Math.max(0, el.getBoundingClientRect().top + window.pageYOffset - 10);
+      window.scrollTo({ top:y, behavior:"smooth" });
+    }catch(e){
+      try{
+        const y = Math.max(0, el.getBoundingClientRect().top + window.scrollY - 10);
+        window.scrollTo(0, y);
+      }catch(_){}
+    }
+  }
+
+  function focusPreview(el){
+    try{
+      if(!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
+      el.focus({ preventScroll:false });
+    }catch(e){}
+  }
+
   function scrollToPreview(){
     const el = previewTarget();
     if(!el) return;
 
+    /*
+      1. metodo standard
+      2. scroll window diretto
+      3. scroll dei parent container
+      4. focus fallback
+    */
     try{
       el.scrollIntoView({
         behavior: "smooth",
         block: "start",
         inline: "nearest"
       });
-    }catch(e){
-      try{ window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + window.scrollY - 12)); }catch(_){}
-    }
+    }catch(e){}
+
+    forceWindowScroll(el);
+    scrollParentsToElement(el);
+    focusPreview(el);
+  }
+
+  function scheduleScroll(){
+    /*
+      Più tentativi perché dopo Riattiva alcuni script ridisegnano preview/history
+      e possono cambiare altezza/posizione.
+    */
+    setTimeout(scrollToPreview, 40);
+    setTimeout(scrollToPreview, 160);
+    setTimeout(scrollToPreview, 420);
+    setTimeout(scrollToPreview, 900);
   }
 
   document.addEventListener("click", function(ev){
@@ -36398,8 +36472,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       Non fa stopPropagation.
       Lascia invariata tutta la logica esistente.
     */
-    setTimeout(scrollToPreview, 80);
-    setTimeout(scrollToPreview, 260);
+    scheduleScroll();
   }, true);
 
   window.followmeScrollToPreviewAfterReactivate20260526 = scrollToPreview;
