@@ -8982,19 +8982,153 @@ document.addEventListener("visibilitychange", function(){
   }
 
   async function activateUrlFromPremium(url){
-    try{
-      if(window.reactivateUrl && typeof window.reactivateUrl === "function"){
-        await window.reactivateUrl(encodeURIComponent(url));
-        setTimeout(renderPremiumHistoryFromApi, 700);
-        return;
+    /*
+      native-fast-reactivate-premium-20260526
+      Cambio istantaneo della card prima della risposta backend.
+      Evita await loadStatus/renderPremiumHistoryFromApi nel percorso visivo immediato.
+    */
+    function cleanLocal(v){
+      return String(v || "").trim();
+    }
+
+    function normLocal(v){
+      return cleanLocal(v).replace(/[?#].*$/, "").replace(/\/+$/, "");
+    }
+
+    function isImageLocal(v){
+      var u = cleanLocal(v).toLowerCase();
+      return u.includes("/fm/image/") || u.includes("/image-card") || (u.includes("/uploads/followme-documents/") && u.includes("/image/"));
+    }
+
+    function isPdfLocal(v){
+      var u = cleanLocal(v).toLowerCase();
+      return u.includes("/fm/document/") || u.includes(".pdf") || u.includes("documento.pdf") || u.includes("/document/");
+    }
+
+    function inactiveBadgeLocal(card){
+      var u = card && card.dataset ? cleanLocal(card.dataset.url) : "";
+      if(!u){
+        var urlEl = card && card.querySelector ? card.querySelector(".premium-history-url") : null;
+        if(urlEl) u = cleanLocal(urlEl.textContent);
       }
 
+      if(isImageLocal(u)) return "Immagine";
+      if(isPdfLocal(u)) return "Documento PDF";
+      return "Recente";
+    }
+
+    function setButtonInactiveLocal(btn){
+      if(!btn) return;
+      btn.textContent = "Riattiva";
+      btn.disabled = false;
+      btn.classList.remove("premium-history-active");
+      btn.classList.add("premium-history-reactivate");
+      btn.style.opacity = "";
+      btn.style.pointerEvents = "";
+      btn.style.display = "";
+      btn.removeAttribute("aria-hidden");
+    }
+
+    function setButtonActiveLocal(btn){
+      if(!btn) return;
+      btn.textContent = "Attivo ora";
+      btn.disabled = true;
+      btn.classList.remove("premium-history-reactivate");
+      btn.classList.add("premium-history-active");
+      btn.style.opacity = "1";
+      btn.style.pointerEvents = "none";
+      btn.style.display = "";
+      btn.removeAttribute("aria-hidden");
+    }
+
+    function fastMarkActiveLocal(targetUrl){
+      try{
+        var targetNorm = normLocal(targetUrl);
+        var cards = Array.from(document.querySelectorAll(".premium-history-card,.history-card,.premium-card"));
+
+        var activeCard = cards.find(function(card){
+          var u = cleanLocal(card.dataset && card.dataset.url);
+          if(!u){
+            var urlEl = card.querySelector(".premium-history-url");
+            if(urlEl) u = cleanLocal(urlEl.textContent);
+          }
+          return normLocal(u) === targetNorm;
+        });
+
+        if(!activeCard) return;
+
+        cards.forEach(function(card){
+          var isTarget = card === activeCard;
+
+          if(isTarget){
+            card.classList.add("is-active");
+            card.setAttribute("data-followme-fast-active-20260526", "1");
+
+            var badge = card.querySelector(".premium-history-badge");
+            if(badge) badge.textContent = "Attivo ora";
+
+            Array.from(card.querySelectorAll("button,a")).forEach(function(btn){
+              var t = cleanLocal(btn.textContent).toLowerCase();
+              if(t.includes("riattiva") || t.includes("attivalo") || t.includes("attivo ora")){
+                setButtonActiveLocal(btn);
+              }
+            });
+
+            try{
+              card.scrollIntoView({ behavior:"smooth", inline:"center", block:"nearest" });
+            }catch(e){}
+
+          }else{
+            card.classList.remove("is-active");
+            card.removeAttribute("data-followme-fast-active-20260526");
+
+            var b = card.querySelector(".premium-history-badge");
+            if(b) b.textContent = inactiveBadgeLocal(card);
+
+            Array.from(card.querySelectorAll("button,a")).forEach(function(btn){
+              var t = cleanLocal(btn.textContent).toLowerCase();
+              if(t.includes("attivo ora")){
+                setButtonInactiveLocal(btn);
+              }
+            });
+          }
+        });
+
+        window.__followmeSkipHeavyHistoryRefreshUntil20260526 = Date.now() + 1800;
+      }catch(e){}
+    }
+
+    try{
       var code = getCodeSafe();
       if(!code || !url) return;
+
+      /*
+        1. UI immediata.
+      */
+      fastMarkActiveLocal(url);
 
       var input = document.getElementById("newUrl");
       if(input) input.value = url;
 
+      /*
+        2. Preview alta immediata, se esistono helper specializzati.
+      */
+      try{
+        if(isPdfLocal(url) && typeof window.followmeFastPdfReactivate20260525 === "function"){
+          window.followmeFastPdfReactivate20260525(url, "Documento PDF");
+        }
+      }catch(e){}
+
+      try{
+        if(isImageLocal(url) && typeof window.followmeNormalizeImageCardsDefinitive20260526 === "function"){
+          window.followmeNormalizeImageCardsDefinitive20260526();
+        }
+      }catch(e){}
+
+      /*
+        3. Backend: aggiorna destinazione.
+         Non usiamo più window.reactivateUrl perché internamente può fare refresh pesanti.
+      */
       var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/update-url", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
@@ -9005,16 +9139,38 @@ document.addEventListener("visibilitychange", function(){
 
       if(!res.ok || !data || !data.success){
         if(typeof toast === "function") toast((data && data.error) || "Errore attivazione link.");
+
+        /*
+          In caso di errore, ricarichiamo lo stato reale.
+        */
+        try{
+          if(typeof loadStatus === "function") await loadStatus();
+        }catch(e){}
+
+        try{
+          if(typeof renderPremiumHistoryFromApi === "function") await renderPremiumHistoryFromApi();
+        }catch(e){}
+
         return;
       }
 
       if(typeof toast === "function") toast("Link attivo ora.");
 
-      if(typeof loadStatus === "function"){
-        try{ await loadStatus(); }catch(e){}
-      }
+      /*
+        4. Refresh leggero ritardato: non blocca più il cambio visivo.
+      */
+      setTimeout(function(){
+        try{
+          if(typeof loadStatus === "function") loadStatus();
+        }catch(e){}
+      }, 900);
 
-      setTimeout(renderPremiumHistoryFromApi, 700);
+      setTimeout(function(){
+        try{
+          if(typeof renderPremiumHistoryFromApi === "function") renderPremiumHistoryFromApi();
+        }catch(e){}
+      }, 1300);
+
     }catch(err){
       console.error("activateUrlFromPremium error:", err);
       if(typeof toast === "function") toast("Errore: " + (err.message || err));
