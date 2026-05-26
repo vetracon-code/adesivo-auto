@@ -36986,3 +36986,376 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   window.followMeOpenQrView20260526 = openQr;
 })();
 </script>
+
+<style id="followme-stable-qr-preview-button-style-20260526">
+  .followme-stable-qr-preview-btn-20260526{
+    width:100%;
+    min-height:48px;
+    border:0;
+    border-radius:16px;
+    margin-top:10px;
+    font-size:14px;
+    font-weight:950;
+    color:#090910;
+    background:linear-gradient(135deg,#c8ff2e,#5ee7ff);
+    box-shadow:0 12px 28px rgba(94,231,255,.18);
+    cursor:pointer;
+  }
+
+  .followme-stable-qr-preview-overlay-20260526{
+    position:fixed;
+    inset:0;
+    z-index:999999;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:18px;
+    background:rgba(2,6,23,.82);
+  }
+
+  .followme-stable-qr-preview-overlay-20260526.open{
+    display:flex;
+  }
+
+  .followme-stable-qr-preview-card-20260526{
+    width:min(430px,100%);
+    border-radius:28px;
+    background:linear-gradient(180deg,#171724,#101018);
+    border:1px solid rgba(255,255,255,.14);
+    box-shadow:0 24px 80px rgba(0,0,0,.48);
+    overflow:hidden;
+    color:#fff;
+  }
+
+  .followme-stable-qr-preview-head-20260526{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:15px 16px;
+    border-bottom:1px solid rgba(255,255,255,.10);
+  }
+
+  .followme-stable-qr-preview-head-20260526 strong{
+    font-size:15px;
+    font-weight:950;
+  }
+
+  .followme-stable-qr-preview-close-20260526{
+    width:auto;
+    min-height:34px;
+    border:1px solid rgba(255,255,255,.18);
+    border-radius:999px;
+    padding:0 13px;
+    color:#fff;
+    background:rgba(255,255,255,.10);
+    font-weight:900;
+    cursor:pointer;
+  }
+
+  .followme-stable-qr-preview-body-20260526{
+    padding:18px;
+    display:grid;
+    gap:14px;
+  }
+
+  .followme-stable-qr-preview-box-20260526{
+    width:100%;
+    aspect-ratio:1/1;
+    border-radius:24px;
+    background:#fff;
+    border:4px solid rgba(200,255,46,.88);
+    display:grid;
+    place-items:center;
+    padding:18px;
+    overflow:hidden;
+  }
+
+  .followme-stable-qr-preview-box-20260526 img{
+    width:100%;
+    height:100%;
+    object-fit:contain;
+    display:block;
+  }
+
+  .followme-stable-qr-preview-url-20260526{
+    padding:12px;
+    border-radius:16px;
+    background:rgba(255,255,255,.07);
+    border:1px solid rgba(255,255,255,.10);
+    color:rgba(255,255,255,.76);
+    font-size:12px;
+    line-height:1.35;
+    font-weight:750;
+    word-break:break-all;
+    text-align:center;
+  }
+
+  .followme-stable-qr-preview-actions-20260526{
+    display:grid;
+    gap:10px;
+  }
+
+  .followme-stable-qr-preview-actions-20260526 a{
+    min-height:46px;
+    border-radius:16px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-decoration:none;
+    color:#101018;
+    background:linear-gradient(135deg,#c8ff2e,#5ee7ff);
+    font-size:14px;
+    font-weight:950;
+  }
+</style>
+
+<script id="followme-stable-qr-preview-button-20260526">
+(function(){
+  if(window.__followmeStableQrPreviewButton20260526) return;
+  window.__followmeStableQrPreviewButton20260526 = true;
+
+  var inserting = false;
+
+  function getCode(){
+    try{
+      var m = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m && m[1]) return decodeURIComponent(m[1]).trim();
+
+      var p = new URLSearchParams(location.search || "");
+      return String(
+        p.get("code") ||
+        p.get("qr") ||
+        p.get("c") ||
+        window.FOLLOWME_CODE ||
+        window.FOLLOWME_PROJECT_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        "FMDEMO"
+      ).trim();
+    }catch(e){
+      return "FMDEMO";
+    }
+  }
+
+  function publicQrUrl(){
+    return location.origin + "/fm/u/" + encodeURIComponent(getCode());
+  }
+
+  function qrImageCandidates(){
+    var code = getCode();
+    var upper = String(code || "").toUpperCase();
+
+    return [
+      "/api/followme/" + encodeURIComponent(code) + "/qr?v=" + Date.now(),
+      "/api/followme/qr/" + encodeURIComponent(code) + "?v=" + Date.now(),
+      "/followme/qrs/followme-" + encodeURIComponent(code) + "-qr.png?v=" + Date.now(),
+      "/followme/qrs/followme-" + encodeURIComponent(upper) + "-qr.png?v=" + Date.now(),
+      "https://api.qrserver.com/v1/create-qr-code/?size=900x900&data=" + encodeURIComponent(publicQrUrl())
+    ];
+  }
+
+  function ensureOverlay(){
+    var old = document.getElementById("followmeStableQrPreviewOverlay20260526");
+    if(old) return old;
+
+    var overlay = document.createElement("div");
+    overlay.id = "followmeStableQrPreviewOverlay20260526";
+    overlay.className = "followme-stable-qr-preview-overlay-20260526";
+
+    overlay.innerHTML =
+      '<div class="followme-stable-qr-preview-card-20260526">' +
+        '<div class="followme-stable-qr-preview-head-20260526">' +
+          '<strong>Anteprima QR</strong>' +
+          '<button class="followme-stable-qr-preview-close-20260526" id="followmeStableQrPreviewClose20260526" type="button">Chiudi</button>' +
+        '</div>' +
+        '<div class="followme-stable-qr-preview-body-20260526">' +
+          '<div class="followme-stable-qr-preview-box-20260526">' +
+            '<img id="followmeStableQrPreviewImg20260526" alt="QR FollowMe">' +
+          '</div>' +
+          '<div class="followme-stable-qr-preview-url-20260526" id="followmeStableQrPreviewUrl20260526"></div>' +
+          '<div class="followme-stable-qr-preview-actions-20260526">' +
+            '<a id="followmeStableQrPreviewOpen20260526" href="#" target="_blank" rel="noopener">Apri QR in nuova pagina</a>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(overlay);
+
+    var close = document.getElementById("followmeStableQrPreviewClose20260526");
+    if(close){
+      close.addEventListener("click", closeQr);
+    }
+
+    overlay.addEventListener("click", function(ev){
+      if(ev.target === overlay) closeQr();
+    });
+
+    return overlay;
+  }
+
+  function closeQr(){
+    var overlay = document.getElementById("followmeStableQrPreviewOverlay20260526");
+    if(overlay) overlay.classList.remove("open");
+  }
+
+  function openQr(){
+    var overlay = ensureOverlay();
+    var img = document.getElementById("followmeStableQrPreviewImg20260526");
+    var urlBox = document.getElementById("followmeStableQrPreviewUrl20260526");
+    var open = document.getElementById("followmeStableQrPreviewOpen20260526");
+
+    var candidates = qrImageCandidates();
+    var i = 0;
+
+    function tryNext(){
+      if(!img) return;
+      if(i >= candidates.length) return;
+      img.src = candidates[i++];
+    }
+
+    if(img){
+      img.onerror = tryNext;
+      tryNext();
+    }
+
+    var qrPublic = publicQrUrl();
+
+    if(urlBox) urlBox.textContent = qrPublic;
+    if(open) open.href = qrPublic;
+
+    overlay.classList.add("open");
+  }
+
+  function candidateContainers(){
+    return [
+      document.getElementById("moreOptionsPanel"),
+      document.getElementById("followmeMoreOptionsPanel"),
+      document.querySelector(".more-options-panel"),
+      document.querySelector(".other-options-panel"),
+      document.querySelector(".followme-other-options"),
+      document.querySelector(".extra-options"),
+      document.querySelector("[data-followme-more-options]"),
+      document.querySelector(".followme-options-panel"),
+      document.querySelector(".options-panel")
+    ].filter(Boolean);
+  }
+
+  function fallbackContainer(){
+    var newUrl = document.getElementById("newUrl") || document.querySelector(".destination-input");
+    if(newUrl && newUrl.parentElement) return newUrl.parentElement;
+
+    var cards = document.querySelectorAll(".card");
+    if(cards && cards.length) return cards[0];
+
+    return document.body;
+  }
+
+  function removeDuplicateButtons(){
+    var buttons = Array.from(document.querySelectorAll(".followme-stable-qr-preview-btn-20260526,#followmeStableQrPreviewBtn20260526"));
+    buttons.forEach(function(btn, index){
+      if(index > 0) btn.remove();
+    });
+  }
+
+  function ensureButton(){
+    if(inserting) return;
+    inserting = true;
+
+    try{
+      removeDuplicateButtons();
+
+      var btn = document.getElementById("followmeStableQrPreviewBtn20260526");
+
+      if(!btn){
+        btn = document.createElement("button");
+        btn.id = "followmeStableQrPreviewBtn20260526";
+        btn.type = "button";
+        btn.className = "followme-stable-qr-preview-btn-20260526";
+        btn.textContent = "Apri anteprima QR";
+
+        btn.addEventListener("click", function(ev){
+          ev.preventDefault();
+          ev.stopPropagation();
+          openQr();
+        });
+      }
+
+      var containers = candidateContainers();
+      var target = containers.length ? containers[0] : fallbackContainer();
+
+      if(target && btn.parentElement !== target){
+        target.appendChild(btn);
+      }
+
+      btn.style.display = "block";
+      btn.style.visibility = "visible";
+      btn.style.opacity = "1";
+      btn.style.pointerEvents = "auto";
+
+    }catch(e){
+      console.error("ensure stable QR preview button error:", e);
+    }finally{
+      inserting = false;
+    }
+  }
+
+  function scheduleEnsure(){
+    setTimeout(ensureButton, 50);
+    setTimeout(ensureButton, 250);
+    setTimeout(ensureButton, 700);
+    setTimeout(ensureButton, 1400);
+  }
+
+  function boot(){
+    ensureButton();
+    scheduleEnsure();
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("load", scheduleEnsure);
+  window.addEventListener("pageshow", scheduleEnsure);
+  window.addEventListener("focus", scheduleEnsure);
+
+  document.addEventListener("click", function(ev){
+    var t = ev.target && ev.target.closest ? ev.target.closest("button,a") : null;
+    if(!t) return;
+
+    var txt = String(t.textContent || "").toLowerCase();
+
+    if(
+      txt.includes("altre opzioni") ||
+      txt.includes("opzioni") ||
+      txt.includes("riattiva") ||
+      txt.includes("attiva") ||
+      txt.includes("aggiorna") ||
+      txt.includes("usa questo link") ||
+      txt.includes("inquadra") ||
+      txt.includes("visualizza")
+    ){
+      scheduleEnsure();
+    }
+  }, true);
+
+  if(window.MutationObserver){
+    var obs = new MutationObserver(function(){
+      scheduleEnsure();
+    });
+
+    obs.observe(document.documentElement, {
+      childList:true,
+      subtree:true
+    });
+  }
+
+  setInterval(ensureButton, 2000);
+
+  window.followMeOpenStableQrPreview20260526 = openQr;
+  window.followMeEnsureStableQrPreviewButton20260526 = ensureButton;
+})();
+</script>
