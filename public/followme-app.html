@@ -33758,19 +33758,61 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     );
   }
 
+  function cleanupDuplicateImagePreviews(){
+    try{
+      /*
+        Rimuove preview rescue rimaste appese fuori dalle card.
+      */
+      Array.from(document.querySelectorAll(".followme-image-card-preview-rescue-20260526")).forEach(function(el){
+        const card = el.closest(".premium-history-card, .history-card, article, .card");
+        if(!card || !cardLooksImage(card)){
+          el.remove();
+        }
+      });
+
+      /*
+        In ogni card immagine deve restare una sola preview rescue.
+      */
+      Array.from(document.querySelectorAll(".premium-history-card, .history-card, article, .card")).forEach(function(card){
+        const previews = Array.from(card.querySelectorAll(".followme-image-card-preview-rescue-20260526"));
+        previews.slice(1).forEach(function(el){ el.remove(); });
+      });
+
+      /*
+        Se esiste già la preview carousel nativa, eliminiamo quella rescue nella stessa card.
+      */
+      Array.from(document.querySelectorAll(".premium-history-card, .history-card, article, .card")).forEach(function(card){
+        const nativePreview = card.querySelector(".followme-image-carousel-preview-20260525,[data-followme-image-carousel-preview='1']");
+        if(nativePreview){
+          Array.from(card.querySelectorAll(".followme-image-card-preview-rescue-20260526")).forEach(function(el){
+            el.remove();
+          });
+        }
+      });
+    }catch(e){}
+  }
+
   function fillCards(url, name){
     if(!url) return;
     ensureCss();
+    cleanupDuplicateImagePreviews();
 
     /*
-      Prima riempiamo gli holder già creati dallo script carousel.
+      Prima riempiamo SOLO gli holder immagine già creati dallo script carousel.
+      Non tocchiamo PDF o preview principali.
     */
     const holders = Array.from(document.querySelectorAll(
-      ".followme-image-carousel-preview-20260525,[data-followme-image-carousel-preview='1']"
+      ".premium-history-card .followme-image-carousel-preview-20260525," +
+      ".history-card .followme-image-carousel-preview-20260525," +
+      ".premium-history-card [data-followme-image-carousel-preview='1']," +
+      ".history-card [data-followme-image-carousel-preview='1']"
     ));
 
     holders.forEach(function(holder){
       try{
+        const card = holder.closest(".premium-history-card, .history-card, article, .card");
+        if(card && !cardLooksImage(card)) return;
+
         const img = holder.querySelector("img");
         if(img){
           if(img.getAttribute("src") !== url) img.setAttribute("src", url);
@@ -33782,20 +33824,30 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     });
 
     /*
-      Poi, se una card immagine non ha proprio holder, lo aggiungiamo in alto.
+      Fallback: aggiungiamo rescue solo alle card realmente immagine e solo se
+      non hanno già una preview nativa o rescue.
     */
-    const cards = Array.from(document.querySelectorAll(".premium-history-card, .history-card, article, .card"));
+    const cards = Array.from(document.querySelectorAll(".premium-history-card, .history-card"));
     cards.forEach(function(card){
       try{
         if(!cardLooksImage(card)) return;
-        if(card.querySelector(".followme-image-carousel-preview-20260525,img[src*='/followme-documents/'][src*='/image/']")) return;
+
+        if(card.querySelector(
+          ".followme-image-carousel-preview-20260525," +
+          "[data-followme-image-carousel-preview='1']," +
+          ".followme-image-card-preview-rescue-20260526," +
+          "img[src*='/followme-documents/'][src*='/image/']"
+        )) return;
 
         const box = document.createElement("div");
         box.className = "followme-image-card-preview-rescue-20260526";
+        box.setAttribute("data-followme-rescue-owned", "1");
         box.innerHTML = '<img src="' + esc(url) + '" alt="' + esc(name || "Immagine caricata") + '">';
         card.insertBefore(box, card.firstChild);
       }catch(e){}
     });
+
+    cleanupDuplicateImagePreviews();
   }
 
   async function refresh(){
