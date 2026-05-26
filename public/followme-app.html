@@ -33902,5 +33902,237 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-instant-active-image-card-20260526">
+/*
+  Dopo upload immagine, aggiorna subito la card attiva nello storico.
+  Evita che rimanga visibile la card precedente fino al refresh completo.
+*/
+(function(){
+  if(window.__followmeInstantActiveImageCard20260526) return;
+  window.__followmeInstantActiveImageCard20260526 = true;
+
+  function esc(v){
+    return String(v || "")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
+  }
+
+  function code(){
+    try{
+      const p = new URLSearchParams(location.search);
+      return p.get("code") || p.get("qr") || p.get("c") ||
+        window.FOLLOWME_CODE ||
+        window.FOLLOWME_PROJECT_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        window.followMeProjectCode ||
+        "FMDEMO";
+    }catch(e){
+      return "FMDEMO";
+    }
+  }
+
+  function abs(path){
+    const raw = String(path || "").trim();
+    if(!raw) return "";
+    if(/^https?:\/\//i.test(raw)) return raw;
+    if(raw.startsWith("/")) return location.origin + raw;
+    return location.origin + "/" + raw.replace(/^\/+/, "");
+  }
+
+  function imageUrlFromPayload(data){
+    const img = data && (data.image || data.data || {});
+    const raw =
+      img.image_url ||
+      img.public_path ||
+      img.public_url ||
+      data.image_url ||
+      data.public_path ||
+      data.public_url ||
+      "";
+
+    if(!raw) return "";
+
+    const version = String(img.id || img.updated_at || img.created_at || Date.now()).replace(/[^a-zA-Z0-9_-]/g,"");
+    const u = abs(raw);
+    return u + (u.includes("?") ? "&" : "?") + "v=" + version;
+  }
+
+  function publicImageUrl(){
+    return "/fm/image/" + encodeURIComponent(code());
+  }
+
+  function ensureCss(){
+    if(document.getElementById("followme-instant-active-image-card-css-20260526")) return;
+
+    const style = document.createElement("style");
+    style.id = "followme-instant-active-image-card-css-20260526";
+    style.textContent = `
+      .followme-instant-active-image-preview-20260526{
+        width:100%;
+        min-height:150px;
+        border-radius:18px;
+        overflow:hidden;
+        background:#05070d;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        margin-bottom:10px;
+      }
+
+      .followme-instant-active-image-preview-20260526 img{
+        width:100%;
+        height:100%;
+        min-height:150px;
+        object-fit:cover;
+        display:block;
+      }
+
+      .premium-history-card[data-followme-instant-image-active="1"] .premium-card-preview-mark,
+      .premium-history-card[data-followme-instant-image-active="1"] .premium-card-preview-caption,
+      .premium-history-card[data-followme-instant-image-active="1"] .preview-fallback-box,
+      .premium-history-card[data-followme-instant-image-active="1"] .preview-fallback-inner{
+        display:none !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function findActiveCard(){
+    const track = document.getElementById("premiumHistoryTrack");
+    if(!track) return null;
+
+    /*
+      Normalmente la card attiva/recentissima è la prima.
+      Preferiamo una card con testo attivo/attuale, altrimenti la prima premium-history-card.
+    */
+    const cards = Array.from(track.querySelectorAll(".premium-history-card, .history-card"));
+    if(!cards.length) return null;
+
+    return cards.find(function(card){
+      const t = String(card.innerText || card.textContent || "").toLowerCase();
+      return t.includes("attiva") || t.includes("attuale") || t.includes("ora");
+    }) || cards[0];
+  }
+
+  function removeWrongPreviewBits(card){
+    if(!card) return;
+
+    Array.from(card.querySelectorAll(
+      ".premium-card-preview-mark," +
+      ".premium-card-preview-caption," +
+      ".preview-fallback-box," +
+      ".preview-fallback-inner," +
+      ".preview-fallback-domain," +
+      ".preview-fallback-kicker," +
+      ".preview-fallback-url," +
+      ".followme-image-carousel-preview-20260525," +
+      "[data-followme-image-carousel-preview='1']"
+    )).forEach(function(el){
+      try{ el.remove(); }catch(e){}
+    });
+  }
+
+  function updateCard(data){
+    const fileUrl = imageUrlFromPayload(data);
+    if(!fileUrl) return;
+
+    ensureCss();
+
+    const img = data && (data.image || data.data || {});
+    const name = img.original_name || img.stored_name || "Immagine caricata";
+    const pageUrl = publicImageUrl();
+
+    const card = findActiveCard();
+    if(!card) return;
+
+    card.setAttribute("data-followme-instant-image-active", "1");
+    card.setAttribute("data-followme-kind", "image");
+
+    removeWrongPreviewBits(card);
+
+    let preview = card.querySelector(".followme-instant-active-image-preview-20260526");
+    if(!preview){
+      preview = document.createElement("div");
+      preview.className = "followme-instant-active-image-preview-20260526";
+      card.insertBefore(preview, card.firstChild);
+    }
+
+    preview.innerHTML = '<img src="' + esc(fileUrl) + '" alt="' + esc(name) + '">';
+
+    /*
+      Aggiorna testi principali senza distruggere i pulsanti.
+    */
+    const titleCandidates = Array.from(card.querySelectorAll("strong,h3,h4,.premium-card-title,.title"));
+    const title = titleCandidates.find(function(el){
+      const txt = String(el.textContent || "").trim().toLowerCase();
+      return txt && (
+        txt.includes("http") ||
+        txt.includes("documento") ||
+        txt.includes("pdf") ||
+        txt.includes("destinazione") ||
+        txt.includes("immagine")
+      );
+    }) || titleCandidates[0];
+
+    if(title) title.textContent = "Immagine";
+
+    Array.from(card.querySelectorAll("a")).forEach(function(a){
+      try{
+        const txt = String(a.textContent || "").toLowerCase();
+        const href = String(a.getAttribute("href") || "");
+        if(txt.includes("apri") || href.includes("/fm/") || href.includes("/uploads/")){
+          a.href = pageUrl;
+        }
+      }catch(e){}
+    });
+
+    /*
+      Aggiorna eventuali URL testuali.
+    */
+    Array.from(card.querySelectorAll(".mono,.url,.premium-card-url,code,small,span")).forEach(function(el){
+      try{
+        const txt = String(el.textContent || "");
+        if(txt.includes("/fm/") || txt.includes("http") || txt.includes("Destinazione")){
+          el.textContent = pageUrl;
+        }
+      }catch(e){}
+    });
+  }
+
+  const oldFetch = window.fetch;
+  if(oldFetch && !window.__followmeInstantActiveImageCardFetch20260526){
+    window.__followmeInstantActiveImageCardFetch20260526 = true;
+
+    window.fetch = async function(){
+      const args = arguments;
+      const requestUrl = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+      const res = await oldFetch.apply(this, args);
+
+      try{
+        if(res && res.ok && requestUrl.includes("/image-card/upload")){
+          res.clone().json().then(function(data){
+            updateCard(data);
+            /*
+              Un solo secondo passaggio leggero, perché alcuni script ricostruiscono
+              la history subito dopo upload.
+            */
+            setTimeout(function(){ updateCard(data); }, 350);
+          }).catch(function(){});
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  window.followmeInstantActiveImageCard20260526 = updateCard;
+})();
+</script>
+
 </body>
 </html>
