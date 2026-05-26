@@ -8989,10 +8989,15 @@ document.addEventListener("visibilitychange", function(){
 
   async function activateUrlFromPremium(url){
     /*
-      native-fast-reactivate-premium-20260526
-      Cambio istantaneo della card prima della risposta backend.
-      Evita await loadStatus/renderPremiumHistoryFromApi nel percorso visivo immediato.
+      reactivate-card-realtime-20260526
+      Riattiva immediato:
+      - la card cliccata diventa subito Attivo ora;
+      - tutte le altre tornano Riattiva;
+      - preview e URL restano gestiti dai sistemi già funzionanti;
+      - backend lavora dopo;
+      - niente refresh pesante immediato.
     */
+
     function cleanLocal(v){
       return String(v || "").trim();
     }
@@ -9011,20 +9016,42 @@ document.addEventListener("visibilitychange", function(){
       return u.includes("/fm/document/") || u.includes(".pdf") || u.includes("documento.pdf") || u.includes("/document/");
     }
 
-    function inactiveBadgeLocal(card){
-      var u = card && card.dataset ? cleanLocal(card.dataset.url) : "";
-      if(!u){
-        var urlEl = card && card.querySelector ? card.querySelector(".premium-history-url") : null;
-        if(urlEl) u = cleanLocal(urlEl.textContent);
-      }
+    function cardUrlLocal(card){
+      if(!card) return "";
 
+      var u = cleanLocal(card.dataset && card.dataset.url);
+      if(u) return u;
+
+      var urlEl = card.querySelector(".premium-history-url,.premium-card-url,.url,.mono,code");
+      if(urlEl) u = cleanLocal(urlEl.textContent);
+      if(u) return u;
+
+      var a = Array.from(card.querySelectorAll("a[href]")).find(function(x){
+        var href = cleanLocal(x.getAttribute("href"));
+        return href && !href.startsWith("#") && !href.startsWith("javascript:");
+      });
+
+      return a ? cleanLocal(a.getAttribute("href")) : "";
+    }
+
+    function inactiveBadgeLocal(card){
+      var u = cardUrlLocal(card);
       if(isImageLocal(u)) return "Immagine";
       if(isPdfLocal(u)) return "Documento PDF";
       return "Recente";
     }
 
-    function setButtonInactiveLocal(btn){
+    function findCardByUrlLocal(targetUrl){
+      var target = normLocal(targetUrl);
+
+      return Array.from(document.querySelectorAll(".premium-history-card,.history-card,.premium-card")).find(function(card){
+        return normLocal(cardUrlLocal(card)) === target;
+      }) || null;
+    }
+
+    function forceButtonInactiveLocal(btn){
       if(!btn) return;
+
       btn.textContent = "Riattiva";
       btn.disabled = false;
       btn.classList.remove("premium-history-active");
@@ -9035,8 +9062,9 @@ document.addEventListener("visibilitychange", function(){
       btn.removeAttribute("aria-hidden");
     }
 
-    function setButtonActiveLocal(btn){
+    function forceButtonActiveLocal(btn){
       if(!btn) return;
+
       btn.textContent = "Attivo ora";
       btn.disabled = true;
       btn.classList.remove("premium-history-reactivate");
@@ -9047,60 +9075,66 @@ document.addEventListener("visibilitychange", function(){
       btn.removeAttribute("aria-hidden");
     }
 
-    function fastMarkActiveLocal(targetUrl){
+    function realtimeMarkActiveLocal(targetUrl){
       try{
-        var targetNorm = normLocal(targetUrl);
-        var cards = Array.from(document.querySelectorAll(".premium-history-card,.history-card,.premium-card"));
+        var activeCard = findCardByUrlLocal(targetUrl);
 
-        var activeCard = cards.find(function(card){
-          var u = cleanLocal(card.dataset && card.dataset.url);
-          if(!u){
-            var urlEl = card.querySelector(".premium-history-url");
-            if(urlEl) u = cleanLocal(urlEl.textContent);
-          }
-          return normLocal(u) === targetNorm;
-        });
-
-        if(!activeCard) return;
-
-        cards.forEach(function(card){
+        Array.from(document.querySelectorAll(".premium-history-card,.history-card,.premium-card")).forEach(function(card){
           var isTarget = card === activeCard;
 
           if(isTarget){
             card.classList.add("is-active");
-            card.setAttribute("data-followme-fast-active-20260526", "1");
+            card.setAttribute("data-followme-realtime-active-20260526", "1");
 
             var badge = card.querySelector(".premium-history-badge");
             if(badge) badge.textContent = "Attivo ora";
 
-            Array.from(card.querySelectorAll("button,a")).forEach(function(btn){
-              var t = cleanLocal(btn.textContent).toLowerCase();
-              if(t.includes("riattiva") || t.includes("attivalo") || t.includes("attivo ora")){
-                setButtonActiveLocal(btn);
+            var foundButton = false;
+
+            Array.from(card.querySelectorAll("button,a")).forEach(function(el){
+              var t = cleanLocal(el.innerText || el.textContent).toLowerCase();
+              var h = String(el.outerHTML || "").toLowerCase();
+
+              if(
+                t.includes("riattiva") ||
+                t.includes("attivalo") ||
+                t.includes("attivo ora") ||
+                h.includes("premium-history-reactivate") ||
+                h.includes("premium-history-active")
+              ){
+                forceButtonActiveLocal(el);
+                foundButton = true;
               }
             });
 
-            try{
-              card.scrollIntoView({ behavior:"smooth", inline:"center", block:"nearest" });
-            }catch(e){}
-
           }else{
             card.classList.remove("is-active");
+            card.removeAttribute("data-followme-realtime-active-20260526");
             card.removeAttribute("data-followme-fast-active-20260526");
+            card.removeAttribute("data-followme-preview-confirmed-active");
 
             var b = card.querySelector(".premium-history-badge");
             if(b) b.textContent = inactiveBadgeLocal(card);
 
-            Array.from(card.querySelectorAll("button,a")).forEach(function(btn){
-              var t = cleanLocal(btn.textContent).toLowerCase();
-              if(t.includes("attivo ora")){
-                setButtonInactiveLocal(btn);
+            Array.from(card.querySelectorAll("button,a")).forEach(function(el){
+              var t = cleanLocal(el.innerText || el.textContent).toLowerCase();
+              var h = String(el.outerHTML || "").toLowerCase();
+
+              if(
+                t.includes("attivo ora") ||
+                t.includes("carico preview") ||
+                h.includes("premium-history-active")
+              ){
+                forceButtonInactiveLocal(el);
               }
             });
           }
         });
 
-        window.__followmeSkipHeavyHistoryRefreshUntil20260526 = Date.now() + 1800;
+        /*
+          Evita che refresh lenti sovrascrivano subito la UI appena aggiornata.
+        */
+        window.__followmeSkipHeavyHistoryRefreshUntil20260526 = Date.now() + 2200;
       }catch(e){}
     }
 
@@ -9109,15 +9143,22 @@ document.addEventListener("visibilitychange", function(){
       if(!code || !url) return;
 
       /*
-        1. UI immediata.
+        1) UI immediata, senza attendere backend.
       */
-      fastMarkActiveLocal(url);
-
-      var input = document.getElementById("newUrl");
-      if(input) if(document.activeElement !== newUrl){ newUrl.value = ""; newUrl.placeholder = "Incolla qui il nuovo URL che vuoi trasmettere."; }
+      realtimeMarkActiveLocal(url);
 
       /*
-        2. Preview alta immediata, se esistono helper specializzati.
+        2) Campo input resta pulito.
+      */
+      var input = document.getElementById("newUrl");
+      if(input && document.activeElement !== input){
+        input.value = "";
+        input.placeholder = "Incolla qui il nuovo URL che vuoi trasmettere.";
+      }
+
+      /*
+        3) Preview veloce PDF se disponibile.
+           Per URL normali e immagini lasciamo i sistemi già funzionanti.
       */
       try{
         if(isPdfLocal(url) && typeof window.followmeFastPdfReactivate20260525 === "function"){
@@ -9125,15 +9166,8 @@ document.addEventListener("visibilitychange", function(){
         }
       }catch(e){}
 
-      try{
-        if(isImageLocal(url) && typeof window.followmeNormalizeImageCardsDefinitive20260526 === "function"){
-          window.followmeNormalizeImageCardsDefinitive20260526();
-        }
-      }catch(e){}
-
       /*
-        3. Backend: aggiorna destinazione.
-         Non usiamo più window.reactivateUrl perché internamente può fare refresh pesanti.
+        4) Backend: aggiorna destinazione.
       */
       var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/update-url", {
         method:"POST",
@@ -9147,7 +9181,7 @@ document.addEventListener("visibilitychange", function(){
         if(typeof toast === "function") toast((data && data.error) || "Errore attivazione link.");
 
         /*
-          In caso di errore, ricarichiamo lo stato reale.
+          Solo in errore ricarichiamo lo stato reale.
         */
         try{
           if(typeof loadStatus === "function") await loadStatus();
@@ -9163,19 +9197,21 @@ document.addEventListener("visibilitychange", function(){
       if(typeof toast === "function") toast("Link attivo ora.");
 
       /*
-        4. Refresh leggero ritardato: non blocca più il cambio visivo.
+        5) Conferma leggera dopo backend: ribadisce la card attiva,
+           non ricostruisce tutto subito.
+      */
+      realtimeMarkActiveLocal(url);
+
+      /*
+        6) Refresh ritardato e non bloccante.
+           Serve solo per riallineare scan/date, non per il cambio visuale.
       */
       setTimeout(function(){
         try{
-          if(typeof loadStatus === "function") loadStatus();
-        }catch(e){}
-      }, 900);
-
-      setTimeout(function(){
-        try{
+          if(Date.now() < (window.__followmeSkipHeavyHistoryRefreshUntil20260526 || 0)) return;
           if(typeof renderPremiumHistoryFromApi === "function") renderPremiumHistoryFromApi();
         }catch(e){}
-      }, 1300);
+      }, 2600);
 
     }catch(err){
       console.error("activateUrlFromPremium error:", err);
@@ -9571,6 +9607,11 @@ document.addEventListener("visibilitychange", function(){
   }
 
   async function renderPremiumHistoryFromApi(){
+    /* followme-render-history-skip-after-reactivate-20260526 */
+    if(Date.now() < (window.__followmeSkipHeavyHistoryRefreshUntil20260526 || 0)){
+      return false;
+    }
+
     var track = document.getElementById("premiumHistoryTrack");
 
     try{
