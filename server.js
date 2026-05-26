@@ -11577,6 +11577,7 @@ app.get('/fm/image/:code', async (req, res) => {
       .replace(/'/g, '&#39;');
 
     const imageUrl = String(img.public_path || '');
+    const manageUrl20260526 = `/followme-app.html?code=${encodeURIComponent(project.code || project.public_id || code)}`;
     const title = esc(String(img.original_name || 'Immagine').replace(/\\.(jpg|jpeg|png|webp|gif)$/i, ''));
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -11661,6 +11662,28 @@ app.get('/fm/image/:code', async (req, res) => {
     cursor:pointer;
     -webkit-tap-highlight-color:transparent;
   }
+  .followme-public-image-back-app-btn-20260526{
+    width:min(420px, calc(100vw - 32px));
+    min-height:54px;
+    margin:10px auto 0 auto;
+    padding:0 20px;
+    border:1px solid rgba(255,255,255,.18);
+    border-radius:999px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    background:rgba(255,255,255,.08);
+    color:#fff;
+    font-size:15px;
+    font-weight:950;
+    line-height:1.05;
+    text-decoration:none;
+    box-sizing:border-box;
+    cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+  }
+
   .followme-public-image-download-btn-20260522 svg{
     width:22px;
     height:22px;
@@ -11696,6 +11719,9 @@ app.get('/fm/image/:code', async (req, res) => {
           <path d="M12 3v10.2m0 0 4-4m-4 4-4-4M5 17.5V20h14v-2.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         <span>Salva immagine</span>
+      </a>
+      <a class="followme-public-image-back-app-btn-20260526" id="followmePublicImageBackAppBtn20260526" href="${esc(manageUrl20260526)}">
+        Torna all’App
       </a>
 
       <div class="followme-ios-save-note-20260522" id="followmeIosSaveNote20260522">
