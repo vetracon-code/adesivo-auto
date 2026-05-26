@@ -9105,7 +9105,15 @@ document.addEventListener("visibilitychange", function(){
       /*
         1. UI immediata.
       */
-      fastMarkActiveLocal(url);
+      /* defer-active-until-preview-loaded-20260526
+         Non impostiamo più "Attivo ora" subito:
+         lo farà followme-active-after-preview-loaded-20260526
+         solo dopo che la preview grande è pronta.
+      */
+      try{
+        var pendingBtn20260526 = null;
+        var pendingCard20260526 = null;
+      }catch(e){}
 
       /* fast-top-preview-called-from-native-reactivate-20260526 */
       try{
@@ -35944,6 +35952,304 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   }, true);
 
   window.followmeFastReactivateTopPreview20260526 = render;
+})();
+</script>
+
+
+<script id="followme-active-after-preview-loaded-20260526">
+/*
+  Riattiva corretto:
+  - al click mostra stato "Carico preview...";
+  - aspetta che la preview grande sia realmente visibile/caricata;
+  - poi imposta "Attivo ora";
+  - poi scrolla subito alla preview grande.
+*/
+(function(){
+  if(window.__followmeActiveAfterPreviewLoaded20260526) return;
+  window.__followmeActiveAfterPreviewLoaded20260526 = true;
+
+  let pending = null;
+
+  function clean(v){ return String(v || "").trim(); }
+
+  function isReactivateButton(el){
+    if(!el) return false;
+    const txt = clean(el.innerText || el.textContent).toLowerCase();
+    const html = String(el.outerHTML || "").toLowerCase();
+
+    return (
+      txt.includes("riattiva") ||
+      txt.includes("attivalo") ||
+      html.includes("premium-history-reactivate") ||
+      html.includes("activateurlfrompremium") ||
+      html.includes("reactivateurl")
+    );
+  }
+
+  function cardOf(el){
+    return el && el.closest ? el.closest(".premium-history-card,.history-card,.premium-card,.destination-card") : null;
+  }
+
+  function urlOfCard(card){
+    if(!card) return "";
+
+    const dataUrl = clean(card.dataset && card.dataset.url);
+    if(dataUrl) return dataUrl;
+
+    const urlEl = card.querySelector(".premium-history-url,.premium-card-url,.url,.mono,code");
+    if(urlEl && clean(urlEl.textContent)) return clean(urlEl.textContent);
+
+    const a = Array.from(card.querySelectorAll("a[href]")).find(function(x){
+      const href = clean(x.getAttribute("href"));
+      return href && !href.startsWith("#") && !href.startsWith("javascript:");
+    });
+
+    return a ? clean(a.getAttribute("href")) : "";
+  }
+
+  function norm(v){
+    return clean(v).replace(/[?#].*$/, "").replace(/\/+$/, "");
+  }
+
+  function square(){
+    return document.querySelector(".simple-preview-card") ||
+      document.getElementById("simpleDestinationPreviewBlock") ||
+      document.querySelector(".simple-preview-square") ||
+      document.querySelector(".destination-preview-frame") ||
+      document.querySelector(".qr-auto-preview-frame");
+  }
+
+  function previewBox(){
+    return document.querySelector(".simple-preview-square") ||
+      document.querySelector(".destination-preview-frame") ||
+      document.querySelector(".qr-auto-preview-frame");
+  }
+
+  function isPreviewReady(){
+    const box = previewBox();
+    if(!box) return false;
+
+    const iframe = box.querySelector("iframe");
+    const img = box.querySelector("img");
+
+    if(img){
+      if(img.complete && img.naturalWidth > 0) return true;
+
+      /*
+        Blob/local preview o immagini già inserite possono non dare naturalWidth subito:
+        basta che ci sia una img visibile dopo un breve tempo.
+      */
+      const r = img.getBoundingClientRect();
+      if(r.width > 20 && r.height > 20) return true;
+    }
+
+    if(iframe){
+      const src = clean(iframe.getAttribute("src") || iframe.src);
+      const r = iframe.getBoundingClientRect();
+
+      /*
+        Per iframe cross-origin non possiamo sapere davvero onload in modo affidabile.
+        Consideriamo pronta quando src è reale e il frame è visibile.
+      */
+      if(src && src !== "about:blank" && r.width > 20 && r.height > 20) return true;
+    }
+
+    const html = clean(box.innerHTML).toLowerCase();
+    if(
+      html.includes("documento pdf") ||
+      html.includes("followme-pdf") ||
+      html.includes("preview.jpg") ||
+      html.includes("document-preview") ||
+      html.includes("uploads/followme-documents")
+    ){
+      return true;
+    }
+
+    return false;
+  }
+
+  function setLoading(card, btn){
+    try{
+      if(card){
+        card.classList.remove("is-active");
+        card.setAttribute("data-followme-reactivating-preview", "1");
+      }
+
+      const badge = card && card.querySelector(".premium-history-badge");
+      if(badge) badge.textContent = "Carico preview...";
+
+      if(btn){
+        btn.textContent = "Carico preview...";
+        btn.disabled = true;
+        btn.classList.remove("premium-history-active");
+        btn.classList.add("premium-history-reactivate");
+        btn.style.opacity = "1";
+        btn.style.pointerEvents = "none";
+      }
+    }catch(e){}
+  }
+
+  function restoreOtherCards(activeCard){
+    Array.from(document.querySelectorAll(".premium-history-card,.history-card,.premium-card")).forEach(function(card){
+      if(card === activeCard) return;
+
+      card.classList.remove("is-active");
+      card.removeAttribute("data-followme-reactivating-preview");
+
+      const badge = card.querySelector(".premium-history-badge");
+      if(badge && clean(badge.textContent).toLowerCase().includes("attivo")){
+        const txt = clean(card.innerText || card.textContent).toLowerCase();
+        if(txt.includes("immagine")) badge.textContent = "Immagine";
+        else if(txt.includes("pdf") || txt.includes("documento")) badge.textContent = "Documento PDF";
+        else badge.textContent = "Recente";
+      }
+
+      Array.from(card.querySelectorAll("button,a")).forEach(function(el){
+        const t = clean(el.innerText || el.textContent).toLowerCase();
+        if(t.includes("attivo ora") || t.includes("carico preview")){
+          el.textContent = "Riattiva";
+          el.disabled = false;
+          el.classList.remove("premium-history-active");
+          el.classList.add("premium-history-reactivate");
+          el.style.opacity = "";
+          el.style.pointerEvents = "";
+          el.style.display = "";
+          el.removeAttribute("aria-hidden");
+        }
+      });
+    });
+  }
+
+  function setActive(card, btn){
+    try{
+      if(!card) return;
+
+      restoreOtherCards(card);
+
+      card.classList.add("is-active");
+      card.removeAttribute("data-followme-reactivating-preview");
+      card.setAttribute("data-followme-preview-confirmed-active", "1");
+
+      const badge = card.querySelector(".premium-history-badge");
+      if(badge) badge.textContent = "Attivo ora";
+
+      const targetBtn = btn || Array.from(card.querySelectorAll("button,a")).find(function(el){
+        const t = clean(el.innerText || el.textContent).toLowerCase();
+        return t.includes("riattiva") || t.includes("attivalo") || t.includes("carico preview") || t.includes("attivo ora");
+      });
+
+      if(targetBtn){
+        targetBtn.textContent = "Attivo ora";
+        targetBtn.disabled = true;
+        targetBtn.classList.remove("premium-history-reactivate");
+        targetBtn.classList.add("premium-history-active");
+        targetBtn.style.opacity = "1";
+        targetBtn.style.pointerEvents = "none";
+      }
+    }catch(e){}
+  }
+
+  function scrollToPreview(){
+    try{
+      const el = square();
+      if(el){
+        el.scrollIntoView({ behavior:"smooth", block:"start", inline:"nearest" });
+      }
+    }catch(e){}
+  }
+
+  function waitPreviewThenConfirm(token){
+    const started = Date.now();
+
+    function tick(){
+      if(!pending || pending.token !== token) return;
+
+      if(isPreviewReady()){
+        setActive(pending.card, pending.btn);
+        scrollToPreview();
+        return;
+      }
+
+      if(Date.now() - started > 3500){
+        /*
+          Timeout prudente: se iframe cross-origin non segnala mai pienamente il load,
+          confermiamo comunque dopo avere dato tempo alla preview di apparire.
+        */
+        setActive(pending.card, pending.btn);
+        scrollToPreview();
+        return;
+      }
+
+      setTimeout(tick, 80);
+    }
+
+    setTimeout(tick, 80);
+  }
+
+  /*
+    Capture: prima degli handler ottimistici.
+    Impedisce che "Attivo ora" compaia immediatamente.
+  */
+  document.addEventListener("click", function(ev){
+    const btn = ev.target && ev.target.closest ? ev.target.closest("button,a") : null;
+    if(!btn || !isReactivateButton(btn)) return;
+
+    const card = cardOf(btn);
+    if(!card) return;
+
+    const url = urlOfCard(card);
+    if(!url) return;
+
+    const token = Date.now() + "-" + Math.random().toString(16).slice(2);
+    pending = { token, card, btn, url: norm(url) };
+
+    setLoading(card, btn);
+
+    /*
+      Lascia partire gli handler esistenti, ma subito dopo rimettiamo stato loading
+      finché la preview non è pronta.
+    */
+    setTimeout(function(){
+      if(pending && pending.token === token) setLoading(card, btn);
+    }, 0);
+
+    setTimeout(function(){
+      if(pending && pending.token === token) setLoading(card, btn);
+    }, 120);
+
+    waitPreviewThenConfirm(token);
+  }, true);
+
+  /*
+    Se vecchi script impostano "Attivo ora" prima del caricamento preview,
+    lo correggiamo al volo finché pending è aperto.
+  */
+  const mo = new MutationObserver(function(){
+    try{
+      if(!pending) return;
+      if(isPreviewReady()) return;
+
+      const badge = pending.card && pending.card.querySelector(".premium-history-badge");
+      if(badge && clean(badge.textContent).toLowerCase().includes("attivo")){
+        badge.textContent = "Carico preview...";
+      }
+
+      if(pending.btn && clean(pending.btn.textContent).toLowerCase().includes("attivo")){
+        pending.btn.textContent = "Carico preview...";
+        pending.btn.disabled = true;
+      }
+    }catch(e){}
+  });
+
+  try{
+    mo.observe(document.body, { childList:true, subtree:true, characterData:true });
+  }catch(e){}
+
+  window.followmeConfirmActiveAfterPreviewLoaded20260526 = {
+    isPreviewReady,
+    setActive,
+    scrollToPreview
+  };
 })();
 </script>
 
