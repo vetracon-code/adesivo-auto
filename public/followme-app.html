@@ -36236,3 +36236,213 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-only-other-options-qr-button-stable-20260526">
+(function(){
+  if(window.__followmeOnlyOtherOptionsQrButtonStable20260526) return;
+  window.__followmeOnlyOtherOptionsQrButtonStable20260526 = true;
+
+  function code(){
+    try{
+      const parts = location.pathname.split("/").filter(Boolean);
+      const i = parts.indexOf("app");
+      if(i >= 0 && parts[i+1]) return decodeURIComponent(parts[i+1]).trim();
+
+      const p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || p.get("qr") || p.get("c") || "FMDEMO").trim();
+    }catch(e){
+      return "FMDEMO";
+    }
+  }
+
+  function qrPngPath(){
+    const c = code();
+    const upper = String(c || "").toUpperCase();
+
+    /*
+      Prima proviamo il QR del codice reale.
+      Se non esiste, il vecchio script può comunque gestire il fallback FMDEMO.
+    */
+    return "/followme/qrs/followme-" + encodeURIComponent(upper) + "-qr.png";
+  }
+
+  function qrSvgPath(){
+    const c = code();
+    const upper = String(c || "").toUpperCase();
+    return "/followme/qrs/followme-" + encodeURIComponent(upper) + "-qr.svg";
+  }
+
+  function ensureOnlyInsideOtherOptions(){
+    const list = document.getElementById("followmeOtherOptionsList");
+    if(!list) return;
+
+    /*
+      Regola rigida:
+      lavoriamo SOLO dentro #followmeOtherOptionsList.
+      Non usiamo body, .card, preview, fallback o altri contenitori.
+    */
+
+    let buttons = Array.from(list.querySelectorAll("#followmeOtherOpenQrPreview"));
+
+    if(buttons.length === 0){
+      const btn = document.createElement("a");
+      btn.className = "btn secondary";
+      btn.id = "followmeOtherOpenQrPreview";
+      btn.textContent = "Apri anteprima QR";
+      btn.target = "_blank";
+      btn.rel = "noopener";
+
+      /*
+        Lo inseriamo sempre come primo elemento del menu,
+        prima di Scarica QR PNG/SVG e Attiva chat.
+      */
+      list.insertBefore(btn, list.firstChild);
+      buttons = [btn];
+    }
+
+    /*
+      Se per qualunque motivo sono comparsi duplicati dentro lo stesso menu,
+      lasciamo solo il primo.
+    */
+    buttons.forEach(function(btn, index){
+      if(index > 0){
+        btn.remove();
+      }
+    });
+
+    const btn = document.getElementById("followmeOtherOpenQrPreview");
+    if(!btn || btn.parentElement !== list) return;
+
+    btn.textContent = "Apri anteprima QR";
+    btn.className = "btn secondary";
+    btn.href = qrPngPath();
+    btn.target = "_blank";
+    btn.rel = "noopener";
+
+    btn.style.display = "";
+    btn.style.visibility = "";
+    btn.style.opacity = "";
+    btn.style.pointerEvents = "";
+
+    /*
+      Manteniamo coerenti anche i due download, ma sempre e solo dentro Altre opzioni.
+    */
+    const png = document.getElementById("followmeOtherDownloadQrPng");
+    if(png && png.parentElement === list){
+      png.href = qrPngPath();
+      png.setAttribute("download", "followme-" + code().toUpperCase() + "-qr.png");
+    }
+
+    const svg = document.getElementById("followmeOtherDownloadQrSvg");
+    if(svg && svg.parentElement === list){
+      svg.href = qrSvgPath();
+      svg.setAttribute("download", "followme-" + code().toUpperCase() + "-qr.svg");
+    }
+
+    /*
+      Se esiste già l'overlay elegante storico, lo usiamo.
+      Altrimenti il link apre normalmente il PNG in nuova scheda.
+    */
+    if(btn.dataset.onlyOtherOptionsQrBound20260526 !== "1"){
+      btn.dataset.onlyOtherOptionsQrBound20260526 = "1";
+
+      btn.addEventListener("click", function(ev){
+        try{
+          const overlay = document.getElementById("followmeElegantQrPreviewOverlay20260520");
+          const img = document.getElementById("followmeElegantQrPreviewImg20260520");
+          const open = document.getElementById("followmeElegantQrPreviewOpen20260520");
+
+          if(overlay && img){
+            ev.preventDefault();
+            ev.stopPropagation();
+
+            const url = new URL(qrPngPath(), location.origin).toString();
+            img.src = url + "?v=" + Date.now();
+            if(open) open.href = url;
+
+            overlay.classList.add("open");
+            return false;
+          }
+        }catch(e){}
+      }, true);
+    }
+  }
+
+  function pulse(){
+    ensureOnlyInsideOtherOptions();
+    setTimeout(ensureOnlyInsideOtherOptions, 150);
+    setTimeout(ensureOnlyInsideOtherOptions, 500);
+    setTimeout(ensureOnlyInsideOtherOptions, 1200);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", pulse);
+  }else{
+    pulse();
+  }
+
+  window.addEventListener("load", pulse);
+  window.addEventListener("pageshow", pulse);
+  window.addEventListener("focus", pulse);
+
+  document.addEventListener("click", function(ev){
+    const t = ev.target && ev.target.closest ? ev.target.closest("button,a") : null;
+    if(!t) return;
+
+    const txt = String(t.textContent || "").toLowerCase();
+
+    if(
+      txt.includes("altre opzioni") ||
+      txt.includes("aggiorna") ||
+      txt.includes("riattiva") ||
+      txt.includes("attiva") ||
+      txt.includes("usa questo link")
+    ){
+      pulse();
+    }
+  }, true);
+
+  /*
+    Osservatore limitato SOLO al menu Altre opzioni.
+    Non osserviamo tutta la pagina.
+  */
+  function bindObserver(){
+    const list = document.getElementById("followmeOtherOptionsList");
+    if(!list || list.dataset.onlyOtherOptionsQrObserver20260526 === "1") return;
+
+    list.dataset.onlyOtherOptionsQrObserver20260526 = "1";
+
+    if(window.MutationObserver){
+      const obs = new MutationObserver(function(){
+        setTimeout(ensureOnlyInsideOtherOptions, 80);
+      });
+
+      obs.observe(list, {
+        childList:true,
+        subtree:false
+      });
+    }
+  }
+
+  setTimeout(bindObserver, 300);
+  setTimeout(bindObserver, 1000);
+
+  const oldFetch = window.fetch;
+  if(oldFetch && !window.__onlyOtherOptionsQrFetchPatch20260526){
+    window.__onlyOtherOptionsQrFetchPatch20260526 = true;
+
+    window.fetch = async function(){
+      const res = await oldFetch.apply(this, arguments);
+
+      try{
+        setTimeout(pulse, 250);
+        setTimeout(pulse, 900);
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  window.followMeEnsureOnlyOtherOptionsQrButton20260526 = pulse;
+})();
+</script>
