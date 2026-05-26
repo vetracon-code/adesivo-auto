@@ -9016,6 +9016,215 @@ document.addEventListener("visibilitychange", function(){
       return u.includes("/fm/document/") || u.includes(".pdf") || u.includes("documento.pdf") || u.includes("/document/");
     }
 
+    /* native-reactivate-preview-scroll-20260526 */
+    function escLocal(v){
+      return String(v || "")
+        .replace(/&/g,"&amp;")
+        .replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;")
+        .replace(/'/g,"&#39;");
+    }
+
+    function absoluteLocal(path){
+      var raw = cleanLocal(path);
+      if(!raw) return "";
+      if(/^https?:\/\//i.test(raw)) return raw;
+      if(raw.startsWith("/")) return location.origin + raw;
+      return location.origin + "/" + raw.replace(/^\/+/, "");
+    }
+
+    function previewSectionLocal(){
+      return document.getElementById("simpleDestinationPreviewBlock") ||
+        document.querySelector(".simple-preview-card") ||
+        document.querySelector(".simple-preview-square");
+    }
+
+    function previewBoxLocal(){
+      return document.querySelector(".simple-preview-square") ||
+        document.querySelector(".destination-preview-frame") ||
+        document.querySelector(".qr-auto-preview-frame");
+    }
+
+    function hidePreviewFallbacksLocal(){
+      try{
+        var empty = document.getElementById("simpleDestinationPreviewEmpty");
+        if(empty) empty.style.display = "none";
+
+        var fallback = document.getElementById("previewFallbackBox");
+        if(fallback) fallback.style.display = "none";
+      }catch(e){}
+    }
+
+    function setOpenPreviewButtonLocal(targetUrl, label){
+      [
+        document.getElementById("simpleDestinationPreviewOpen"),
+        document.getElementById("openQrPreview"),
+        document.getElementById("followmeOtherOpenQrPreview")
+      ].filter(Boolean).forEach(function(a){
+        try{
+          a.href = targetUrl;
+          a.textContent = label || "Apri pagina";
+          a.target = "_blank";
+          a.rel = "noopener";
+          a.style.opacity = "1";
+          a.style.pointerEvents = "auto";
+          a.removeAttribute("disabled");
+        }catch(e){}
+      });
+    }
+
+    function hardSetTopPreviewHtmlLocal(html){
+      try{
+        hidePreviewFallbacksLocal();
+
+        var box = previewBoxLocal();
+        if(!box) return;
+
+        box.innerHTML = html;
+        box.style.display = "";
+
+        var frame = box.querySelector("iframe");
+        if(frame){
+          frame.style.width = "100%";
+          frame.style.height = "100%";
+          frame.style.minHeight = "220px";
+          frame.style.border = "0";
+          frame.style.display = "block";
+          frame.style.background = "#fff";
+        }
+
+        var img = box.querySelector("img");
+        if(img){
+          img.style.width = "100%";
+          img.style.height = "100%";
+          img.style.minHeight = "220px";
+          img.style.objectFit = "cover";
+          img.style.display = "block";
+        }
+      }catch(e){}
+    }
+
+    function scrollToTopPreviewLocal(){
+      try{
+        var el = previewSectionLocal();
+        if(!el) return;
+
+        try{
+          el.scrollIntoView({ behavior:"smooth", block:"start", inline:"nearest" });
+        }catch(e){}
+
+        try{
+          var y = Math.max(0, el.getBoundingClientRect().top + window.pageYOffset - 8);
+          window.scrollTo({ top:y, behavior:"smooth" });
+        }catch(e){}
+
+        try{
+          var node = el.parentElement;
+          while(node && node !== document.body && node !== document.documentElement){
+            var st = window.getComputedStyle(node);
+            var oy = st.overflowY;
+            if((oy === "auto" || oy === "scroll" || oy === "overlay") && node.scrollHeight > node.clientHeight + 20){
+              var nr = node.getBoundingClientRect();
+              var er = el.getBoundingClientRect();
+              node.scrollTo({ top: node.scrollTop + (er.top - nr.top - 8), behavior:"smooth" });
+            }
+            node = node.parentElement;
+          }
+        }catch(e){}
+
+        try{
+          if(!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
+          el.focus({ preventScroll:false });
+        }catch(e){}
+      }catch(e){}
+    }
+
+    function renderUrlTopPreviewLocal(targetUrl){
+      hardSetTopPreviewHtmlLocal(
+        '<iframe id="simpleDestinationPreviewFrame" src="' + escLocal(targetUrl) + '" loading="eager"></iframe>'
+      );
+      setOpenPreviewButtonLocal(targetUrl, "Apri pagina");
+    }
+
+    async function getCurrentImageForPreviewLocal(){
+      try{
+        var c = getCodeSafe();
+        if(!c) return null;
+
+        var res = await fetch("/api/followme/" + encodeURIComponent(c) + "/image-card/current?v=" + Date.now(), {
+          cache:"no-store"
+        });
+
+        var data = await res.json().catch(function(){ return null; });
+        var img = data && (data.image || data.data || {});
+        var raw = img && (img.image_url || img.public_path || img.public_url);
+
+        if(!raw) return null;
+
+        var version = String(img.id || img.updated_at || img.created_at || Date.now()).replace(/[^a-zA-Z0-9_-]/g, "");
+        var src = absoluteLocal(raw);
+        src = src + (src.includes("?") ? "&" : "?") + "v=" + version;
+
+        return {
+          src: src,
+          publicUrl: data.public_url || ("/fm/image/" + encodeURIComponent(c)),
+          name: img.original_name || img.stored_name || "Immagine"
+        };
+      }catch(e){
+        return null;
+      }
+    }
+
+    async function renderImageTopPreviewLocal(targetUrl){
+      hardSetTopPreviewHtmlLocal(
+        '<div style="width:100%;min-height:220px;display:grid;place-items:center;background:#05070d;color:#101018;">' +
+          '<div style="min-height:32px;padding:0 13px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#c8ff2e,#5ee7ff);font-size:11px;font-weight:950;letter-spacing:.04em;">CARICO IMMAGINE...</div>' +
+        '</div>'
+      );
+
+      setOpenPreviewButtonLocal(targetUrl, "Apri immagine");
+
+      var img = await getCurrentImageForPreviewLocal();
+      if(img && img.src){
+        hardSetTopPreviewHtmlLocal('<img src="' + escLocal(img.src) + '" alt="' + escLocal(img.name || "Immagine") + '">');
+        setOpenPreviewButtonLocal(img.publicUrl || targetUrl, "Apri immagine");
+      }
+    }
+
+    function renderPdfTopPreviewLocal(targetUrl){
+      try{
+        if(typeof window.followmeFastPdfReactivate20260525 === "function"){
+          window.followmeFastPdfReactivate20260525(targetUrl, "Documento PDF");
+          setOpenPreviewButtonLocal(targetUrl, "Apri documento");
+          return;
+        }
+      }catch(e){}
+
+      hardSetTopPreviewHtmlLocal(
+        '<div style="width:100%;min-height:220px;display:grid;place-items:center;background:#101018;color:#fff;">' +
+          '<div style="text-align:center;"><strong style="font-size:34px;">PDF</strong><br><span>Documento PDF</span></div>' +
+        '</div>'
+      );
+      setOpenPreviewButtonLocal(targetUrl, "Apri documento");
+    }
+
+    function updateTopPreviewImmediatelyLocal(targetUrl){
+      try{
+        if(isPdfLocal(targetUrl)){
+          renderPdfTopPreviewLocal(targetUrl);
+        }else if(isImageLocal(targetUrl)){
+          renderImageTopPreviewLocal(targetUrl);
+        }else{
+          renderUrlTopPreviewLocal(targetUrl);
+        }
+
+        setTimeout(scrollToTopPreviewLocal, 40);
+        setTimeout(scrollToTopPreviewLocal, 180);
+        setTimeout(scrollToTopPreviewLocal, 520);
+      }catch(e){}
+    }
+
     function cardUrlLocal(card){
       if(!card) return "";
 
@@ -9146,6 +9355,12 @@ document.addEventListener("visibilitychange", function(){
         1) UI immediata, senza attendere backend.
       */
       realtimeMarkActiveLocal(url);
+
+      /*
+        Preview alta immediata e scroll nativo.
+        Non aspetta renderPremiumHistoryFromApi/loadStatus.
+      */
+      updateTopPreviewImmediatelyLocal(url);
 
       /*
         2) Campo input resta pulito.
@@ -35711,37 +35926,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 
 
-<script id="followme-light-scroll-preview-after-reactivate-20260526">
-/*
-  Scroll leggero dopo Riattiva.
-  Nessun fetch hook, nessun observer, nessuna riscrittura preview.
-*/
-(function(){
-  if(window.__followmeLightScrollPreviewAfterReactivate20260526) return;
-  window.__followmeLightScrollPreviewAfterReactivate20260526 = true;
-
-  function isBtn(el){
-    if(!el) return false;
-    var t = String(el.innerText || el.textContent || "").toLowerCase();
-    var h = String(el.outerHTML || "").toLowerCase();
-    return t.includes("riattiva") || t.includes("attivalo") || h.includes("premium-history-reactivate");
-  }
-
-  function go(){
-    var el = document.getElementById("simpleDestinationPreviewBlock") ||
-             document.querySelector(".simple-preview-card") ||
-             document.querySelector(".simple-preview-square");
-    if(!el) return;
-    try{ el.scrollIntoView({behavior:"smooth", block:"start"}); }catch(e){}
-  }
-
-  document.addEventListener("click", function(ev){
-    var b = ev.target && ev.target.closest ? ev.target.closest("button,a") : null;
-    if(!isBtn(b)) return;
-    setTimeout(go, 180);
-  }, true);
-})();
-</script>
 
 </body>
 </html>
