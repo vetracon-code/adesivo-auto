@@ -6071,9 +6071,9 @@ function followmeSafeClearPdfPreview20260526(preview){
       return;
     }
 
-    followmeSafeClearPdfPreview20260526(preview);
+    preview.innerHTML = "";
   }catch(e){
-    try{ followmeSafeClearPdfPreview20260526(preview); }catch(_){}
+    try{ preview.innerHTML = ""; }catch(_){}
   }
 }
 </script>
@@ -33840,6 +33840,160 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   }
 
   window.followmeCleanImagePreviewOnlyImage20260526 = clean;
+})();
+</script>
+
+
+<script id="followme-remove-destinazione-frame-from-image-card-20260526">
+/*
+  Rimuove il frame fallback/favicons "D / Destinazione" dalle card IMMAGINE.
+  Quel frame serve per URL generici, ma non deve comparire nell'area immagine.
+*/
+(function(){
+  if(window.__followmeRemoveDestinazioneFrameFromImageCard20260526) return;
+  window.__followmeRemoveDestinazioneFrameFromImageCard20260526 = true;
+
+  function cardIsImage(card){
+    if(!card) return false;
+
+    const h = String(card.innerText || card.textContent || card.innerHTML || "").toLowerCase();
+    const html = String(card.innerHTML || "").toLowerCase();
+
+    const hasImage =
+      h.includes("immagine") ||
+      html.includes("/fm/image/") ||
+      html.includes("/image-card/") ||
+      html.includes("/uploads/followme-documents/") && html.includes("/image/") ||
+      html.includes("followme-image-carousel-preview") ||
+      html.includes("followme-fast-image-preview") ||
+      html.includes("data-followme-preview-only-image");
+
+    const hasPdf =
+      h.includes("pdf") ||
+      h.includes("documento") ||
+      html.includes("/fm/document/") ||
+      html.includes("document-preview") ||
+      html.includes("documento.pdf");
+
+    return hasImage && !hasPdf;
+  }
+
+  function looksLikeDestinazioneFrame(el){
+    if(!el) return false;
+
+    const txt = String(el.innerText || el.textContent || "").trim().toLowerCase();
+    const html = String(el.innerHTML || "").toLowerCase();
+    const cls = String(el.className || "").toLowerCase();
+
+    const saysDest =
+      txt === "d destinazione" ||
+      txt === "destinazione" ||
+      txt.includes("d destinazione") ||
+      txt.includes("destinazione");
+
+    const looksPreviewFallback =
+      cls.includes("premium-card-preview") ||
+      cls.includes("preview") ||
+      cls.includes("fallback") ||
+      cls.includes("favicon") ||
+      cls.includes("destination") ||
+      html.includes("premium-card-preview") ||
+      html.includes("preview-fallback") ||
+      html.includes("destinazione");
+
+    const containsActions =
+      el.querySelector && el.querySelector("button,a,.actions,.premium-card-actions");
+
+    return saysDest && looksPreviewFallback && !containsActions;
+  }
+
+  function cleanCard(card){
+    if(!cardIsImage(card)) return;
+
+    Array.from(card.querySelectorAll("div,section,span")).forEach(function(el){
+      try{
+        if(looksLikeDestinazioneFrame(el)){
+          el.remove();
+        }
+      }catch(e){}
+    });
+
+    /*
+      Dentro una card immagine lasciamo una sola preview immagine.
+    */
+    const imagePreviews = Array.from(card.querySelectorAll(
+      ".followme-image-carousel-preview-20260525," +
+      ".followme-fast-image-preview-box-20260525," +
+      "[data-followme-image-carousel-preview='1']," +
+      "[data-followme-preview-only-image='1']"
+    ));
+
+    imagePreviews.slice(1).forEach(function(el){
+      try{ el.remove(); }catch(e){}
+    });
+  }
+
+  function clean(){
+    try{
+      Array.from(document.querySelectorAll(".premium-history-card, .history-card, article, .card")).forEach(cleanCard);
+    }catch(e){}
+  }
+
+  function css(){
+    if(document.getElementById("followme-remove-destinazione-frame-from-image-card-css-20260526")) return;
+
+    const style = document.createElement("style");
+    style.id = "followme-remove-destinazione-frame-from-image-card-css-20260526";
+    style.textContent = `
+      .premium-history-card [data-followme-preview-only-image="1"] .premium-card-preview-mark,
+      .premium-history-card [data-followme-preview-only-image="1"] .premium-card-preview-caption,
+      .premium-history-card [data-followme-preview-only-image="1"] .preview-fallback-box,
+      .premium-history-card [data-followme-preview-only-image="1"] .preview-fallback-inner,
+      .premium-history-card [data-followme-preview-only-image="1"] .preview-fallback-domain,
+      .premium-history-card [data-followme-preview-only-image="1"] .preview-fallback-kicker,
+      .premium-history-card [data-followme-preview-only-image="1"] .preview-fallback-url{
+        display:none !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  css();
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", clean, { once:true });
+  }else{
+    clean();
+  }
+
+  setTimeout(clean, 250);
+  setTimeout(clean, 800);
+  setTimeout(clean, 1600);
+  setTimeout(clean, 3000);
+
+  const oldFetch = window.fetch;
+  if(oldFetch && !window.__followmeRemoveDestinazioneFrameFetchHook20260526){
+    window.__followmeRemoveDestinazioneFrameFetchHook20260526 = true;
+
+    window.fetch = async function(){
+      const res = await oldFetch.apply(this, arguments);
+      try{
+        const requestUrl = String(arguments[0] && arguments[0].url ? arguments[0].url : arguments[0] || "");
+        if(
+          requestUrl.includes("/image-card/") ||
+          requestUrl.includes("/document/") ||
+          requestUrl.includes("/status")
+        ){
+          setTimeout(clean, 250);
+          setTimeout(clean, 900);
+          setTimeout(clean, 1800);
+        }
+      }catch(e){}
+      return res;
+    };
+  }
+
+  window.followmeCleanDestinazioneFrameFromImageCards20260526 = clean;
 })();
 </script>
 
