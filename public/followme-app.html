@@ -6285,6 +6285,97 @@ body.followme-safe-pc-dismissed #followmeSafeInstallOverlay{
 })();
 </script>
 
+<script id="followme-document-current-fetch-dedupe-20260526">
+/*
+  Deduplica document/current FollowMe.
+  Motivo: più moduli legacy chiamano /document/current quasi insieme.
+  Effetto visivo: preview PDF richiamata due volte e sfarfallio.
+  Questa patch fa condividere la stessa Promise alle chiamate identiche ravvicinate.
+*/
+(function(){
+  if(window.__followmeDocumentCurrentFetchDedupe20260526) return;
+  window.__followmeDocumentCurrentFetchDedupe20260526 = true;
+
+  const originalFetch = window.fetch ? window.fetch.bind(window) : null;
+  if(!originalFetch) return;
+
+  const inflight = new Map();
+  const cache = new Map();
+  const TTL = 900;
+
+  function normalizeKey(input){
+    try{
+      const raw = typeof input === "string"
+        ? input
+        : (input && input.url ? input.url : "");
+
+      if(!raw) return "";
+
+      const u = new URL(raw, location.origin);
+
+      if(!u.pathname.includes("/api/followme/") || !u.pathname.includes("/document/current")){
+        return "";
+      }
+
+      u.searchParams.delete("v");
+      u.searchParams.delete("_");
+      u.searchParams.delete("t");
+      u.searchParams.delete("ts");
+      u.searchParams.delete("cache");
+      u.searchParams.delete("cacheBust");
+      u.searchParams.delete("cb");
+
+      return u.pathname + (u.search ? u.search : "");
+    }catch(e){
+      const raw = String(input || "");
+      return raw.includes("/document/current") ? raw.replace(/[?&](v|_|t|ts|cache|cacheBust|cb)=\d+/g, "") : "";
+    }
+  }
+
+  function cloneResponse(res){
+    try{
+      return res.clone();
+    }catch(e){
+      return res;
+    }
+  }
+
+  window.fetch = function(input, init){
+    const key = normalizeKey(input);
+
+    if(!key){
+      return originalFetch(input, init);
+    }
+
+    const now = Date.now();
+
+    const cached = cache.get(key);
+    if(cached && now - cached.at < TTL){
+      return Promise.resolve(cloneResponse(cached.response));
+    }
+
+    const existing = inflight.get(key);
+    if(existing && now - existing.at < TTL){
+      return existing.promise.then(cloneResponse);
+    }
+
+    const promise = originalFetch(input, init).then(function(res){
+      cache.set(key, { at:Date.now(), response:cloneResponse(res) });
+      setTimeout(function(){ inflight.delete(key); }, TTL);
+      return res;
+    }).catch(function(err){
+      inflight.delete(key);
+      throw err;
+    });
+
+    inflight.set(key, { at:now, promise });
+
+    return promise.then(cloneResponse);
+  };
+})();
+</script>
+
+
 </head>
 <body>
   <main class="app">
