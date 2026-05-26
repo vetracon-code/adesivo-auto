@@ -34515,5 +34515,236 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-image-library-upload-fix-20260526">
+/*
+  Fix upload immagine da libreria.
+  Il backend funziona: questo script evita conflitti tra vecchi handler duplicati
+  e usa un unico flusso robusto per input file -> FormData image -> upload.
+*/
+(function(){
+  if(window.__followmeImageLibraryUploadFix20260526) return;
+  window.__followmeImageLibraryUploadFix20260526 = true;
+
+  const BTN_ID = "followmeImageCardBtn20260522";
+  const INPUT_ID = "followmeImageCardUploadInput20260522";
+
+  function code(){
+    try{
+      const p = new URLSearchParams(location.search);
+      return p.get("code") || p.get("qr") || p.get("c") ||
+        window.FOLLOWME_CODE ||
+        window.FOLLOWME_PROJECT_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        window.followMeProjectCode ||
+        "FMDEMO";
+    }catch(e){
+      return "FMDEMO";
+    }
+  }
+
+  function ensureInput(){
+    let input = document.getElementById(INPUT_ID);
+
+    if(!input){
+      input = document.createElement("input");
+      input.id = INPUT_ID;
+      input.type = "file";
+      input.accept = "image/*";
+      document.body.appendChild(input);
+    }
+
+    input.type = "file";
+    input.accept = "image/*";
+
+    /*
+      Non uso display:none: su alcuni browser/mobile il click programmatico
+      su input completamente nascosto può essere instabile.
+    */
+    input.style.position = "fixed";
+    input.style.left = "-9999px";
+    input.style.top = "0";
+    input.style.width = "1px";
+    input.style.height = "1px";
+    input.style.opacity = "0";
+    input.style.pointerEvents = "none";
+    input.style.zIndex = "-1";
+
+    return input;
+  }
+
+  function btn(){
+    return document.getElementById(BTN_ID);
+  }
+
+  function setButtonLoading(on){
+    const b = btn();
+    if(!b) return;
+
+    const title = b.querySelector(".fm-img-title") || b;
+
+    if(on){
+      b.classList.add("fm-uploading");
+      title.textContent = "Caricamento immagine...";
+      b.disabled = true;
+      b.style.pointerEvents = "none";
+    }else{
+      b.classList.remove("fm-uploading");
+      title.textContent = "Scatta o carica immagine";
+      b.disabled = false;
+      b.style.pointerEvents = "";
+    }
+  }
+
+  function validate(file){
+    if(!file) throw new Error("Seleziona prima una immagine.");
+
+    const maxBytes = 12 * 1024 * 1024;
+    const mime = String(file.type || "");
+
+    if(file.size > maxBytes){
+      throw new Error("Immagine troppo pesante. Limite attuale: 12 MB.");
+    }
+
+    /*
+      Alcuni browser/iPhone possono lasciare mime vuoto.
+      In quel caso lasciamo decidere al backend, che controlla estensione e firma file.
+    */
+    if(mime && !mime.startsWith("image/")){
+      throw new Error("Formato non supportato. Carica una immagine.");
+    }
+  }
+
+  async function upload(file){
+    validate(file);
+
+    setButtonLoading(true);
+
+    const fd = new FormData();
+    fd.append("image", file, file.name || "immagine");
+
+    const res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/image-card/upload", {
+      method:"POST",
+      body:fd
+    });
+
+    const text = await res.text();
+    let data = null;
+    try{ data = JSON.parse(text); }catch(e){}
+
+    if(!res.ok || !data || !data.success){
+      throw new Error((data && data.error) || text || "Caricamento immagine non riuscito.");
+    }
+
+    /*
+      Aggiornamento immediato UI, senza aprire nuova finestra.
+    */
+    try{
+      window.__FOLLOWME_IMAGE_CARD_PUBLIC_URL_20260522 = data.public_url || "";
+      window.__FOLLOWME_IMAGE_CARD_OBJECT_20260522 = data.image || null;
+    }catch(e){}
+
+    try{
+      if(typeof window.followmeFastImageRenderNoDelay20260526 === "function"){
+        window.followmeFastImageRenderNoDelay20260526(data);
+      }
+    }catch(e){}
+
+    try{
+      if(typeof window.followmeInstantActiveImageCard20260526 === "function"){
+        window.followmeInstantActiveImageCard20260526(data);
+      }
+    }catch(e){}
+
+    /*
+      Refresh leggero dello stato dopo la preview immediata.
+    */
+    setTimeout(function(){
+      try{
+        if(typeof window.loadStatus === "function") window.loadStatus();
+      }catch(e){}
+
+      try{
+        if(typeof window.renderPremiumHistoryFromApi === "function") window.renderPremiumHistoryFromApi();
+      }catch(e){}
+
+      try{
+        if(typeof window.followmeNormalizeImageCardsDefinitive20260526 === "function") {
+          window.followmeNormalizeImageCardsDefinitive20260526();
+        }
+      }catch(e){}
+    }, 350);
+
+    return data;
+  }
+
+  /*
+    Click prioritario: apre la libreria.
+    Stoppa i vecchi handler duplicati.
+  */
+  document.addEventListener("click", function(ev){
+    const b = ev.target && ev.target.closest ? ev.target.closest("#" + BTN_ID) : null;
+    if(!b) return;
+
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation();
+
+    const input = ensureInput();
+    input.value = "";
+
+    setTimeout(function(){
+      try{ input.click(); }catch(e){
+        alert("Non riesco ad aprire la libreria immagini. Riprova dal browser principale.");
+      }
+    }, 0);
+  }, true);
+
+  /*
+    Change prioritario: carica il file selezionato.
+    Stoppa i vecchi upload duplicati.
+  */
+  document.addEventListener("change", function(ev){
+    const input = ev.target && ev.target.id === INPUT_ID ? ev.target : null;
+    if(!input) return;
+
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation();
+
+    const file = input.files && input.files[0];
+    input.value = "";
+
+    if(!file) return;
+
+    upload(file)
+      .then(function(){
+        alert("Immagine pubblicata correttamente sul QR.");
+      })
+      .catch(function(err){
+        alert(err && err.message ? err.message : "Errore caricamento immagine.");
+      })
+      .finally(function(){
+        setButtonLoading(false);
+      });
+  }, true);
+
+  /*
+    Normalizza l’input al caricamento pagina.
+  */
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", ensureInput, { once:true });
+  }else{
+    ensureInput();
+  }
+
+  window.followmeImageLibraryUploadFix20260526 = {
+    upload,
+    ensureInput
+  };
+})();
+</script>
+
 </body>
 </html>
