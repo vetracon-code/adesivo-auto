@@ -33626,5 +33626,229 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 
 
+
+<script id="followme-image-card-preview-rescue-20260526">
+/*
+  Fix preview card IMMAGINE FollowMe.
+  Non tocca PDF. Serve a ripopolare la preview immagine nelle card storico/carousel
+  quando altri script aggiornano il frame ma lasciano il contenitore senza <img>.
+*/
+(function(){
+  if(window.__followmeImageCardPreviewRescue20260526) return;
+  window.__followmeImageCardPreviewRescue20260526 = true;
+
+  let lastImageUrl = "";
+  let lastRun = 0;
+
+  function code(){
+    try{
+      const p = new URLSearchParams(location.search);
+      return p.get("code") || p.get("qr") || p.get("c") ||
+        window.FOLLOWME_CODE ||
+        window.FOLLOWME_PROJECT_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        window.followMeProjectCode ||
+        "FMDEMO";
+    }catch(e){
+      return "FMDEMO";
+    }
+  }
+
+  function esc(v){
+    return String(v || "")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
+  }
+
+  function abs(path){
+    const raw = String(path || "").trim();
+    if(!raw) return "";
+    if(/^https?:\/\//i.test(raw)) return raw;
+    if(raw.startsWith("/")) return location.origin + raw;
+    return location.origin + "/" + raw.replace(/^\/+/, "");
+  }
+
+  function normalizeImageUrl(data){
+    const img = data && (data.image || data.data || {});
+    const raw =
+      img.image_url ||
+      img.public_path ||
+      img.public_url ||
+      data.image_url ||
+      data.public_path ||
+      data.public_url ||
+      "";
+
+    if(!raw) return "";
+
+    const version = String(
+      img.id ||
+      img.updated_at ||
+      img.created_at ||
+      Date.now()
+    ).replace(/[^a-zA-Z0-9_-]/g,"");
+
+    const url = abs(raw);
+    return url + (url.includes("?") ? "&" : "?") + "v=" + version;
+  }
+
+  async function loadCurrentImage(){
+    try{
+      const c = code();
+      const res = await fetch("/api/followme/" + encodeURIComponent(c) + "/image-card/current?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+      const url = normalizeImageUrl(data);
+
+      if(url) lastImageUrl = url;
+
+      return {
+        url,
+        name: data && data.image ? (data.image.original_name || data.image.stored_name || "Immagine caricata") : "Immagine caricata"
+      };
+    }catch(e){
+      return { url:lastImageUrl, name:"Immagine caricata" };
+    }
+  }
+
+  function ensureCss(){
+    if(document.getElementById("followme-image-card-preview-rescue-css-20260526")) return;
+
+    const style = document.createElement("style");
+    style.id = "followme-image-card-preview-rescue-css-20260526";
+    style.textContent = `
+      .followme-image-carousel-preview-20260525,
+      .followme-image-card-preview-rescue-20260526{
+        width:100%;
+        min-height:150px;
+        border-radius:18px;
+        overflow:hidden;
+        background:#05070d;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+      }
+
+      .followme-image-carousel-preview-20260525 img,
+      .followme-image-card-preview-rescue-20260526 img{
+        width:100%;
+        height:100%;
+        min-height:150px;
+        object-fit:cover;
+        display:block;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function cardLooksImage(card){
+    if(!card) return false;
+    const h = String(card.innerText || card.textContent || card.innerHTML || "").toLowerCase();
+    return (
+      h.includes("immagine") ||
+      h.includes("/fm/image/") ||
+      h.includes("image-card") ||
+      h.includes("immagine caricata")
+    );
+  }
+
+  function fillCards(url, name){
+    if(!url) return;
+    ensureCss();
+
+    /*
+      Prima riempiamo gli holder già creati dallo script carousel.
+    */
+    const holders = Array.from(document.querySelectorAll(
+      ".followme-image-carousel-preview-20260525,[data-followme-image-carousel-preview='1']"
+    ));
+
+    holders.forEach(function(holder){
+      try{
+        const img = holder.querySelector("img");
+        if(img){
+          if(img.getAttribute("src") !== url) img.setAttribute("src", url);
+          img.alt = name || "Immagine caricata";
+        }else{
+          holder.innerHTML = '<img src="' + esc(url) + '" alt="' + esc(name || "Immagine caricata") + '">';
+        }
+      }catch(e){}
+    });
+
+    /*
+      Poi, se una card immagine non ha proprio holder, lo aggiungiamo in alto.
+    */
+    const cards = Array.from(document.querySelectorAll(".premium-history-card, .history-card, article, .card"));
+    cards.forEach(function(card){
+      try{
+        if(!cardLooksImage(card)) return;
+        if(card.querySelector(".followme-image-carousel-preview-20260525,img[src*='/followme-documents/'][src*='/image/']")) return;
+
+        const box = document.createElement("div");
+        box.className = "followme-image-card-preview-rescue-20260526";
+        box.innerHTML = '<img src="' + esc(url) + '" alt="' + esc(name || "Immagine caricata") + '">';
+        card.insertBefore(box, card.firstChild);
+      }catch(e){}
+    });
+  }
+
+  async function refresh(){
+    const now = Date.now();
+    if(now - lastRun < 500) return;
+    lastRun = now;
+
+    const data = await loadCurrentImage();
+    fillCards(data.url, data.name);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", refresh, { once:true });
+  }else{
+    refresh();
+  }
+
+  /*
+    Le card vengono spesso ricostruite dopo current/upload/publish:
+    facciamo pochi refresh mirati, senza loop aggressivi.
+  */
+  setTimeout(refresh, 700);
+  setTimeout(refresh, 1600);
+  setTimeout(refresh, 3200);
+
+  const oldFetch = window.fetch;
+  if(oldFetch && !window.__followmeImageCardPreviewFetchHook20260526){
+    window.__followmeImageCardPreviewFetchHook20260526 = true;
+
+    window.fetch = async function(){
+      const args = arguments;
+      const requestUrl = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+      const res = await oldFetch.apply(this, args);
+
+      try{
+        if(
+          requestUrl.includes("/image-card/current") ||
+          requestUrl.includes("/image-card/upload") ||
+          requestUrl.includes("/document/current") ||
+          requestUrl.includes("/document/upload")
+        ){
+          setTimeout(refresh, 300);
+          setTimeout(refresh, 1000);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  window.followmeRefreshImageCardPreview20260526 = refresh;
+})();
+</script>
+
 </body>
 </html>
