@@ -34175,5 +34175,154 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-fast-reactivate-history-card-20260526">
+/*
+  Riattiva / Attivalo istantaneo nelle card FollowMe.
+  La UI cambia subito; il backend lavora dopo.
+  Evita la sensazione di lentezza causata dal refresh completo dello storico.
+*/
+(function(){
+  if(window.__followmeFastReactivateHistoryCard20260526) return;
+  window.__followmeFastReactivateHistoryCard20260526 = true;
+
+  let lastClickAt = 0;
+
+  function isReactivateButton(el){
+    if(!el) return false;
+    const txt = String(el.innerText || el.textContent || "").trim().toLowerCase();
+    const html = String(el.outerHTML || "").toLowerCase();
+
+    return (
+      txt === "riattiva" ||
+      txt === "attivalo" ||
+      txt.includes("riattiva") ||
+      txt.includes("attivalo") ||
+      html.includes("reactivateurl") ||
+      html.includes("activateurlemergency") ||
+      html.includes("premium-history-reactivate")
+    );
+  }
+
+  function getCard(el){
+    return el && el.closest
+      ? el.closest(".premium-history-card,.history-card,.premium-card,.destination-card")
+      : null;
+  }
+
+  function markOtherCardsInactive(current){
+    try{
+      document.querySelectorAll(".premium-history-card,.history-card").forEach(function(card){
+        if(card === current) return;
+
+        card.classList.remove("is-active");
+        card.removeAttribute("data-followme-instant-image-active");
+
+        const badge = card.querySelector(".premium-history-badge");
+        if(badge && String(badge.textContent || "").toLowerCase().includes("attivo")){
+          badge.textContent = "Recente";
+        }
+
+        const activeBtn = Array.from(card.querySelectorAll("button,a")).find(function(b){
+          const t = String(b.innerText || b.textContent || "").toLowerCase();
+          return t.includes("attivo ora");
+        });
+
+        if(activeBtn){
+          activeBtn.textContent = "Riattiva";
+          activeBtn.disabled = false;
+          activeBtn.classList.remove("premium-history-active");
+          activeBtn.classList.add("premium-history-reactivate");
+          activeBtn.style.opacity = "";
+          activeBtn.style.pointerEvents = "";
+          activeBtn.style.display = "";
+          activeBtn.removeAttribute("aria-hidden");
+        }
+      });
+    }catch(e){}
+  }
+
+  function markCardActive(card, btn){
+    if(!card) return;
+
+    markOtherCardsInactive(card);
+
+    card.classList.add("is-active");
+    card.setAttribute("data-followme-fast-active-20260526", "1");
+
+    const badge = card.querySelector(".premium-history-badge");
+    if(badge) badge.textContent = "Attivo ora";
+
+    if(btn){
+      btn.textContent = "Attivo ora";
+      btn.disabled = true;
+      btn.classList.remove("premium-history-reactivate");
+      btn.classList.add("premium-history-active");
+      btn.style.opacity = "1";
+      btn.style.pointerEvents = "none";
+    }
+
+    /*
+      Porta la card visivamente in evidenza, senza ricostruire tutta la lista.
+    */
+    try{
+      card.scrollIntoView({ behavior:"smooth", inline:"center", block:"nearest" });
+    }catch(e){}
+  }
+
+  /*
+    Click ottimistico: intercetta prima degli handler legacy.
+  */
+  document.addEventListener("click", function(ev){
+    const btn = ev.target && ev.target.closest ? ev.target.closest("button,a") : null;
+    if(!btn || !isReactivateButton(btn)) return;
+
+    const card = getCard(btn);
+    if(!card) return;
+
+    lastClickAt = Date.now();
+    window.__followmeSkipHeavyHistoryRefreshUntil20260526 = lastClickAt + 1400;
+
+    markCardActive(card, btn);
+  }, true);
+
+  /*
+    Se dopo il click parte un fetch di riattivazione, appena risponde confermiamo lo stato
+    senza richiamare refresh pesanti.
+  */
+  const oldFetch = window.fetch;
+  if(oldFetch && !window.__followmeFastReactivateFetch20260526){
+    window.__followmeFastReactivateFetch20260526 = true;
+
+    window.fetch = async function(){
+      const args = arguments;
+      const requestUrl = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+      const isReactivation =
+        requestUrl.includes("/update-url") ||
+        requestUrl.includes("/reactivate") ||
+        requestUrl.includes("/document/publish") ||
+        requestUrl.includes("/image-card/") ||
+        requestUrl.includes("/api/followme/");
+
+      const res = await oldFetch.apply(this, args);
+
+      try{
+        if(isReactivation && Date.now() - lastClickAt < 1800){
+          window.__followmeSkipHeavyHistoryRefreshUntil20260526 = Date.now() + 900;
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  /*
+    Protezione leggera contro refresh immediati che riscrivono la card entro il primo secondo.
+    Non blocchiamo funzioni: lasciamo solo un flag che altri fix possono rispettare.
+  */
+  window.followmeFastMarkHistoryCardActive20260526 = markCardActive;
+})();
+</script>
+
 </body>
 </html>
