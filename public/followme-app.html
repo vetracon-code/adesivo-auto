@@ -6045,6 +6045,246 @@ body.followme-safe-pc-dismissed #followmeSafeInstallOverlay{
   }
 </style>
 
+
+<script id="followme-doc-preview-anti-flicker-20260526">
+/*
+  Anti-sfarfallio definitivo preview documento FollowMe.
+  Intercetta:
+  - aggiornamenti ripetuti src immagine;
+  - sostituzioni ravvicinate di innerHTML nel blocco preview;
+  - svuotamenti temporanei del contenitore preview.
+*/
+(function(){
+  if(window.__followmeDocPreviewAntiFlicker20260526) return;
+  window.__followmeDocPreviewAntiFlicker20260526 = true;
+
+  const state = {
+    lastBaseSrc:"",
+    lastAppliedSrc:"",
+    lastStableHtmlByElement:new WeakMap(),
+    lastHtmlAtByElement:new WeakMap(),
+    timer:null
+  };
+
+  function cleanSrc(src){
+    src = String(src || "").trim();
+    if(!src) return "";
+    try{
+      const u = new URL(src, location.origin);
+      u.searchParams.delete("v");
+      u.searchParams.delete("_");
+      u.searchParams.delete("t");
+      u.searchParams.delete("ts");
+      u.searchParams.delete("cache");
+      u.searchParams.delete("cacheBust");
+      u.searchParams.delete("cb");
+      return u.pathname + (u.search ? u.search : "");
+    }catch(e){
+      return src.replace(/[?&](v|_|t|ts|cache|cacheBust|cb)=\d+/g, "");
+    }
+  }
+
+  function stableSrc(src){
+    const base = cleanSrc(src);
+    if(!base) return "";
+    const sep = base.includes("?") ? "&" : "?";
+    return base + sep + "stablePreview=1";
+  }
+
+  function looksLikeDocPreviewUrl(v){
+    v = String(v || "");
+    return (
+      v.includes("/followme-documents/") ||
+      v.includes("document-preview") ||
+      v.includes("preview.svg") ||
+      v.includes("thumbnail")
+    );
+  }
+
+  function isDocPreviewNode(el){
+    if(!el || !el.tagName) return false;
+
+    const id = String(el.id || "");
+    const cls = String(el.className || "");
+    const html = String(el.innerHTML || "");
+    const src = String(el.getAttribute ? (el.getAttribute("src") || "") : "");
+
+    return (
+      id.includes("PreviewDoc") ||
+      id.includes("Preview") && id.includes("Doc") ||
+      id.includes("Document") && id.includes("Preview") ||
+      cls.includes("preview") && cls.includes("doc") ||
+      looksLikeDocPreviewUrl(src) ||
+      looksLikeDocPreviewUrl(html)
+    );
+  }
+
+  function isDocPreviewImage(img){
+    if(!img || !img.tagName || img.tagName.toLowerCase() !== "img") return false;
+
+    const id = String(img.id || "");
+    const cls = String(img.className || "");
+    const src = String(img.getAttribute("src") || "");
+
+    return (
+      id.includes("Doc") ||
+      id.includes("Preview") ||
+      cls.includes("doc") ||
+      cls.includes("preview") ||
+      looksLikeDocPreviewUrl(src)
+    );
+  }
+
+  function applyStableImage(img, nextRaw){
+    const base = cleanSrc(nextRaw);
+    if(!base) return;
+
+    const next = stableSrc(nextRaw);
+    const currentBase = cleanSrc(img.getAttribute("src") || "");
+
+    if(base === state.lastBaseSrc || base === currentBase){
+      return;
+    }
+
+    state.lastBaseSrc = base;
+
+    clearTimeout(state.timer);
+    state.timer = setTimeout(function(){
+      const pre = new Image();
+
+      pre.onload = function(){
+        if(state.lastAppliedSrc === next) return;
+
+        img.style.transition = "opacity .18s ease";
+        img.style.opacity = "1";
+        img.setAttribute("data-followme-stable-preview-src", next);
+
+        const desc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src");
+        if(desc && desc.set){
+          desc.set.call(img, next);
+        }else{
+          img.setAttribute("src", next);
+        }
+
+        state.lastAppliedSrc = next;
+      };
+
+      pre.src = next;
+    }, 180);
+  }
+
+  /*
+    Intercetta img.src.
+  */
+  const srcDesc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src");
+  if(srcDesc && srcDesc.set && srcDesc.get){
+    Object.defineProperty(HTMLImageElement.prototype, "src", {
+      configurable:true,
+      enumerable:srcDesc.enumerable,
+      get:function(){
+        return srcDesc.get.call(this);
+      },
+      set:function(value){
+        if(isDocPreviewImage(this) && looksLikeDocPreviewUrl(value)){
+          const cleanOld = cleanSrc(this.getAttribute("src") || "");
+          const cleanNew = cleanSrc(value);
+          if(cleanNew && cleanOld && cleanNew === cleanOld) return;
+          applyStableImage(this, value);
+          return;
+        }
+        return srcDesc.set.call(this, value);
+      }
+    });
+  }
+
+  /*
+    Intercetta setAttribute('src').
+  */
+  const originalSetAttribute = Element.prototype.setAttribute;
+  Element.prototype.setAttribute = function(name, value){
+    if(String(name).toLowerCase() === "src" && isDocPreviewImage(this) && looksLikeDocPreviewUrl(value)){
+      const cleanOld = cleanSrc(this.getAttribute("src") || "");
+      const cleanNew = cleanSrc(value);
+      if(cleanNew && cleanOld && cleanNew === cleanOld) return;
+      applyStableImage(this, value);
+      return;
+    }
+
+    return originalSetAttribute.call(this, name, value);
+  };
+
+  /*
+    Intercetta innerHTML sui blocchi preview.
+    Se un modulo legacy prova a svuotare/ricreare lo stesso contenuto in pochi ms,
+    manteniamo il contenuto stabile già presente.
+  */
+  const htmlDesc = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
+  if(htmlDesc && htmlDesc.set && htmlDesc.get){
+    Object.defineProperty(Element.prototype, "innerHTML", {
+      configurable:true,
+      enumerable:htmlDesc.enumerable,
+      get:function(){
+        return htmlDesc.get.call(this);
+      },
+      set:function(value){
+        if(isDocPreviewNode(this)){
+          const incoming = String(value || "");
+          const previous = state.lastStableHtmlByElement.get(this) || "";
+          const lastAt = state.lastHtmlAtByElement.get(this) || 0;
+          const now = Date.now();
+
+          const incomingHasPreview = looksLikeDocPreviewUrl(incoming) || incoming.includes("<img");
+          const previousHasPreview = looksLikeDocPreviewUrl(previous) || previous.includes("<img");
+
+          /*
+            Blocca svuotamenti e placeholder ravvicinati quando una preview valida esiste già.
+          */
+          if(previousHasPreview && !incomingHasPreview && now - lastAt < 1600){
+            return;
+          }
+
+          /*
+            Blocca reinserimenti identici/ravvicinati.
+          */
+          if(previous && incoming && previous === incoming && now - lastAt < 1600){
+            return;
+          }
+
+          state.lastHtmlAtByElement.set(this, now);
+          if(incomingHasPreview){
+            state.lastStableHtmlByElement.set(this, incoming);
+          }
+        }
+
+        return htmlDesc.set.call(this, value);
+      }
+    });
+  }
+
+  /*
+    Stabilizza visivamente il contenitore preview alto se già esiste.
+  */
+  function stabilizeExisting(){
+    const candidates = Array.from(document.querySelectorAll("img, [id*='Preview'], [class*='preview'], [id*='Document']"));
+    for(const el of candidates){
+      if(isDocPreviewNode(el) || isDocPreviewImage(el)){
+        el.style.backfaceVisibility = "hidden";
+        el.style.transform = el.style.transform || "translateZ(0)";
+        el.style.willChange = "auto";
+      }
+    }
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", stabilizeExisting, { once:true });
+  }else{
+    stabilizeExisting();
+  }
+
+  setInterval(stabilizeExisting, 1200);
+})();
+</script>
+
 </head>
 <body>
   <main class="app">
@@ -33592,181 +33832,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 </script>
 
 
-<script id="followme-doc-preview-anti-flicker-20260526">
-/*
-  Anti-sfarfallio preview documento FollowMe.
-  Motivo: più moduli legacy aggiornano thumbnail_url/current/upload/publish in rapida sequenza.
-  Questo filtro:
-  - evita ricarichi se src è uguale;
-  - non svuota mai la preview;
-  - applica la nuova immagine solo dopo preload completato;
-  - aggiunge cache-busting stabile per documento, non per ogni refresh.
-*/
-(function(){
-  if(window.__followmeDocPreviewAntiFlicker20260526) return;
-  window.__followmeDocPreviewAntiFlicker20260526 = true;
-
-  const state = {
-    lastBaseSrc:"",
-    lastAppliedSrc:"",
-    timer:null,
-    loading:false
-  };
-
-  function cleanSrc(src){
-    src = String(src || "").trim();
-    if(!src) return "";
-    try{
-      const u = new URL(src, location.origin);
-      u.searchParams.delete("v");
-      u.searchParams.delete("_");
-      u.searchParams.delete("t");
-      return u.pathname + (u.search ? u.search : "");
-    }catch(e){
-      return src.replace(/[?&](v|_|t)=\d+/g, "");
-    }
-  }
-
-  function stableSrc(src){
-    const base = cleanSrc(src);
-    if(!base) return "";
-    /*
-      Versione stabile: cambia solo quando cambia percorso reale.
-      Evita Date.now() multipli che causano 3/4 ricarichi visivi.
-    */
-    const sep = base.includes("?") ? "&" : "?";
-    return base + sep + "stablePreview=1";
-  }
-
-  function isDocPreviewImage(img){
-    if(!img || !img.tagName || img.tagName.toLowerCase() !== "img") return false;
-
-    const id = img.id || "";
-    const cls = img.className || "";
-    const src = img.getAttribute("src") || "";
-
-    return (
-      id.includes("Doc") ||
-      id.includes("Preview") ||
-      cls.includes("doc") ||
-      cls.includes("preview") ||
-      src.includes("/followme-documents/") ||
-      src.includes("document-preview") ||
-      src.includes("preview.svg")
-    );
-  }
-
-  function applyStable(img, nextRaw){
-    const base = cleanSrc(nextRaw);
-    if(!base) return;
-
-    const next = stableSrc(nextRaw);
-    const currentBase = cleanSrc(img.getAttribute("src") || "");
-
-    if(base === state.lastBaseSrc || base === currentBase){
-      return;
-    }
-
-    state.lastBaseSrc = base;
-
-    clearTimeout(state.timer);
-    state.timer = setTimeout(function(){
-      const pre = new Image();
-
-      state.loading = true;
-
-      pre.onload = function(){
-        if(state.lastAppliedSrc === next) return;
-
-        img.style.transition = img.style.transition || "opacity .18s ease";
-        img.style.opacity = "1";
-        img.setAttribute("src", next);
-
-        state.lastAppliedSrc = next;
-        state.loading = false;
-      };
-
-      pre.onerror = function(){
-        state.loading = false;
-      };
-
-      pre.src = next;
-    }, 120);
-  }
-
-  const srcDesc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src");
-
-  if(srcDesc && srcDesc.set && srcDesc.get){
-    Object.defineProperty(HTMLImageElement.prototype, "src", {
-      configurable:true,
-      enumerable:srcDesc.enumerable,
-      get:function(){
-        return srcDesc.get.call(this);
-      },
-      set:function(value){
-        if(isDocPreviewImage(this)){
-          const old = this.getAttribute("src") || "";
-          const cleanOld = cleanSrc(old);
-          const cleanNew = cleanSrc(value);
-
-          if(cleanNew && cleanOld && cleanNew === cleanOld){
-            return;
-          }
-
-          if(cleanNew && (
-            cleanNew.includes("/followme-documents/") ||
-            cleanNew.includes("document-preview") ||
-            cleanNew.includes("preview.svg")
-          )){
-            applyStable(this, value);
-            return;
-          }
-        }
-
-        return srcDesc.set.call(this, value);
-      }
-    });
-  }
-
-  const originalSetAttribute = Element.prototype.setAttribute;
-  Element.prototype.setAttribute = function(name, value){
-    if(String(name).toLowerCase() === "src" && isDocPreviewImage(this)){
-      const cleanOld = cleanSrc(this.getAttribute("src") || "");
-      const cleanNew = cleanSrc(value);
-
-      if(cleanNew && cleanOld && cleanNew === cleanOld){
-        return;
-      }
-
-      if(cleanNew && (
-        cleanNew.includes("/followme-documents/") ||
-        cleanNew.includes("document-preview") ||
-        cleanNew.includes("preview.svg")
-      )){
-        applyStable(this, value);
-        return;
-      }
-    }
-
-    return originalSetAttribute.call(this, name, value);
-  };
-
-  /*
-    Riduce anche micro-lampi CSS sulle immagini preview già presenti.
-  */
-  const style = document.createElement("style");
-  style.textContent = `
-    img[src*="/followme-documents/"],
-    img[src*="document-preview"],
-    img[src*="preview.svg"]{
-      backface-visibility:hidden;
-      transform:translateZ(0);
-      image-rendering:auto;
-    }
-  `;
-  document.head.appendChild(style);
-})();
-</script>
 
 </body>
 </html>
