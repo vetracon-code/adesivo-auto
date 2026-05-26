@@ -33708,292 +33708,197 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 </script>
 
 
-<script id="followme-image-card-preview-only-image-20260526">
+
+
+
+
+<script id="followme-fast-image-render-no-delay-20260526">
 /*
-  Card IMMAGINE: nell'area preview deve restare solo l'immagine.
-  Nasconde etichette/metadati tipo "D Destinazione" quando finiscono dentro il riquadro preview.
+  Render immagine immediato e leggero.
+  Evita loop di pulizia e refresh multipli: aggiorna solo i contenitori già esistenti.
 */
 (function(){
-  if(window.__followmeImageCardPreviewOnlyImage20260526) return;
-  window.__followmeImageCardPreviewOnlyImage20260526 = true;
+  if(window.__followmeFastImageRenderNoDelay20260526) return;
+  window.__followmeFastImageRenderNoDelay20260526 = true;
 
-  function looksImagePreviewBox(el){
-    if(!el) return false;
-    const cls = String(el.className || "");
-    const html = String(el.innerHTML || "").toLowerCase();
-
-    return (
-      cls.includes("followme-image-carousel-preview") ||
-      cls.includes("followme-image-main-preview") ||
-      cls.includes("followme-fast-image-preview") ||
-      el.getAttribute("data-followme-image-carousel-preview") === "1" ||
-      html.includes("/image/immagine") ||
-      html.includes("/image/preview")
-    );
+  function esc(v){
+    return String(v || "")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
   }
 
-  function clean(){
-    try{
-      const boxes = Array.from(document.querySelectorAll(
-        ".followme-image-carousel-preview-20260525," +
-        ".followme-image-main-preview-20260522," +
-        ".followme-fast-image-preview-box-20260525," +
-        "[data-followme-image-carousel-preview='1']"
-      ));
-
-      boxes.forEach(function(box){
-        if(!looksImagePreviewBox(box)) return;
-
-        box.setAttribute("data-followme-preview-only-image", "1");
-
-        /*
-          Se nel box ci sono elementi oltre all'immagine, nascondiamo quelli testuali.
-          Non rimuoviamo l'immagine.
-        */
-        Array.from(box.children || []).forEach(function(child){
-          if(String(child.tagName || "").toLowerCase() === "img") return;
-          if(child.querySelector && child.querySelector("img")) return;
-
-          const txt = String(child.innerText || child.textContent || "").trim().toLowerCase();
-          if(
-            txt.includes("destinazione") ||
-            txt === "d" ||
-            txt.includes("immagine") ||
-            txt.includes("preview")
-          ){
-            child.style.display = "none";
-          }
-        });
-      });
-    }catch(e){}
+  function abs(path){
+    const raw = String(path || "").trim();
+    if(!raw) return "";
+    if(/^https?:\/\//i.test(raw)) return raw;
+    if(raw.startsWith("/")) return location.origin + raw;
+    return location.origin + "/" + raw.replace(/^\/+/, "");
   }
 
-  function injectCss(){
-    if(document.getElementById("followme-image-card-preview-only-image-css-20260526")) return;
+  function imageUrlFromPayload(data){
+    const img = data && (data.image || data.data || {});
+    const raw =
+      img.image_url ||
+      img.public_path ||
+      img.public_url ||
+      data.image_url ||
+      data.public_path ||
+      data.public_url ||
+      "";
+
+    if(!raw) return "";
+
+    const version = String(img.id || img.updated_at || img.created_at || Date.now()).replace(/[^a-zA-Z0-9_-]/g,"");
+    const u = abs(raw);
+    return u + (u.includes("?") ? "&" : "?") + "v=" + version;
+  }
+
+  function ensureCss(){
+    if(document.getElementById("followme-fast-image-render-no-delay-css-20260526")) return;
 
     const style = document.createElement("style");
-    style.id = "followme-image-card-preview-only-image-css-20260526";
+    style.id = "followme-fast-image-render-no-delay-css-20260526";
     style.textContent = `
-      [data-followme-preview-only-image="1"]{
-        padding:0 !important;
+      .followme-fast-image-preview-box-20260526{
+        width:100% !important;
+        min-height:220px !important;
+        height:100% !important;
+        border-radius:18px !important;
         overflow:hidden !important;
+        background:#05070d !important;
         display:flex !important;
         align-items:center !important;
         justify-content:center !important;
+        padding:0 !important;
       }
 
-      [data-followme-preview-only-image="1"] > img,
-      [data-followme-preview-only-image="1"] picture,
-      [data-followme-preview-only-image="1"] picture > img{
+      .followme-fast-image-preview-box-20260526 img{
         width:100% !important;
         height:100% !important;
-        min-height:150px !important;
+        min-height:220px !important;
         object-fit:cover !important;
         display:block !important;
       }
 
-      [data-followme-preview-only-image="1"] .kicker,
-      [data-followme-preview-only-image="1"] .label,
-      [data-followme-preview-only-image="1"] .badge,
-      [data-followme-preview-only-image="1"] .type,
-      [data-followme-preview-only-image="1"] [class*="kicker"],
-      [data-followme-preview-only-image="1"] [class*="label"],
-      [data-followme-preview-only-image="1"] [class*="badge"],
-      [data-followme-preview-only-image="1"] [class*="type"]{
-        display:none !important;
+      .premium-history-card .followme-fast-image-preview-box-20260526{
+        min-height:150px !important;
+        margin-bottom:10px !important;
+      }
+
+      .premium-history-card .followme-fast-image-preview-box-20260526 img{
+        min-height:150px !important;
       }
     `;
     document.head.appendChild(style);
   }
 
-  injectCss();
+  function setImageInto(target, url, name){
+    if(!target || !url) return;
 
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", clean, { once:true });
-  }else{
-    clean();
+    ensureCss();
+
+    let box = target.querySelector && target.querySelector(".followme-fast-image-preview-box-20260526");
+
+    if(!box){
+      box = document.createElement("div");
+      box.className = "followme-fast-image-preview-box-20260526";
+      box.innerHTML = '<img src="' + esc(url) + '" alt="' + esc(name || "Immagine caricata") + '">';
+      target.innerHTML = "";
+      target.appendChild(box);
+      return;
+    }
+
+    let img = box.querySelector("img");
+    if(!img){
+      box.innerHTML = '<img src="' + esc(url) + '" alt="' + esc(name || "Immagine caricata") + '">';
+      return;
+    }
+
+    if(img.getAttribute("src") !== url){
+      img.setAttribute("src", url);
+    }
+
+    img.alt = name || "Immagine caricata";
   }
 
-  setTimeout(clean, 300);
-  setTimeout(clean, 900);
-  setTimeout(clean, 1800);
+  function mainPreviewTarget(){
+    const frame = document.getElementById("simpleDestinationPreviewFrame");
+    if(frame){
+      frame.style.display = "none";
+      return frame.parentElement;
+    }
 
-  const oldFetch = window.fetch;
-  if(oldFetch && !window.__followmeImageCardPreviewOnlyImageFetch20260526){
-    window.__followmeImageCardPreviewOnlyImageFetch20260526 = true;
-
-    window.fetch = async function(){
-      const res = await oldFetch.apply(this, arguments);
-      try{
-        const requestUrl = String(arguments[0] && arguments[0].url ? arguments[0].url : arguments[0] || "");
-        if(
-          requestUrl.includes("/image-card/current") ||
-          requestUrl.includes("/image-card/upload") ||
-          requestUrl.includes("/document/current")
-        ){
-          setTimeout(clean, 250);
-          setTimeout(clean, 900);
-        }
-      }catch(e){}
-      return res;
-    };
+    return document.querySelector(".simple-preview-square") ||
+      document.querySelector(".destination-preview-frame") ||
+      document.querySelector(".qr-auto-preview-frame") ||
+      document.querySelector("[id*='PreviewFrame']");
   }
 
-  window.followmeCleanImagePreviewOnlyImage20260526 = clean;
-})();
-</script>
-
-
-<script id="followme-remove-destinazione-frame-from-image-card-20260526">
-/*
-  Rimuove il frame fallback/favicons "D / Destinazione" dalle card IMMAGINE.
-  Quel frame serve per URL generici, ma non deve comparire nell'area immagine.
-*/
-(function(){
-  if(window.__followmeRemoveDestinazioneFrameFromImageCard20260526) return;
-  window.__followmeRemoveDestinazioneFrameFromImageCard20260526 = true;
-
-  function cardIsImage(card){
-    if(!card) return false;
-
-    const h = String(card.innerText || card.textContent || card.innerHTML || "").toLowerCase();
-    const html = String(card.innerHTML || "").toLowerCase();
-
-    const hasImage =
-      h.includes("immagine") ||
-      html.includes("/fm/image/") ||
-      html.includes("/image-card/") ||
-      html.includes("/uploads/followme-documents/") && html.includes("/image/") ||
-      html.includes("followme-image-carousel-preview") ||
-      html.includes("followme-fast-image-preview") ||
-      html.includes("data-followme-preview-only-image");
-
-    const hasPdf =
-      h.includes("pdf") ||
-      h.includes("documento") ||
-      html.includes("/fm/document/") ||
-      html.includes("document-preview") ||
-      html.includes("documento.pdf");
-
-    return hasImage && !hasPdf;
-  }
-
-  function looksLikeDestinazioneFrame(el){
-    if(!el) return false;
-
-    const txt = String(el.innerText || el.textContent || "").trim().toLowerCase();
-    const html = String(el.innerHTML || "").toLowerCase();
-    const cls = String(el.className || "").toLowerCase();
-
-    const saysDest =
-      txt === "d destinazione" ||
-      txt === "destinazione" ||
-      txt.includes("d destinazione") ||
-      txt.includes("destinazione");
-
-    const looksPreviewFallback =
-      cls.includes("premium-card-preview") ||
-      cls.includes("preview") ||
-      cls.includes("fallback") ||
-      cls.includes("favicon") ||
-      cls.includes("destination") ||
-      html.includes("premium-card-preview") ||
-      html.includes("preview-fallback") ||
-      html.includes("destinazione");
-
-    const containsActions =
-      el.querySelector && el.querySelector("button,a,.actions,.premium-card-actions");
-
-    return saysDest && looksPreviewFallback && !containsActions;
-  }
-
-  function cleanCard(card){
-    if(!cardIsImage(card)) return;
-
-    Array.from(card.querySelectorAll("div,section,span")).forEach(function(el){
-      try{
-        if(looksLikeDestinazioneFrame(el)){
-          el.remove();
-        }
-      }catch(e){}
-    });
-
-    /*
-      Dentro una card immagine lasciamo una sola preview immagine.
-    */
-    const imagePreviews = Array.from(card.querySelectorAll(
-      ".followme-image-carousel-preview-20260525," +
-      ".followme-fast-image-preview-box-20260525," +
-      "[data-followme-image-carousel-preview='1']," +
-      "[data-followme-preview-only-image='1']"
-    ));
-
-    imagePreviews.slice(1).forEach(function(el){
-      try{ el.remove(); }catch(e){}
-    });
-  }
-
-  function clean(){
+  function cleanDestinationFallbackInMain(){
     try{
-      Array.from(document.querySelectorAll(".premium-history-card, .history-card, article, .card")).forEach(cleanCard);
+      const empty = document.getElementById("simpleDestinationPreviewEmpty");
+      if(empty) empty.style.display = "none";
+
+      const fallback = document.getElementById("previewFallbackBox");
+      if(fallback) fallback.style.display = "none";
     }catch(e){}
   }
 
-  function css(){
-    if(document.getElementById("followme-remove-destinazione-frame-from-image-card-css-20260526")) return;
+  function updateMain(data){
+    const url = imageUrlFromPayload(data);
+    if(!url) return;
 
-    const style = document.createElement("style");
-    style.id = "followme-remove-destinazione-frame-from-image-card-css-20260526";
-    style.textContent = `
-      .premium-history-card [data-followme-preview-only-image="1"] .premium-card-preview-mark,
-      .premium-history-card [data-followme-preview-only-image="1"] .premium-card-preview-caption,
-      .premium-history-card [data-followme-preview-only-image="1"] .preview-fallback-box,
-      .premium-history-card [data-followme-preview-only-image="1"] .preview-fallback-inner,
-      .premium-history-card [data-followme-preview-only-image="1"] .preview-fallback-domain,
-      .premium-history-card [data-followme-preview-only-image="1"] .preview-fallback-kicker,
-      .premium-history-card [data-followme-preview-only-image="1"] .preview-fallback-url{
-        display:none !important;
-      }
-    `;
-    document.head.appendChild(style);
+    const img = data && (data.image || data.data || {});
+    const name = img.original_name || img.stored_name || "Immagine caricata";
+
+    cleanDestinationFallbackInMain();
+
+    const target = mainPreviewTarget();
+    if(target) setImageInto(target, url, name);
+
+    const open = document.getElementById("simpleDestinationPreviewOpen") ||
+      document.getElementById("openQrPreview") ||
+      document.getElementById("followmeOtherOpenQrPreview");
+
+    if(open){
+      open.href = "/fm/image/" + encodeURIComponent(
+        window.FOLLOWME_CODE || window.FOLLOWME_PROJECT_CODE || new URLSearchParams(location.search).get("code") || "FMDEMO"
+      );
+      open.textContent = "Apri immagine";
+      open.style.opacity = "1";
+      open.style.pointerEvents = "auto";
+      open.removeAttribute("disabled");
+    }
   }
 
-  css();
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", clean, { once:true });
-  }else{
-    clean();
-  }
-
-  setTimeout(clean, 250);
-  setTimeout(clean, 800);
-  setTimeout(clean, 1600);
-  setTimeout(clean, 3000);
-
+  /*
+    Hook leggero: solo upload immagine, niente document/current, niente loop.
+  */
   const oldFetch = window.fetch;
-  if(oldFetch && !window.__followmeRemoveDestinazioneFrameFetchHook20260526){
-    window.__followmeRemoveDestinazioneFrameFetchHook20260526 = true;
+  if(oldFetch && !window.__followmeFastImageRenderNoDelayFetch20260526){
+    window.__followmeFastImageRenderNoDelayFetch20260526 = true;
 
     window.fetch = async function(){
-      const res = await oldFetch.apply(this, arguments);
+      const args = arguments;
+      const requestUrl = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+      const res = await oldFetch.apply(this, args);
+
       try{
-        const requestUrl = String(arguments[0] && arguments[0].url ? arguments[0].url : arguments[0] || "");
-        if(
-          requestUrl.includes("/image-card/") ||
-          requestUrl.includes("/document/") ||
-          requestUrl.includes("/status")
-        ){
-          setTimeout(clean, 250);
-          setTimeout(clean, 900);
-          setTimeout(clean, 1800);
+        if(res && res.ok && requestUrl.includes("/image-card/upload")){
+          res.clone().json().then(function(data){
+            updateMain(data);
+          }).catch(function(){});
         }
       }catch(e){}
+
       return res;
     };
   }
 
-  window.followmeCleanDestinazioneFrameFromImageCards20260526 = clean;
+  window.followmeFastImageRenderNoDelay20260526 = updateMain;
 })();
 </script>
 
