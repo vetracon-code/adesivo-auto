@@ -5723,6 +5723,40 @@
       overflow:hidden !important;
     }
 
+
+  /* native-image-history-card-20260526 */
+  .premium-history-card[data-followme-history-kind="image"] .premium-card-preview-mark,
+  .premium-history-card[data-followme-history-kind="image"] .premium-card-preview-caption,
+  .premium-history-card[data-followme-history-kind="image"] .premium-card-preview-domain{
+    display:none !important;
+  }
+
+  .premium-history-card[data-followme-history-kind="image"] .followme-native-image-history-preview-20260526{
+    width:100% !important;
+    height:100% !important;
+    min-height:150px !important;
+    border-radius:inherit !important;
+    overflow:hidden !important;
+    background:#05070d !important;
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+  }
+
+  .premium-history-card[data-followme-history-kind="image"] .followme-native-image-history-preview-20260526 img{
+    width:100% !important;
+    height:100% !important;
+    min-height:150px !important;
+    object-fit:cover !important;
+    display:block !important;
+  }
+
+  .followme-native-image-history-loading-20260526{
+    color:rgba(255,255,255,.78);
+    font-weight:900;
+    font-size:13px;
+  }
+
 </style>
 
   <link rel="icon" href="/favicon.ico?v=followme-dynamic-qr-v5">
@@ -9025,15 +9059,81 @@ document.addEventListener("visibilitychange", function(){
     }
   }
 
+
+  /* native-image-history-card-20260526 */
+  function isImageHistoryUrl20260526(url){
+    var u = String(url || "").toLowerCase();
+    return u.includes("/fm/image/") || u.includes("/image-card") || u.includes("/uploads/followme-documents/") && u.includes("/image/");
+  }
+
+  function makeImagePreviewForHistory20260526(){
+    var box = document.createElement("div");
+    box.className = "followme-native-image-history-preview-20260526";
+    box.innerHTML = '<div class="followme-native-image-history-loading-20260526">Immagine</div>';
+    return box;
+  }
+
+  function loadImageIntoHistoryPreview20260526(box){
+    try{
+      if(!box || box.dataset.loaded === "1") return;
+      box.dataset.loaded = "1";
+
+      var code =
+        (typeof getCodeSafe === "function" && getCodeSafe()) ||
+        window.FOLLOWME_CODE ||
+        window.FOLLOWME_PROJECT_CODE ||
+        new URLSearchParams(location.search).get("code") ||
+        "FMDEMO";
+
+      fetch("/api/followme/" + encodeURIComponent(code) + "/image-card/current?v=" + Date.now(), {
+        cache:"no-store"
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        var img = data && (data.image || data.data || {});
+        var raw = img.public_path || img.public_url || img.image_url || data.public_path || data.public_url || data.image_url || "";
+
+        if(!raw){
+          box.innerHTML = '<div class="followme-native-image-history-loading-20260526">Immagine</div>';
+          return;
+        }
+
+        var src = String(raw);
+        if(!/^https?:\/\//i.test(src)){
+          src = src.startsWith("/") ? location.origin + src : location.origin + "/" + src.replace(/^\/+/, "");
+        }
+
+        var version = String(img.id || img.updated_at || img.created_at || Date.now()).replace(/[^a-zA-Z0-9_-]/g,"");
+        src += (src.includes("?") ? "&" : "?") + "v=" + version;
+
+        var name = String(img.original_name || img.stored_name || "Immagine")
+          .replace(/&/g,"&amp;")
+          .replace(/</g,"&lt;")
+          .replace(/>/g,"&gt;")
+          .replace(/"/g,"&quot;")
+          .replace(/'/g,"&#39;");
+
+        box.innerHTML = '<img src="' + src.replace(/"/g,"&quot;") + '" alt="' + name + '">';
+      })
+      .catch(function(){
+        box.innerHTML = '<div class="followme-native-image-history-loading-20260526">Immagine</div>';
+      });
+    }catch(e){}
+  }
+
   function createPremiumCard(item, activeUrl){
     var url = String(item.url || "");
     var isActive = clean(url) === activeUrl;
+    var isImageHistory = isImageHistoryUrl20260526(url);
     var scans = item.scan_count || 0;
     var last = fmtDate(item.last_used_at);
 
     var card = document.createElement("article");
     card.className = "premium-history-card" + (isActive ? " is-active" : "");
     card.dataset.url = url;
+    if(isImageHistory){
+      card.dataset.followmeHistoryKind = "image";
+    }
 
     var top = document.createElement("div");
 
@@ -9043,7 +9143,7 @@ document.addEventListener("visibilitychange", function(){
 
     var domain = document.createElement("div");
     domain.className = "premium-history-domain";
-    domain.textContent = domainOf(url);
+    domain.textContent = isImageHistory ? "Immagine" : domainOf(url);
 
     var urlEl = document.createElement("div");
     urlEl.className = "premium-history-url";
@@ -9163,10 +9263,18 @@ document.addEventListener("visibilitychange", function(){
     previewCaption.className = "premium-card-preview-caption";
     previewCaption.textContent = "Destinazione salvata";
 
-    previewContent.appendChild(previewMark);
-    previewContent.appendChild(previewDomain);
-    previewContent.appendChild(previewCaption);
-    previewInner.appendChild(previewContent);
+    if(isImageHistory){
+      var imagePreview20260526 = makeImagePreviewForHistory20260526();
+      previewInner.appendChild(imagePreview20260526);
+      setTimeout(function(){
+        loadImageIntoHistoryPreview20260526(imagePreview20260526);
+      }, 0);
+    }else{
+      previewContent.appendChild(previewMark);
+      previewContent.appendChild(previewDomain);
+      previewContent.appendChild(previewCaption);
+      previewInner.appendChild(previewContent);
+    }
     preview.appendChild(previewInner);
 
     var meta = document.createElement("div");
