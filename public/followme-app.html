@@ -33707,5 +33707,141 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-image-card-preview-only-image-20260526">
+/*
+  Card IMMAGINE: nell'area preview deve restare solo l'immagine.
+  Nasconde etichette/metadati tipo "D Destinazione" quando finiscono dentro il riquadro preview.
+*/
+(function(){
+  if(window.__followmeImageCardPreviewOnlyImage20260526) return;
+  window.__followmeImageCardPreviewOnlyImage20260526 = true;
+
+  function looksImagePreviewBox(el){
+    if(!el) return false;
+    const cls = String(el.className || "");
+    const html = String(el.innerHTML || "").toLowerCase();
+
+    return (
+      cls.includes("followme-image-carousel-preview") ||
+      cls.includes("followme-image-main-preview") ||
+      cls.includes("followme-fast-image-preview") ||
+      el.getAttribute("data-followme-image-carousel-preview") === "1" ||
+      html.includes("/image/immagine") ||
+      html.includes("/image/preview")
+    );
+  }
+
+  function clean(){
+    try{
+      const boxes = Array.from(document.querySelectorAll(
+        ".followme-image-carousel-preview-20260525," +
+        ".followme-image-main-preview-20260522," +
+        ".followme-fast-image-preview-box-20260525," +
+        "[data-followme-image-carousel-preview='1']"
+      ));
+
+      boxes.forEach(function(box){
+        if(!looksImagePreviewBox(box)) return;
+
+        box.setAttribute("data-followme-preview-only-image", "1");
+
+        /*
+          Se nel box ci sono elementi oltre all'immagine, nascondiamo quelli testuali.
+          Non rimuoviamo l'immagine.
+        */
+        Array.from(box.children || []).forEach(function(child){
+          if(String(child.tagName || "").toLowerCase() === "img") return;
+          if(child.querySelector && child.querySelector("img")) return;
+
+          const txt = String(child.innerText || child.textContent || "").trim().toLowerCase();
+          if(
+            txt.includes("destinazione") ||
+            txt === "d" ||
+            txt.includes("immagine") ||
+            txt.includes("preview")
+          ){
+            child.style.display = "none";
+          }
+        });
+      });
+    }catch(e){}
+  }
+
+  function injectCss(){
+    if(document.getElementById("followme-image-card-preview-only-image-css-20260526")) return;
+
+    const style = document.createElement("style");
+    style.id = "followme-image-card-preview-only-image-css-20260526";
+    style.textContent = `
+      [data-followme-preview-only-image="1"]{
+        padding:0 !important;
+        overflow:hidden !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+      }
+
+      [data-followme-preview-only-image="1"] > img,
+      [data-followme-preview-only-image="1"] picture,
+      [data-followme-preview-only-image="1"] picture > img{
+        width:100% !important;
+        height:100% !important;
+        min-height:150px !important;
+        object-fit:cover !important;
+        display:block !important;
+      }
+
+      [data-followme-preview-only-image="1"] .kicker,
+      [data-followme-preview-only-image="1"] .label,
+      [data-followme-preview-only-image="1"] .badge,
+      [data-followme-preview-only-image="1"] .type,
+      [data-followme-preview-only-image="1"] [class*="kicker"],
+      [data-followme-preview-only-image="1"] [class*="label"],
+      [data-followme-preview-only-image="1"] [class*="badge"],
+      [data-followme-preview-only-image="1"] [class*="type"]{
+        display:none !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  injectCss();
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", clean, { once:true });
+  }else{
+    clean();
+  }
+
+  setTimeout(clean, 300);
+  setTimeout(clean, 900);
+  setTimeout(clean, 1800);
+
+  const oldFetch = window.fetch;
+  if(oldFetch && !window.__followmeImageCardPreviewOnlyImageFetch20260526){
+    window.__followmeImageCardPreviewOnlyImageFetch20260526 = true;
+
+    window.fetch = async function(){
+      const res = await oldFetch.apply(this, arguments);
+      try{
+        const requestUrl = String(arguments[0] && arguments[0].url ? arguments[0].url : arguments[0] || "");
+        if(
+          requestUrl.includes("/image-card/current") ||
+          requestUrl.includes("/image-card/upload") ||
+          requestUrl.includes("/document/current")
+        ){
+          setTimeout(clean, 250);
+          setTimeout(clean, 900);
+        }
+      }catch(e){}
+      return res;
+    };
+  }
+
+  window.followmeCleanImagePreviewOnlyImage20260526 = clean;
+})();
+</script>
+
 </body>
 </html>
