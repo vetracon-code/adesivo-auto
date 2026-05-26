@@ -9002,6 +9002,32 @@ document.addEventListener("visibilitychange", function(){
       return String(v || "").trim();
     }
 
+    /* last-reactivate-wins-20260526 */
+    function nextReactivateTokenLocal(targetUrl){
+      try{
+        window.__followmeReactivateSeq20260526 = Number(window.__followmeReactivateSeq20260526 || 0) + 1;
+        window.__followmeReactivateWantedUrl20260526 = cleanLocal(targetUrl);
+        return window.__followmeReactivateSeq20260526;
+      }catch(e){
+        return Date.now();
+      }
+    }
+
+    function isLatestReactivateLocal(seq, targetUrl){
+      try{
+        return (
+          Number(seq) === Number(window.__followmeReactivateSeq20260526 || 0) &&
+          normLocal(targetUrl) === normLocal(window.__followmeReactivateWantedUrl20260526 || "")
+        );
+      }catch(e){
+        return true;
+      }
+    }
+
+    function ignoreOldReactivateLocal(seq, targetUrl){
+      return !isLatestReactivateLocal(seq, targetUrl);
+    }
+
     /* native-reactivate-cooldown-5s-20260526 */
     function showCooldownMessageLocal(remainingMs){
       var seconds = Math.max(1, Math.ceil(remainingMs / 1000));
@@ -9416,6 +9442,8 @@ document.addEventListener("visibilitychange", function(){
       var code = getCodeSafe();
       if(!code || !url) return;
 
+      var reactivateSeq20260526 = nextReactivateTokenLocal(url);
+
       /* cooldown-native-called-before-reactivate-20260526 */
       if(!canStartReactivateLocal()) return;
 
@@ -9460,6 +9488,11 @@ document.addEventListener("visibilitychange", function(){
 
       var data = await res.json().catch(function(){ return null; });
 
+      /* ignore-old-reactivate-response-20260526 */
+      if(ignoreOldReactivateLocal(reactivateSeq20260526, url)){
+        return;
+      }
+
       if(!res.ok || !data || !data.success){
         if(typeof toast === "function") toast((data && data.error) || "Errore attivazione link.");
 
@@ -9483,7 +9516,10 @@ document.addEventListener("visibilitychange", function(){
         5) Conferma leggera dopo backend: ribadisce la card attiva,
            non ricostruisce tutto subito.
       */
-      realtimeMarkActiveLocal(url);
+      /* confirm-latest-reactivate-only-20260526 */
+      if(isLatestReactivateLocal(reactivateSeq20260526, url)){
+        realtimeMarkActiveLocal(url);
+      }
 
       /*
         6) Refresh ritardato e non bloccante.
@@ -9491,6 +9527,8 @@ document.addEventListener("visibilitychange", function(){
       */
       setTimeout(function(){
         try{
+          /* delayed-refresh-latest-only-20260526 */
+          if(!isLatestReactivateLocal(reactivateSeq20260526, url)) return;
           if(Date.now() < (window.__followmeSkipHeavyHistoryRefreshUntil20260526 || 0)) return;
           if(typeof renderPremiumHistoryFromApi === "function") renderPremiumHistoryFromApi();
         }catch(e){}
