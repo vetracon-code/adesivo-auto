@@ -377,6 +377,46 @@ function validateRuntimeEnv() {
   }
 }
 
+
+
+// followme-dynamic-no-cache-20260526
+// No-cache solo per pagine/API dinamiche FollowMe.
+// Non tocca upload immagini/PDF/QR/statici, così non rompe PWA e asset.
+app.use((req, res, next) => {
+  try {
+    const path = String(req.path || "");
+
+    const dynamicFollowMe =
+      path === "/followme-app.html" ||
+      path.startsWith("/api/followme/") ||
+      path.startsWith("/api/admin/");
+
+    const keepCached =
+      path.startsWith("/uploads/") ||
+      path.startsWith("/followme/qrs/") ||
+      path.startsWith("/static/") ||
+      path.startsWith("/images/") ||
+      path.endsWith(".css") ||
+      path.endsWith(".js") ||
+      path.endsWith(".png") ||
+      path.endsWith(".jpg") ||
+      path.endsWith(".jpeg") ||
+      path.endsWith(".webp") ||
+      path.endsWith(".gif") ||
+      path.endsWith(".svg") ||
+      path.endsWith(".pdf");
+
+    if (dynamicFollowMe && !keepCached) {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+      res.setHeader("Surrogate-Control", "no-store");
+    }
+  } catch (e) {}
+
+  next();
+});
+
 app.use(cors());
 
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
