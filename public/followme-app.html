@@ -35927,5 +35927,129 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 
 
+
+<script id="followme-reactivate-cooldown-5s-20260526">
+/*
+  Cooldown Riattiva 5 secondi.
+  Evita cambi troppo ravvicinati che possono sovrapporre preview/history/backend.
+  Non modifica backend, URL input, preview o card: blocca solo click troppo ravvicinati.
+*/
+(function(){
+  if(window.__followmeReactivateCooldown5s20260526) return;
+  window.__followmeReactivateCooldown5s20260526 = true;
+
+  var COOLDOWN_MS = 5000;
+  var lastReactivateAt = 0;
+
+  function clean(v){
+    return String(v || "").trim();
+  }
+
+  function isReactivateButton(el){
+    if(!el) return false;
+
+    var txt = clean(el.innerText || el.textContent).toLowerCase();
+    var html = String(el.outerHTML || "").toLowerCase();
+
+    return (
+      txt.includes("riattiva") ||
+      txt.includes("attivalo") ||
+      html.includes("premium-history-reactivate") ||
+      html.includes("activateurlfrompremium") ||
+      html.includes("reactivateurl")
+    );
+  }
+
+  function showWaitMessage(remainingMs){
+    var seconds = Math.max(1, Math.ceil(remainingMs / 1000));
+    var msg = "Aspetta qualche secondo ancora... potrai cambiare destinazione tra " + seconds + " secondi.";
+
+    try{
+      if(typeof window.toast === "function"){
+        window.toast(msg);
+        return;
+      }
+    }catch(e){}
+
+    var old = document.getElementById("followmeReactivateCooldownToast20260526");
+    if(old) old.remove();
+
+    var box = document.createElement("div");
+    box.id = "followmeReactivateCooldownToast20260526";
+    box.textContent = msg;
+    box.style.position = "fixed";
+    box.style.left = "50%";
+    box.style.bottom = "22px";
+    box.style.transform = "translateX(-50%)";
+    box.style.zIndex = "999999";
+    box.style.width = "min(420px, calc(100vw - 28px))";
+    box.style.padding = "13px 16px";
+    box.style.borderRadius = "18px";
+    box.style.background = "linear-gradient(135deg,#c8ff2e,#5ee7ff)";
+    box.style.color = "#101018";
+    box.style.fontWeight = "950";
+    box.style.fontSize = "13px";
+    box.style.textAlign = "center";
+    box.style.boxShadow = "0 18px 40px rgba(0,0,0,.28)";
+    box.style.pointerEvents = "none";
+
+    document.body.appendChild(box);
+
+    setTimeout(function(){
+      try{ box.remove(); }catch(e){}
+    }, 1900);
+  }
+
+  function markButtonsCooling(){
+    try{
+      document.querySelectorAll(".premium-history-reactivate, button, a").forEach(function(el){
+        if(!isReactivateButton(el)) return;
+
+        el.setAttribute("data-followme-reactivate-cooling", "1");
+        el.style.opacity = ".72";
+      });
+
+      setTimeout(function(){
+        document.querySelectorAll("[data-followme-reactivate-cooling='1']").forEach(function(el){
+          el.removeAttribute("data-followme-reactivate-cooling");
+          el.style.opacity = "";
+        });
+      }, COOLDOWN_MS);
+    }catch(e){}
+  }
+
+  document.addEventListener("click", function(ev){
+    var btn = ev.target && ev.target.closest ? ev.target.closest("button,a") : null;
+    if(!btn || !isReactivateButton(btn)) return;
+
+    var now = Date.now();
+    var elapsed = now - lastReactivateAt;
+    var remaining = COOLDOWN_MS - elapsed;
+
+    if(lastReactivateAt && remaining > 0){
+      /*
+        Qui blocchiamo veramente il click troppo ravvicinato,
+        così non parte un secondo cambio mentre il primo si sta fissando.
+      */
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+
+      showWaitMessage(remaining);
+      return false;
+    }
+
+    lastReactivateAt = now;
+    window.__followmeReactivateCooldownUntil20260526 = now + COOLDOWN_MS;
+    markButtonsCooling();
+  }, true);
+
+  window.followmeReactivateCooldown5s20260526 = {
+    reset:function(){ lastReactivateAt = 0; },
+    remaining:function(){ return Math.max(0, (lastReactivateAt + COOLDOWN_MS) - Date.now()); }
+  };
+})();
+</script>
+
 </body>
 </html>
