@@ -36502,3 +36502,187 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   window.startFollowMeQrScanner = openScanner;
 })();
 </script>
+
+<script id="followme-universal-user-refresh-20260526">
+(function(){
+  if(window.__followmeUniversalUserRefresh20260526) return;
+  window.__followmeUniversalUserRefresh20260526 = true;
+
+  var reloadPlanned = false;
+  var lastActionAt = 0;
+
+  function log(){
+    try{ console.log.apply(console, ["[FollowMe Universal Refresh]"].concat(Array.from(arguments))); }catch(e){}
+  }
+
+  function isTypingNow(){
+    try{
+      var el = document.activeElement;
+      if(!el) return false;
+      var tag = String(el.tagName || "").toLowerCase();
+      return tag === "input" || tag === "textarea" || el.isContentEditable;
+    }catch(e){
+      return false;
+    }
+  }
+
+  function showMiniNotice(){
+    try{
+      var id = "followmeUniversalRefreshNotice20260526";
+      var old = document.getElementById(id);
+      if(old) old.remove();
+
+      var box = document.createElement("div");
+      box.id = id;
+      box.textContent = "Aggiornamento applicato…";
+      box.style.cssText = [
+        "position:fixed",
+        "left:14px",
+        "right:14px",
+        "bottom:calc(14px + env(safe-area-inset-bottom))",
+        "z-index:999999",
+        "min-height:44px",
+        "border-radius:16px",
+        "display:flex",
+        "align-items:center",
+        "justify-content:center",
+        "font-family:-apple-system,BlinkMacSystemFont,Segoe UI,system-ui,sans-serif",
+        "font-size:13px",
+        "font-weight:950",
+        "color:#101018",
+        "background:linear-gradient(135deg,#c8ff2e,#5ee7ff)",
+        "box-shadow:0 18px 45px rgba(0,0,0,.30)"
+      ].join(";");
+
+      document.body.appendChild(box);
+    }catch(e){}
+  }
+
+  function hardReloadWithCacheBust(reason){
+    if(reloadPlanned) return;
+
+    reloadPlanned = true;
+    lastActionAt = Date.now();
+
+    log("reload planned", reason);
+
+    showMiniNotice();
+
+    setTimeout(function(){
+      try{
+        /*
+          Se l’utente nel frattempo sta scrivendo, aspettiamo un attimo.
+          Evita di perdere testo mentre compila il campo URL.
+        */
+        if(isTypingNow() && Date.now() - lastActionAt < 3500){
+          reloadPlanned = false;
+          setTimeout(function(){
+            hardReloadWithCacheBust(reason + ":delayed");
+          }, 1200);
+          return;
+        }
+
+        var url = new URL(location.href);
+        url.searchParams.set("v", "user-refresh-" + Date.now());
+
+        /*
+          location.replace evita di sporcare la cronologia.
+          È equivalente pratico a chiudere/riaprire, ma automatico.
+        */
+        location.replace(url.toString());
+      }catch(e){
+        location.reload();
+      }
+    }, 700);
+  }
+
+  function isFollowMeWriteAction(url, method){
+    url = String(url || "").toLowerCase();
+    method = String(method || "GET").toUpperCase();
+
+    if(!url.includes("/api/followme/")) return false;
+
+    /*
+      Solo azioni che modificano stato.
+      Non tocchiamo semplici GET/status/current per evitare loop.
+    */
+    if(method === "GET") return false;
+
+    return (
+      url.includes("/url") ||
+      url.includes("/destination") ||
+      url.includes("/redirect") ||
+      url.includes("/history") ||
+      url.includes("/activate") ||
+      url.includes("/reactivate") ||
+      url.includes("/document/upload") ||
+      url.includes("/document/publish") ||
+      url.includes("/document/disable") ||
+      url.includes("/image") ||
+      url.includes("/photo") ||
+      url.includes("/upload")
+    );
+  }
+
+  if(window.fetch && !window.__followmeUniversalRefreshFetchPatch20260526){
+    window.__followmeUniversalRefreshFetchPatch20260526 = true;
+
+    var oldFetch = window.fetch.bind(window);
+
+    window.fetch = async function(input, init){
+      var requestUrl = "";
+      var method = "GET";
+
+      try{
+        requestUrl = typeof input === "string" ? input : String(input && input.url || "");
+        method = init && init.method ? init.method : (input && input.method ? input.method : "GET");
+      }catch(e){}
+
+      var res = await oldFetch(input, init);
+
+      try{
+        if(res && res.ok && isFollowMeWriteAction(requestUrl, method)){
+          hardReloadWithCacheBust("fetch:" + method + ":" + requestUrl);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  /*
+    Fallback: se qualche funzione vecchia usa submit o click senza fetch intercettabile,
+    intercettiamo i pulsanti sensibili, ma ricarichiamo più tardi.
+  */
+  document.addEventListener("click", function(ev){
+    try{
+      var target = ev.target && ev.target.closest ? ev.target.closest("button,a") : null;
+      if(!target) return;
+
+      var txt = String(target.textContent || "").toLowerCase();
+
+      var sensitive =
+        txt.includes("aggiorna") ||
+        txt.includes("riattiva") ||
+        txt.includes("attiva") ||
+        txt.includes("pubblica") ||
+        txt.includes("carica") ||
+        txt.includes("sostituisci") ||
+        txt.includes("usa questo link");
+
+      if(!sensitive) return;
+
+      /*
+        Non ricarico subito al click: aspetto che l’azione server finisca.
+        Se fetch non viene intercettato, questo fallback agisce dopo 2.8s.
+      */
+      setTimeout(function(){
+        if(!reloadPlanned){
+          hardReloadWithCacheBust("click-fallback:" + txt.slice(0,40));
+        }
+      }, 2800);
+    }catch(e){}
+  }, true);
+
+})();
+</script>
