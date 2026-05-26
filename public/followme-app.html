@@ -36337,54 +36337,55 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 </script>
 
 
+
+
 <script id="followme-scroll-to-preview-after-reactivate-20260526">
 /*
-  Dopo click su Riattiva/Attivalo:
-  non modifica cambio URL, non modifica preview, non modifica Attivo ora.
-  Fa solo scroll verso la preview grande in alto.
+  SOLO scroll verso preview alta dopo click Riattiva/Attivalo.
+  Non modifica URL, preview, card, input, stato o backend.
 */
 (function(){
   if(window.__followmeScrollToPreviewAfterReactivate20260526) return;
   window.__followmeScrollToPreviewAfterReactivate20260526 = true;
 
-  function clean(v){
-    return String(v || "").trim();
+  function text(el){
+    return String(el && (el.innerText || el.textContent) || "").trim().toLowerCase();
   }
 
   function isReactivateButton(el){
     if(!el) return false;
 
-    const txt = clean(el.innerText || el.textContent).toLowerCase();
-    const html = String(el.outerHTML || "").toLowerCase();
+    const t = text(el);
+    const h = String(el.outerHTML || "").toLowerCase();
 
     return (
-      txt.includes("riattiva") ||
-      txt.includes("attivalo") ||
-      html.includes("premium-history-reactivate") ||
-      html.includes("activateurlfrompremium") ||
-      html.includes("reactivateurl")
+      t.includes("riattiva") ||
+      t.includes("attivalo") ||
+      h.includes("premium-history-reactivate") ||
+      h.includes("activateurlfrompremium") ||
+      h.includes("reactivateurl")
     );
   }
 
-  function previewSection(){
+  function previewTarget(){
     return document.getElementById("simpleDestinationPreviewBlock") ||
       document.querySelector(".simple-preview-card") ||
-      document.querySelector(".simple-preview-square") ||
-      document.querySelector(".destination-preview-frame") ||
-      document.querySelector(".qr-auto-preview-frame");
+      document.querySelector(".simple-preview-square");
   }
 
   function scrollToPreview(){
-    try{
-      const el = previewSection();
-      if(!el) return;
+    const el = previewTarget();
+    if(!el) return;
 
+    try{
       el.scrollIntoView({
         behavior: "smooth",
         block: "start",
         inline: "nearest"
       });
-    }catch(e){}
+    }catch(e){
+      try{ window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + window.scrollY - 12)); }catch(_){}
+    }
   }
 
   document.addEventListener("click", function(ev){
@@ -36392,11 +36393,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     if(!btn || !isReactivateButton(btn)) return;
 
     /*
-      Lasciamo partire prima la logica già funzionante del cambio URL,
-      poi portiamo l’utente sulla preview.
+      Non blocca il click.
+      Non fa preventDefault.
+      Non fa stopPropagation.
+      Lascia invariata tutta la logica esistente.
     */
-    setTimeout(scrollToPreview, 120);
-    setTimeout(scrollToPreview, 420);
+    setTimeout(scrollToPreview, 80);
+    setTimeout(scrollToPreview, 260);
   }, true);
 
   window.followmeScrollToPreviewAfterReactivate20260526 = scrollToPreview;
