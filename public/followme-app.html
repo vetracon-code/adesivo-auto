@@ -33903,10 +33903,15 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 </script>
 
 
+
+
 <script id="followme-instant-active-image-card-20260526">
 /*
-  Dopo upload immagine, aggiorna subito la card attiva nello storico.
-  Evita che rimanga visibile la card precedente fino al refresh completo.
+  Card attiva immagine - fix pulito:
+  - una sola preview;
+  - nessun pulsante Riattiva sulla card attiva;
+  - non distrugge Elimina / Apri;
+  - non aggiunge fallback "D Destinazione".
 */
 (function(){
   if(window.__followmeInstantActiveImageCard20260526) return;
@@ -33972,30 +33977,52 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     const style = document.createElement("style");
     style.id = "followme-instant-active-image-card-css-20260526";
     style.textContent = `
+      .premium-history-card[data-followme-instant-image-active="1"],
+      .history-card[data-followme-instant-image-active="1"]{
+        overflow:visible !important;
+      }
+
       .followme-instant-active-image-preview-20260526{
-        width:100%;
-        min-height:150px;
-        border-radius:18px;
-        overflow:hidden;
-        background:#05070d;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        margin-bottom:10px;
+        width:100% !important;
+        min-height:150px !important;
+        border-radius:18px !important;
+        overflow:hidden !important;
+        background:#05070d !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        margin:0 0 10px 0 !important;
+        padding:0 !important;
       }
 
       .followme-instant-active-image-preview-20260526 img{
-        width:100%;
-        height:100%;
-        min-height:150px;
-        object-fit:cover;
-        display:block;
+        width:100% !important;
+        height:100% !important;
+        min-height:150px !important;
+        object-fit:cover !important;
+        display:block !important;
       }
 
       .premium-history-card[data-followme-instant-image-active="1"] .premium-card-preview-mark,
       .premium-history-card[data-followme-instant-image-active="1"] .premium-card-preview-caption,
       .premium-history-card[data-followme-instant-image-active="1"] .preview-fallback-box,
-      .premium-history-card[data-followme-instant-image-active="1"] .preview-fallback-inner{
+      .premium-history-card[data-followme-instant-image-active="1"] .preview-fallback-inner,
+      .premium-history-card[data-followme-instant-image-active="1"] .preview-fallback-domain,
+      .premium-history-card[data-followme-instant-image-active="1"] .preview-fallback-kicker,
+      .premium-history-card[data-followme-instant-image-active="1"] .preview-fallback-url,
+      .premium-history-card[data-followme-instant-image-active="1"] [data-followme-image-carousel-preview="1"],
+      .premium-history-card[data-followme-instant-image-active="1"] .followme-image-carousel-preview-20260525,
+      .premium-history-card[data-followme-instant-image-active="1"] .followme-fast-image-preview-box-20260525,
+      .premium-history-card[data-followme-instant-image-active="1"] .followme-fast-image-preview-box-20260526{
+        display:none !important;
+      }
+
+      .premium-history-card[data-followme-instant-image-active="1"] .followme-instant-active-image-preview-20260526{
+        display:flex !important;
+      }
+
+      .premium-history-card[data-followme-instant-image-active="1"] .followme-hide-reactivate-20260526,
+      .history-card[data-followme-instant-image-active="1"] .followme-hide-reactivate-20260526{
         display:none !important;
       }
     `;
@@ -34006,35 +34033,89 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     const track = document.getElementById("premiumHistoryTrack");
     if(!track) return null;
 
-    /*
-      Normalmente la card attiva/recentissima è la prima.
-      Preferiamo una card con testo attivo/attuale, altrimenti la prima premium-history-card.
-    */
     const cards = Array.from(track.querySelectorAll(".premium-history-card, .history-card"));
     if(!cards.length) return null;
 
     return cards.find(function(card){
       const t = String(card.innerText || card.textContent || "").toLowerCase();
-      return t.includes("attiva") || t.includes("attuale") || t.includes("ora");
+      return t.includes("attivo ora") ||
+             t.includes("attiva ora") ||
+             t.includes("attuale");
     }) || cards[0];
   }
 
-  function removeWrongPreviewBits(card){
+  function hardRemoveDuplicatePreviews(card){
     if(!card) return;
 
-    Array.from(card.querySelectorAll(
-      ".premium-card-preview-mark," +
-      ".premium-card-preview-caption," +
-      ".preview-fallback-box," +
-      ".preview-fallback-inner," +
-      ".preview-fallback-domain," +
-      ".preview-fallback-kicker," +
-      ".preview-fallback-url," +
-      ".followme-image-carousel-preview-20260525," +
-      "[data-followme-image-carousel-preview='1']"
-    )).forEach(function(el){
+    /*
+      Rimuove tutte le preview immediate già create da noi.
+      Le preview native vengono nascoste via CSS per non rompere la struttura della card.
+    */
+    Array.from(card.querySelectorAll(".followme-instant-active-image-preview-20260526")).forEach(function(el){
       try{ el.remove(); }catch(e){}
     });
+  }
+
+  function hideReactivateButton(card){
+    if(!card) return;
+
+    Array.from(card.querySelectorAll("button,a")).forEach(function(el){
+      try{
+        const txt = String(el.innerText || el.textContent || "").trim().toLowerCase();
+        const html = String(el.outerHTML || "").toLowerCase();
+
+        if(txt.includes("riattiva") || txt.includes("attivalo") || html.includes("reactivateurl")){
+          el.classList.add("followme-hide-reactivate-20260526");
+          el.style.display = "none";
+          el.setAttribute("aria-hidden", "true");
+          if("disabled" in el) el.disabled = true;
+        }
+      }catch(e){}
+    });
+  }
+
+  function updateBadge(card){
+    if(!card) return;
+
+    const badge = card.querySelector(".premium-history-badge");
+    if(badge) badge.textContent = "Attivo ora";
+
+    const activeBtn = card.querySelector(".premium-history-active, .btn-history-active-now");
+    if(activeBtn) activeBtn.textContent = "Attivo ora";
+  }
+
+  function updateTitle(card){
+    if(!card) return;
+
+    const title =
+      card.querySelector(".premium-history-domain") ||
+      card.querySelector(".premium-card-title") ||
+      card.querySelector("strong,h3,h4");
+
+    if(title) title.textContent = "Immagine";
+  }
+
+  function updateLinks(card, pageUrl){
+    if(!card) return;
+
+    Array.from(card.querySelectorAll("a")).forEach(function(a){
+      try{
+        const txt = String(a.textContent || "").toLowerCase();
+        const href = String(a.getAttribute("href") || "");
+        if(txt.includes("apri") || href.includes("/fm/") || href.includes("/uploads/")){
+          a.href = pageUrl;
+          a.target = "_blank";
+          a.rel = "noopener";
+        }
+      }catch(e){}
+    });
+  }
+
+  function updateUrlText(card, pageUrl){
+    if(!card) return;
+
+    const urlEl = card.querySelector(".premium-history-url, .premium-card-url, .mono, code");
+    if(urlEl) urlEl.textContent = pageUrl;
   }
 
   function updateCard(data){
@@ -34050,58 +34131,22 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     const card = findActiveCard();
     if(!card) return;
 
+    card.classList.add("is-active");
     card.setAttribute("data-followme-instant-image-active", "1");
     card.setAttribute("data-followme-kind", "image");
 
-    removeWrongPreviewBits(card);
+    hardRemoveDuplicatePreviews(card);
 
-    let preview = card.querySelector(".followme-instant-active-image-preview-20260526");
-    if(!preview){
-      preview = document.createElement("div");
-      preview.className = "followme-instant-active-image-preview-20260526";
-      card.insertBefore(preview, card.firstChild);
-    }
-
+    const preview = document.createElement("div");
+    preview.className = "followme-instant-active-image-preview-20260526";
     preview.innerHTML = '<img src="' + esc(fileUrl) + '" alt="' + esc(name) + '">';
+    card.insertBefore(preview, card.firstChild);
 
-    /*
-      Aggiorna testi principali senza distruggere i pulsanti.
-    */
-    const titleCandidates = Array.from(card.querySelectorAll("strong,h3,h4,.premium-card-title,.title"));
-    const title = titleCandidates.find(function(el){
-      const txt = String(el.textContent || "").trim().toLowerCase();
-      return txt && (
-        txt.includes("http") ||
-        txt.includes("documento") ||
-        txt.includes("pdf") ||
-        txt.includes("destinazione") ||
-        txt.includes("immagine")
-      );
-    }) || titleCandidates[0];
-
-    if(title) title.textContent = "Immagine";
-
-    Array.from(card.querySelectorAll("a")).forEach(function(a){
-      try{
-        const txt = String(a.textContent || "").toLowerCase();
-        const href = String(a.getAttribute("href") || "");
-        if(txt.includes("apri") || href.includes("/fm/") || href.includes("/uploads/")){
-          a.href = pageUrl;
-        }
-      }catch(e){}
-    });
-
-    /*
-      Aggiorna eventuali URL testuali.
-    */
-    Array.from(card.querySelectorAll(".mono,.url,.premium-card-url,code,small,span")).forEach(function(el){
-      try{
-        const txt = String(el.textContent || "");
-        if(txt.includes("/fm/") || txt.includes("http") || txt.includes("Destinazione")){
-          el.textContent = pageUrl;
-        }
-      }catch(e){}
-    });
+    updateBadge(card);
+    updateTitle(card);
+    updateUrlText(card, pageUrl);
+    updateLinks(card, pageUrl);
+    hideReactivateButton(card);
   }
 
   const oldFetch = window.fetch;
@@ -34117,11 +34162,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
         if(res && res.ok && requestUrl.includes("/image-card/upload")){
           res.clone().json().then(function(data){
             updateCard(data);
-            /*
-              Un solo secondo passaggio leggero, perché alcuni script ricostruiscono
-              la history subito dopo upload.
-            */
-            setTimeout(function(){ updateCard(data); }, 350);
+            setTimeout(function(){ updateCard(data); }, 450);
           }).catch(function(){});
         }
       }catch(e){}
