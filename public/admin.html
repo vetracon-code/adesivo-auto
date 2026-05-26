@@ -1703,17 +1703,59 @@ window.fixQrUrl = async function(code){
     }
 
     window.setStatus = async function(code, status, btn){
-      const oldText = btn ? btn.textContent : '';
       const row = btn ? btn.closest('tr') : null;
+      const oldText = btn ? btn.textContent : '';
+      const oldBtnStyle = btn ? {
+        background: btn.style.background,
+        borderColor: btn.style.borderColor,
+        color: btn.style.color,
+        opacity: btn.style.opacity,
+        pointerEvents: btn.style.pointerEvents
+      } : null;
+
+      const statusEl = row ? row.querySelector('.status') : null;
+      const oldStatusClass = statusEl ? statusEl.className : '';
+      const oldStatusText = statusEl ? statusEl.textContent : '';
+      const oldRowStatus = row ? row.dataset.status : '';
+
+      function labelForStatus(v){
+        return v === 'used' ? 'Attivo' :
+               v === 'new' ? 'Nuovo' :
+               v === 'disabled' ? 'Disabilitato' :
+               v === 'reactivated' ? 'Riattivato' :
+               v;
+      }
+
+      /*
+        Aggiornamento istantaneo:
+        la UI cambia subito, senza attendere il backend.
+      */
+      if (statusEl) {
+        statusEl.className = 'status ' + String(status || '').toLowerCase();
+        statusEl.textContent = labelForStatus(status);
+      }
+
+      if (row) {
+        row.dataset.status = status;
+      }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = labelForStatus(status);
+        btn.style.opacity = '1';
+        btn.style.pointerEvents = 'none';
+        btn.style.background = status === 'used'
+          ? 'rgba(157,226,167,.14)'
+          : 'rgba(255,255,255,.05)';
+        btn.style.borderColor = status === 'used'
+          ? 'rgba(157,226,167,.30)'
+          : '';
+        btn.style.color = status === 'used'
+          ? '#9de2a7'
+          : '';
+      }
 
       try {
-        if (btn) {
-          btn.disabled = true;
-          btn.textContent = 'Aggiorno...';
-          btn.style.opacity = '.65';
-          btn.style.pointerEvents = 'none';
-        }
-
         const res = await fetch('/api/admin/set-status', {
           method:'POST',
           headers:{'Content-Type':'application/json'},
@@ -1728,48 +1770,35 @@ window.fixQrUrl = async function(code){
         }
 
         /*
-          Aggiornamento rapido:
-          invece di ricaricare tutta la tabella, aggiorniamo visivamente solo la riga.
-          Così passando da una card/riga all'altra il pulsante risponde subito.
+          Non ricarichiamo la tabella.
+          La riga è già coerente lato UI.
         */
-        if (row) {
-          const statusEl = row.querySelector('.status');
-          if (statusEl) {
-            statusEl.className = 'status ' + String(status || '').toLowerCase();
-            statusEl.textContent =
-              status === 'used' ? 'Attivo' :
-              status === 'new' ? 'Nuovo' :
-              status === 'disabled' ? 'Disabilitato' :
-              status === 'reactivated' ? 'Riattivato' :
-              status;
-          }
-
-          row.dataset.status = status;
-
-          if (btn) {
-            btn.textContent = status === 'used' ? 'Attivo' : 'Aggiornato';
-            btn.style.background = 'rgba(157,226,167,.14)';
-            btn.style.borderColor = 'rgba(157,226,167,.30)';
-            btn.style.color = '#9de2a7';
-          }
-
-          return;
-        }
-
-        // Fallback se non siamo in una riga tabellare.
-        if (typeof loadData === 'function') {
-          await loadData();
-        }
+        return;
 
       } catch (err) {
-        alert(err && err.message ? err.message : 'Errore cambio stato.');
+        /*
+          Rollback visivo solo se il backend fallisce.
+        */
+        if (statusEl) {
+          statusEl.className = oldStatusClass;
+          statusEl.textContent = oldStatusText;
+        }
+
+        if (row) {
+          row.dataset.status = oldRowStatus;
+        }
 
         if (btn) {
           btn.disabled = false;
           btn.textContent = oldText || 'Riattiva';
-          btn.style.opacity = '';
-          btn.style.pointerEvents = '';
+          btn.style.background = oldBtnStyle ? oldBtnStyle.background : '';
+          btn.style.borderColor = oldBtnStyle ? oldBtnStyle.borderColor : '';
+          btn.style.color = oldBtnStyle ? oldBtnStyle.color : '';
+          btn.style.opacity = oldBtnStyle ? oldBtnStyle.opacity : '';
+          btn.style.pointerEvents = oldBtnStyle ? oldBtnStyle.pointerEvents : '';
         }
+
+        alert(err && err.message ? err.message : 'Errore cambio stato.');
       }
     };
 
