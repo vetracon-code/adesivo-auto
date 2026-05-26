@@ -6046,335 +6046,37 @@ body.followme-safe-pc-dismissed #followmeSafeInstallOverlay{
 </style>
 
 
-<script id="followme-doc-preview-anti-flicker-20260526">
-/*
-  Anti-sfarfallio definitivo preview documento FollowMe.
-  Intercetta:
-  - aggiornamenti ripetuti src immagine;
-  - sostituzioni ravvicinate di innerHTML nel blocco preview;
-  - svuotamenti temporanei del contenitore preview.
-*/
-(function(){
-  if(window.__followmeDocPreviewAntiFlicker20260526) return;
-  window.__followmeDocPreviewAntiFlicker20260526 = true;
 
-  const state = {
-    lastBaseSrc:"",
-    lastAppliedSrc:"",
-    lastStableHtmlByElement:new WeakMap(),
-    lastHtmlAtByElement:new WeakMap(),
-    timer:null
-  };
 
-  function cleanSrc(src){
-    src = String(src || "").trim();
-    if(!src) return "";
-    try{
-      const u = new URL(src, location.origin);
-      u.searchParams.delete("v");
-      u.searchParams.delete("_");
-      u.searchParams.delete("t");
-      u.searchParams.delete("ts");
-      u.searchParams.delete("cache");
-      u.searchParams.delete("cacheBust");
-      u.searchParams.delete("cb");
-      return u.pathname + (u.search ? u.search : "");
-    }catch(e){
-      return src.replace(/[?&](v|_|t|ts|cache|cacheBust|cb)=\d+/g, "");
-    }
-  }
 
-  function stableSrc(src){
-    const base = cleanSrc(src);
-    if(!base) return "";
-    const sep = base.includes("?") ? "&" : "?";
-    return base + sep + "stablePreview=1";
-  }
 
-  function looksLikeDocPreviewUrl(v){
-    v = String(v || "");
-    return (
-      v.includes("/followme-documents/") ||
-      v.includes("document-preview") ||
-      v.includes("preview.svg") ||
-      v.includes("thumbnail")
-    );
-  }
+<script id="followme-safe-pdf-preview-clear-20260526">
+function followmeSafeClearPdfPreview20260526(preview){
+  try{
+    if(!preview) return;
 
-  function isDocPreviewNode(el){
-    if(!el || !el.tagName) return false;
+    const html = String(preview.innerHTML || "").toLowerCase();
+    const hasStablePreview =
+      html.includes("followme-documents") ||
+      html.includes("document-preview") ||
+      html.includes("preview.svg") ||
+      html.includes("followme-pdf-preview");
 
-    const id = String(el.id || "");
-    const cls = String(el.className || "");
-    const html = String(el.innerHTML || "");
-    const src = String(el.getAttribute ? (el.getAttribute("src") || "") : "");
-
-    return (
-      id.includes("PreviewDoc") ||
-      id.includes("Preview") && id.includes("Doc") ||
-      id.includes("Document") && id.includes("Preview") ||
-      cls.includes("preview") && cls.includes("doc") ||
-      looksLikeDocPreviewUrl(src) ||
-      looksLikeDocPreviewUrl(html)
-    );
-  }
-
-  function isDocPreviewImage(img){
-    if(!img || !img.tagName || img.tagName.toLowerCase() !== "img") return false;
-
-    const id = String(img.id || "");
-    const cls = String(img.className || "");
-    const src = String(img.getAttribute("src") || "");
-
-    return (
-      id.includes("Doc") ||
-      id.includes("Preview") ||
-      cls.includes("doc") ||
-      cls.includes("preview") ||
-      looksLikeDocPreviewUrl(src)
-    );
-  }
-
-  function applyStableImage(img, nextRaw){
-    const base = cleanSrc(nextRaw);
-    if(!base) return;
-
-    const next = stableSrc(nextRaw);
-    const currentBase = cleanSrc(img.getAttribute("src") || "");
-
-    if(base === state.lastBaseSrc || base === currentBase){
+    /*
+      Se esiste già una preview valida, non svuotarla.
+      Questo elimina il lampo bianco/nero prima del nuovo render.
+    */
+    if(hasStablePreview){
+      preview.setAttribute("data-followme-preview-kept-20260526", "1");
       return;
     }
 
-    state.lastBaseSrc = base;
-
-    clearTimeout(state.timer);
-    state.timer = setTimeout(function(){
-      const pre = new Image();
-
-      pre.onload = function(){
-        if(state.lastAppliedSrc === next) return;
-
-        img.style.transition = "opacity .18s ease";
-        img.style.opacity = "1";
-        img.setAttribute("data-followme-stable-preview-src", next);
-
-        const desc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src");
-        if(desc && desc.set){
-          desc.set.call(img, next);
-        }else{
-          img.setAttribute("src", next);
-        }
-
-        state.lastAppliedSrc = next;
-      };
-
-      pre.src = next;
-    }, 180);
+    followmeSafeClearPdfPreview20260526(preview);
+  }catch(e){
+    try{ followmeSafeClearPdfPreview20260526(preview); }catch(_){}
   }
-
-  /*
-    Intercetta img.src.
-  */
-  const srcDesc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src");
-  if(srcDesc && srcDesc.set && srcDesc.get){
-    Object.defineProperty(HTMLImageElement.prototype, "src", {
-      configurable:true,
-      enumerable:srcDesc.enumerable,
-      get:function(){
-        return srcDesc.get.call(this);
-      },
-      set:function(value){
-        if(isDocPreviewImage(this) && looksLikeDocPreviewUrl(value)){
-          const cleanOld = cleanSrc(this.getAttribute("src") || "");
-          const cleanNew = cleanSrc(value);
-          if(cleanNew && cleanOld && cleanNew === cleanOld) return;
-          applyStableImage(this, value);
-          return;
-        }
-        return srcDesc.set.call(this, value);
-      }
-    });
-  }
-
-  /*
-    Intercetta setAttribute('src').
-  */
-  const originalSetAttribute = Element.prototype.setAttribute;
-  Element.prototype.setAttribute = function(name, value){
-    if(String(name).toLowerCase() === "src" && isDocPreviewImage(this) && looksLikeDocPreviewUrl(value)){
-      const cleanOld = cleanSrc(this.getAttribute("src") || "");
-      const cleanNew = cleanSrc(value);
-      if(cleanNew && cleanOld && cleanNew === cleanOld) return;
-      applyStableImage(this, value);
-      return;
-    }
-
-    return originalSetAttribute.call(this, name, value);
-  };
-
-  /*
-    Intercetta innerHTML sui blocchi preview.
-    Se un modulo legacy prova a svuotare/ricreare lo stesso contenuto in pochi ms,
-    manteniamo il contenuto stabile già presente.
-  */
-  const htmlDesc = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
-  if(htmlDesc && htmlDesc.set && htmlDesc.get){
-    Object.defineProperty(Element.prototype, "innerHTML", {
-      configurable:true,
-      enumerable:htmlDesc.enumerable,
-      get:function(){
-        return htmlDesc.get.call(this);
-      },
-      set:function(value){
-        if(isDocPreviewNode(this)){
-          const incoming = String(value || "");
-          const previous = state.lastStableHtmlByElement.get(this) || "";
-          const lastAt = state.lastHtmlAtByElement.get(this) || 0;
-          const now = Date.now();
-
-          const incomingHasPreview = looksLikeDocPreviewUrl(incoming) || incoming.includes("<img");
-          const previousHasPreview = looksLikeDocPreviewUrl(previous) || previous.includes("<img");
-
-          /*
-            Blocca svuotamenti e placeholder ravvicinati quando una preview valida esiste già.
-          */
-          if(previousHasPreview && !incomingHasPreview && now - lastAt < 1600){
-            return;
-          }
-
-          /*
-            Blocca reinserimenti identici/ravvicinati.
-          */
-          if(previous && incoming && previous === incoming && now - lastAt < 1600){
-            return;
-          }
-
-          state.lastHtmlAtByElement.set(this, now);
-          if(incomingHasPreview){
-            state.lastStableHtmlByElement.set(this, incoming);
-          }
-        }
-
-        return htmlDesc.set.call(this, value);
-      }
-    });
-  }
-
-  /*
-    Stabilizza visivamente il contenitore preview alto se già esiste.
-  */
-  function stabilizeExisting(){
-    const candidates = Array.from(document.querySelectorAll("img, [id*='Preview'], [class*='preview'], [id*='Document']"));
-    for(const el of candidates){
-      if(isDocPreviewNode(el) || isDocPreviewImage(el)){
-        el.style.backfaceVisibility = "hidden";
-        el.style.transform = el.style.transform || "translateZ(0)";
-        el.style.willChange = "auto";
-      }
-    }
-  }
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", stabilizeExisting, { once:true });
-  }else{
-    stabilizeExisting();
-  }
-
-  setInterval(stabilizeExisting, 1200);
-})();
+}
 </script>
-
-<script id="followme-document-current-fetch-dedupe-20260526">
-/*
-  Deduplica document/current FollowMe.
-  Motivo: più moduli legacy chiamano /document/current quasi insieme.
-  Effetto visivo: preview PDF richiamata due volte e sfarfallio.
-  Questa patch fa condividere la stessa Promise alle chiamate identiche ravvicinate.
-*/
-(function(){
-  if(window.__followmeDocumentCurrentFetchDedupe20260526) return;
-  window.__followmeDocumentCurrentFetchDedupe20260526 = true;
-
-  const originalFetch = window.fetch ? window.fetch.bind(window) : null;
-  if(!originalFetch) return;
-
-  const inflight = new Map();
-  const cache = new Map();
-  const TTL = 900;
-
-  function normalizeKey(input){
-    try{
-      const raw = typeof input === "string"
-        ? input
-        : (input && input.url ? input.url : "");
-
-      if(!raw) return "";
-
-      const u = new URL(raw, location.origin);
-
-      if(!u.pathname.includes("/api/followme/") || !u.pathname.includes("/document/current")){
-        return "";
-      }
-
-      u.searchParams.delete("v");
-      u.searchParams.delete("_");
-      u.searchParams.delete("t");
-      u.searchParams.delete("ts");
-      u.searchParams.delete("cache");
-      u.searchParams.delete("cacheBust");
-      u.searchParams.delete("cb");
-
-      return u.pathname + (u.search ? u.search : "");
-    }catch(e){
-      const raw = String(input || "");
-      return raw.includes("/document/current") ? raw.replace(/[?&](v|_|t|ts|cache|cacheBust|cb)=\d+/g, "") : "";
-    }
-  }
-
-  function cloneResponse(res){
-    try{
-      return res.clone();
-    }catch(e){
-      return res;
-    }
-  }
-
-  window.fetch = function(input, init){
-    const key = normalizeKey(input);
-
-    if(!key){
-      return originalFetch(input, init);
-    }
-
-    const now = Date.now();
-
-    const cached = cache.get(key);
-    if(cached && now - cached.at < TTL){
-      return Promise.resolve(cloneResponse(cached.response));
-    }
-
-    const existing = inflight.get(key);
-    if(existing && now - existing.at < TTL){
-      return existing.promise.then(cloneResponse);
-    }
-
-    const promise = originalFetch(input, init).then(function(res){
-      cache.set(key, { at:Date.now(), response:cloneResponse(res) });
-      setTimeout(function(){ inflight.delete(key); }, TTL);
-      return res;
-    }).catch(function(err){
-      inflight.delete(key);
-      throw err;
-    });
-
-    inflight.set(key, { at:now, promise });
-
-    return promise.then(cloneResponse);
-  };
-})();
-</script>
-
 
 </head>
 <body>
@@ -27673,7 +27375,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       const firstBlock = card.firstElementChild;
 
       if(preview){
-        preview.innerHTML = "";
+        followmeSafeClearPdfPreview20260526(preview);
         preview.appendChild(holder);
       }else if(meta){
         meta.insertAdjacentElement("beforebegin", holder);
@@ -28014,7 +27716,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       const first = card.firstElementChild;
 
       if(preview){
-        preview.innerHTML = "";
+        followmeSafeClearPdfPreview20260526(preview);
         preview.appendChild(holder);
       }else if(meta){
         meta.insertAdjacentElement("beforebegin", holder);
