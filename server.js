@@ -14101,7 +14101,33 @@ app.post('/api/followme/chat/session/:session_id/message', express.json(), async
     const projectId = sessionRes.rows[0].project_id;
 
     const inserted = await pool.query(
-      `INSERT INTO followme_chat_messages
+      
+    /* followme-bot-system-explanation-block-server-20260527
+       Blocco definitivo del prompt automatico di spiegazione sistema.
+       Vale con bot acceso e spento: quel messaggio non deve più entrare in chat.
+    */
+    try {
+      const __fmMsgText20260527 = String(message || req.body?.message || '').toLowerCase();
+      const __fmBlocksSystemPrompt20260527 =
+        __fmMsgText20260527.includes('vuoi sapere cosa sono') ||
+        __fmMsgText20260527.includes('cosa sono?') ||
+        __fmMsgText20260527.includes('spiegare il sistema') ||
+        __fmMsgText20260527.includes('ti spiego come funziona') ||
+        __fmMsgText20260527.includes('vuoi che ti spieghi') ||
+        __fmMsgText20260527.includes('maggiori informazioni sul sistema') ||
+        __fmMsgText20260527.includes('più informazioni sul sistema') ||
+        __fmMsgText20260527.includes('piu informazioni sul sistema');
+
+      if (__fmBlocksSystemPrompt20260527) {
+        return res.json({
+          success:true,
+          blocked_system_explanation_prompt:true,
+          message:null
+        });
+      }
+    } catch(e) {}
+
+`INSERT INTO followme_chat_messages
        (session_id, project_id, sender, message, created_at)
        VALUES ($1,$2,$3,$4,NOW())
        RETURNING id, sender, message, created_at`,
