@@ -14107,57 +14107,7 @@ app.post('/api/followme/chat/session/:session_id/message', express.json(), async
 
     const inserted = await pool.query(
       
-    /* followme-bot-system-explanation-block-server-20260527
-       Blocco definitivo del prompt automatico di spiegazione sistema.
-       Vale con bot acceso e spento: quel messaggio non deve più entrare in chat.
-    */
-    try {
-      const __fmMsgText20260527 = String(message || req.body?.message || '').toLowerCase();
-      const __fmBlocksSystemPrompt20260527 =
-        __fmMsgText20260527.includes('vuoi sapere cosa sono') ||
-        __fmMsgText20260527.includes('cosa sono?') ||
-        __fmMsgText20260527.includes('spiegare il sistema') ||
-        __fmMsgText20260527.includes('ti spiego come funziona') ||
-        __fmMsgText20260527.includes('vuoi che ti spieghi') ||
-        __fmMsgText20260527.includes('maggiori informazioni sul sistema') ||
-        __fmMsgText20260527.includes('più informazioni sul sistema') ||
-        __fmMsgText20260527.includes('piu informazioni sul sistema');
-
-      if (__fmBlocksSystemPrompt20260527) {
-        return res.json({
-          success:true,
-          blocked_system_explanation_prompt:true,
-          message:null
-        });
-      }
-    } catch(e) {}
-
-
-    /* followme-block-system-explanation-anywhere-20260527
-       Questo prompt NON deve mai essere inviato all'utente.
-       Il bot è spento di default; anche se qualche script prova a generarlo, viene bloccato qui.
-    */
-    try {
-      const __txt = String(message || req.body?.message || '').toLowerCase();
-      const __bad =
-        __txt.includes('vuoi sapere cosa sono') ||
-        __txt.includes('vuoi sapere cosa sono?') ||
-        __txt.includes('cosa sono?') ||
-        __txt.includes('ti spiego come funziona') ||
-        __txt.includes('vuoi che ti spieghi') ||
-        __txt.includes('spiegare il sistema') ||
-        __txt.includes('maggiori informazioni sul sistema') ||
-        __txt.includes('più informazioni sul sistema') ||
-        __txt.includes('piu informazioni sul sistema');
-
-      if(__bad){
-        return res.json({
-          success:true,
-          blocked_system_explanation_prompt:true,
-          message:null
-        });
-      }
-    }catch(e){}
+    
 
 `INSERT INTO followme_chat_messages
        (session_id, project_id, sender, message, created_at)
