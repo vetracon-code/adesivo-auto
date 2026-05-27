@@ -6843,3 +6843,260 @@
   }, 1500);
 })();
 </script>
+
+<script id="followme-public-message-dedupe-hard-final-20260527">
+(function(){
+  if(window.__followmePublicMessageDedupeHardFinal20260527) return;
+  window.__followmePublicMessageDedupeHardFinal20260527 = true;
+
+  /*
+    SOLO CHAT PUBBLICA UTENTE.
+    Problema:
+    lo stesso messaggio admin può essere renderizzato più volte da poller/renderer diversi.
+    
+    Regola:
+    - se esiste data-message-id, deduplica per id;
+    - se non esiste id, deduplica per sender + testo + finestra temporale;
+    - non blocca invio, non tocca Admin, non tocca bot.
+  */
+
+  var seenIds = new Set();
+  var seenSoft = new Map();
+  var running = false;
+
+  function normText(v){
+    return String(v || "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function getMessageBox(){
+    return document.querySelector(".messages") ||
+           document.getElementById("messages") ||
+           document.querySelector(".chat .messages") ||
+           document.body;
+  }
+
+  function isMessageNode(el){
+    if(!el || el.nodeType !== 1) return false;
+
+    return (
+      el.classList.contains("message") ||
+      el.classList.contains("bubble") ||
+      el.classList.contains("followme-public-bubble") ||
+      el.matches("[data-message-id]") ||
+      el.querySelector("[data-message-id]")
+    );
+  }
+
+  function messageId(el){
+    if(!el) return "";
+
+    return (
+      el.getAttribute("data-message-id") ||
+      el.dataset.messageId ||
+      el.getAttribute("data-id") ||
+      el.dataset.id ||
+      ""
+    );
+  }
+
+  function senderOf(el){
+    if(!el) return "";
+
+    if(el.classList.contains("admin")) return "admin";
+    if(el.classList.contains("owner")) return "owner";
+    if(el.classList.contains("user")) return "user";
+    if(el.classList.contains("visitor")) return "visitor";
+    if(el.classList.contains("bot")) return "bot";
+    if(el.classList.contains("system")) return "system";
+
+    var cls = String(el.className || "").toLowerCase();
+    if(cls.includes("admin")) return "admin";
+    if(cls.includes("owner")) return "owner";
+    if(cls.includes("user")) return "user";
+    if(cls.includes("visitor")) return "visitor";
+    if(cls.includes("bot")) return "bot";
+    if(cls.includes("system")) return "system";
+
+    return "unknown";
+  }
+
+  function softKey(el){
+    var txt = normText(el.textContent || "");
+
+    /*
+      Non deduplichiamo messaggi vuoti o allegati complessi solo dal testo,
+      per evitare rimozioni sbagliate.
+    */
+    if(!txt || txt.length < 2) return "";
+
+    return senderOf(el) + "::" + txt;
+  }
+
+  function collectMessageNodes(){
+    var box = getMessageBox();
+
+    var nodes = Array.from(document.querySelectorAll(
+      ".message, .bubble, .followme-public-bubble, [data-message-id]"
+    ));
+
+    /*
+      Limita per sicurezza ai nodi dentro la chat se possibile.
+    */
+    if(box && box !== document.body){
+      nodes = nodes.filter(function(el){
+        return box.contains(el);
+      });
+    }
+
+    return nodes.filter(isMessageNode);
+  }
+
+  function dedupe(){
+    if(running) return;
+    running = true;
+
+    try{
+      var localSeenIds = new Set();
+      var localSeenSoft = new Map();
+
+      collectMessageNodes().forEach(function(el){
+        if(!el || !el.parentNode) return;
+
+        var id = String(messageId(el) || "").trim();
+
+        if(id){
+          if(localSeenIds.has(id) || seenIds.has(id)){
+            try{ el.remove(); }catch(e){}
+            return;
+          }
+
+          localSeenIds.add(id);
+          seenIds.add(id);
+          return;
+        }
+
+        var key = softKey(el);
+        if(!key) return;
+
+        /*
+          Dedupe soft: se stesso sender+testo compare più volte nella stessa pagina,
+          teniamo il primo e togliamo i successivi.
+        */
+        if(localSeenSoft.has(key)){
+          try{ el.remove(); }catch(e){}
+          return;
+        }
+
+        localSeenSoft.set(key, el);
+      });
+
+      /*
+        Evita crescita infinita della mappa soft storica.
+      */
+      var now = Date.now();
+      collectMessageNodes().forEach(function(el){
+        var key = softKey(el);
+        if(key) seenSoft.set(key, now);
+      });
+
+      if(seenSoft.size > 300){
+        Array.from(seenSoft.keys()).slice(0, 100).forEach(function(k){
+          seenSoft.delete(k);
+        });
+      }
+
+    }catch(e){
+    }finally{
+      running = false;
+    }
+  }
+
+  function patchFetchForMessageIds(){
+    if(window.__fmPublicMessageDedupeFetchPatch20260527) return;
+    window.__fmPublicMessageDedupeFetchPatch20260527 = true;
+
+    var originalFetch = window.fetch;
+
+    window.fetch = async function(input, init){
+      var url = "";
+      try{
+        url = typeof input === "string" ? input : (input && input.url) || "";
+      }catch(e){}
+
+      var isMessages =
+        url.includes("/api/followme/chat/session/") &&
+        url.includes("/messages");
+
+      var res = await originalFetch.apply(this, arguments);
+
+      if(isMessages){
+        try{
+          var clone = res.clone();
+          var data = await clone.json().catch(function(){ return null; });
+
+          if(data && Array.isArray(data.messages)){
+            /*
+              Se più poller leggono lo stesso payload, almeno registriamo gli ID
+              e facciamo dedupe subito dopo il render.
+            */
+            setTimeout(dedupe, 20);
+            setTimeout(dedupe, 120);
+            setTimeout(dedupe, 450);
+          }
+        }catch(e){}
+      }
+
+      return res;
+    };
+  }
+
+  function observe(){
+    var box = getMessageBox();
+    if(!box || box.dataset.fmPublicDedupeObserved === "1") return;
+
+    box.dataset.fmPublicDedupeObserved = "1";
+
+    if(window.MutationObserver){
+      var obs = new MutationObserver(function(){
+        dedupe();
+      });
+
+      obs.observe(box, {
+        childList:true,
+        subtree:true
+      });
+    }
+  }
+
+  function boot(){
+    patchFetchForMessageIds();
+    observe();
+
+    setTimeout(dedupe, 100);
+    setTimeout(dedupe, 500);
+    setTimeout(dedupe, 1200);
+  }
+
+  window.followMePublicMessageDedupeHard20260527 = {
+    dedupe: dedupe,
+    boot: boot
+  };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 200);
+  });
+
+  setInterval(function(){
+    observe();
+    dedupe();
+  }, 900);
+})();
+</script>
