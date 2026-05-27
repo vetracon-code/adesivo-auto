@@ -149,6 +149,13 @@
       background:rgba(255,255,255,.55);color:#111b21;text-decoration:none;font-weight:850;
     }
     .attachment-file span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
+    .voice-card{display:grid;gap:7px;min-width:210px}
+    .voice-row{
+      display:flex;align-items:center;gap:8px;padding:8px;border-radius:14px;
+      background:rgba(255,255,255,.58);
+    }
+    .voice-row audio{width:190px;max-width:100%;height:34px}
+    .voice-temp{font-size:10px;color:#667781;font-weight:850;text-align:right}
   </style>
 </head>
 <body>
@@ -251,8 +258,17 @@
 
     function renderAttachmentV2(att, createdAt){
       const isImage = String(att.mime || "").startsWith("image/");
+      const isVoice = String(att.kind || "") === "voice" || String(att.mime || "").startsWith("audio/");
       const label = esc(att.label || att.filename || "Allegato");
       const url = esc(att.url || "#");
+
+      if(isVoice){
+        return '<div class="voice-card">' +
+          '<div class="voice-row">🎙️ <audio controls preload="metadata" src="' + url + '" data-voice-message-id=""></audio></div>' +
+          '<span class="voice-temp">messaggio temporaneo</span>' +
+          '<span class="time">' + esc(timeOf(createdAt)) + '</span>' +
+        '</div>';
+      }
 
       if(isImage){
         return '<div class="attachment-card">' +
@@ -281,6 +297,43 @@
       });
     }
 
+
+    async function registerVoiceListenV2(messageId, bubble){
+      try{
+        const res = await fetch("/api/followme/chat-v2/message/" + encodeURIComponent(messageId) + "/listen", {
+          method:"POST",
+          headers:{"Content-Type":"application/json","Accept":"application/json"},
+          cache:"no-store",
+          body:JSON.stringify({})
+        });
+
+        const data = await res.json().catch(()=>null);
+
+        if(res.status === 410 || (data && data.deleted)){
+          if(bubble) bubble.remove();
+          toast("Messaggio vocale eliminato.");
+          return;
+        }
+
+        if(!res.ok || !data || !data.success){
+          if(res.status === 410 && bubble) bubble.remove();
+        }
+      }catch(e){}
+    }
+
+    function bindVoiceListenOnceV2(audio){
+      if(!audio || audio.dataset.listenBound === "1") return;
+      audio.dataset.listenBound = "1";
+
+      audio.addEventListener("play", function(){
+        if(audio.dataset.listenRegistered === "1") return;
+        audio.dataset.listenRegistered = "1";
+        const id = audio.getAttribute("data-voice-message-id");
+        const bubble = audio.closest(".bubble");
+        if(id) registerVoiceListenV2(id, bubble);
+      }, { once:true });
+    }
+
     function appendMessage(m){
       if(!m || !m.id) return;
       const id = String(m.id);
@@ -302,6 +355,15 @@
 
       if(els.messages.querySelector(".notice")) els.messages.innerHTML = "";
       els.messages.appendChild(div);
+
+      if(att && (String(att.kind || "") === "voice" || String(att.mime || "").startsWith("audio/"))){
+        const audio = div.querySelector("audio[data-voice-message-id]");
+        if(audio){
+          audio.setAttribute("data-voice-message-id", String(m.id));
+          bindVoiceListenOnceV2(audio);
+        }
+      }
+
       els.messages.scrollTop = els.messages.scrollHeight;
       lastMessageId = Math.max(lastMessageId, Number(m.id) || 0);
     }

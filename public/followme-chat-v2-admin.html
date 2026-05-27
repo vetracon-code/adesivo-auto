@@ -458,6 +458,90 @@
     .attachment-countdown.expiring{
       color:#b42318;
     }
+    .voice-recorder-sheet{
+      position:fixed;
+      left:12px;
+      right:12px;
+      bottom:calc(64px + env(safe-area-inset-bottom));
+      z-index:45;
+      display:none;
+      padding:14px;
+      border-radius:28px;
+      background:rgba(248,248,248,.94);
+      -webkit-backdrop-filter:blur(22px) saturate(1.35);
+      backdrop-filter:blur(22px) saturate(1.35);
+      box-shadow:0 22px 60px rgba(0,0,0,.28);
+      border:1px solid rgba(255,255,255,.72);
+    }
+    .voice-recorder-sheet.open{display:block}
+    .voice-recorder-title{
+      font-weight:950;
+      font-size:15px;
+      letter-spacing:-.02em;
+      margin-bottom:4px;
+      color:#111b21;
+    }
+    .voice-recorder-sub{
+      font-size:12px;
+      color:#667781;
+      font-weight:750;
+      margin-bottom:12px;
+    }
+    .voice-recorder-time{
+      height:54px;
+      border-radius:20px;
+      background:#fff;
+      display:grid;
+      place-items:center;
+      font-size:26px;
+      font-weight:950;
+      font-variant-numeric:tabular-nums;
+      color:#111b21;
+      margin-bottom:12px;
+      box-shadow:0 8px 20px rgba(0,0,0,.07);
+    }
+    .voice-recorder-actions{
+      display:grid;
+      grid-template-columns:1fr 1fr 1fr;
+      gap:8px;
+    }
+    .voice-recorder-actions button{
+      min-height:42px;
+      border:0;
+      border-radius:999px;
+      font-weight:950;
+      font-size:13px;
+    }
+    .voice-start{background:#ff3b30;color:white}
+    .voice-cancel{background:#f0f2f5;color:#1f2c33}
+    .voice-send{background:#00a884;color:white}
+    .voice-send:disabled{opacity:.45}
+    .voice-card{
+      display:grid;
+      gap:7px;
+      min-width:210px;
+    }
+    .voice-row{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:8px;
+      border-radius:14px;
+      background:rgba(255,255,255,.58);
+    }
+    .voice-row audio{
+      width:190px;
+      max-width:100%;
+      height:34px;
+    }
+    .voice-meta{
+      display:flex;
+      justify-content:space-between;
+      gap:8px;
+      font-size:10px;
+      color:#667781;
+      font-weight:850;
+    }
   </style>
 </head>
 <body>
@@ -539,6 +623,11 @@
       pickFile:document.getElementById("adminPickFileV2"),
       voiceMsg:document.getElementById("adminVoiceMsgV2"),
       locationBtn:document.getElementById("adminLocationV2"),
+      voiceSheet:document.getElementById("adminVoiceRecorderV2"),
+      voiceTimer:document.getElementById("adminVoiceTimerV2"),
+      voiceCancel:document.getElementById("adminVoiceCancelV2"),
+      voiceStart:document.getElementById("adminVoiceStartV2"),
+      voiceSend:document.getElementById("adminVoiceSendV2"),
       photoInput:document.getElementById("adminPhotoInputV2"),
       cameraInput:document.getElementById("adminCameraInputV2"),
       fileInput:document.getElementById("adminFileInputV2"),
@@ -653,8 +742,18 @@
 
     function renderAttachmentV2(att, createdAt){
       const isImage = String(att.mime || "").startsWith("image/");
+      const isVoice = String(att.kind || "") === "voice" || String(att.mime || "").startsWith("audio/");
       const label = esc(att.label || att.filename || "Allegato");
       const url = esc(att.url || "#");
+
+      if(isVoice){
+        return '<div class="voice-card">' +
+          '<div class="voice-row">🎙️ <audio controls preload="metadata" src="' + url + '" data-voice-message-id=""></audio></div>' +
+          '<div class="voice-meta"><span>ascolti ' + Number(att.listen_count || 0) + '/' + Number(att.max_listens || 2) + '</span><span>temporaneo</span></div>' +
+          (att.expires_at ? '<span class="attachment-countdown" data-countdown-expires="' + esc(att.expires_at) + '">si cancella tra --</span>' : '') +
+          '<span class="time">' + esc(timeOf(createdAt)) + '</span>' +
+        '</div>';
+      }
 
       if(isImage){
         return '<div class="attachment-card">' +
@@ -932,6 +1031,138 @@ async function sendAdminAttachmentV2(file, kind){
         toast("Allegato inviato");
       }catch(err){
         toast("Errore allegato: " + err.message);
+      }
+    }
+
+
+    let voiceMediaRecorderV2 = null;
+    let voiceChunksV2 = [];
+    let voiceBlobV2 = null;
+    let voiceStartedAtV2 = 0;
+    let voiceTickV2 = null;
+    let voiceStopTimerV2 = null;
+
+    function openVoiceRecorderV2(){
+      closeExtraMenuV2();
+      if(!els.voiceSheet) return;
+      voiceBlobV2 = null;
+      voiceChunksV2 = [];
+      if(els.voiceSend) els.voiceSend.disabled = true;
+      if(els.voiceStart) els.voiceStart.textContent = "Registra";
+      if(els.voiceTimer) els.voiceTimer.textContent = "00:00";
+      els.voiceSheet.classList.add("open");
+      els.voiceSheet.setAttribute("aria-hidden","false");
+    }
+
+    function closeVoiceRecorderV2(){
+      try{
+        if(voiceMediaRecorderV2 && voiceMediaRecorderV2.state !== "inactive"){
+          voiceMediaRecorderV2.stop();
+        }
+      }catch(e){}
+
+      clearInterval(voiceTickV2);
+      clearTimeout(voiceStopTimerV2);
+
+      if(els.voiceSheet){
+        els.voiceSheet.classList.remove("open");
+        els.voiceSheet.setAttribute("aria-hidden","true");
+      }
+    }
+
+    function updateVoiceTimerV2(){
+      const elapsed = Math.min(20, Math.floor((Date.now() - voiceStartedAtV2) / 1000));
+      if(els.voiceTimer){
+        els.voiceTimer.textContent = "00:" + String(elapsed).padStart(2,"0");
+      }
+    }
+
+    function preferredVoiceMimeV2(){
+      const options = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+        "audio/aac"
+      ];
+      for(const m of options){
+        try{
+          if(window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) return m;
+        }catch(e){}
+      }
+      return "";
+    }
+
+    async function startVoiceRecordingV2(){
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        toast("Microfono non supportato da questo browser.");
+        return;
+      }
+
+      try{
+        const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+        const mime = preferredVoiceMimeV2();
+        voiceChunksV2 = [];
+        voiceBlobV2 = null;
+
+        const opts = mime ? { mimeType:mime, audioBitsPerSecond:64000 } : { audioBitsPerSecond:64000 };
+        voiceMediaRecorderV2 = new MediaRecorder(stream, opts);
+
+        voiceMediaRecorderV2.ondataavailable = ev=>{
+          if(ev.data && ev.data.size) voiceChunksV2.push(ev.data);
+        };
+
+        voiceMediaRecorderV2.onstop = ()=>{
+          try{ stream.getTracks().forEach(t=>t.stop()); }catch(e){}
+          const realMime = voiceMediaRecorderV2.mimeType || mime || "audio/webm";
+          voiceBlobV2 = new Blob(voiceChunksV2, { type:realMime });
+          if(els.voiceSend) els.voiceSend.disabled = !voiceBlobV2 || !voiceBlobV2.size;
+          if(els.voiceStart) els.voiceStart.textContent = "Rifai";
+          clearInterval(voiceTickV2);
+          clearTimeout(voiceStopTimerV2);
+        };
+
+        voiceStartedAtV2 = Date.now();
+        voiceMediaRecorderV2.start(250);
+        updateVoiceTimerV2();
+        voiceTickV2 = setInterval(updateVoiceTimerV2, 250);
+
+        if(els.voiceStart) els.voiceStart.textContent = "Stop";
+
+        voiceStopTimerV2 = setTimeout(()=>{
+          try{
+            if(voiceMediaRecorderV2 && voiceMediaRecorderV2.state !== "inactive"){
+              voiceMediaRecorderV2.stop();
+            }
+          }catch(e){}
+        }, 20000);
+
+      }catch(err){
+        toast("Microfono non disponibile: " + (err.message || String(err)));
+      }
+    }
+
+    function stopOrRestartVoiceV2(){
+      if(voiceMediaRecorderV2 && voiceMediaRecorderV2.state === "recording"){
+        try{ voiceMediaRecorderV2.stop(); }catch(e){}
+        return;
+      }
+
+      startVoiceRecordingV2();
+    }
+
+    async function sendVoiceV2(){
+      if(!voiceBlobV2 || !voiceBlobV2.size){
+        toast("Nessun vocale registrato.");
+        return;
+      }
+
+      try{
+        const ext = String(voiceBlobV2.type || "").includes("mp4") ? ".m4a" : ".webm";
+        const file = new File([voiceBlobV2], "vocale" + ext, { type:voiceBlobV2.type || "audio/webm" });
+        await sendAdminAttachmentV2(file, "voice");
+        closeVoiceRecorderV2();
+      }catch(err){
+        toast("Errore vocale: " + (err.message || String(err)));
       }
     }
 

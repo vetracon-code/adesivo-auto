@@ -17055,7 +17055,12 @@ async function cleanupExpiredFollowMeChatV2Attachments() {
       if (!payload || payload.__followme_attachment_v2 !== true) continue;
 
       const expiresAt = payload.expires_at ? Date.parse(payload.expires_at) : 0;
-      if (!expiresAt || expiresAt > now) continue;
+      const listenCount = Number(payload.listen_count || 0);
+      const maxListens = Number(payload.max_listens || 0);
+      const expiredByTime = !!expiresAt && expiresAt <= now;
+      const expiredByListens = !!maxListens && listenCount >= maxListens;
+
+      if (!expiredByTime && !expiredByListens) continue;
 
       const url = String(payload.url || '');
 
@@ -17107,6 +17112,128 @@ function startFollowMeChatV2AttachmentCleanupOnce() {
 startFollowMeChatV2AttachmentCleanupOnce();
 
 
+
+
+
+
+/* ============================================================
+   FOLLOWME CHAT V2 VOICE TEMPORARY 20260527
+   Vocale Admin: max 20s lato client, scadenza 60s oppure 2 ascolti.
+   ============================================================ */
+
+async function registerFollowMeChatV2VoiceListen(messageId) {
+  const path = require('path');
+  const fs = require('fs');
+
+  const q = await pool.query(
+    `SELECT id, message
+     FROM followme_chat_messages
+     WHERE id = $1
+     LIMIT 1`,
+    [messageId]
+  );
+
+  if (!q.rows.length) {
+    return { success:false, gone:true, error:'Messaggio non trovato.' };
+  }
+
+  let payload = null;
+  try {
+    payload = JSON.parse(String(q.rows[0].message || ''));
+  } catch (e) {
+    return { success:false, error:'Payload non valido.' };
+  }
+
+  if (!payload || payload.__followme_attachment_v2 !== true || payload.kind !== 'voice') {
+    return { success:false, error:'Non è un vocale temporaneo.' };
+  }
+
+  const now = Date.now();
+  const expiresAt = payload.expires_at ? Date.parse(payload.expires_at) : 0;
+  const currentCount = Number(payload.listen_count || 0);
+  const maxListens = Number(payload.max_listens || 2);
+
+  if (expiresAt && expiresAt <= now) {
+    await cleanupExpiredFollowMeChatV2Attachments();
+    return { success:false, gone:true, expired:true, error:'Vocale scaduto.' };
+  }
+
+  const nextCount = currentCount + 1;
+  payload.listen_count = nextCount;
+  payload.last_listened_at = new Date().toISOString();
+
+  if (nextCount >= maxListens) {
+    const url = String(payload.url || '');
+
+    if (url.startsWith('/uploads/followme-chat-v2/')) {
+      const filename = path.basename(url);
+      const fullPath = path.join(__dirname, 'public', 'uploads', 'followme-chat-v2', filename);
+
+      try {
+        if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+      } catch (e) {
+        console.error('followme chat-v2 voice unlink error:', e.message || e);
+      }
+    }
+
+    await pool.query(
+      `DELETE FROM followme_chat_messages WHERE id = $1`,
+      [messageId]
+    );
+
+    return {
+      success:true,
+      deleted:true,
+      listen_count:nextCount,
+      max_listens:maxListens
+    };
+  }
+
+  await pool.query(
+    `UPDATE followme_chat_messages
+     SET message = $2
+     WHERE id = $1`,
+    [messageId, JSON.stringify(payload)]
+  );
+
+  return {
+    success:true,
+    deleted:false,
+    listen_count:nextCount,
+    max_listens:maxListens,
+    payload
+  };
+}
+
+app.post('/api/followme/chat-v2/message/:message_id/listen', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeChatV2Runtime();
+
+    const messageId = Number(req.params.message_id || 0);
+    if (!messageId) {
+      return res.status(400).json({ success:false, error:'Messaggio mancante.' });
+    }
+
+    const result = await registerFollowMeChatV2VoiceListen(messageId);
+
+    if (!result.success && result.gone) {
+      return res.status(410).json(result);
+    }
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    return res.json(result);
+  } catch (err) {
+    console.error('followme chat-v2 listen register error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore registrazione ascolto.',
+      detail:String(err && err.message ? err.message : err)
+    });
+  }
+});
 
 
 /* ============================================================
@@ -17203,10 +17330,13 @@ app.post('/api/followme/chat-v2/session/:session_id/attachment-raw', express.raw
 
     const publicUrl = `/uploads/followme-chat-v2/${storedName}`;
 
+    const isVoice = kind === 'voice';
+    const ttlSeconds = isVoice ? 60 : 120;
+
     const payload = {
       __followme_attachment_v2: true,
       temporary: true,
-      ttl_seconds: 120,
+      ttl_seconds: ttlSeconds,
       kind,
       sender,
       url: publicUrl,
@@ -17214,8 +17344,10 @@ app.post('/api/followme/chat-v2/session/:session_id/attachment-raw', express.raw
       mime,
       label,
       size_bytes: buffer.length,
+      listen_count: isVoice ? 0 : undefined,
+      max_listens: isVoice ? 2 : undefined,
       created_at: new Date().toISOString(),
-      expires_at: new Date(Date.now() + 120000).toISOString()
+      expires_at: new Date(Date.now() + ttlSeconds * 1000).toISOString()
     };
 
     const inserted = await pool.query(
