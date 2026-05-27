@@ -17920,7 +17920,13 @@ const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || ''
     const publicUrl = `/uploads/followme-chat-v2/${storedName}`;
 
     const isVoice = kind === 'voice';
-    const ttlSeconds = isVoice ? 60 : 120;
+    /*
+      Regola corretta 20260528:
+      Gli allegati restano salvati per admin.
+      Lato utente vengono solo NASCOSTI dopo 60 secondi.
+      La cancellazione fisica avviene solo al reset admin.
+    */
+    const ttlSeconds = 60;
 
     const payload = {
       __followme_attachment_v2: true,
@@ -17951,12 +17957,7 @@ const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || ''
       `UPDATE followme_chat_sessions SET updated_at = NOW(), last_seen_at = NOW() WHERE id = $1`,
       [session.id]
     );
-
-    setTimeout(function(){
-      cleanupExpiredFollowMeChatV2Attachments().catch(function(err){
-        console.error('followme chat-v2 delayed cleanup raw error:', err);
-      });
-    }, 125000);
+    /* Nessun cleanup automatico: gli allegati si eliminano solo al reset admin. */
 
     return res.json({
       success:true,
@@ -18097,11 +18098,7 @@ app.post('/api/followme/chat-v2/session/:session_id/attachment', express.json({ 
       Cleanup mirato: prova a cancellare poco dopo la scadenza.
       Il cleanup globale ogni 30s copre comunque riavvii/ritardi.
     */
-    setTimeout(function(){
-      cleanupExpiredFollowMeChatV2Attachments().catch(function(err){
-        console.error('followme chat-v2 delayed cleanup error:', err);
-      });
-    }, 125000);
+    /* Nessun cleanup automatico: gli allegati si eliminano solo al reset admin. */
 
     return res.json({
       success:true,
