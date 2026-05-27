@@ -4229,13 +4229,13 @@
         <div class="timeline-card" style="padding:18px;border:1px solid rgba(63,121,216,.16);box-shadow:0 0 30px rgba(63,121,216,.06) inset;">
           <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
             <div>
-              <h2 class="section-title" style="margin-bottom:8px;font-size:.9rem;">Anteprima adesivo</h2>
+              <h2 class="section-title" style="margin-bottom:8px;font-size:.9rem;">Prova segnalazione</h2>
               <div class="muted" style="line-height:1.45;font-size:.84rem;">Qui puoi vedere quasi a pagina piena l’adesivo esatto da stampare o mostrare per una verifica rapida.</div>
             </div>
-            <button id="closeStickerPreviewBtn" class="btn btn-secondary" type="button" style="background:#4f8df0;color:#fff;border-color:#4f8df0;">Chiudi anteprima</button>
+            <button id="closeStickerPreviewBtn" class="btn btn-secondary" type="button" style="background:#4f8df0;color:#fff;border-color:#4f8df0;">Torna alla App</button>
           </div>
           <div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-            <button id="previewTryQrBtn" class="btn btn-secondary" type="button" style="background:#4f8df0;color:#fff;border-color:#4f8df0;">Mostralo a un amico</button>
+            <button id="previewTryQrBtn" class="btn btn-secondary" type="button" style="background:#4f8df0;color:#fff;border-color:#4f8df0;">Apri fuori dalla App</button>
           </div>
           <div style="border-radius:20px;overflow:hidden;border:1px solid rgba(34,48,70,.08);background:#f3f7fc;min-height:72vh;">
             <iframe id="stickerPreviewFrame" src="about:blank" style="width:100%;height:72vh;border:0;background:#fff;" loading="lazy"></iframe>
@@ -5429,32 +5429,28 @@ if(!res.ok || !data.success){
           }
 
           /*
-            Ripristino flusso corretto:
-            Prova segnalazione deve riportare alla schermata guidata
-            "Ora puoi fare una prova reale della segnalazione...",
-            non all'anteprima adesivo e non al frame sbagliato.
+            Prova segnalazione:
+            apre dentro la Web App la stessa pagina pubblica che vede l'utente
+            quando inquadra il QR. Da qui puoi testare notifica, messaggio e posizione.
           */
-          const resultEl2 = document.getElementById('installActionResult');
-          const explain2 = document.getElementById('installExplainBox');
-          const primaryBtn2 = document.getElementById('systemCheckPrimaryBtn');
-          const topSystemBox2 = document.getElementById('installAppSection') || explain2 || resultEl2 || document.body;
-
-          if (explain2) {
-            explain2.style.display = 'block';
+          if (stickerPreviewFrame) {
+            stickerPreviewFrame.dataset.src = publicUserFrameUrl || publicQrUrl;
           }
 
-          if (resultEl2) {
-            resultEl2.textContent = 'Ora puoi fare una prova reale della segnalazione e verificare come ti arriverà l’avviso.';
-          }
+          if (typeof openStickerPreview === 'function') {
+            openStickerPreview();
 
-          if (primaryBtn2) {
-            primaryBtn2.textContent = 'Prova segnalazione';
-            primaryBtn2.style.display = '';
-            primaryBtn2.onclick = function(){
-              if (!publicQrUrl || publicQrUrl === '#') return;
-              window.location.href = publicQrUrl;
-            };
+            const section = document.getElementById('stickerPreviewSection');
+            if (section && section.scrollIntoView) {
+              setTimeout(function(){
+                section.scrollIntoView({ behavior:'smooth', block:'start' });
+              }, 80);
+            }
+          } else {
+            window.location.href = publicUserFrameUrl || publicQrUrl;
           }
+        };
+      }
 
           if (typeof updateInstallUI === 'function') {
             try { await updateInstallUI(); } catch(e) {}
@@ -10982,170 +10978,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
-<script id="fix-prova-segnalazione-real-flow-20260527">
-(function(){
-  if (window.__fixProvaSegnalazioneRealFlow20260527) return;
-  window.__fixProvaSegnalazioneRealFlow20260527 = true;
-
-  function $(id){ return document.getElementById(id); }
-
-  function getOwnerCtx(){
-    var params = new URLSearchParams(window.location.search || "");
-
-    var code =
-      params.get("code") ||
-      window.__OWNER_CODE__ ||
-      document.body.getAttribute("data-owner-code") ||
-      localStorage.getItem("owner_saved_code") ||
-      sessionStorage.getItem("owner_saved_code") ||
-      "";
-
-    var plate =
-      params.get("plate") ||
-      window.__OWNER_PLATE__ ||
-      document.body.getAttribute("data-owner-plate") ||
-      localStorage.getItem("owner_saved_plate") ||
-      sessionStorage.getItem("owner_saved_plate") ||
-      "";
-
-    if ((!code || !plate) && window.location.pathname) {
-      var m = String(window.location.pathname).match(/\/owner-app\/([^\/?#]+)\/([^\/?#]+)/i);
-      if (m) {
-        code = code || decodeURIComponent(m[1] || "");
-        plate = plate || decodeURIComponent(m[2] || "");
-      }
-    }
-
-    return {
-      code: String(code || "").trim().toUpperCase(),
-      plate: String(plate || "").trim().toUpperCase()
-    };
-  }
-
-  async function getPublicId(){
-    try {
-      var stored =
-        localStorage.getItem("owner_public_id") ||
-        sessionStorage.getItem("owner_public_id") ||
-        window.__CURRENT_PUBLIC_ID__ ||
-        "";
-      if (stored) return String(stored).trim();
-    } catch(e) {}
-
-    var ctx = getOwnerCtx();
-    if (!ctx.code || !ctx.plate) return "";
-
-    try {
-      var res = await fetch("/api/owner-dashboard", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ code:ctx.code, plate:ctx.plate })
-      });
-
-      var data = await res.json().catch(function(){ return {}; });
-      var publicId = data && data.success && data.data ? String(data.data.public_id || "").trim() : "";
-
-      if (publicId) {
-        try {
-          localStorage.setItem("owner_public_id", publicId);
-          sessionStorage.setItem("owner_public_id", publicId);
-        } catch(e) {}
-      }
-
-      return publicId;
-    } catch(e) {
-      return "";
-    }
-  }
-
-  async function getPublicQrUrl(){
-    var publicId = await getPublicId();
-    if (!publicId) return "";
-
-    if (typeof window.buildPublicQrUrl === "function") {
-      try {
-        var url = window.buildPublicQrUrl(publicId);
-        if (url && url !== "#") return url;
-      } catch(e) {}
-    }
-
-    return "/contact/u/" + encodeURIComponent(publicId);
-  }
-
-  function showRealTestBox(publicQrUrl){
-    var resultEl = $("installActionResult");
-    var explain = $("installExplainBox");
-    var primaryBtn = $("systemCheckPrimaryBtn");
-    var topBox = $("installAppSection") || explain || resultEl || document.body;
-
-    if (explain) explain.style.display = "block";
-
-    if (resultEl) {
-      resultEl.textContent = "Ora puoi fare una prova reale della segnalazione e verificare come ti arriverà l’avviso.";
-    }
-
-    if (primaryBtn) {
-      primaryBtn.textContent = "Prova segnalazione";
-      primaryBtn.style.display = "inline-flex";
-      primaryBtn.dataset.realPublicQrUrl = publicQrUrl || "";
-
-      primaryBtn.onclick = function(ev){
-        if (ev) {
-          ev.preventDefault();
-          ev.stopPropagation();
-          if (typeof ev.stopImmediatePropagation === "function") ev.stopImmediatePropagation();
-        }
-
-        var url = primaryBtn.dataset.realPublicQrUrl || publicQrUrl || "";
-        if (!url || url === "#") {
-          alert("QR pubblico non ancora disponibile. Premi Aggiorna App e riprova.");
-          return false;
-        }
-
-        window.location.href = url;
-        return false;
-      };
-    }
-
-    if (topBox && topBox.scrollIntoView) {
-      topBox.scrollIntoView({ behavior:"smooth", block:"start" });
-    }
-  }
-
-  async function handlePreviewClick(ev){
-    var btn = ev.target && ev.target.closest ? ev.target.closest("#previewStickerBtn") : null;
-    if (!btn) return;
-
-    ev.preventDefault();
-    ev.stopPropagation();
-    if (typeof ev.stopImmediatePropagation === "function") ev.stopImmediatePropagation();
-
-    var url = await getPublicQrUrl();
-
-    if (!url || url === "#") {
-      alert("QR pubblico non ancora disponibile. Premi Aggiorna App e riprova.");
-      return false;
-    }
-
-    showRealTestBox(url);
-    return false;
-  }
-
-  /*
-    Capture phase: vince sugli handler vecchi che aprivano anteprima adesivo,
-    frame errato o redirect Android diretto.
-  */
-  document.addEventListener("click", handlePreviewClick, true);
-
-  window.fixProvaSegnalazioneRealFlow20260527 = {
-    open: async function(){
-      var url = await getPublicQrUrl();
-      showRealTestBox(url);
-    },
-    url: getPublicQrUrl
-  };
-})();
-</script>
 
 </body>
 </html>
