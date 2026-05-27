@@ -12898,5 +12898,222 @@ document.addEventListener('DOMContentLoaded', function () {
 })();
 </script>
 
+
+<script id="followme-chat-v2-activation-client-guard-20260527">
+(function(){
+  if (window.__followmeChatV2ActivationGuard20260527) return;
+  window.__followmeChatV2ActivationGuard20260527 = true;
+
+  function getCode(){
+    try{
+      var u = new URL(location.href);
+      var q = (u.searchParams.get("code") || u.searchParams.get("qr") || u.searchParams.get("followme") || "").trim();
+      if(q) return q.toUpperCase();
+
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i) ||
+              location.pathname.match(/\/followme\/([^\/?#]+)/i) ||
+              location.pathname.match(/\/fm\/u\/([^\/?#]+)/i);
+
+      if(m && m[1]) return decodeURIComponent(m[1]).trim().toUpperCase();
+    }catch(e){}
+    return "";
+  }
+
+  function homeUrl(){
+    var code = getCode();
+    if(code) return "/fm/app/" + encodeURIComponent(code);
+    try{
+      var clean = new URL(location.href);
+      clean.searchParams.delete("chat");
+      clean.searchParams.delete("chatv2");
+      clean.searchParams.delete("openChat");
+      clean.searchParams.delete("session");
+      clean.searchParams.delete("session_id");
+      return clean.pathname + clean.search + clean.hash;
+    }catch(e){
+      return "/";
+    }
+  }
+
+  function showActivationError(message){
+    var old = document.getElementById("followmeChatV2ActivationErrorGuard");
+    if(old) old.remove();
+
+    var box = document.createElement("div");
+    box.id = "followmeChatV2ActivationErrorGuard";
+    box.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:rgba(3,8,20,.72);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:22px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;";
+    box.innerHTML =
+      '<div style="width:min(420px,100%);border-radius:24px;background:#fff;color:#121826;box-shadow:0 24px 80px rgba(0,0,0,.35);padding:24px;text-align:center;">' +
+        '<div style="width:54px;height:54px;border-radius:18px;background:#fee2e2;color:#991b1b;display:grid;place-items:center;margin:0 auto 14px;font-size:28px;font-weight:900;">!</div>' +
+        '<h2 style="margin:0 0 8px;font-size:20px;line-height:1.15;">Errore di attivazione chat</h2>' +
+        '<p style="margin:0 0 18px;color:#526070;line-height:1.45;font-size:14px;">' + escapeHtml(message || "La chat non è ancora pronta. Riprova tra qualche secondo.") + '</p>' +
+        '<button id="followmeChatV2ActivationErrorClose" type="button" style="width:100%;height:48px;border:0;border-radius:15px;background:#111827;color:#fff;font-weight:900;font-size:15px;cursor:pointer;">Chiudi</button>' +
+      '</div>';
+
+    document.body.appendChild(box);
+
+    var close = document.getElementById("followmeChatV2ActivationErrorClose");
+    if(close){
+      close.onclick = function(){
+        location.href = homeUrl();
+      };
+    }
+  }
+
+  function escapeHtml(v){
+    return String(v || "").replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function isChatActivationElement(el){
+    if(!el) return false;
+    var t = String((el.innerText || el.textContent || el.value || el.getAttribute("aria-label") || "")).toLowerCase();
+    var id = String(el.id || "").toLowerCase();
+    var cls = String(el.className || "").toLowerCase();
+    var data = String(el.getAttribute("data-action") || "") .toLowerCase();
+
+    return (
+      (t.includes("attiva") && t.includes("chat")) ||
+      (t.includes("apri") && t.includes("chat")) ||
+      id.includes("chat") ||
+      cls.includes("chat") ||
+      data.includes("chat-v2") ||
+      data.includes("chat")
+    );
+  }
+
+  async function waitReady(code, timeoutMs){
+    var started = Date.now();
+    var lastErr = "";
+
+    while(Date.now() - started < timeoutMs){
+      try{
+        var r = await fetch("/api/followme/" + encodeURIComponent(code) + "/chat-v2/ready?_=" + Date.now(), {
+          method:"GET",
+          cache:"no-store",
+          headers:{ "Accept":"application/json" }
+        });
+
+        var d = await r.json().catch(function(){ return null; });
+
+        if(r.ok && d && d.success && d.ready && d.chat_url && d.admin_url){
+          return d;
+        }
+
+        lastErr = d && d.error ? d.error : "Chat non ancora pronta.";
+      }catch(e){
+        lastErr = e && e.message ? e.message : "Load failed";
+      }
+
+      await new Promise(function(resolve){ setTimeout(resolve, 650); });
+    }
+
+    throw new Error(lastErr || "Load failed");
+  }
+
+  async function robustActivateChatV2(ev, btn){
+    var code = getCode();
+    if(!code) return;
+
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation();
+
+    var oldText = btn && (btn.innerText || btn.textContent);
+    if(btn){
+      btn.disabled = true;
+      btn.style.pointerEvents = "none";
+      try{ btn.textContent = "Attivazione chat..."; }catch(e){}
+    }
+
+    try{
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/chat-v2/enable?_=" + Date.now(), {
+        method:"POST",
+        cache:"no-store",
+        headers:{
+          "Content-Type":"application/json",
+          "Accept":"application/json"
+        },
+        body:JSON.stringify({ source:"owner-webapp", robust:true })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || data.success !== true || !data.chat_url || !data.admin_url){
+        throw new Error((data && data.error) || "Load failed");
+      }
+
+      var ready = await waitReady(code, 6500);
+
+      if(!ready || !ready.ready || !ready.admin_url){
+        throw new Error("Chat non pronta.");
+      }
+
+      location.href = ready.admin_url;
+    }catch(err){
+      showActivationError(err && err.message ? err.message : "Load failed");
+    }finally{
+      if(btn){
+        btn.disabled = false;
+        btn.style.pointerEvents = "";
+        if(oldText) {
+          try{ btn.textContent = oldText; }catch(e){}
+        }
+      }
+    }
+  }
+
+  document.addEventListener("click", function(ev){
+    var btn = ev.target && ev.target.closest ? ev.target.closest("button,a,[role='button']") : null;
+    if(!btn) return;
+
+    if(!isChatActivationElement(btn)) return;
+
+    /*
+      Guard stretto: intercetta solo la WebApp FollowMe, non la chat già aperta.
+    */
+    if(location.pathname.includes("/fm/chat-v2/")) return;
+
+    var text = String((btn.innerText || btn.textContent || "")).toLowerCase();
+    var href = String(btn.getAttribute("href") || "").toLowerCase();
+
+    if(
+      text.includes("attiva chat") ||
+      text.includes("apri chat") ||
+      href.includes("/fm/chat-v2/") ||
+      String(btn.id || "").toLowerCase().includes("chat")
+    ){
+      robustActivateChatV2(ev, btn);
+    }
+  }, true);
+
+  /*
+    Se una vecchia modale mostra "Errore di attivazione chat: Load failed",
+    forziamo il suo Chiudi a tornare alla home della WebApp.
+  */
+  var mo = new MutationObserver(function(){
+    var txt = String(document.body && document.body.innerText || "");
+    if(!/Errore di attivazione chat/i.test(txt) && !/Load failed/i.test(txt)) return;
+
+    Array.from(document.querySelectorAll("button,a")).forEach(function(b){
+      var t = String(b.innerText || b.textContent || "").trim().toLowerCase();
+      if(t === "chiudi" || t === "ok" || t === "annulla"){
+        if(b.dataset.followmeChatGuardClose === "1") return;
+        b.dataset.followmeChatGuardClose = "1";
+        b.addEventListener("click", function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          location.href = homeUrl();
+        }, true);
+      }
+    });
+  });
+
+  try{ mo.observe(document.documentElement, { childList:true, subtree:true, characterData:true }); }catch(e){}
+})();
+</script>
+
 </body>
 </html>

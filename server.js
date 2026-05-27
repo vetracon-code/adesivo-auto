@@ -16940,6 +16940,72 @@ app.get('/fm/chat-v2/c/:chat_token', async (req, res) => {
   return res.sendFile(require('path').join(__dirname, 'public', 'followme-chat-v2-user.html'));
 });
 
+
+
+/* FOLLOWME CHAT V2 ACTIVATION GUARD 20260527 */
+app.use('/api/followme/:code/chat-v2/enable', function(req, res, next){
+  try {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  } catch(e) {}
+  next();
+});
+
+app.get('/api/followme/:code/chat-v2/ready', async function(req, res){
+  try {
+    if (typeof ensureFollowMeChatV2Runtime === 'function') {
+      await ensureFollowMeChatV2Runtime();
+    }
+
+    const code = String(req.params.code || '').trim().toUpperCase();
+    if (!code) {
+      return res.status(400).json({ success:false, ready:false, error:'Codice FollowMe mancante.' });
+    }
+
+    const q = await pool.query(
+      `SELECT id, code, chat_enabled, chat_public_token
+       FROM followme_projects
+       WHERE UPPER(code) = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).json({ success:false, ready:false, error:'Progetto FollowMe non trovato.' });
+    }
+
+    const row = q.rows[0];
+    const token = String(row.chat_public_token || '').trim();
+
+    if (!token) {
+      return res.json({
+        success:true,
+        ready:false,
+        chat_enabled:!!row.chat_enabled,
+        error:'Chat non ancora pronta.'
+      });
+    }
+
+    return res.json({
+      success:true,
+      ready:true,
+      chat_enabled:!!row.chat_enabled,
+      chat_url:'/fm/chat-v2/c/' + encodeURIComponent(token),
+      admin_url:'/fm/chat-v2/admin/' + encodeURIComponent(row.code || code)
+    });
+  } catch(err) {
+    console.error('followme chat-v2 ready error:', err);
+    return res.status(500).json({
+      success:false,
+      ready:false,
+      error:'Errore verifica stato chat.'
+    });
+  }
+});
+/* END FOLLOWME CHAT V2 ACTIVATION GUARD 20260527 */
+
+
 app.post('/api/followme/:code/chat-v2/enable', express.json(), async (req, res) => {
   try {
     await ensureFollowMeChatV2Runtime();
