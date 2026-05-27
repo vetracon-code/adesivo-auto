@@ -6454,3 +6454,392 @@
   setInterval(kill, 700);
 })();
 </script>
+
+<script id="followme-public-closed-chat-thankyou-final-20260527">
+(function(){
+  if(window.__followmePublicClosedChatThankyouFinal20260527) return;
+  window.__followmePublicClosedChatThankyouFinal20260527 = true;
+
+  /*
+    SOLO CHAT PUBBLICA UTENTE.
+    Se il proprietario/admin chiude la chat:
+    - l'utente non deve più continuare a scrivere;
+    - deve vedere una schermata chiara di chiusura e ringraziamento;
+    - se prova a inviare dopo la chiusura, intercettiamo e mostriamo subito la schermata.
+  */
+
+  var closed = false;
+  var checking = false;
+
+  function sid(){
+    try{
+      return (
+        sessionStorage.getItem("followme_chat_session_id") ||
+        window.sessionId ||
+        window.followmeChatSessionId ||
+        ""
+      );
+    }catch(e){
+      return "";
+    }
+  }
+
+  function esc(v){
+    return String(v || "").replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function ensureStyle(){
+    if(document.getElementById("fmPublicClosedThankyouStyle20260527")) return;
+
+    var style = document.createElement("style");
+    style.id = "fmPublicClosedThankyouStyle20260527";
+    style.textContent = `
+      body.fm-public-chat-closed-final{
+        overflow:hidden !important;
+      }
+
+      #fmPublicClosedThankyouOverlay20260527{
+        position:fixed;
+        inset:0;
+        z-index:2147483000;
+        display:none;
+        align-items:center;
+        justify-content:center;
+        padding:22px;
+        background:
+          radial-gradient(circle at 50% 0%, rgba(255,255,255,.18), transparent 38%),
+          linear-gradient(145deg, #101018, #191923 48%, #101018);
+        color:#ffffff;
+        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+      }
+
+      body.fm-public-chat-closed-final #fmPublicClosedThankyouOverlay20260527{
+        display:flex;
+      }
+
+      #fmPublicClosedThankyouOverlay20260527 .fm-closed-card{
+        width:min(430px, 94vw);
+        border-radius:30px;
+        padding:26px 22px 22px;
+        background:rgba(255,255,255,.09);
+        border:1px solid rgba(255,255,255,.18);
+        box-shadow:0 30px 90px rgba(0,0,0,.45);
+        text-align:center;
+        backdrop-filter:blur(20px);
+        -webkit-backdrop-filter:blur(20px);
+      }
+
+      #fmPublicClosedThankyouOverlay20260527 .fm-closed-icon{
+        width:64px;
+        height:64px;
+        border-radius:22px;
+        margin:0 auto 16px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        background:linear-gradient(145deg, #25d366, #17a854);
+        box-shadow:0 16px 36px rgba(37,211,102,.28);
+        font-size:32px;
+      }
+
+      #fmPublicClosedThankyouOverlay20260527 h1{
+        margin:0 0 10px;
+        font-size:1.55rem;
+        line-height:1.08;
+        letter-spacing:-.05em;
+        font-weight:950;
+      }
+
+      #fmPublicClosedThankyouOverlay20260527 p{
+        margin:0 auto 16px;
+        max-width:330px;
+        color:rgba(255,255,255,.76);
+        font-size:.98rem;
+        line-height:1.45;
+        font-weight:650;
+      }
+
+      #fmPublicClosedThankyouOverlay20260527 .fm-closed-note{
+        margin-top:12px;
+        padding:12px 14px;
+        border-radius:18px;
+        background:rgba(255,255,255,.08);
+        color:rgba(255,255,255,.7);
+        font-size:.82rem;
+        line-height:1.35;
+        font-weight:700;
+      }
+
+      #fmPublicClosedThankyouOverlay20260527 button{
+        width:100%;
+        min-height:48px;
+        border:0;
+        border-radius:999px;
+        background:#ffffff;
+        color:#101018;
+        font-weight:950;
+        font-size:.94rem;
+        box-shadow:0 12px 34px rgba(0,0,0,.22);
+      }
+
+      body.fm-public-chat-closed-final .composer,
+      body.fm-public-chat-closed-final footer,
+      body.fm-public-chat-closed-final textarea,
+      body.fm-public-chat-closed-final #sendBtn,
+      body.fm-public-chat-closed-final .followme-public-attach-panel,
+      body.fm-public-chat-closed-final #fmPublicInlinePlusBtn20260519,
+      body.fm-public-chat-closed-final #fmExtraDedicatedButton20260519{
+        pointer-events:none !important;
+        opacity:.35 !important;
+        filter:grayscale(1) !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function ensureOverlay(){
+    ensureStyle();
+
+    var overlay = document.getElementById("fmPublicClosedThankyouOverlay20260527");
+    if(overlay) return overlay;
+
+    overlay = document.createElement("div");
+    overlay.id = "fmPublicClosedThankyouOverlay20260527";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "Chat chiusa");
+
+    overlay.innerHTML =
+      '<div class="fm-closed-card">' +
+        '<div class="fm-closed-icon">✓</div>' +
+        '<h1>Chat conclusa</h1>' +
+        '<p>Grazie, il proprietario ha chiuso questa conversazione. Il tuo messaggio è stato preso in carico e non è più possibile inviare nuovi messaggi da questa chat.</p>' +
+        '<button type="button" id="fmPublicClosedThankyouOk20260527">Ho capito</button>' +
+        '<div class="fm-closed-note">Puoi chiudere questa pagina. Per aprire una nuova richiesta sarà necessario inquadrare nuovamente il QR, se il servizio risulta attivo.</div>' +
+      '</div>';
+
+    document.body.appendChild(overlay);
+
+    var ok = document.getElementById("fmPublicClosedThankyouOk20260527");
+    if(ok){
+      ok.addEventListener("click", function(){
+        /*
+          Non riattiva la chat: nasconde solo il modal se l'utente vuole leggere la pagina.
+          Il composer resta comunque disabilitato.
+        */
+        overlay.style.display = "none";
+      });
+    }
+
+    return overlay;
+  }
+
+  function showClosedPage(reason){
+    if(closed) {
+      document.body.classList.add("fm-public-chat-closed-final");
+      return;
+    }
+
+    closed = true;
+    window.__FM_PUBLIC_CHAT_SELECTED_CLOSED__ = true;
+    window.__FM_PUBLIC_CHAT_CLOSED_FINAL__ = true;
+
+    try{
+      sessionStorage.setItem("followme_public_chat_closed_final", "1");
+    }catch(e){}
+
+    var overlay = ensureOverlay();
+    if(overlay){
+      overlay.style.display = "";
+    }
+
+    document.body.classList.add("followme-chat-closed");
+    document.body.classList.add("fm-public-chat-closed-final");
+
+    var ta = document.querySelector("textarea");
+    if(ta){
+      ta.value = "";
+      ta.disabled = true;
+      ta.placeholder = "Chat conclusa";
+    }
+
+    var send = document.getElementById("sendBtn") || document.querySelector("button[type='submit']");
+    if(send){
+      send.disabled = true;
+      send.textContent = "Chat conclusa";
+    }
+
+    try{
+      document.querySelectorAll(".choice, .fm-extra-dedicated-confirm, .fm-extra-dedicated-cancel").forEach(function(el){
+        el.disabled = true;
+        el.setAttribute("aria-disabled", "true");
+      });
+    }catch(e){}
+  }
+
+  async function checkState(){
+    if(checking || closed) return;
+
+    var id = sid();
+    if(!id) return;
+
+    checking = true;
+
+    try{
+      var res = await fetch("/api/followme/chat/session/" + encodeURIComponent(id) + "/state?v=" + Date.now(), {
+        cache:"no-store",
+        headers:{ "Accept":"application/json" }
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(data && data.success && data.session && String(data.session.status || "").toLowerCase() === "closed"){
+        showClosedPage("state");
+      }
+    }catch(e){
+      /*
+        Se lo stato non risponde non blocchiamo: l'intercetto invio sotto gestisce il caso.
+      */
+    }finally{
+      checking = false;
+    }
+  }
+
+  function looksClosedResponse(data){
+    if(!data) return false;
+
+    var err = String(data.error || data.message || data.status || "").toLowerCase();
+
+    return (
+      data.closed === true ||
+      data.chat_closed === true ||
+      data.session_closed === true ||
+      data.status === "closed" ||
+      (data.session && String(data.session.status || "").toLowerCase() === "closed") ||
+      err.includes("sessione non aperta") ||
+      err.includes("chat chiusa") ||
+      err.includes("sessione chiusa") ||
+      err.includes("conversazione chiusa")
+    );
+  }
+
+  function patchFetch(){
+    if(window.__fmPublicClosedThankyouFetchPatched20260527) return;
+    window.__fmPublicClosedThankyouFetchPatched20260527 = true;
+
+    var originalFetch = window.fetch;
+
+    window.fetch = async function(input, init){
+      var url = "";
+      try{
+        url = typeof input === "string" ? input : (input && input.url) || "";
+      }catch(e){}
+
+      var isChatWrite =
+        url.includes("/api/followme/chat/session/") &&
+        (
+          url.includes("/message") ||
+          url.includes("/attachment") ||
+          url.includes("/attachment-raw") ||
+          url.includes("/request-extra")
+        );
+
+      if(closed && isChatWrite){
+        showClosedPage("blocked-before-send");
+        return new Response(JSON.stringify({
+          success:false,
+          closed:true,
+          error:"Chat conclusa."
+        }), {
+          status:409,
+          headers:{ "Content-Type":"application/json" }
+        });
+      }
+
+      var response = await originalFetch.apply(this, arguments);
+
+      if(isChatWrite){
+        try{
+          var clone = response.clone();
+          var data = await clone.json().catch(function(){ return null; });
+
+          if(!response.ok && looksClosedResponse(data)){
+            showClosedPage("write-response-closed");
+          }else if(looksClosedResponse(data)){
+            showClosedPage("write-response-closed");
+          }
+        }catch(e){}
+      }
+
+      return response;
+    };
+  }
+
+  function interceptSendButtons(){
+    function handler(ev){
+      if(!closed) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      showClosedPage("send-click");
+      return false;
+    }
+
+    var send = document.getElementById("sendBtn") || document.querySelector("button[type='submit']");
+    if(send && send.dataset.closedThankyouBound !== "1"){
+      send.dataset.closedThankyouBound = "1";
+      send.addEventListener("click", handler, true);
+    }
+
+    var ta = document.querySelector("textarea");
+    if(ta && ta.dataset.closedThankyouBound !== "1"){
+      ta.dataset.closedThankyouBound = "1";
+      ta.addEventListener("keydown", function(ev){
+        if(!closed) return;
+        if(ev.key === "Enter"){
+          ev.preventDefault();
+          ev.stopPropagation();
+          ev.stopImmediatePropagation();
+          showClosedPage("enter");
+          return false;
+        }
+      }, true);
+    }
+  }
+
+  function boot(){
+    patchFetch();
+    interceptSendButtons();
+
+    setTimeout(checkState, 250);
+    setTimeout(checkState, 1200);
+  }
+
+  window.followMePublicShowClosedThankyou20260527 = showClosedPage;
+  window.followMePublicCheckClosedThankyou20260527 = checkState;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 200);
+    setTimeout(checkState, 900);
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible"){
+      setTimeout(checkState, 250);
+    }
+  });
+
+  setInterval(function(){
+    interceptSendButtons();
+    checkState();
+  }, 1500);
+})();
+</script>
