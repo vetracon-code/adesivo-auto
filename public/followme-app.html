@@ -36446,3 +36446,312 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   window.followMeEnsureOnlyOtherOptionsQrButton20260526 = pulse;
 })();
 </script>
+
+<script id="followme-chat-only-admin-speed-dedupe-20260526">
+(function(){
+  if(window.__followmeChatOnlyAdminSpeedDedupe20260526) return;
+  window.__followmeChatOnlyAdminSpeedDedupe20260526 = true;
+
+  /*
+    SOLO MODULO CHAT ADMIN.
+    Obiettivi:
+    - evitare doppio invio admin;
+    - deduplicare bolle duplicate nel DOM;
+    - refresh rapido dopo invio/nome/controlli chat;
+    - non toccare QR, preview, card, PDF, URL switching.
+  */
+
+  var sendingLock = false;
+  var lastSendKey = "";
+  var lastSendAt = 0;
+
+  function isChatMode(){
+    return document.body &&
+      (
+        document.body.classList.contains("followme-chat-only-mode") ||
+        document.body.classList.contains("followme-chat-waiting-mode") ||
+        !!document.getElementById("followmeOwnerChatScreen")
+      );
+  }
+
+  function currentSessionId(){
+    try{
+      var active = document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active");
+      if(active){
+        return active.getAttribute("data-session-id") ||
+               active.dataset.sessionId ||
+               active.dataset.id ||
+               active.getAttribute("data-id") ||
+               "";
+      }
+
+      var messages = document.getElementById("followmeOwnerChatMessages");
+      if(messages){
+        return messages.getAttribute("data-session-id") || messages.dataset.sessionId || "";
+      }
+
+      return window.followMeCurrentChatSessionId ||
+             window.currentFollowMeChatSessionId ||
+             "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function messageInput(){
+    return document.getElementById("followmeOwnerChatInput") ||
+           document.querySelector("body.followme-chat-only-mode textarea") ||
+           document.querySelector("#followmeOwnerChatComposer textarea");
+  }
+
+  function sendButton(){
+    return document.getElementById("followmeOwnerChatSend") ||
+           document.querySelector(".followme-admin-wa-send-inline");
+  }
+
+  function messageKey(){
+    var input = messageInput();
+    var sid = currentSessionId();
+    return sid + "::" + String(input && input.value || "").trim();
+  }
+
+  function dedupeDomMessages(){
+    try{
+      var box = document.getElementById("followmeOwnerChatMessages");
+      if(!box) return;
+
+      var seenIds = new Set();
+      var seenText = new Map();
+
+      Array.from(box.querySelectorAll(".followme-owner-chat-bubble,[data-message-id]")).forEach(function(el){
+        var id = el.getAttribute("data-message-id") || el.dataset.messageId || "";
+        var sender = el.classList.contains("owner") ? "owner" : (el.classList.contains("system") ? "system" : "user");
+        var text = String(el.textContent || "").replace(/\s+/g, " ").trim();
+        var key = sender + "::" + text;
+
+        if(id){
+          if(seenIds.has(id)){
+            el.remove();
+            return;
+          }
+          seenIds.add(id);
+        }
+
+        /*
+          Dedupe visivo prudente:
+          solo testo identico, stesso sender, ravvicinato nel DOM.
+        */
+        if(text && seenText.has(key)){
+          el.remove();
+          return;
+        }
+
+        if(text) seenText.set(key, true);
+      });
+    }catch(e){}
+  }
+
+  function refreshChatSoon(){
+    if(!isChatMode()) return;
+
+    try{ window.refreshFollowMeOwnerChat?.(); }catch(e){}
+    try{ window.loadFollowMeOwnerChat?.(); }catch(e){}
+    try{ window.loadOwnerChatMessages?.(); }catch(e){}
+    try{ window.followMeOwnerChatRefresh?.(); }catch(e){}
+    try{ window.bootFollowMeOwnerChat?.(); }catch(e){}
+    try{ window.fmOwnerChatDialogueFinalFix?.boot?.(); }catch(e){}
+    try{ window.fmRealChatDialogueFix?.boot?.(); }catch(e){}
+    try{ window.fmChatSelectedUserAndReset?.boot?.(); }catch(e){}
+
+    setTimeout(dedupeDomMessages, 80);
+    setTimeout(dedupeDomMessages, 350);
+    setTimeout(dedupeDomMessages, 900);
+  }
+
+  function bindSendGuard(){
+    var btn = sendButton();
+    if(!btn || btn.dataset.chatOnlySendGuard20260526 === "1") return;
+
+    btn.dataset.chatOnlySendGuard20260526 = "1";
+
+    btn.addEventListener("click", function(ev){
+      if(!isChatMode()) return;
+
+      var key = messageKey();
+      var now = Date.now();
+
+      if(!key || key.endsWith("::")) return;
+
+      if(sendingLock || (key === lastSendKey && now - lastSendAt < 4500)){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        return false;
+      }
+
+      sendingLock = true;
+      lastSendKey = key;
+      lastSendAt = now;
+
+      setTimeout(function(){
+        sendingLock = false;
+      }, 1800);
+
+      setTimeout(refreshChatSoon, 180);
+      setTimeout(refreshChatSoon, 700);
+      setTimeout(refreshChatSoon, 1400);
+    }, true);
+  }
+
+  function bindEnterGuard(){
+    var input = messageInput();
+    if(!input || input.dataset.chatOnlyEnterGuard20260526 === "1") return;
+
+    input.dataset.chatOnlyEnterGuard20260526 = "1";
+
+    input.addEventListener("keydown", function(ev){
+      if(!isChatMode()) return;
+      if(ev.key !== "Enter" || ev.shiftKey) return;
+
+      var key = messageKey();
+      var now = Date.now();
+
+      if(!key || key.endsWith("::")) return;
+
+      if(sendingLock || (key === lastSendKey && now - lastSendAt < 4500)){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        return false;
+      }
+
+      sendingLock = true;
+      lastSendKey = key;
+      lastSendAt = now;
+
+      setTimeout(function(){
+        sendingLock = false;
+      }, 1800);
+
+      setTimeout(refreshChatSoon, 180);
+      setTimeout(refreshChatSoon, 700);
+      setTimeout(refreshChatSoon, 1400);
+    }, true);
+  }
+
+  function patchFetch(){
+    if(window.__followmeChatOnlyAdminFetchPatch20260526) return;
+    window.__followmeChatOnlyAdminFetchPatch20260526 = true;
+
+    var oldFetch = window.fetch;
+    if(!oldFetch) return;
+
+    window.fetch = async function(){
+      var args = arguments;
+      var url = "";
+
+      try{
+        url = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+      }catch(e){}
+
+      var res = await oldFetch.apply(this, args);
+
+      try{
+        if(
+          url.includes("/api/followme/chat/session/") &&
+          (
+            url.includes("/message") ||
+            url.includes("/name") ||
+            url.includes("/rename") ||
+            url.includes("/settings") ||
+            url.includes("/set-user-control") ||
+            url.includes("/toggle-user-control")
+          )
+        ){
+          setTimeout(refreshChatSoon, 120);
+          setTimeout(refreshChatSoon, 450);
+          setTimeout(refreshChatSoon, 1000);
+        }
+
+        if(
+          url.includes("/api/followme/") &&
+          url.includes("/chat/sessions")
+        ){
+          setTimeout(dedupeDomMessages, 80);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  function optimizeNameConfirm(){
+    /*
+      Solo lato UX: quando viene confermato un nome, aggiorna subito i tab visibili
+      se il testo del nome è già presente in input/card. Il server resta autoritativo.
+    */
+    document.addEventListener("click", function(ev){
+      if(!isChatMode()) return;
+
+      var btn = ev.target && ev.target.closest ? ev.target.closest("button") : null;
+      if(!btn) return;
+
+      var txt = String(btn.textContent || "").toLowerCase();
+      if(!(txt.includes("conferma") || txt.includes("salva"))) return;
+
+      var card = btn.closest(".followme-name-detect-card,.followme-name-suggestion");
+      if(!card) return;
+
+      var input = card.querySelector("input");
+      var nameEl = card.querySelector(".followme-name-detect-name,strong");
+      var name = String((input && input.value) || (nameEl && nameEl.textContent) || "").trim();
+
+      if(!name) return;
+
+      setTimeout(function(){
+        var active = document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active");
+        if(active){
+          active.classList.add("has-name");
+          var nameTarget = active.querySelector(".followme-chat-user-name,strong,span") || active;
+          if(nameTarget) nameTarget.textContent = name;
+        }
+      }, 60);
+
+      setTimeout(refreshChatSoon, 200);
+      setTimeout(refreshChatSoon, 800);
+    }, true);
+  }
+
+  function boot(){
+    bindSendGuard();
+    bindEnterGuard();
+    patchFetch();
+    optimizeNameConfirm();
+    dedupeDomMessages();
+
+    setTimeout(bindSendGuard, 500);
+    setTimeout(bindEnterGuard, 500);
+    setTimeout(dedupeDomMessages, 700);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", boot);
+  window.addEventListener("focus", function(){
+    if(isChatMode()) refreshChatSoon();
+  });
+
+  setInterval(function(){
+    if(!isChatMode()) return;
+    bindSendGuard();
+    bindEnterGuard();
+    dedupeDomMessages();
+  }, 1200);
+
+  window.followMeChatOnlyRefreshFast20260526 = refreshChatSoon;
+})();
+</script>

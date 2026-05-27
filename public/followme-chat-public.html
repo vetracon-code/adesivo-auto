@@ -6364,3 +6364,214 @@
 
 
 
+
+<script id="followme-chat-only-public-speed-dedupe-20260526">
+(function(){
+  if(window.__followmeChatOnlyPublicSpeedDedupe20260526) return;
+  window.__followmeChatOnlyPublicSpeedDedupe20260526 = true;
+
+  /*
+    SOLO CHAT PUBBLICA.
+    - evita doppi invii utente;
+    - deduplica bolle duplicate;
+    - forza refresh rapido dopo messaggio/allegato/stato.
+  */
+
+  var sendingLock = false;
+  var lastKey = "";
+  var lastAt = 0;
+
+  function sessionId(){
+    try{
+      return sessionStorage.getItem("followme_chat_session_id") ||
+             window.sessionId ||
+             window.followMeChatSessionId ||
+             "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function input(){
+    return document.getElementById("messageInput") ||
+           document.getElementById("msgInput") ||
+           document.querySelector("textarea");
+  }
+
+  function sendBtn(){
+    return document.getElementById("sendBtn") ||
+           document.querySelector("button[type='submit']") ||
+           document.querySelector(".send");
+  }
+
+  function key(){
+    var i = input();
+    return sessionId() + "::" + String(i && i.value || "").trim();
+  }
+
+  function dedupeDom(){
+    try{
+      var seenIds = new Set();
+      var seenText = new Set();
+
+      document.querySelectorAll(".message,.bubble,[data-message-id]").forEach(function(el){
+        var id = el.getAttribute("data-message-id") || el.dataset.messageId || "";
+        var text = String(el.textContent || "").replace(/\s+/g, " ").trim();
+        var sender =
+          el.classList.contains("user") ? "user" :
+          el.classList.contains("admin") ? "admin" :
+          el.classList.contains("bot") ? "bot" :
+          el.classList.contains("system") ? "system" : "x";
+
+        if(id){
+          if(seenIds.has(id)){
+            el.remove();
+            return;
+          }
+          seenIds.add(id);
+        }
+
+        var k = sender + "::" + text;
+        if(text && seenText.has(k)){
+          el.remove();
+          return;
+        }
+
+        if(text) seenText.add(k);
+      });
+    }catch(e){}
+  }
+
+  function refreshSoon(){
+    try{ window.poll?.(); }catch(e){}
+    try{ window.loadAllMessages?.(); }catch(e){}
+    try{ window.fetchState?.(true); }catch(e){}
+    try{ window.renderAllAttachments?.(); }catch(e){}
+
+    setTimeout(dedupeDom, 60);
+    setTimeout(dedupeDom, 250);
+    setTimeout(dedupeDom, 800);
+  }
+
+  function bindSend(){
+    var btn = sendBtn();
+    if(btn && btn.dataset.chatOnlyPublicSendGuard20260526 !== "1"){
+      btn.dataset.chatOnlyPublicSendGuard20260526 = "1";
+
+      btn.addEventListener("click", function(ev){
+        var k = key();
+        var now = Date.now();
+
+        if(!k || k.endsWith("::")) return;
+
+        if(sendingLock || (k === lastKey && now - lastAt < 4500)){
+          ev.preventDefault();
+          ev.stopPropagation();
+          ev.stopImmediatePropagation();
+          return false;
+        }
+
+        sendingLock = true;
+        lastKey = k;
+        lastAt = now;
+
+        setTimeout(function(){ sendingLock = false; }, 1700);
+        setTimeout(refreshSoon, 150);
+        setTimeout(refreshSoon, 600);
+        setTimeout(refreshSoon, 1300);
+      }, true);
+    }
+
+    var i = input();
+    if(i && i.dataset.chatOnlyPublicEnterGuard20260526 !== "1"){
+      i.dataset.chatOnlyPublicEnterGuard20260526 = "1";
+
+      i.addEventListener("keydown", function(ev){
+        if(ev.key !== "Enter" || ev.shiftKey) return;
+
+        var k = key();
+        var now = Date.now();
+
+        if(!k || k.endsWith("::")) return;
+
+        if(sendingLock || (k === lastKey && now - lastAt < 4500)){
+          ev.preventDefault();
+          ev.stopPropagation();
+          ev.stopImmediatePropagation();
+          return false;
+        }
+
+        sendingLock = true;
+        lastKey = k;
+        lastAt = now;
+
+        setTimeout(function(){ sendingLock = false; }, 1700);
+        setTimeout(refreshSoon, 150);
+        setTimeout(refreshSoon, 600);
+        setTimeout(refreshSoon, 1300);
+      }, true);
+    }
+  }
+
+  function patchFetch(){
+    if(window.__followmeChatOnlyPublicFetchPatch20260526) return;
+    window.__followmeChatOnlyPublicFetchPatch20260526 = true;
+
+    var oldFetch = window.fetch;
+    if(!oldFetch) return;
+
+    window.fetch = async function(){
+      var args = arguments;
+      var url = "";
+
+      try{
+        url = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+      }catch(e){}
+
+      var res = await oldFetch.apply(this, args);
+
+      try{
+        if(
+          url.includes("/api/followme/chat/session/") &&
+          (
+            url.includes("/message") ||
+            url.includes("/messages") ||
+            url.includes("/state") ||
+            url.includes("/attachment")
+          )
+        ){
+          setTimeout(refreshSoon, 120);
+          setTimeout(refreshSoon, 500);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  function boot(){
+    bindSend();
+    patchFetch();
+    dedupeDom();
+
+    setTimeout(bindSend, 500);
+    setTimeout(dedupeDom, 700);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", boot);
+  window.addEventListener("focus", refreshSoon);
+
+  setInterval(function(){
+    bindSend();
+    dedupeDom();
+  }, 1200);
+
+  window.followMePublicChatRefreshFast20260526 = refreshSoon;
+})();
+</script>
