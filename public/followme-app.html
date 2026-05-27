@@ -12784,13 +12784,40 @@ document.addEventListener("visibilitychange", function(){
   }
 
   async function sendOwnerReply(){
-    /*
-      followme-owner-chat-dialogue-final-fix-send-disabled-20260527
-      Invio Admin disattivato qui: era uno dei punti che generava doppi invii / Load failed.
-      L'invio reale viene gestito dal controller unico followme-admin-single-sender-definitive-20260527.
-    */
-    if(window.followMeAdminSingleSenderDefinitive20260527 && typeof window.followMeAdminSingleSenderDefinitive20260527.send === "function"){
-      return window.followMeAdminSingleSenderDefinitive20260527.send();
+    const sessionId = currentOwnerSessionId || getParam("chatSession");
+    const input = document.getElementById("followmeOwnerChatInput");
+    const text = input ? input.value.trim() : "";
+
+    if(!sessionId || !text) return;
+
+    if(input) input.value = "";
+
+    try{
+      const res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/message", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json", "Accept":"application/json" },
+        cache:"no-store",
+        body:JSON.stringify({ sender:"owner", message:text })
+      });
+
+      const data = await res.json().catch(()=>null);
+
+      if(data && data.success && data.message){
+        ownerLastMessageId = Math.max(ownerLastMessageId, Number(data.message.id) || 0);
+        addOwnerChatMessage("owner", text);
+        if(typeof window.playFollowMeSendSound === "function") window.playFollowMeSendSound();
+
+        setTimeout(function(){
+          try{ pollOwnerMessages(false); }catch(e){}
+        }, 350);
+      }else{
+        if(input && !input.value) input.value = text;
+        addOwnerChatMessage("visitor", "Errore invio messaggio.");
+      }
+
+    }catch(err){
+      if(input && !input.value) input.value = text;
+      addOwnerChatMessage("visitor", "Errore invio messaggio: " + (err.message || String(err)));
     }
   }
 
@@ -36365,261 +36392,53 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
-<script id="followme-admin-single-sender-definitive-20260527">
+<script id="followme-admin-single-sender-definitive-20260527-disabled-blocks-after-one-message">/* disabled: bloccava invio admin dopo il primo messaggio */</script>
+
+<script id="followme-admin-send-light-guard-20260527">
 (function(){
-  if(window.__followmeAdminSingleSenderDefinitive20260527) return;
-  window.__followmeAdminSingleSenderDefinitive20260527 = true;
+  if(window.__followmeAdminSendLightGuard20260527) return;
+  window.__followmeAdminSendLightGuard20260527 = true;
 
   /*
-    SOLO ADMIN CHAT.
-    Un solo invio, una sola POST, nessun refresh globale.
-    Serve a risolvere:
-    - Load failed dopo 2/3 messaggi;
-    - doppi invii;
-    - input bloccato;
-    - listener multipli su Enter / pulsanti.
+    Guardia leggera, NON sostituisce il sender.
+    Serve solo a evitare doppio click ravvicinato, senza bloccare il bottone dopo il primo invio.
   */
 
-  var sending = false;
-  var lastKey = "";
+  var lastText = "";
   var lastAt = 0;
 
-  function isAdminChat(){
-    try{
-      var p = new URLSearchParams(location.search || "");
-      return !!p.get("chatSession") && !!document.getElementById("followmeOwnerChatMessages");
-    }catch(e){
-      return !!document.getElementById("followmeOwnerChatMessages");
-    }
-  }
-
-  function sid(){
-    try{
-      var p = new URLSearchParams(location.search || "");
-      return p.get("chatSession") || "";
-    }catch(e){
-      return "";
-    }
-  }
-
   function input(){
-    return document.getElementById("followmeOwnerChatInput") ||
-           document.querySelector("#followmeOwnerChatComposer textarea");
+    return document.getElementById("followmeOwnerChatInput");
   }
 
-  function box(){
-    return document.getElementById("followmeOwnerChatMessages");
+  function isAdminSendTarget(el){
+    return !!(
+      el &&
+      (
+        el.id === "followmeOwnerChatSend" ||
+        el.id === "followmeAdminSendInline" ||
+        el.closest("#followmeOwnerChatSend") ||
+        el.closest("#followmeAdminSendInline")
+      )
+    );
   }
 
-  function esc(v){
-    return String(v || "").replace(/[&<>"']/g, function(c){
-      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
-    });
-  }
+  document.addEventListener("click", function(ev){
+    if(!isAdminSendTarget(ev.target)) return;
 
-  function buttons(){
-    return [
-      document.getElementById("followmeAdminSendInline"),
-      document.getElementById("followmeOwnerChatSend")
-    ].filter(Boolean);
-  }
+    var inp = input();
+    var txt = inp ? String(inp.value || "").trim() : "";
+    var now = Date.now();
 
-  function setBusy(on){
-    buttons().forEach(function(b){
-      b.disabled = !!on;
-      b.classList.toggle("fm-admin-sending", !!on);
-    });
-  }
-
-  function addOptimistic(text){
-    var b = box();
-    if(!b) return;
-
-    var div = document.createElement("div");
-    div.className = "followme-owner-chat-bubble owner";
-    div.dataset.optimisticOwnerMessage = "1";
-    div.dataset.optimisticText = text;
-    div.dataset.optimisticAt = String(Date.now());
-    div.innerHTML = esc(text).replace(/\n/g, "<br>");
-
-    b.appendChild(div);
-    b.scrollTop = b.scrollHeight;
-  }
-
-  function removeOptimisticIfServerArrived(text){
-    var b = box();
-    if(!b) return;
-
-    var norm = String(text || "").replace(/\s+/g, " ").trim();
-
-    var serverExists = Array.from(b.querySelectorAll(".followme-owner-chat-bubble.owner:not([data-optimistic-owner-message])"))
-      .some(function(el){
-        return String(el.textContent || "").replace(/\s+/g, " ").trim() === norm;
-      });
-
-    if(!serverExists) return;
-
-    Array.from(b.querySelectorAll('.followme-owner-chat-bubble.owner[data-optimistic-owner-message="1"]'))
-      .forEach(function(el){
-        if(String(el.textContent || "").replace(/\s+/g, " ").trim() === norm){
-          try{ el.remove(); }catch(e){}
-        }
-      });
-  }
-
-  async function lightPollOnce(){
-    try{
-      if(window.followMeOwnerChatFinalFix && typeof window.followMeOwnerChatFinalFix.pollOwnerMessages === "function"){
-        await window.followMeOwnerChatFinalFix.pollOwnerMessages(false);
-      }
-    }catch(e){}
-  }
-
-  async function send(ev){
-    if(ev){
+    if(txt && txt === lastText && now - lastAt < 700){
       ev.preventDefault();
       ev.stopPropagation();
       ev.stopImmediatePropagation();
+      return false;
     }
 
-    if(!isAdminChat()) return false;
-
-    var sessionId = sid();
-    var inp = input();
-    var text = inp ? String(inp.value || "").trim() : "";
-
-    if(!sessionId || !text) return false;
-
-    var now = Date.now();
-    var key = sessionId + "::" + text;
-
-    if(sending) return false;
-    if(key === lastKey && now - lastAt < 1500) return false;
-
-    sending = true;
-    lastKey = key;
+    lastText = txt;
     lastAt = now;
-    setBusy(true);
-
-    if(inp) inp.value = "";
-
-    addOptimistic(text);
-
-    try{
-      var res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/message", {
-        method:"POST",
-        headers:{
-          "Content-Type":"application/json",
-          "Accept":"application/json"
-        },
-        cache:"no-store",
-        body:JSON.stringify({
-          sender:"owner",
-          message:text
-        })
-      });
-
-      var data = await res.json().catch(function(){ return null; });
-
-      if(!res.ok || !data || !data.success){
-        throw new Error((data && data.error) || ("HTTP " + res.status));
-      }
-
-      /*
-        Una sola lettura leggera dopo invio, non 3/4 setTimeout sovrapposti.
-      */
-      setTimeout(function(){
-        lightPollOnce();
-        removeOptimisticIfServerArrived(text);
-      }, 250);
-
-      setTimeout(function(){
-        removeOptimisticIfServerArrived(text);
-      }, 900);
-
-      try{
-        if(typeof window.playFollowMeSendSound === "function") window.playFollowMeSendSound();
-      }catch(e){}
-
-    }catch(err){
-      var msg = String(err && (err.message || err.name) || err || "Errore");
-
-      /*
-        Non lasciamo il messaggio perso: lo rimettiamo nell'input.
-      */
-      if(inp && !String(inp.value || "").trim()){
-        inp.value = text;
-      }
-
-      /*
-        Rimuove il bubble ottimistico se il server non ha accettato.
-      */
-      Array.from(document.querySelectorAll('.followme-owner-chat-bubble.owner[data-optimistic-owner-message="1"]'))
-        .forEach(function(el){
-          if(String(el.dataset.optimisticText || "") === text){
-            try{ el.remove(); }catch(e){}
-          }
-        });
-
-      alert("Errore invio messaggio: " + msg);
-
-    }finally{
-      sending = false;
-      setBusy(false);
-    }
-
-    return false;
-  }
-
-  function cloneAndBindButton(btn){
-    if(!btn || btn.dataset.singleSenderDefinitive === "1") return;
-
-    var fresh = btn.cloneNode(true);
-    fresh.dataset.singleSenderDefinitive = "1";
-    btn.parentNode.replaceChild(fresh, btn);
-
-    fresh.addEventListener("click", send, true);
-  }
-
-  function bind(){
-    cloneAndBindButton(document.getElementById("followmeAdminSendInline"));
-    cloneAndBindButton(document.getElementById("followmeOwnerChatSend"));
-
-    var inp = input();
-    if(inp && inp.dataset.singleSenderDefinitiveEnter !== "1"){
-      inp.dataset.singleSenderDefinitiveEnter = "1";
-      inp.addEventListener("keydown", function(ev){
-        if(ev.key === "Enter" && !ev.shiftKey){
-          ev.preventDefault();
-          ev.stopPropagation();
-          ev.stopImmediatePropagation();
-          send(ev);
-          return false;
-        }
-      }, true);
-    }
-  }
-
-  function boot(){
-    if(!isAdminChat()) return;
-    bind();
-  }
-
-  window.followMeAdminSingleSenderDefinitive20260527 = {
-    send: send,
-    bind: bind
-  };
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", boot);
-  }else{
-    boot();
-  }
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 200);
-  });
-
-  setInterval(boot, 1500);
+  }, true);
 })();
 </script>
