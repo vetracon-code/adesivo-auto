@@ -187,3 +187,50 @@ self.addEventListener('notificationclick', function(event) {
     })());
   } catch(e) {}
 });
+
+
+/* followme-generic-notification-click-all-projects-20260527
+   Handler generico per tutte le notifiche:
+   FollowMe, Chat V2, Contatto Veicolo, Avvisami.
+   Non modifica i testi delle notifiche: gestisce solo il click.
+*/
+self.addEventListener('notificationclick', function(event) {
+  try {
+    const notification = event.notification;
+    const data = (notification && notification.data) || {};
+
+    const url =
+      data.url ||
+      data.targetUrl ||
+      data.relativeTargetUrl ||
+      (data.data && (data.data.url || data.data.targetUrl || data.data.relativeTargetUrl)) ||
+      '/';
+
+    if (notification) notification.close();
+
+    event.waitUntil((async function(){
+      const absoluteUrl = new URL(url, self.location.origin).href;
+
+      const allClients = await clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true
+      });
+
+      for (const client of allClients) {
+        try {
+          if ('focus' in client) {
+            await client.focus();
+            if ('navigate' in client) {
+              return client.navigate(absoluteUrl);
+            }
+            return;
+          }
+        } catch(e) {}
+      }
+
+      if (clients.openWindow) {
+        return clients.openWindow(absoluteUrl);
+      }
+    })());
+  } catch(e) {}
+});
