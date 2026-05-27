@@ -6555,3 +6555,279 @@
   window.followMePublicCanonicalFastRender20260527 = loadCanonical;
 })();
 </script>
+
+<script id="followme-public-extra-fast-flow-20260527">
+(function(){
+  if(window.__followmePublicExtraFastFlow20260527) return;
+  window.__followmePublicExtraFastFlow20260527 = true;
+
+  /*
+    SOLO EXTRA UTENTE.
+    - invio richiesta Extra immediato;
+    - feedback immediato;
+    - polling rapido solo se richiesta pendente;
+    - applica subito uploads_enabled quando admin approva.
+  */
+
+  var requesting = false;
+  var polling = false;
+  var pendingRequestId = "";
+
+  function sid(){
+    try{
+      return sessionStorage.getItem("followme_chat_session_id") ||
+             window.sessionId ||
+             window.followMeChatSessionId ||
+             "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function esc(v){
+    return String(v || "").replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function messagesBox(){
+    return document.querySelector(".messages") ||
+           document.getElementById("messages") ||
+           document.querySelector(".chat .messages");
+  }
+
+  function addSystem(text){
+    var box = messagesBox();
+    if(!box || !text) return;
+
+    var div = document.createElement("div");
+    div.className = "message bot fm-extra-fast-status";
+    div.innerHTML = '<div class="bubble">' + esc(text).replace(/\n/g, "<br>") + '</div>';
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function setExtraEnabled(on){
+    document.body.classList.toggle("fm-public-extra-inline-on", !!on);
+    document.body.classList.toggle("fm-public-extra-enabled-live", !!on);
+    document.body.classList.toggle("fm-public-extra-adminlike-on", !!on);
+
+    try{ window.fetchState?.(true); }catch(e){}
+    try{ window.renderAllAttachments?.(); }catch(e){}
+  }
+
+  function getPending(requests){
+    if(!Array.isArray(requests)) return null;
+    if(pendingRequestId){
+      var exact = requests.find(function(r){ return String(r.request_id) === String(pendingRequestId); });
+      if(exact) return exact;
+    }
+    return requests[0] || null;
+  }
+
+  async function pollExtra(){
+    var sessionId = sid();
+    if(!sessionId || polling) return;
+
+    polling = true;
+
+    try{
+      var res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/extra-requests?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success) return;
+
+      if(data.session && data.session.uploads_enabled === true){
+        pendingRequestId = "";
+        setExtraEnabled(true);
+        return;
+      }
+
+      var req = getPending(data.requests);
+
+      if(!req) return;
+
+      if(req.status === "accepted"){
+        pendingRequestId = "";
+        setExtraEnabled(true);
+        addSystem(req.response_message || "Richiesta accettata. Ora puoi inviare contenuti Extra.");
+      }
+
+      if(req.status === "rejected"){
+        pendingRequestId = "";
+        setExtraEnabled(false);
+        addSystem(req.response_message || "Richiesta Extra rifiutata.");
+      }
+
+    }catch(e){
+    }finally{
+      polling = false;
+    }
+  }
+
+  async function requestExtraFast(button){
+    var sessionId = sid();
+    if(!sessionId || requesting) return false;
+
+    requesting = true;
+
+    var requestId = "extra-" + sessionId + "-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
+    pendingRequestId = requestId;
+
+    if(button){
+      button.disabled = true;
+      button.dataset.originalText20260527 = button.textContent || "";
+      button.textContent = "Richiesta inviata...";
+    }
+
+    addSystem("Richiesta Extra inviata. Attendi la risposta del proprietario.");
+
+    try{
+      var res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/request-extra", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ request_id:requestId, fast:true })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Richiesta Extra non riuscita");
+      }
+
+      if(data.already_enabled || (data.session && data.session.uploads_enabled === true)){
+        pendingRequestId = "";
+        setExtraEnabled(true);
+        addSystem("Extra è già attivo.");
+      }else if(data.request && data.request.request_id){
+        pendingRequestId = data.request.request_id;
+      }
+
+      setTimeout(pollExtra, 200);
+      setTimeout(pollExtra, 700);
+      setTimeout(pollExtra, 1300);
+
+    }catch(err){
+      console.error("extra fast request error:", err);
+      addSystem("Errore richiesta Extra: " + (err.message || String(err)));
+      pendingRequestId = "";
+    }finally{
+      setTimeout(function(){
+        requesting = false;
+        if(button){
+          button.disabled = false;
+          button.textContent = button.dataset.originalText20260527 || "Richiedi Extra";
+        }
+      }, 700);
+    }
+
+    return false;
+  }
+
+  function findExtraButtonFromClick(target){
+    if(!target || !target.closest) return null;
+
+    var btn = target.closest(
+      "#fmExtraDedicatedButton20260519, " +
+      "#fmExtraCleanButton20260519, " +
+      "#followmePublicRequestExtraBtn20260519, " +
+      ".fm-extra-dedicated-confirm, " +
+      "button"
+    );
+
+    if(!btn) return null;
+
+    if(btn.id === "fmExtraDedicatedButton20260519") return btn;
+    if(btn.id === "fmExtraCleanButton20260519") return btn;
+    if(btn.id === "followmePublicRequestExtraBtn20260519") return btn;
+    if(btn.classList.contains("fm-extra-dedicated-confirm")) return btn;
+
+    var txt = String(btn.textContent || "").trim().toLowerCase();
+    if(txt === "richiedi extra" || txt === "extra" || txt.includes("richiedi") && txt.includes("extra")){
+      return btn;
+    }
+
+    return null;
+  }
+
+  function bind(){
+    if(window.__followmePublicExtraFastClick20260527) return;
+    window.__followmePublicExtraFastClick20260527 = true;
+
+    document.addEventListener("click", function(ev){
+      var btn = findExtraButtonFromClick(ev.target);
+      if(!btn) return;
+
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+
+      requestExtraFast(btn);
+      return false;
+    }, true);
+  }
+
+  function patchFetch(){
+    if(window.__followmePublicExtraFastFetch20260527) return;
+    window.__followmePublicExtraFastFetch20260527 = true;
+
+    var oldFetch = window.fetch;
+    if(!oldFetch) return;
+
+    window.fetch = async function(){
+      var args = arguments;
+      var url = "";
+
+      try{
+        url = String(args[0] && args[0].url ? args[0].url : args[0] || "");
+      }catch(e){}
+
+      var res = await oldFetch.apply(this, args);
+
+      try{
+        if(url.includes("/api/followme/chat/session/") && (
+          url.includes("/request-extra") ||
+          url.includes("/extra-requests") ||
+          url.includes("/state")
+        )){
+          setTimeout(pollExtra, 150);
+          setTimeout(pollExtra, 700);
+        }
+      }catch(e){}
+
+      return res;
+    };
+  }
+
+  function boot(){
+    bind();
+    patchFetch();
+
+    setTimeout(pollExtra, 500);
+    setTimeout(pollExtra, 1500);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", boot);
+  window.addEventListener("focus", function(){ setTimeout(pollExtra, 120); });
+
+  setInterval(function(){
+    if(document.visibilityState === "hidden") return;
+    if(!pendingRequestId) return;
+    pollExtra();
+  }, 700);
+
+  window.fmExtraFastPublic20260527 = {
+    requestExtraFast:requestExtraFast,
+    pollExtra:pollExtra
+  };
+})();
+</script>

@@ -13466,6 +13466,34 @@ app.post('/api/followme/chat/session/:session_id/request-extra', express.json(),
       });
     }
 
+    /* followme-extra-fast-server-guard-20260527
+       Se esiste già una richiesta Extra pendente per questa sessione,
+       non ne creiamo altre. Evita rallentamenti, doppioni e pannelli duplicati.
+    */
+    const pendingExtra20260527 = await pool.query(
+      `SELECT id, session_id, project_id, request_id, status, created_at, responded_at, response_message
+       FROM followme_extra_requests
+       WHERE session_id = $1
+         AND status = 'pending'
+       ORDER BY id DESC
+       LIMIT 1`,
+      [session.id]
+    );
+
+    if (pendingExtra20260527.rows.length) {
+      return res.json({
+        success:true,
+        existing_pending:true,
+        request:pendingExtra20260527.rows[0],
+        session:{
+          id:session.id,
+          visitor_label:session.visitor_label,
+          display_name:session.display_name,
+          uploads_enabled:session.uploads_enabled
+        }
+      });
+    }
+
     const requestId = String(
       req.body && req.body.request_id
         ? req.body.request_id
@@ -13614,6 +13642,28 @@ app.post('/api/followme/chat/session/:session_id/extra-request/:request_id/respo
 
     if (!reqRes.rows.length) {
       return res.status(404).json({ success:false, error:'Richiesta Extra non trovata per questa sessione.' });
+    }
+
+    /* followme-extra-fast-respond-idempotent-20260527
+       Se la richiesta è già stata approvata/rifiutata, rispondiamo subito
+       senza reinserire messaggi e senza rifare update inutili.
+    */
+    if (reqRes.rows[0].status && reqRes.rows[0].status !== 'pending') {
+      const freshSessionAlready = await pool.query(
+        `SELECT id, project_id, visitor_label, display_name, uploads_enabled, is_blocked, status
+         FROM followme_chat_sessions
+         WHERE id = $1
+         LIMIT 1`,
+        [sessionId]
+      );
+
+      return res.json({
+        success:true,
+        already_responded:true,
+        action:reqRes.rows[0].status === 'accepted' ? 'accept' : 'reject',
+        request:reqRes.rows[0],
+        session:freshSessionAlready.rows[0] || session
+      });
     }
 
     const responseMessage = action === 'accept'

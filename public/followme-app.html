@@ -36748,3 +36748,252 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   };
 })();
 </script>
+
+<script id="followme-admin-extra-fast-flow-20260527">
+(function(){
+  if(window.__followmeAdminExtraFastFlow20260527) return;
+  window.__followmeAdminExtraFastFlow20260527 = true;
+
+  /*
+    SOLO EXTRA ADMIN.
+    - controlla richieste Extra più rapidamente;
+    - aggiorna subito il pannello;
+    - approva/rifiuta con feedback immediato;
+    - non tocca QR, preview, PDF, URL/card.
+  */
+
+  var loading = false;
+  var responding = false;
+  var lastSignature = "";
+
+  function sid(){
+    try{
+      var p = new URLSearchParams(location.search || "");
+      var fromUrl = p.get("chatSession");
+      if(fromUrl) return String(fromUrl);
+
+      var active = document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active");
+      if(active){
+        return active.getAttribute("data-session-id") ||
+               active.dataset.sessionId ||
+               active.getAttribute("data-id") ||
+               active.dataset.id ||
+               "";
+      }
+    }catch(e){}
+    return "";
+  }
+
+  function isChat(){
+    return document.body && (
+      document.body.classList.contains("followme-chat-only-mode") ||
+      document.body.classList.contains("followme-chat-waiting-mode") ||
+      !!document.getElementById("followmeOwnerChatMessages")
+    );
+  }
+
+  function esc(v){
+    return String(v || "").replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function ensurePanel(){
+    var panel = document.getElementById("fmExtraDedicatedAdminPanel20260519");
+
+    if(!panel){
+      panel = document.createElement("div");
+      panel.id = "fmExtraDedicatedAdminPanel20260519";
+      panel.className = "is-open";
+
+      var host =
+        document.querySelector("#followmeOwnerChatComposer") ||
+        document.querySelector("#followmeOwnerChatMessages")?.parentElement ||
+        document.body;
+
+      host.appendChild(panel);
+    }
+
+    return panel;
+  }
+
+  function hidePanel(){
+    var panel = document.getElementById("fmExtraDedicatedAdminPanel20260519");
+    if(panel){
+      panel.classList.remove("is-open");
+      panel.style.display = "none";
+      panel.innerHTML = "";
+    }
+    lastSignature = "";
+  }
+
+  function pendingRequest(requests){
+    if(!Array.isArray(requests)) return null;
+    return requests.find(function(r){ return String(r.status || "") === "pending"; }) || null;
+  }
+
+  function paint(data){
+    var pending = pendingRequest(data && data.requests);
+    var session = data && data.session;
+
+    if(!pending){
+      hidePanel();
+      return;
+    }
+
+    var signature = pending.request_id + "::" + pending.status + "::" + (session && session.uploads_enabled);
+    if(signature === lastSignature) return;
+    lastSignature = signature;
+
+    var panel = ensurePanel();
+    panel.style.display = "block";
+    panel.classList.add("is-open");
+
+    var who = (session && (session.display_name || session.visitor_label)) || "Utente";
+
+    panel.innerHTML =
+      '<button type="button" class="x" data-extra-fast-close="1">×</button>' +
+      '<div style="font-weight:950;margin-bottom:6px;">Richiesta Extra ricevuta</div>' +
+      '<div style="font-size:13px;line-height:1.35;opacity:.88;margin-bottom:12px;">' +
+        esc(who) + ' chiede di inviare foto, audio, posizione o allegati.' +
+      '</div>' +
+      '<div class="actions">' +
+        '<button type="button" class="accept" data-extra-fast-action="accept" data-request-id="' + esc(pending.request_id) + '">Accetta Extra</button>' +
+        '<button type="button" class="reject" data-extra-fast-action="reject" data-request-id="' + esc(pending.request_id) + '">Rifiuta</button>' +
+      '</div>';
+  }
+
+  async function load(){
+    var sessionId = sid();
+    if(!sessionId || loading) return;
+
+    loading = true;
+
+    try{
+      var res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/extra-requests?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(res.ok && data && data.success){
+        paint(data);
+      }
+    }catch(e){
+    }finally{
+      loading = false;
+    }
+  }
+
+  async function respond(requestId, action, btn){
+    var sessionId = sid();
+    if(!sessionId || !requestId || responding) return;
+
+    responding = true;
+
+    var panel = ensurePanel();
+    var oldHtml = panel.innerHTML;
+
+    try{
+      if(btn){
+        btn.disabled = true;
+        btn.textContent = action === "accept" ? "Accetto..." : "Rifiuto...";
+      }
+
+      panel.classList.add("is-open");
+      panel.style.display = "block";
+
+      var res = await fetch(
+        "/api/followme/chat/session/" + encodeURIComponent(sessionId) +
+        "/extra-request/" + encodeURIComponent(requestId) + "/respond",
+        {
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body:JSON.stringify({ action:action })
+        }
+      );
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Errore risposta Extra");
+      }
+
+      panel.innerHTML =
+        '<div style="font-weight:950;margin-bottom:6px;">' +
+          (action === "accept" ? "Extra approvato" : "Extra rifiutato") +
+        '</div>' +
+        '<div style="font-size:13px;line-height:1.35;opacity:.88;">Aggiornamento inviato all’utente.</div>';
+
+      setTimeout(load, 150);
+      setTimeout(load, 700);
+
+      try{ window.followMeAdminCanonicalFastRender20260527?.loadMessagesCanonical?.(); }catch(e){}
+      try{ window.followMeAdminCanonicalFastRender20260527?.refreshSessionsCanonical?.(); }catch(e){}
+
+      setTimeout(hidePanel, 1200);
+
+    }catch(err){
+      console.error("extra fast respond error:", err);
+      panel.innerHTML = oldHtml;
+      alert(err.message || "Errore Extra");
+    }finally{
+      setTimeout(function(){ responding = false; }, 400);
+    }
+  }
+
+  function bind(){
+    if(window.__followmeAdminExtraFastFlowClick20260527) return;
+    window.__followmeAdminExtraFastFlowClick20260527 = true;
+
+    document.addEventListener("click", function(ev){
+      var t = ev.target && ev.target.closest ? ev.target.closest("button") : null;
+      if(!t) return;
+
+      if(t.dataset.extraFastClose === "1"){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        hidePanel();
+        return false;
+      }
+
+      var action = t.dataset.extraFastAction || "";
+      if(action === "accept" || action === "reject"){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+
+        respond(t.dataset.requestId || "", action, t);
+        return false;
+      }
+    }, true);
+  }
+
+  function boot(){
+    bind();
+    if(isChat()){
+      setTimeout(load, 120);
+      setTimeout(load, 500);
+      setTimeout(load, 1000);
+    }
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", boot);
+  window.addEventListener("focus", function(){ setTimeout(load, 120); });
+
+  setInterval(function(){
+    if(document.visibilityState === "hidden") return;
+    if(!isChat()) return;
+    load();
+  }, 700);
+
+  window.fmExtraFastAdmin20260527 = { load:load };
+})();
+</script>
