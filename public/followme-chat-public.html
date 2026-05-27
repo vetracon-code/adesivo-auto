@@ -7100,3 +7100,166 @@
   }, 900);
 })();
 </script>
+
+<script id="followme-public-remove-empty-duplicate-bubbles-final-20260527">
+(function(){
+  if(window.__followmePublicRemoveEmptyDuplicateBubblesFinal20260527) return;
+  window.__followmePublicRemoveEmptyDuplicateBubblesFinal20260527 = true;
+
+  /*
+    SOLO lato utente pubblico.
+    Rimuove i "gusci" vuoti lasciati da renderer duplicati:
+    avatar/favicon visibile ma nessun testo, nessun allegato, nessun contenuto utile.
+  */
+
+  function txt(el){
+    return String(el && el.textContent || "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function hasRealMedia(el){
+    if(!el) return false;
+
+    return !!el.querySelector(
+      "img[src], audio[src], video[src], canvas, a[href], " +
+      ".followme-attachment-card, .followme-attachment-image, " +
+      ".followme-attachment-file, .followme-attachment-location, " +
+      ".followme-attachment-audio, [data-audio-url], [data-fm-attachment-url]"
+    );
+  }
+
+  function looksLikeMessageBubble(el){
+    if(!el || el.nodeType !== 1) return false;
+
+    return (
+      el.classList.contains("message") ||
+      el.classList.contains("bubble") ||
+      el.classList.contains("followme-public-bubble") ||
+      el.classList.contains("bot") ||
+      el.classList.contains("admin") ||
+      el.classList.contains("user") ||
+      el.classList.contains("system") ||
+      el.hasAttribute("data-message-id")
+    );
+  }
+
+  function isUiContainer(el){
+    if(!el) return false;
+
+    return !!el.closest(
+      ".composer, footer, form, textarea, button, " +
+      ".choices, .choice, .top, header, " +
+      ".followme-public-close-chat, " +
+      "#fmExtraDedicatedButton20260519, " +
+      "#fmPublicAttachMenu20260519"
+    );
+  }
+
+  function cleanEmptyBubbles(){
+    try{
+      var nodes = Array.from(document.querySelectorAll(
+        ".message, .bubble, .followme-public-bubble, " +
+        ".bot, .admin, .user, .system, [data-message-id]"
+      ));
+
+      nodes.forEach(function(el){
+        if(!looksLikeMessageBubble(el)) return;
+        if(isUiContainer(el)) return;
+
+        var text = txt(el);
+        var media = hasRealMedia(el);
+
+        /*
+          Conserva messaggi reali e allegati.
+          Rimuove solo gusci totalmente vuoti o quasi vuoti.
+        */
+        if(text || media) return;
+
+        try{
+          el.remove();
+        }catch(e){}
+      });
+
+      /*
+        Secondo passaggio: se resta un wrapper che contiene solo avatar/iconcina
+        senza bubble testuale, lo rimuoviamo.
+      */
+      Array.from(document.querySelectorAll(".message, .followme-public-bubble")).forEach(function(el){
+        if(isUiContainer(el)) return;
+
+        var text = txt(el);
+        var media = hasRealMedia(el);
+
+        if(text || media) return;
+
+        var html = String(el.innerHTML || "").toLowerCase();
+
+        var onlyIcon =
+          html.includes("avatar") ||
+          html.includes("favicon") ||
+          html.includes("boticon") ||
+          html.includes("icon");
+
+        if(onlyIcon || html.length < 180){
+          try{ el.remove(); }catch(e){}
+        }
+      });
+
+    }catch(e){}
+  }
+
+  function observe(){
+    var target =
+      document.querySelector(".messages") ||
+      document.getElementById("messages") ||
+      document.querySelector(".chat") ||
+      document.body;
+
+    if(!target || target.dataset.fmEmptyBubbleCleanerObserved === "1") return;
+
+    target.dataset.fmEmptyBubbleCleanerObserved = "1";
+
+    if(window.MutationObserver){
+      var obs = new MutationObserver(function(){
+        cleanEmptyBubbles();
+      });
+
+      obs.observe(target, {
+        childList:true,
+        subtree:true
+      });
+    }
+  }
+
+  function boot(){
+    observe();
+    cleanEmptyBubbles();
+
+    setTimeout(cleanEmptyBubbles, 80);
+    setTimeout(cleanEmptyBubbles, 250);
+    setTimeout(cleanEmptyBubbles, 700);
+    setTimeout(cleanEmptyBubbles, 1400);
+  }
+
+  window.followMePublicRemoveEmptyDuplicateBubbles20260527 = {
+    clean: cleanEmptyBubbles,
+    boot: boot
+  };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 150);
+  });
+
+  setInterval(function(){
+    observe();
+    cleanEmptyBubbles();
+  }, 600);
+})();
+</script>
