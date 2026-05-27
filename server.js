@@ -10063,6 +10063,17 @@ function makeFollowMeChatToken() {
   return Math.random().toString(36).slice(2, 8).toUpperCase() + Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
+
+/* followme-bot-off-hard-guard-20260527 */
+function followMeBotAllowed20260527(project) {
+  return project && project.bot_enabled === true;
+}
+
+function followMeOwnerInformedMessage20260527() {
+  return 'Il proprietario è stato informato. Attendi una risposta.';
+}
+
+
 async function ensureFollowMeChatToken(projectId) {
   await ensureFollowMeChatSchemaFast();
 
@@ -10158,7 +10169,7 @@ app.get('/fm/u/:public_id', async (req, res, next) => {
     const publicId = normalizeFollowMePublicId(req.params.public_id);
 
     const projectRes = await pool.query(
-      `SELECT id, code, public_id, chat_mode_enabled, chat_public_token
+      `SELECT id, code, public_id, chat_mode_enabled, chat_public_token, bot_enabled
        FROM followme_projects
        WHERE public_id = $1 OR code = $1
        LIMIT 1`,
@@ -10187,7 +10198,7 @@ app.post('/api/followme/:code/chat/enable', express.json(), async (req, res) => 
 
     const code = normalizeFollowMeCode(req.params.code);
     const projectRes = await pool.query(
-      `SELECT id, code, public_id FROM followme_projects WHERE code = $1 OR public_id = $1 LIMIT 1`,
+      `SELECT id, code, public_id, bot_enabled FROM followme_projects WHERE code = $1 OR public_id = $1 LIMIT 1`,
       [code]
     );
 
@@ -12558,7 +12569,7 @@ app.post('/api/followme/chat/:chat_token/session', express.json(), async (req, r
     const chatToken = String(req.params.chat_token || '').trim();
 
     const projectRes = await pool.query(
-      `SELECT id, code, public_id, chat_mode_enabled, chat_public_token
+      `SELECT id, code, public_id, chat_mode_enabled, chat_public_token, bot_enabled
        FROM followme_projects
        WHERE chat_public_token = $1
        LIMIT 1`,

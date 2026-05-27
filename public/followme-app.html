@@ -36447,455 +36447,32 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
-<script id="followme-chat-only-admin-speed-dedupe-20260526">
+
+<script id="followme-admin-send-repair-fast-20260527">
 (function(){
-  if(window.__followmeChatOnlyAdminSpeedDedupe20260526) return;
-  window.__followmeChatOnlyAdminSpeedDedupe20260526 = true;
+  if(window.__followmeAdminSendRepairFast20260527) return;
+  window.__followmeAdminSendRepairFast20260527 = true;
 
   /*
-    SOLO MODULO CHAT ADMIN.
-    Obiettivi:
-    - evitare doppio invio admin;
-    - deduplicare bolle duplicate nel DOM;
-    - refresh rapido dopo invio/nome/controlli chat;
-    - non toccare QR, preview, card, PDF, URL switching.
+    SOLO CHAT ADMIN.
+    Ripara l'invio admin se i vecchi handler si bloccano:
+    - intercetta click sul pulsante invio visibile;
+    - invia direttamente alla route /message;
+    - aggiorna subito la UI admin;
+    - non blocca i messaggi successivi.
   */
 
-  var sendingLock = false;
-  var lastSendKey = "";
-  var lastSendAt = 0;
-
-  function isChatMode(){
-    return document.body &&
-      (
-        document.body.classList.contains("followme-chat-only-mode") ||
-        document.body.classList.contains("followme-chat-waiting-mode") ||
-        !!document.getElementById("followmeOwnerChatScreen")
-      );
-  }
-
-  function currentSessionId(){
-    try{
-      var active = document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active");
-      if(active){
-        return active.getAttribute("data-session-id") ||
-               active.dataset.sessionId ||
-               active.dataset.id ||
-               active.getAttribute("data-id") ||
-               "";
-      }
-
-      var messages = document.getElementById("followmeOwnerChatMessages");
-      if(messages){
-        return messages.getAttribute("data-session-id") || messages.dataset.sessionId || "";
-      }
-
-      return window.followMeCurrentChatSessionId ||
-             window.currentFollowMeChatSessionId ||
-             "";
-    }catch(e){
-      return "";
-    }
-  }
-
-  function messageInput(){
-    return document.getElementById("followmeOwnerChatInput") ||
-           document.querySelector("body.followme-chat-only-mode textarea") ||
-           document.querySelector("#followmeOwnerChatComposer textarea");
-  }
-
-  function sendButton(){
-    return document.getElementById("followmeOwnerChatSend") ||
-           document.querySelector(".followme-admin-wa-send-inline");
-  }
-
-  function messageKey(){
-    var input = messageInput();
-    var sid = currentSessionId();
-    return sid + "::" + String(input && input.value || "").trim();
-  }
-
-  function dedupeDomMessages(){
-    try{
-      var box = document.getElementById("followmeOwnerChatMessages");
-      if(!box) return;
-
-      var seenIds = new Set();
-      var seenText = new Map();
-
-      Array.from(box.querySelectorAll(".followme-owner-chat-bubble,[data-message-id]")).forEach(function(el){
-        var id = el.getAttribute("data-message-id") || el.dataset.messageId || "";
-        var sender = el.classList.contains("owner") ? "owner" : (el.classList.contains("system") ? "system" : "user");
-        var text = String(el.textContent || "").replace(/\s+/g, " ").trim();
-        var key = sender + "::" + text;
-
-        if(id){
-          if(seenIds.has(id)){
-            el.remove();
-            return;
-          }
-          seenIds.add(id);
-        }
-
-        /*
-          Dedupe visivo prudente:
-          solo testo identico, stesso sender, ravvicinato nel DOM.
-        */
-        if(text && seenText.has(key)){
-          el.remove();
-          return;
-        }
-
-        if(text) seenText.set(key, true);
-      });
-    }catch(e){}
-  }
-
-  function refreshChatSoon(){
-    if(!isChatMode()) return;
-
-    try{ window.refreshFollowMeOwnerChat?.(); }catch(e){}
-    try{ window.loadFollowMeOwnerChat?.(); }catch(e){}
-    try{ window.loadOwnerChatMessages?.(); }catch(e){}
-    try{ window.followMeOwnerChatRefresh?.(); }catch(e){}
-    try{ window.bootFollowMeOwnerChat?.(); }catch(e){}
-    try{ window.fmOwnerChatDialogueFinalFix?.boot?.(); }catch(e){}
-    try{ window.fmRealChatDialogueFix?.boot?.(); }catch(e){}
-    try{ window.fmChatSelectedUserAndReset?.boot?.(); }catch(e){}
-
-    setTimeout(dedupeDomMessages, 80);
-    setTimeout(dedupeDomMessages, 350);
-    setTimeout(dedupeDomMessages, 900);
-  }
-
-  function bindSendGuard(){
-    var btn = sendButton();
-    if(!btn || btn.dataset.chatOnlySendGuard20260526 === "1") return;
-
-    btn.dataset.chatOnlySendGuard20260526 = "1";
-
-    btn.addEventListener("click", function(ev){
-      if(!isChatMode()) return;
-
-      var key = messageKey();
-      var now = Date.now();
-
-      if(!key || key.endsWith("::")) return;
-
-      if(sendingLock || (key === lastSendKey && now - lastSendAt < 4500)){
-        ev.preventDefault();
-        ev.stopPropagation();
-        ev.stopImmediatePropagation();
-        return false;
-      }
-
-      sendingLock = true;
-      lastSendKey = key;
-      lastSendAt = now;
-
-      setTimeout(function(){
-        sendingLock = false;
-      }, 1800);
-
-      setTimeout(refreshChatSoon, 180);
-      setTimeout(refreshChatSoon, 700);
-      setTimeout(refreshChatSoon, 1400);
-    }, true);
-  }
-
-  function bindEnterGuard(){
-    var input = messageInput();
-    if(!input || input.dataset.chatOnlyEnterGuard20260526 === "1") return;
-
-    input.dataset.chatOnlyEnterGuard20260526 = "1";
-
-    input.addEventListener("keydown", function(ev){
-      if(!isChatMode()) return;
-      if(ev.key !== "Enter" || ev.shiftKey) return;
-
-      var key = messageKey();
-      var now = Date.now();
-
-      if(!key || key.endsWith("::")) return;
-
-      if(sendingLock || (key === lastSendKey && now - lastSendAt < 4500)){
-        ev.preventDefault();
-        ev.stopPropagation();
-        ev.stopImmediatePropagation();
-        return false;
-      }
-
-      sendingLock = true;
-      lastSendKey = key;
-      lastSendAt = now;
-
-      setTimeout(function(){
-        sendingLock = false;
-      }, 1800);
-
-      setTimeout(refreshChatSoon, 180);
-      setTimeout(refreshChatSoon, 700);
-      setTimeout(refreshChatSoon, 1400);
-    }, true);
-  }
-
-  function patchFetch(){
-    if(window.__followmeChatOnlyAdminFetchPatch20260526) return;
-    window.__followmeChatOnlyAdminFetchPatch20260526 = true;
-
-    var oldFetch = window.fetch;
-    if(!oldFetch) return;
-
-    window.fetch = async function(){
-      var args = arguments;
-      var url = "";
-
-      try{
-        url = String(args[0] && args[0].url ? args[0].url : args[0] || "");
-      }catch(e){}
-
-      var res = await oldFetch.apply(this, args);
-
-      try{
-        if(
-          url.includes("/api/followme/chat/session/") &&
-          (
-            url.includes("/message") ||
-            url.includes("/name") ||
-            url.includes("/rename") ||
-            url.includes("/settings") ||
-            url.includes("/set-user-control") ||
-            url.includes("/toggle-user-control")
-          )
-        ){
-          setTimeout(refreshChatSoon, 120);
-          setTimeout(refreshChatSoon, 450);
-          setTimeout(refreshChatSoon, 1000);
-        }
-
-        if(
-          url.includes("/api/followme/") &&
-          url.includes("/chat/sessions")
-        ){
-          setTimeout(dedupeDomMessages, 80);
-        }
-      }catch(e){}
-
-      return res;
-    };
-  }
-
-  function optimizeNameConfirm(){
-    /*
-      Solo lato UX: quando viene confermato un nome, aggiorna subito i tab visibili
-      se il testo del nome è già presente in input/card. Il server resta autoritativo.
-    */
-    document.addEventListener("click", function(ev){
-      if(!isChatMode()) return;
-
-      var btn = ev.target && ev.target.closest ? ev.target.closest("button") : null;
-      if(!btn) return;
-
-      var txt = String(btn.textContent || "").toLowerCase();
-      if(!(txt.includes("conferma") || txt.includes("salva"))) return;
-
-      var card = btn.closest(".followme-name-detect-card,.followme-name-suggestion");
-      if(!card) return;
-
-      var input = card.querySelector("input");
-      var nameEl = card.querySelector(".followme-name-detect-name,strong");
-      var name = String((input && input.value) || (nameEl && nameEl.textContent) || "").trim();
-
-      if(!name) return;
-
-      setTimeout(function(){
-        var active = document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active");
-        if(active){
-          active.classList.add("has-name");
-          var nameTarget = active.querySelector(".followme-chat-user-name,strong,span") || active;
-          if(nameTarget) nameTarget.textContent = name;
-        }
-      }, 60);
-
-      setTimeout(refreshChatSoon, 200);
-      setTimeout(refreshChatSoon, 800);
-    }, true);
-  }
-
-  function boot(){
-    bindSendGuard();
-    bindEnterGuard();
-    patchFetch();
-    optimizeNameConfirm();
-    dedupeDomMessages();
-
-    setTimeout(bindSendGuard, 500);
-    setTimeout(bindEnterGuard, 500);
-    setTimeout(dedupeDomMessages, 700);
-  }
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", boot);
-  }else{
-    boot();
-  }
-
-  window.addEventListener("pageshow", boot);
-  window.addEventListener("focus", function(){
-    if(isChatMode()) refreshChatSoon();
-  });
-
-  setInterval(function(){
-    if(!isChatMode()) return;
-    bindSendGuard();
-    bindEnterGuard();
-    dedupeDomMessages();
-  }, 1200);
-
-  window.followMeChatOnlyRefreshFast20260526 = refreshChatSoon;
-})();
-</script>
-
-<script id="followme-chat-only-fast-actions-20260527">
-(function(){
-  if(window.__followmeChatOnlyFastActions20260527) return;
-  window.__followmeChatOnlyFastActions20260527 = true;
-
-  /*
-    SOLO MODULO CHAT ADMIN.
-    Non tocca:
-    - QR
-    - preview
-    - PDF
-    - card destinazioni
-    - update URL
-    - riattiva URL/card
-
-    Scopo:
-    - Attiva chat: feedback immediato e waiting screen subito.
-    - Reset: effetto UI immediato + chiamata server.
-    - Chiudi TUTTO: effetto UI immediato + chiusura servizio.
-    - Evita vecchi handler doppi/lenti con stopImmediatePropagation solo sui comandi chat.
-  */
-
-  var actionLock = {
-    enable:false,
-    reset:false,
-    closeAll:false
-  };
+  var sending = false;
 
   function code(){
     try{
       var m = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/i);
       if(m && m[1]) return decodeURIComponent(m[1]).trim().toUpperCase();
-
-      if(typeof getCode === "function"){
-        var c = getCode();
-        if(c) return String(c).trim().toUpperCase();
-      }
     }catch(e){}
     return "FM-DEMO";
   }
 
-  function toastFast(msg){
-    try{
-      if(typeof toast === "function") toast(msg);
-      else console.log("[FollowMe chat]", msg);
-    }catch(e){
-      console.log("[FollowMe chat]", msg);
-    }
-  }
-
-  function isChatElement(el){
-    if(!el) return false;
-    return !!(
-      el.closest("#followmeOwnerChatScreen") ||
-      el.closest("#followmeOwnerChatWaitingScreen") ||
-      el.closest("#followmeOwnerChatSessionStrip") ||
-      el.closest("#followmeChatWaitingList") ||
-      el.closest("#followmeResetChoiceOverlay") ||
-      el.id === "followmeOtherOpenChat"
-    );
-  }
-
-  function showWaitingNow(){
-    try{
-      document.body.classList.remove("followme-chat-only-mode");
-      document.body.classList.add("followme-chat-waiting-mode");
-
-      var waiting = document.getElementById("followmeOwnerChatWaitingScreen");
-      if(waiting) waiting.style.display = "grid";
-
-      var chat = document.getElementById("followmeOwnerChatScreen");
-      if(chat) chat.style.display = "none";
-
-      var card = document.querySelector(".followme-chat-waiting-card h2");
-      if(card) card.textContent = "Chat attiva";
-
-      var pulse = document.querySelector(".followme-chat-waiting-pulse");
-      if(pulse) pulse.innerHTML = "<i></i> In attesa di collegamenti...";
-
-      try{
-        var u = "/fm/app/" + encodeURIComponent(code()) + "?chatWaiting=1&focus=chat-waiting";
-        history.replaceState(null, "", u);
-      }catch(e){}
-    }catch(e){}
-  }
-
-  function exitChatUiNow(message){
-    try{
-      document.body.classList.remove("followme-chat-only-mode");
-      document.body.classList.remove("followme-chat-waiting-mode");
-
-      var chat = document.getElementById("followmeOwnerChatScreen");
-      if(chat) chat.style.display = "none";
-
-      var waiting = document.getElementById("followmeOwnerChatWaitingScreen");
-      if(waiting) waiting.style.display = "none";
-
-      var box = document.getElementById("followmeOwnerChatMessages");
-      if(box) box.innerHTML = "";
-
-      var strip = document.getElementById("followmeOwnerChatSessionStrip");
-      if(strip) strip.innerHTML = "";
-
-      var list = document.getElementById("followmeChatWaitingList");
-      if(list) list.innerHTML = "";
-
-      if(message) toastFast(message);
-
-      try{
-        history.replaceState(null, "", "/fm/app/" + encodeURIComponent(code()) + "?v=chat-action-" + Date.now());
-      }catch(e){}
-    }catch(e){}
-  }
-
-  function clearCurrentChatUiNow(){
-    try{
-      var box = document.getElementById("followmeOwnerChatMessages");
-      if(box){
-        box.innerHTML =
-          '<div class="followme-owner-chat-bubble system" data-chat-fast-reset="1">' +
-          'Chat azzerata. In attesa di nuovi messaggi.' +
-          '</div>';
-      }
-
-      var active = document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active");
-      if(active) active.remove();
-
-      var list = document.getElementById("followmeChatWaitingList");
-      if(list){
-        list.querySelectorAll(".followme-chat-waiting-row").forEach(function(row){
-          var txt = String(row.textContent || "").toLowerCase();
-          if(txt.includes("apri")) row.remove();
-        });
-      }
-
-      toastFast("Reset chat eseguito.");
-    }catch(e){}
-  }
-
-  function activeSessionId(){
+  function sid(){
     try{
       var p = new URLSearchParams(location.search || "");
       var fromUrl = p.get("chatSession");
@@ -36913,369 +36490,122 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     return "";
   }
 
-  async function refreshSessionsFast(){
+  function input(){
+    return document.getElementById("followmeOwnerChatInput");
+  }
+
+  function box(){
+    return document.getElementById("followmeOwnerChatMessages");
+  }
+
+  function esc(v){
+    return String(v || "").replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function appendOwnerMessage(text, id){
+    var b = box();
+    if(!b || !text) return;
+
+    if(id && b.querySelector('[data-message-id="' + CSS.escape(String(id)) + '"]')) return;
+
+    var div = document.createElement("div");
+    div.className = "followme-owner-chat-bubble owner";
+    if(id) div.setAttribute("data-message-id", String(id));
+    div.innerHTML = esc(text).replace(/\n/g, "<br>");
+    b.appendChild(div);
+    b.scrollTop = b.scrollHeight;
+  }
+
+  async function refreshSoon(){
+    try{ window.followMeOwnerChatFinalFix?.pollOwnerMessages?.(false); }catch(e){}
+    try{ window.followMeChatOnlyRefreshFast20260526?.(); }catch(e){}
     try{ window.refreshFollowMeOwnerChatSessions?.(); }catch(e){}
-    try{ window.followMeOwnerChatFinalFix?.refreshSessionsAndMaybeOpenLatest?.(); }catch(e){}
-    try{ window.checkFollowMeWaitingLatestSession?.(); }catch(e){}
-    try{ window.checkLatestOpenFollowMeChat?.(); }catch(e){}
   }
 
-  async function pollLatestAndOpenFast(){
-    var c = code();
+  async function sendNow(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+    }
 
-    for(var i = 0; i < 8; i++){
-      try{
-        var res = await fetch("/api/followme/" + encodeURIComponent(c) + "/chat/latest-open-session?v=" + Date.now(), {
-          cache:"no-store"
-        });
+    if(sending) return false;
 
-        var data = await res.json().catch(function(){ return null; });
+    var sessionId = sid();
+    var inp = input();
+    var text = String(inp && inp.value || "").trim();
 
-        if(data && data.success && data.chat_mode_enabled === true && data.session && data.session.id){
-          location.href = "/fm/app/" + encodeURIComponent(data.project_code || c) +
-            "?chatSession=" + encodeURIComponent(data.session.id) +
-            "&focus=chat&fast=1";
-          return;
+    if(!sessionId || !text) return false;
+
+    sending = true;
+    if(inp) inp.value = "";
+
+    try{
+      var res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/message", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ sender:"owner", message:text })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || data.success === false){
+        throw new Error((data && data.error) || "Errore invio");
+      }
+
+      if(data.message && data.message.id){
+        appendOwnerMessage(text, data.message.id);
+      }else{
+        appendOwnerMessage(text, "local-" + Date.now());
+      }
+
+      setTimeout(refreshSoon, 120);
+      setTimeout(refreshSoon, 500);
+      setTimeout(refreshSoon, 1000);
+
+    }catch(err){
+      console.error("followme admin send repair error:", err);
+      if(inp) inp.value = text;
+      alert("Errore invio messaggio: " + (err.message || String(err)));
+    }finally{
+      setTimeout(function(){ sending = false; }, 250);
+    }
+
+    return false;
+  }
+
+  function bind(){
+    var visible = document.getElementById("followmeAdminSendInline");
+    var hidden = document.getElementById("followmeOwnerChatSend");
+    var inp = input();
+
+    [visible, hidden].forEach(function(btn){
+      if(!btn || btn.dataset.adminSendRepairFast20260527 === "1") return;
+      btn.dataset.adminSendRepairFast20260527 = "1";
+      btn.addEventListener("click", sendNow, true);
+    });
+
+    if(inp && inp.dataset.adminEnterSendRepairFast20260527 !== "1"){
+      inp.dataset.adminEnterSendRepairFast20260527 = "1";
+      inp.addEventListener("keydown", function(ev){
+        if(ev.key === "Enter" && !ev.shiftKey){
+          sendNow(ev);
         }
-      }catch(e){}
-
-      await new Promise(function(resolve){ setTimeout(resolve, i < 3 ? 700 : 1200); });
-    }
-
-    setTimeout(refreshSessionsFast, 300);
-  }
-
-  async function fastEnableChat(ev){
-    if(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
-      ev.stopImmediatePropagation();
-    }
-
-    if(actionLock.enable) return false;
-    actionLock.enable = true;
-
-    var btn = document.getElementById("followmeOtherOpenChat");
-    var original = btn ? btn.textContent : "";
-
-    if(btn){
-      btn.disabled = true;
-      btn.textContent = "Chat attiva...";
-    }
-
-    showWaitingNow();
-    toastFast("Chat attivata. In attesa di collegamenti.");
-
-    try{
-      var res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/enable", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ fast:true })
-      });
-
-      var data = await res.json().catch(function(){ return null; });
-
-      if(!res.ok || !data || !data.success){
-        throw new Error((data && data.error) || "Errore attivazione chat");
-      }
-
-      if(btn){
-        btn.disabled = false;
-        btn.textContent = "Chat attiva";
-      }
-
-      setTimeout(refreshSessionsFast, 150);
-      setTimeout(pollLatestAndOpenFast, 450);
-      setTimeout(refreshSessionsFast, 1200);
-
-    }catch(err){
-      console.error("fastEnableChat error:", err);
-
-      if(btn){
-        btn.disabled = false;
-        btn.textContent = original || "Attiva chat";
-      }
-
-      exitChatUiNow("");
-      toastFast("Errore attivazione chat: " + (err.message || String(err)));
-    }finally{
-      setTimeout(function(){ actionLock.enable = false; }, 1500);
-    }
-
-    return false;
-  }
-
-  async function fastResetCurrent(ev){
-    if(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
-      ev.stopImmediatePropagation();
-    }
-
-    if(actionLock.reset) return false;
-    actionLock.reset = true;
-
-    var sid = activeSessionId();
-
-    if(!sid){
-      /*
-        Se non c'è sessione attiva, ha più senso fare reset globale chat.
-      */
-      return fastResetAll(ev);
-    }
-
-    clearCurrentChatUiNow();
-
-    try{
-      var res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/session/" + encodeURIComponent(sid) + "/reset", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ fast:true })
-      });
-
-      var data = await res.json().catch(function(){ return null; });
-
-      if(!res.ok || !data || !data.success){
-        throw new Error((data && data.error) || "Errore reset chat");
-      }
-
-      setTimeout(refreshSessionsFast, 150);
-      setTimeout(refreshSessionsFast, 700);
-
-      /*
-        Dopo reset della chat corrente, torno alla schermata di attesa
-        invece di restare su una sessione ormai cancellata.
-      */
-      showWaitingNow();
-
-    }catch(err){
-      console.error("fastResetCurrent error:", err);
-      toastFast("Errore reset chat: " + (err.message || String(err)));
-    }finally{
-      setTimeout(function(){ actionLock.reset = false; }, 1200);
-    }
-
-    return false;
-  }
-
-  async function fastResetAll(ev){
-    if(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
-      ev.stopImmediatePropagation();
-    }
-
-    if(actionLock.reset) return false;
-    actionLock.reset = true;
-
-    exitChatUiNow("Reset totale chat eseguito.");
-
-    try{
-      var res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/reset", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ fast:true })
-      });
-
-      var data = await res.json().catch(function(){ return null; });
-
-      if(!res.ok || !data || !data.success){
-        throw new Error((data && data.error) || "Errore reset totale");
-      }
-
-      setTimeout(refreshSessionsFast, 200);
-
-    }catch(err){
-      console.error("fastResetAll error:", err);
-      toastFast("Errore reset totale: " + (err.message || String(err)));
-    }finally{
-      setTimeout(function(){ actionLock.reset = false; }, 1200);
-    }
-
-    return false;
-  }
-
-  async function fastCloseAll(ev){
-    if(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
-      ev.stopImmediatePropagation();
-    }
-
-    if(actionLock.closeAll) return false;
-    actionLock.closeAll = true;
-
-    exitChatUiNow("Chat chiusa.");
-
-    try{
-      var res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/close-all-with-reset", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ fast:true })
-      });
-
-      var data = await res.json().catch(function(){ return null; });
-
-      if(!res.ok || !data || !data.success){
-        /*
-          Fallback all'endpoint più semplice.
-        */
-        var res2 = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/close-all", {
-          method:"POST",
-          headers:{ "Content-Type":"application/json" },
-          body:JSON.stringify({ fast:true })
-        });
-
-        var data2 = await res2.json().catch(function(){ return null; });
-
-        if(!res2.ok || !data2 || !data2.success){
-          throw new Error((data && data.error) || (data2 && data2.error) || "Errore chiusura chat");
-        }
-      }
-
-      setTimeout(function(){
-        location.href = "/fm/app/" + encodeURIComponent(code()) + "?v=chat-closed-" + Date.now();
-      }, 350);
-
-    }catch(err){
-      console.error("fastCloseAll error:", err);
-      toastFast("Errore chiusura chat: " + (err.message || String(err)));
-    }finally{
-      setTimeout(function(){ actionLock.closeAll = false; }, 1500);
-    }
-
-    return false;
-  }
-
-  function closeResetOverlay(){
-    try{
-      var o = document.getElementById("followmeResetChoiceOverlay");
-      if(o){
-        o.classList.remove("is-open");
-        o.setAttribute("aria-hidden", "true");
-      }
-    }catch(e){}
-  }
-
-  function bindDirectButtons(){
-    var open = document.getElementById("followmeOtherOpenChat");
-    if(open && open.dataset.chatFastEnable20260527 !== "1"){
-      open.dataset.chatFastEnable20260527 = "1";
-      open.addEventListener("click", fastEnableChat, true);
-    }
-
-    var resetCurrent = document.getElementById("followmeResetCurrentChatBtn");
-    if(resetCurrent && resetCurrent.dataset.chatFastResetCurrent20260527 !== "1"){
-      resetCurrent.dataset.chatFastResetCurrent20260527 = "1";
-      resetCurrent.addEventListener("click", function(ev){
-        closeResetOverlay();
-        fastResetCurrent(ev);
-      }, true);
-    }
-
-    var resetAll = document.getElementById("followmeResetAllChatsBtn");
-    if(resetAll && resetAll.dataset.chatFastResetAll20260527 !== "1"){
-      resetAll.dataset.chatFastResetAll20260527 = "1";
-      resetAll.addEventListener("click", function(ev){
-        closeResetOverlay();
-        fastResetAll(ev);
       }, true);
     }
   }
-
-  function isResetButton(t, txt){
-    if(!t) return false;
-
-    if(
-      t.id === "followmeTopResetChatBtn" ||
-      t.id === "followmeResetChatBtn" ||
-      t.id === "followmeChatWaitingReset"
-    ){
-      return true;
-    }
-
-    return isChatElement(t) && txt === "reset";
-  }
-
-  function isCloseAllButton(t, txt){
-    if(!t) return false;
-
-    if(txt.includes("chiudi tutto") || txt.includes("chiudi tutto")) return true;
-
-    return false;
-  }
-
-  function bindCaptureRouter(){
-    if(window.__followmeChatOnlyFastCaptureRouter20260527) return;
-    window.__followmeChatOnlyFastCaptureRouter20260527 = true;
-
-    document.addEventListener("click", function(ev){
-      var t = ev.target && ev.target.closest ? ev.target.closest("button,a") : null;
-      if(!t) return;
-
-      var txt = String(t.textContent || "").trim().toLowerCase();
-
-      if(t.id === "followmeOtherOpenChat"){
-        return fastEnableChat(ev);
-      }
-
-      if(isResetButton(t, txt)){
-        /*
-          Mantengo il comportamento con scelta se esiste il modal:
-          il click su Reset apre il modal storico, ma i bottoni del modal sono ora veloci.
-          Se il modal non esiste, resetto la chat corrente.
-        */
-        var overlay = document.getElementById("followmeResetChoiceOverlay");
-        if(overlay){
-          ev.preventDefault();
-          ev.stopPropagation();
-          ev.stopImmediatePropagation();
-
-          overlay.classList.add("is-open");
-          overlay.setAttribute("aria-hidden", "false");
-          bindDirectButtons();
-          return false;
-        }
-
-        return fastResetCurrent(ev);
-      }
-
-      if(isChatElement(t) && isCloseAllButton(t, txt)){
-        return fastCloseAll(ev);
-      }
-    }, true);
-  }
-
-  function boot(){
-    bindDirectButtons();
-    bindCaptureRouter();
-
-    setTimeout(bindDirectButtons, 300);
-    setTimeout(bindDirectButtons, 900);
-    setTimeout(bindDirectButtons, 1800);
-  }
-
-  window.followMeChatFastActions20260527 = {
-    fastEnableChat,
-    fastResetCurrent,
-    fastResetAll,
-    fastCloseAll,
-    refreshSessionsFast,
-    showWaitingNow,
-    exitChatUiNow
-  };
 
   if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", boot);
+    document.addEventListener("DOMContentLoaded", bind);
   }else{
-    boot();
+    bind();
   }
 
-  window.addEventListener("pageshow", boot);
-  window.addEventListener("focus", function(){
-    setTimeout(refreshSessionsFast, 250);
-  });
+  window.addEventListener("pageshow", bind);
+  setInterval(bind, 1200);
 
-  setInterval(bindDirectButtons, 1500);
+  window.followMeAdminSendRepairFast20260527 = sendNow;
 })();
 </script>

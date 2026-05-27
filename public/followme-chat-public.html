@@ -6365,23 +6365,25 @@
 
 
 
-<script id="followme-chat-only-public-speed-dedupe-20260526">
+
+<script id="followme-public-fast-admin-message-poll-20260527">
 (function(){
-  if(window.__followmeChatOnlyPublicSpeedDedupe20260526) return;
-  window.__followmeChatOnlyPublicSpeedDedupe20260526 = true;
+  if(window.__followmePublicFastAdminMessagePoll20260527) return;
+  window.__followmePublicFastAdminMessagePoll20260527 = true;
 
   /*
     SOLO CHAT PUBBLICA.
-    - evita doppi invii utente;
-    - deduplica bolle duplicate;
-    - forza refresh rapido dopo messaggio/allegato/stato.
+    Scopo:
+    - ricevere risposte admin velocemente;
+    - non duplicare bolle;
+    - non toccare QR/PDF/preview/app admin.
   */
 
-  var sendingLock = false;
-  var lastKey = "";
-  var lastAt = 0;
+  var running = false;
+  var lastSeenId = 0;
+  var booted = false;
 
-  function sessionId(){
+  function sid(){
     try{
       return sessionStorage.getItem("followme_chat_session_id") ||
              window.sessionId ||
@@ -6392,170 +6394,125 @@
     }
   }
 
-  function input(){
-    return document.getElementById("messageInput") ||
-           document.getElementById("msgInput") ||
-           document.querySelector("textarea");
+  function esc(v){
+    return String(v || "").replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
   }
 
-  function sendBtn(){
-    return document.getElementById("sendBtn") ||
-           document.querySelector("button[type='submit']") ||
-           document.querySelector(".send");
+  function messagesBox(){
+    return document.querySelector(".messages") ||
+           document.getElementById("messages") ||
+           document.querySelector(".chat .messages");
   }
 
-  function key(){
-    var i = input();
-    return sessionId() + "::" + String(i && i.value || "").trim();
+  function existingIds(){
+    var ids = new Set();
+
+    document.querySelectorAll("[data-message-id]").forEach(function(el){
+      var id = Number(el.getAttribute("data-message-id") || el.dataset.messageId || 0);
+      if(id) ids.add(String(id));
+    });
+
+    return ids;
   }
 
-  function dedupeDom(){
+  function maxExistingId(){
+    var max = lastSeenId || 0;
+
+    document.querySelectorAll("[data-message-id]").forEach(function(el){
+      var id = Number(el.getAttribute("data-message-id") || el.dataset.messageId || 0);
+      if(id > max) max = id;
+    });
+
+    return max;
+  }
+
+  function renderMessage(m){
+    if(!m || !m.id) return;
+
+    var id = String(m.id);
+    if(document.querySelector('[data-message-id="' + CSS.escape(id) + '"]')) return;
+
+    var box = messagesBox();
+    if(!box) return;
+
+    var sender = String(m.sender || "").toLowerCase();
+    var cls = sender === "owner" || sender === "admin" ? "admin" : sender === "user" ? "user" : "system";
+    var text = String(m.message || "");
+
+    /*
+      Non mostrare mai prompt bot extra se arrivano comunque da vecchi script/cache.
+    */
+    var low = text.toLowerCase();
+    if(
+      low.includes("vuoi sapere cosa sono") ||
+      low.includes("vuoi maggiori informazioni") ||
+      low.includes("più informazioni") ||
+      low.includes("piu informazioni") ||
+      low.includes("ottenere più informazioni") ||
+      low.includes("ottenere piu informazioni")
+    ){
+      return;
+    }
+
+    var wrap = document.createElement("div");
+    wrap.className = "message " + cls;
+    wrap.setAttribute("data-message-id", id);
+
+    var bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.innerHTML = esc(text).replace(/\n/g, "<br>");
+
+    wrap.appendChild(bubble);
+    box.appendChild(wrap);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  async function pollFast(){
+    var sessionId = sid();
+    if(!sessionId || running) return;
+
+    running = true;
+
     try{
-      var seenIds = new Set();
-      var seenText = new Set();
+      var after = maxExistingId();
 
-      document.querySelectorAll(".message,.bubble,[data-message-id]").forEach(function(el){
-        var id = el.getAttribute("data-message-id") || el.dataset.messageId || "";
-        var text = String(el.textContent || "").replace(/\s+/g, " ").trim();
-        var sender =
-          el.classList.contains("user") ? "user" :
-          el.classList.contains("admin") ? "admin" :
-          el.classList.contains("bot") ? "bot" :
-          el.classList.contains("system") ? "system" : "x";
-
-        if(id){
-          if(seenIds.has(id)){
-            el.remove();
-            return;
-          }
-          seenIds.add(id);
-        }
-
-        var k = sender + "::" + text;
-        if(text && seenText.has(k)){
-          el.remove();
-          return;
-        }
-
-        if(text) seenText.add(k);
+      var res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/messages?after=" + encodeURIComponent(after) + "&v=" + Date.now(), {
+        cache:"no-store"
       });
-    }catch(e){}
-  }
 
-  function refreshSoon(){
-    try{ window.poll?.(); }catch(e){}
-    try{ window.loadAllMessages?.(); }catch(e){}
-    try{ window.fetchState?.(true); }catch(e){}
-    try{ window.renderAllAttachments?.(); }catch(e){}
+      var data = await res.json().catch(function(){ return null; });
 
-    setTimeout(dedupeDom, 60);
-    setTimeout(dedupeDom, 250);
-    setTimeout(dedupeDom, 800);
-  }
-
-  function bindSend(){
-    var btn = sendBtn();
-    if(btn && btn.dataset.chatOnlyPublicSendGuard20260526 !== "1"){
-      btn.dataset.chatOnlyPublicSendGuard20260526 = "1";
-
-      btn.addEventListener("click", function(ev){
-        var k = key();
-        var now = Date.now();
-
-        if(!k || k.endsWith("::")) return;
-
-        if(sendingLock || (k === lastKey && now - lastAt < 4500)){
-          ev.preventDefault();
-          ev.stopPropagation();
-          ev.stopImmediatePropagation();
-          return false;
-        }
-
-        sendingLock = true;
-        lastKey = k;
-        lastAt = now;
-
-        setTimeout(function(){ sendingLock = false; }, 1700);
-        setTimeout(refreshSoon, 150);
-        setTimeout(refreshSoon, 600);
-        setTimeout(refreshSoon, 1300);
-      }, true);
+      if(res.ok && data && data.success && Array.isArray(data.messages)){
+        data.messages.forEach(function(m){
+          lastSeenId = Math.max(lastSeenId, Number(m.id) || 0);
+          renderMessage(m);
+        });
+      }
+    }catch(e){
+    }finally{
+      running = false;
     }
-
-    var i = input();
-    if(i && i.dataset.chatOnlyPublicEnterGuard20260526 !== "1"){
-      i.dataset.chatOnlyPublicEnterGuard20260526 = "1";
-
-      i.addEventListener("keydown", function(ev){
-        if(ev.key !== "Enter" || ev.shiftKey) return;
-
-        var k = key();
-        var now = Date.now();
-
-        if(!k || k.endsWith("::")) return;
-
-        if(sendingLock || (k === lastKey && now - lastAt < 4500)){
-          ev.preventDefault();
-          ev.stopPropagation();
-          ev.stopImmediatePropagation();
-          return false;
-        }
-
-        sendingLock = true;
-        lastKey = k;
-        lastAt = now;
-
-        setTimeout(function(){ sendingLock = false; }, 1700);
-        setTimeout(refreshSoon, 150);
-        setTimeout(refreshSoon, 600);
-        setTimeout(refreshSoon, 1300);
-      }, true);
-    }
-  }
-
-  function patchFetch(){
-    if(window.__followmeChatOnlyPublicFetchPatch20260526) return;
-    window.__followmeChatOnlyPublicFetchPatch20260526 = true;
-
-    var oldFetch = window.fetch;
-    if(!oldFetch) return;
-
-    window.fetch = async function(){
-      var args = arguments;
-      var url = "";
-
-      try{
-        url = String(args[0] && args[0].url ? args[0].url : args[0] || "");
-      }catch(e){}
-
-      var res = await oldFetch.apply(this, args);
-
-      try{
-        if(
-          url.includes("/api/followme/chat/session/") &&
-          (
-            url.includes("/message") ||
-            url.includes("/messages") ||
-            url.includes("/state") ||
-            url.includes("/attachment")
-          )
-        ){
-          setTimeout(refreshSoon, 120);
-          setTimeout(refreshSoon, 500);
-        }
-      }catch(e){}
-
-      return res;
-    };
   }
 
   function boot(){
-    bindSend();
-    patchFetch();
-    dedupeDom();
+    if(booted) return;
+    booted = true;
 
-    setTimeout(bindSend, 500);
-    setTimeout(dedupeDom, 700);
+    setTimeout(pollFast, 150);
+    setTimeout(pollFast, 500);
+    setTimeout(pollFast, 1000);
+
+    setInterval(function(){
+      if(document.visibilityState === "hidden") return;
+      pollFast();
+    }, 700);
+
+    window.addEventListener("focus", function(){
+      setTimeout(pollFast, 80);
+      setTimeout(pollFast, 350);
+    });
   }
 
   if(document.readyState === "loading"){
@@ -6564,14 +6521,6 @@
     boot();
   }
 
-  window.addEventListener("pageshow", boot);
-  window.addEventListener("focus", refreshSoon);
-
-  setInterval(function(){
-    bindSend();
-    dedupeDom();
-  }, 1200);
-
-  window.followMePublicChatRefreshFast20260526 = refreshSoon;
+  window.followMePublicFastAdminPoll20260527 = pollFast;
 })();
 </script>
