@@ -36405,397 +36405,28 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
-<script id="followme-admin-chat-exit-controls-final-20260527">
+<script id="followme-admin-chat-exit-controls-final-20260527">/* disabled: replaced by clean single reset controller */</script>
+
+<script id="followme-admin-chat-reset-definitive-20260527">/* disabled: replaced by clean single reset controller */</script>
+
+<script id="followme-admin-reset-visible-hook-final-20260527">/* disabled: replaced by clean single reset controller */</script>
+
+<script id="followme-admin-single-reset-clean-final-20260527">
 (function(){
-  if(window.__followmeAdminChatExitControlsFinal20260527) return;
-  window.__followmeAdminChatExitControlsFinal20260527 = true;
+  if(window.__followmeAdminSingleResetCleanFinal20260527) return;
+  window.__followmeAdminSingleResetCleanFinal20260527 = true;
 
   /*
-    Controlli definitivi dentro la chat Admin:
-    - Chiudi questa chat: chiude solo la sessione attiva.
-    - Chiudi TUTTO: chiude tutte le sessioni, spegne il servizio chat,
-      torna alla home Web App mantenendo l'ultimo progetto trasmesso.
+    Reset unico e pulito:
+    - NON appare nella home.
+    - NON appare nella pagina attesa collegamenti.
+    - Appare solo dentro chat Admin con chatSession.
+    - Non usa setInterval continuo.
+    - Nasconde i vecchi Reset/Chiudi TUTTO/Spegni solo dentro chatSession.
   */
 
-  var closingAll = false;
-  var closingOne = false;
-
-  function code(){
-    try{
-      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
-      if(m && m[1]) return decodeURIComponent(m[1]).trim().toUpperCase();
-    }catch(e){}
-
-    try{
-      if(typeof getCode === "function"){
-        var c = getCode();
-        if(c) return String(c).trim().toUpperCase();
-      }
-    }catch(e){}
-
-    return "FMDEMO";
-  }
-
-  function currentSessionId(){
-    try{
-      var p = new URLSearchParams(location.search || "");
-      var sid = p.get("chatSession");
-      if(sid) return String(sid);
-    }catch(e){}
-
-    try{
-      var active = document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active");
-      if(active){
-        return String(
-          active.getAttribute("data-session-id") ||
-          active.getAttribute("data-id") ||
-          active.dataset.sessionId ||
-          active.dataset.id ||
-          ""
-        );
-      }
-    }catch(e){}
-
-    return "";
-  }
-
-  function toast(msg){
-    try{
-      if(typeof window.toast === "function"){
-        window.toast(msg);
-        return;
-      }
-    }catch(e){}
-
-    try{
-      var box = document.createElement("div");
-      box.textContent = msg;
-      box.style.cssText =
-        "position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));" +
-        "transform:translateX(-50%);z-index:2147483647;" +
-        "background:rgba(18,18,24,.96);color:white;padding:12px 16px;" +
-        "border-radius:999px;font:800 13px system-ui,-apple-system,sans-serif;" +
-        "box-shadow:0 16px 46px rgba(0,0,0,.35);max-width:88vw;text-align:center;";
-      document.body.appendChild(box);
-      setTimeout(function(){ try{ box.remove(); }catch(e){} }, 2800);
-    }catch(e){
-      alert(msg);
-    }
-  }
-
-  async function postJson(url, body){
-    var res = await fetch(url, {
-      method:"POST",
-      headers:{
-        "Content-Type":"application/json",
-        "Accept":"application/json"
-      },
-      cache:"no-store",
-      body:JSON.stringify(body || {})
-    });
-
-    var data = await res.json().catch(function(){ return null; });
-
-    return {
-      ok:res.ok,
-      status:res.status,
-      data:data
-    };
-  }
-
-  function homeUrl(){
-    return "/fm/app/" + encodeURIComponent(code()) + "?chatClosedAll=1&v=" + Date.now();
-  }
-
-  async function closeSelectedChat(ev){
-    if(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
-      ev.stopImmediatePropagation();
-    }
-
-    if(closingOne) return false;
-    closingOne = true;
-
-    var sid = currentSessionId();
-
-    if(!sid){
-      closingOne = false;
-      toast("Nessuna chat selezionata.");
-      return false;
-    }
-
-    var btn = document.getElementById("fmAdminCloseCurrentChatFinal20260527");
-    if(btn){
-      btn.disabled = true;
-      btn.textContent = "Chiudo...";
-    }
-
-    try{
-      var r = await postJson(
-        "/api/followme/chat/session/" + encodeURIComponent(sid) + "/close-selected",
-        {
-          source:"admin_close_selected_final"
-        }
-      );
-
-      if(!r.ok || !r.data || !r.data.success){
-        throw new Error((r.data && r.data.error) || ("HTTP " + r.status));
-      }
-
-      toast("Chat chiusa.");
-
-      /*
-        Dopo chiusura della chat selezionata:
-        torno alla schermata attesa, NON spengo tutto.
-      */
-      setTimeout(function(){
-        window.location.href =
-          "/fm/app/" + encodeURIComponent(code()) +
-          "?chatWaiting=1&focus=chat-waiting&v=" + Date.now();
-      }, 350);
-
-    }catch(err){
-      closingOne = false;
-      if(btn){
-        btn.disabled = false;
-        btn.textContent = "Chiudi questa chat";
-      }
-      toast("Errore chiusura chat: " + (err.message || String(err)));
-    }
-
-    return false;
-  }
-
-  async function closeAllChatsAndExit(ev){
-    if(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
-      ev.stopImmediatePropagation();
-    }
-
-    if(closingAll) return false;
-    closingAll = true;
-
-    var c = code();
-
-    var btn = document.getElementById("fmAdminCloseAllChatsFinal20260527");
-    if(btn){
-      btn.disabled = true;
-      btn.textContent = "Chiudo tutto...";
-    }
-
-    try{
-      /*
-        1) Chiude tutte le sessioni + spegne chat_mode_enabled.
-      */
-      var r1 = await postJson(
-        "/api/followme/" + encodeURIComponent(c) + "/chat/close-all-with-reset",
-        {
-          source:"admin_close_all_exit_final",
-          close_all:true,
-          disable_chat:true,
-          keep_current_project:true
-        }
-      );
-
-      if(!r1.ok || !r1.data || !r1.data.success){
-        throw new Error((r1.data && r1.data.error) || ("close-all HTTP " + r1.status));
-      }
-
-      /*
-        2) Fallback esplicito: forza lo spegnimento servizio.
-        Non deve modificare active_url/card/documento.
-      */
-      try{
-        await postJson(
-          "/api/followme/" + encodeURIComponent(c) + "/chat/disable",
-          {
-            source:"admin_close_all_exit_fallback"
-          }
-        );
-      }catch(e){}
-
-      try{
-        sessionStorage.setItem("followme_admin_chat_closed_all", "1");
-      }catch(e){}
-
-      /*
-        3) Uscita vera dalla chat: torna home Web App.
-      */
-      window.location.replace(homeUrl());
-
-    }catch(err){
-      closingAll = false;
-      if(btn){
-        btn.disabled = false;
-        btn.textContent = "Chiudi TUTTO";
-      }
-      toast("Errore chiusura totale: " + (err.message || String(err)));
-    }
-
-    return false;
-  }
-
-  function isChatScreen(){
-    try{
-      var p = new URLSearchParams(location.search || "");
-      if(p.get("chatSession")) return true;
-    }catch(e){}
-
-    return (
-      document.body.classList.contains("followme-chat-only-mode") ||
-      !!document.getElementById("followmeOwnerChatMessages")
-    );
-  }
-
-  function insertControls(){
-    if(!isChatScreen()) return;
-
-    if(document.getElementById("fmAdminChatExitControlsFinal20260527")){
-      return;
-    }
-
-    var target =
-      document.querySelector("#followmeOwnerChatTopActions") ||
-      document.querySelector(".followme-owner-chat-actions") ||
-      document.querySelector("#followmeOwnerChatScreen header") ||
-      document.querySelector("#followmeOwnerChatMessages")?.parentElement ||
-      document.getElementById("followmeOwnerChatScreen");
-
-    if(!target) return;
-
-    var wrap = document.createElement("div");
-    wrap.id = "fmAdminChatExitControlsFinal20260527";
-    wrap.style.cssText =
-      "display:flex;gap:8px;align-items:center;justify-content:center;" +
-      "padding:8px 10px;position:relative;z-index:2147483000;";
-
-    var one = document.createElement("button");
-    one.id = "fmAdminCloseCurrentChatFinal20260527";
-    one.type = "button";
-    one.textContent = "Chiudi questa chat";
-    one.style.cssText =
-      "min-height:36px;border-radius:999px;border:1px solid rgba(255,255,255,.18);" +
-      "background:rgba(255,255,255,.10);color:#fff;font-weight:900;padding:0 12px;";
-
-    var all = document.createElement("button");
-    all.id = "fmAdminCloseAllChatsFinal20260527";
-    all.type = "button";
-    all.textContent = "Chiudi TUTTO";
-    all.style.cssText =
-      "min-height:36px;border-radius:999px;border:0;background:#ff3b30;" +
-      "color:#fff;font-weight:950;padding:0 13px;box-shadow:0 8px 22px rgba(255,59,48,.25);";
-
-    one.addEventListener("click", closeSelectedChat, true);
-    all.addEventListener("click", closeAllChatsAndExit, true);
-
-    wrap.appendChild(one);
-    wrap.appendChild(all);
-
-    /*
-      Lo metto all'inizio della testata/area chat così resta visibile.
-    */
-    try{
-      target.insertBefore(wrap, target.firstChild);
-    }catch(e){
-      target.appendChild(wrap);
-    }
-  }
-
-  function hideOldConfusingControls(){
-    if(!isChatScreen()) return;
-
-    /*
-      Nasconde i vecchi pulsanti Reset/Spegni/Chiudi TUTTO solo dentro chat,
-      non nella home della Web App.
-    */
-    Array.from(document.querySelectorAll("button,a")).forEach(function(el){
-      if(el.closest("#fmAdminChatExitControlsFinal20260527")) return;
-
-      var t = String(el.textContent || "")
-        .replace(/\s+/g, " ")
-        .trim()
-        .toLowerCase();
-
-      var id = String(el.id || "");
-
-      var isOld =
-        id === "followmeTopResetChatBtn" ||
-        id === "followmeResetChatBtn" ||
-        id === "followmeOwnerChatDisable" ||
-        t === "reset" ||
-        t === "spegni" ||
-        t === "chiudi tutto" ||
-        t === "chiudi tutto";
-
-      if(!isOld) return;
-
-      if(
-        el.closest("#followmeOwnerChatScreen") ||
-        document.body.classList.contains("followme-chat-only-mode")
-      ){
-        el.style.setProperty("display", "none", "important");
-        el.style.setProperty("pointer-events", "none", "important");
-        el.setAttribute("aria-hidden", "true");
-      }
-    });
-  }
-
-  function showHomeConfirmation(){
-    try{
-      var p = new URLSearchParams(location.search || "");
-      var done = p.get("chatClosedAll") === "1" ||
-        sessionStorage.getItem("followme_admin_chat_closed_all") === "1";
-
-      if(!done) return;
-
-      sessionStorage.removeItem("followme_admin_chat_closed_all");
-
-      setTimeout(function(){
-        toast("Servizio chat chiuso. Ultimo progetto ripristinato.");
-      }, 450);
-
-      if(history && history.replaceState){
-        history.replaceState(null, "", "/fm/app/" + encodeURIComponent(code()));
-      }
-    }catch(e){}
-  }
-
-  function boot(){
-    insertControls();
-    hideOldConfusingControls();
-    showHomeConfirmation();
-  }
-
-  window.followMeAdminChatExitControls20260527 = {
-    closeSelectedChat: closeSelectedChat,
-    closeAllChatsAndExit: closeAllChatsAndExit,
-    boot: boot
-  };
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", boot);
-  }else{
-    boot();
-  }
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 100);
-    setTimeout(boot, 500);
-    setTimeout(boot, 1200);
-  });
-
-  setInterval(boot, 900);
-})();
-</script>
-
-<script id="followme-admin-chat-reset-definitive-20260527">
-(function(){
-  if(window.__followmeAdminChatResetDefinitive20260527) return;
-  window.__followmeAdminChatResetDefinitive20260527 = true;
-
   var running = false;
+  var observer = null;
 
   function code(){
     try{
@@ -36813,17 +36444,21 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     return "FMDEMO";
   }
 
-  function isChatScreen(){
+  function params(){
     try{
-      var p = new URLSearchParams(location.search || "");
-      if(p.get("chatSession")) return true;
-    }catch(e){}
+      return new URLSearchParams(location.search || "");
+    }catch(e){
+      return new URLSearchParams("");
+    }
+  }
 
-    return (
-      document.body.classList.contains("followme-chat-only-mode") ||
-      !!document.getElementById("followmeOwnerChatMessages") ||
-      !!document.getElementById("followmeOwnerChatScreen")
-    );
+  function isRealAdminConversation(){
+    /*
+      Regola rigida:
+      compare SOLO nella conversazione Admin con chatSession.
+      Così sparisce dalla home e dalla pagina attesa.
+    */
+    return !!params().get("chatSession");
   }
 
   function toast(msg){
@@ -36844,310 +36479,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
         "border-radius:999px;font:800 13px system-ui,-apple-system,sans-serif;" +
         "box-shadow:0 16px 46px rgba(0,0,0,.35);max-width:88vw;text-align:center;";
       document.body.appendChild(el);
-      setTimeout(function(){ try{ el.remove(); }catch(e){} }, 2800);
-    }catch(e){
-      alert(msg);
-    }
-  }
-
-  async function postJson(url, body){
-    var res = await fetch(url, {
-      method:"POST",
-      headers:{
-        "Content-Type":"application/json",
-        "Accept":"application/json"
-      },
-      cache:"no-store",
-      body:JSON.stringify(body || {})
-    });
-
-    var data = await res.json().catch(function(){ return null; });
-
-    return {
-      ok:res.ok,
-      status:res.status,
-      data:data
-    };
-  }
-
-  function homeUrl(){
-    return "/fm/app/" + encodeURIComponent(code()) + "?chatResetDone=1&v=" + Date.now();
-  }
-
-  async function definitiveReset(ev){
-    if(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
-      ev.stopImmediatePropagation();
-    }
-
-    if(running) return false;
-    running = true;
-
-    var c = code();
-    var btn = document.getElementById("fmAdminDefinitiveReset20260527");
-
-    if(btn){
-      btn.disabled = true;
-      btn.textContent = "Reset...";
-    }
-
-    try{
-      /*
-        Chiusura totale ufficiale:
-        chiude sessioni, resetta controlli utenti, spegne chat_mode_enabled.
-      */
-      var r1 = await postJson(
-        "/api/followme/" + encodeURIComponent(c) + "/chat/close-all-with-reset",
-        {
-          source:"admin_definitive_reset_button",
-          close_all:true,
-          disable_chat:true,
-          keep_current_project:true
-        }
-      );
-
-      if(!r1.ok || !r1.data || !r1.data.success){
-        throw new Error((r1.data && r1.data.error) || ("close-all HTTP " + r1.status));
-      }
-
-      /*
-        Fallback: se una vecchia logica non spegne chat_mode_enabled,
-        forziamo comunque la disattivazione del servizio chat.
-      */
-      try{
-        await postJson(
-          "/api/followme/" + encodeURIComponent(c) + "/chat/disable",
-          {
-            source:"admin_definitive_reset_disable_fallback"
-          }
-        );
-      }catch(e){}
-
-      /*
-        Pulizia locale: evita rientri automatici nella chat appena chiusa.
-      */
-      try{
-        sessionStorage.setItem("followme_admin_chat_reset_done", "1");
-        sessionStorage.removeItem("followme_chat_session_id");
-        sessionStorage.removeItem("followme_selected_chat_closed");
-        localStorage.removeItem("followme_chat_session_id");
-      }catch(e){}
-
-      window.location.replace(homeUrl());
-      return false;
-
-    }catch(err){
-      running = false;
-
-      if(btn){
-        btn.disabled = false;
-        btn.textContent = "Reset";
-      }
-
-      toast("Reset non riuscito: " + (err.message || String(err)));
-      return false;
-    }
-  }
-
-  function removeOldExitControls(){
-    if(!isChatScreen()) return;
-
-    /*
-      Rimuove/nasconde i controlli precedenti dentro la chat:
-      vecchi Reset, Spegni, Chiudi TUTTO, Chiudi questa chat.
-      Lasciamo solo il nuovo Reset definitivo.
-    */
-    Array.from(document.querySelectorAll("button,a")).forEach(function(el){
-      if(!el) return;
-      if(el.id === "fmAdminDefinitiveReset20260527") return;
-      if(el.closest("#fmAdminDefinitiveResetWrap20260527")) return;
-
-      var text = String(el.textContent || "")
-        .replace(/\s+/g, " ")
-        .trim()
-        .toLowerCase();
-
-      var id = String(el.id || "");
-
-      var shouldHide =
-        id === "followmeTopResetChatBtn" ||
-        id === "followmeResetChatBtn" ||
-        id === "followmeOwnerChatDisable" ||
-        id === "fmAdminCloseAllChatsFinal20260527" ||
-        id === "fmAdminCloseCurrentChatFinal20260527" ||
-        text === "reset" ||
-        text === "spegni" ||
-        text === "chiudi tutto" ||
-        text === "chiudi tutto..." ||
-        text === "chiudi questa chat";
-
-      if(!shouldHide) return;
-
-      if(
-        el.closest("#followmeOwnerChatScreen") ||
-        document.body.classList.contains("followme-chat-only-mode")
-      ){
-        el.style.setProperty("display", "none", "important");
-        el.style.setProperty("pointer-events", "none", "important");
-        el.setAttribute("aria-hidden", "true");
-      }
-    });
-
-    var oldWrap = document.getElementById("fmAdminChatExitControlsFinal20260527");
-    if(oldWrap){
-      oldWrap.style.setProperty("display", "none", "important");
-      oldWrap.style.setProperty("pointer-events", "none", "important");
-      oldWrap.setAttribute("aria-hidden", "true");
-    }
-  }
-
-  function ensureResetButton(){
-    if(!isChatScreen()) return;
-
-    if(document.getElementById("fmAdminDefinitiveReset20260527")){
-      return;
-    }
-
-    var target =
-      document.querySelector(".followme-owner-chat-actions") ||
-      document.querySelector("#followmeOwnerChatScreen header") ||
-      document.querySelector("#followmeOwnerChatMessages")?.parentElement ||
-      document.getElementById("followmeOwnerChatScreen");
-
-    if(!target) return;
-
-    var wrap = document.createElement("div");
-    wrap.id = "fmAdminDefinitiveResetWrap20260527";
-    wrap.style.cssText =
-      "display:flex;align-items:center;justify-content:center;" +
-      "gap:8px;padding:8px 10px;position:relative;z-index:2147483001;";
-
-    var btn = document.createElement("button");
-    btn.id = "fmAdminDefinitiveReset20260527";
-    btn.type = "button";
-    btn.textContent = "Reset";
-    btn.setAttribute("aria-label", "Reset chat");
-    btn.style.cssText =
-      "min-height:38px;border-radius:999px;border:0;" +
-      "background:#ff3b30;color:#fff;font-weight:950;" +
-      "padding:0 18px;box-shadow:0 10px 26px rgba(255,59,48,.28);" +
-      "letter-spacing:-.01em;";
-
-    btn.addEventListener("click", definitiveReset, true);
-    btn.onclick = definitiveReset;
-
-    wrap.appendChild(btn);
-
-    try{
-      target.insertBefore(wrap, target.firstChild);
-    }catch(e){
-      target.appendChild(wrap);
-    }
-  }
-
-  function showHomeConfirmation(){
-    try{
-      var p = new URLSearchParams(location.search || "");
-      var done = p.get("chatResetDone") === "1" ||
-        sessionStorage.getItem("followme_admin_chat_reset_done") === "1";
-
-      if(!done) return;
-
-      sessionStorage.removeItem("followme_admin_chat_reset_done");
-
-      setTimeout(function(){
-        toast("Chat resettata. Servizio chat spento.");
-      }, 450);
-
-      if(history && history.replaceState){
-        history.replaceState(null, "", "/fm/app/" + encodeURIComponent(code()));
-      }
-    }catch(e){}
-  }
-
-  function boot(){
-    removeOldExitControls();
-    ensureResetButton();
-    showHomeConfirmation();
-  }
-
-  window.followMeAdminChatResetDefinitive20260527 = {
-    reset:definitiveReset,
-    boot:boot
-  };
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", boot);
-  }else{
-    boot();
-  }
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(boot, 100);
-    setTimeout(boot, 500);
-    setTimeout(boot, 1200);
-  });
-
-  setInterval(boot, 800);
-})();
-</script>
-
-<script id="followme-admin-reset-visible-hook-final-20260527">
-(function(){
-  if(window.__followmeAdminResetVisibleHookFinal20260527) return;
-  window.__followmeAdminResetVisibleHookFinal20260527 = true;
-
-  var running = false;
-
-  function code(){
-    try{
-      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
-      if(m && m[1]) return decodeURIComponent(m[1]).trim().toUpperCase();
-    }catch(e){}
-
-    try{
-      if(typeof getCode === "function"){
-        var c = getCode();
-        if(c) return String(c).trim().toUpperCase();
-      }
-    }catch(e){}
-
-    return "FMDEMO";
-  }
-
-  function inAdminChat(){
-    try{
-      var p = new URLSearchParams(location.search || "");
-      if(p.get("chatSession")) return true;
-    }catch(e){}
-
-    return (
-      document.body.classList.contains("followme-chat-only-mode") ||
-      !!document.getElementById("followmeOwnerChatMessages") ||
-      !!document.getElementById("followmeOwnerChatScreen")
-    );
-  }
-
-  function toast(msg){
-    try{
-      if(typeof window.toast === "function"){
-        window.toast(msg);
-        return;
-      }
-    }catch(e){}
-
-    try{
-      var el = document.createElement("div");
-      el.textContent = msg;
-      el.style.cssText =
-        "position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));" +
-        "transform:translateX(-50%);z-index:2147483647;" +
-        "background:rgba(18,18,24,.96);color:white;padding:12px 16px;" +
-        "border-radius:999px;font:800 13px system-ui,-apple-system,sans-serif;" +
-        "box-shadow:0 16px 46px rgba(0,0,0,.35);max-width:88vw;text-align:center;";
-      document.body.appendChild(el);
-      setTimeout(function(){ try{ el.remove(); }catch(e){} }, 2800);
+      setTimeout(function(){ try{ el.remove(); }catch(e){} }, 2600);
     }catch(e){
       alert(msg);
     }
@@ -37187,28 +36519,19 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     if(running) return false;
     running = true;
 
-    var c = code();
+    var btn = document.getElementById("fmAdminSingleResetClean20260527");
+    if(btn){
+      btn.disabled = true;
+      btn.textContent = "Reset...";
+    }
 
-    Array.from(document.querySelectorAll("button,a")).forEach(function(el){
-      var t = String(el.textContent || "").replace(/\s+/g," ").trim().toLowerCase();
-      if(
-        el.id === "fmAdminVisibleResetFinal20260527" ||
-        t === "reset" ||
-        t === "chiudi tutto" ||
-        t === "tutte le chat"
-      ){
-        try{
-          el.disabled = true;
-          el.textContent = "Reset...";
-        }catch(e){}
-      }
-    });
+    var c = code();
 
     try{
       var r1 = await postJson(
         "/api/followme/" + encodeURIComponent(c) + "/chat/close-all-with-reset",
         {
-          source:"admin_visible_reset_hook_final",
+          source:"admin_single_reset_clean_final",
           close_all:true,
           disable_chat:true,
           keep_current_project:true
@@ -37220,20 +36543,17 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       }
 
       /*
-        Fallback esplicito per spegnere comunque il servizio chat.
+        Fallback di sicurezza: spegne comunque il servizio chat.
       */
       try{
         await postJson(
           "/api/followme/" + encodeURIComponent(c) + "/chat/disable",
           {
-            source:"admin_visible_reset_hook_disable_fallback"
+            source:"admin_single_reset_clean_disable_fallback"
           }
         );
       }catch(e){}
 
-      /*
-        Pulizia locale: evita rientro nella chat chiusa.
-      */
       try{
         sessionStorage.setItem("followme_admin_chat_reset_done", "1");
         sessionStorage.removeItem("followme_chat_session_id");
@@ -37246,82 +36566,32 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
     }catch(err){
       running = false;
+
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = "Reset";
+      }
+
       toast("Reset non riuscito: " + (err.message || String(err)));
-
-      Array.from(document.querySelectorAll("button,a")).forEach(function(el){
-        var t = String(el.textContent || "").replace(/\s+/g," ").trim().toLowerCase();
-        if(t === "reset..." || el.id === "fmAdminVisibleResetFinal20260527"){
-          try{
-            el.disabled = false;
-            el.textContent = "Reset";
-          }catch(e){}
-        }
-      });
-
       return false;
     }
   }
 
-  function killOldModal(){
-    try{
-      var overlay = document.getElementById("followmeResetChoiceOverlay");
-      if(overlay){
-        overlay.classList.remove("is-open");
-        overlay.setAttribute("aria-hidden", "true");
-        overlay.style.setProperty("display", "none", "important");
-        overlay.style.setProperty("pointer-events", "none", "important");
-      }
-    }catch(e){}
+  function removeCleanReset(){
+    var wrap = document.getElementById("fmAdminSingleResetCleanWrap20260527");
+    if(wrap) wrap.remove();
   }
 
-  function hookExistingButtons(){
-    if(!inAdminChat()) return;
-
-    Array.from(document.querySelectorAll("button,a")).forEach(function(el){
-      if(!el) return;
-      if(el.closest("#fmAdminVisibleResetWrapFinal20260527")) return;
-
-      var text = String(el.textContent || "")
-        .replace(/\s+/g, " ")
-        .trim()
-        .toLowerCase();
-
-      var id = String(el.id || "");
-
-      var mustBecomeReset =
-        id === "followmeTopResetChatBtn" ||
-        id === "followmeResetChatBtn" ||
-        id === "followmeResetAllChatsBtn" ||
-        id === "fmAdminCloseAllChatsFinal20260527" ||
-        text === "reset" ||
-        text === "chiudi tutto" ||
-        text === "tutte le chat";
-
-      if(!mustBecomeReset) return;
-
-      /*
-        Non lo nascondo: lo trasformo in Reset definitivo.
-      */
-      el.style.removeProperty("display");
-      el.style.removeProperty("pointer-events");
-      el.removeAttribute("aria-hidden");
-      el.textContent = "Reset";
-      el.setAttribute("data-followme-reset-visible-hook", "1");
-
-      if(el.dataset.resetVisibleHookBound === "1") return;
-      el.dataset.resetVisibleHookBound = "1";
-
-      el.onclick = resetAllAndExit;
-      el.addEventListener("click", resetAllAndExit, true);
-    });
+  function hideOldChatControlsOnce(){
+    if(!isRealAdminConversation()) return;
 
     /*
-      Nascondo solo comandi ambigui che non devono più comandare nulla.
+      Nascondiamo solo vecchi comandi dentro la conversazione vera.
+      Non tocchiamo la home.
     */
     Array.from(document.querySelectorAll("button,a")).forEach(function(el){
       if(!el) return;
-      if(el.closest("#fmAdminVisibleResetWrapFinal20260527")) return;
-      if(el.getAttribute("data-followme-reset-visible-hook") === "1") return;
+      if(el.closest("#fmAdminSingleResetCleanWrap20260527")) return;
 
       var text = String(el.textContent || "")
         .replace(/\s+/g, " ")
@@ -37330,16 +36600,28 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
       var id = String(el.id || "");
 
-      var ambiguous =
+      var old =
+        id === "followmeTopResetChatBtn" ||
+        id === "followmeResetChatBtn" ||
         id === "followmeOwnerChatDisable" ||
+        id === "followmeResetAllChatsBtn" ||
+        id === "fmAdminCloseAllChatsFinal20260527" ||
         id === "fmAdminCloseCurrentChatFinal20260527" ||
+        id === "fmAdminDefinitiveReset20260527" ||
+        id === "fmAdminVisibleResetFinal20260527" ||
+        text === "reset" ||
+        text === "reset..." ||
+        text === "chiudi tutto" ||
+        text === "chiudi questa chat" ||
         text === "spegni" ||
-        text === "chiudi questa chat";
+        text === "tutte le chat";
 
-      if(!ambiguous) return;
+      if(!old) return;
 
       if(
         el.closest("#followmeOwnerChatScreen") ||
+        el.closest(".followme-owner-chat-actions") ||
+        el.closest("#followmeResetChoiceOverlay") ||
         document.body.classList.contains("followme-chat-only-mode")
       ){
         el.style.setProperty("display", "none", "important");
@@ -37347,47 +36629,86 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
         el.setAttribute("aria-hidden", "true");
       }
     });
+
+    /*
+      Chiude e neutralizza il vecchio popup reset a scelta.
+    */
+    var overlay = document.getElementById("followmeResetChoiceOverlay");
+    if(overlay){
+      overlay.classList.remove("is-open");
+      overlay.setAttribute("aria-hidden", "true");
+      overlay.style.setProperty("display", "none", "important");
+      overlay.style.setProperty("pointer-events", "none", "important");
+    }
+
+    /*
+      Nasconde eventuali wrapper precedenti.
+    */
+    [
+      "fmAdminChatExitControlsFinal20260527",
+      "fmAdminDefinitiveResetWrap20260527",
+      "fmAdminVisibleResetWrapFinal20260527"
+    ].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el){
+        el.style.setProperty("display", "none", "important");
+        el.style.setProperty("pointer-events", "none", "important");
+        el.setAttribute("aria-hidden", "true");
+      }
+    });
   }
 
-  function ensureVisibleReset(){
-    if(!inAdminChat()) return;
+  function ensureSingleReset(){
+    if(!isRealAdminConversation()){
+      removeCleanReset();
+      return;
+    }
 
-    var existing = document.getElementById("fmAdminVisibleResetFinal20260527");
-    if(existing) return;
+    if(document.getElementById("fmAdminSingleResetClean20260527")){
+      return;
+    }
 
-    var screen =
-      document.getElementById("followmeOwnerChatScreen") ||
-      document.querySelector("#followmeOwnerChatMessages")?.parentElement ||
-      document.body;
+    var target =
+      document.querySelector(".followme-owner-chat-actions") ||
+      document.querySelector("#followmeOwnerChatScreen header") ||
+      document.getElementById("followmeOwnerChatScreen");
 
-    if(!screen) return;
+    if(!target) return;
 
     var wrap = document.createElement("div");
-    wrap.id = "fmAdminVisibleResetWrapFinal20260527";
+    wrap.id = "fmAdminSingleResetCleanWrap20260527";
     wrap.style.cssText =
-      "position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;" +
-      "z-index:2147483647;display:flex;align-items:center;justify-content:center;" +
-      "pointer-events:auto;";
+      "display:flex;align-items:center;justify-content:center;" +
+      "gap:8px;padding:6px 8px;position:relative;z-index:20;";
 
     var btn = document.createElement("button");
-    btn.id = "fmAdminVisibleResetFinal20260527";
+    btn.id = "fmAdminSingleResetClean20260527";
     btn.type = "button";
     btn.textContent = "Reset";
+    btn.setAttribute("aria-label", "Reset chat");
     btn.style.cssText =
-      "min-height:40px;border-radius:999px;border:0;background:#ff3b30;color:#fff;" +
-      "font-weight:950;padding:0 18px;box-shadow:0 12px 30px rgba(255,59,48,.35);" +
+      "min-height:36px;border-radius:999px;border:0;background:#ff3b30;color:#fff;" +
+      "font-weight:950;padding:0 16px;box-shadow:0 8px 22px rgba(255,59,48,.24);" +
       "font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;";
 
-    btn.onclick = resetAllAndExit;
     btn.addEventListener("click", resetAllAndExit, true);
+    btn.onclick = resetAllAndExit;
 
     wrap.appendChild(btn);
-    document.body.appendChild(wrap);
+
+    try{
+      target.insertBefore(wrap, target.firstChild);
+    }catch(e){
+      target.appendChild(wrap);
+    }
   }
 
   function showHomeConfirmation(){
+    /*
+      In home non mostriamo Reset. Mostriamo solo eventuale conferma e puliamo URL.
+    */
     try{
-      var p = new URLSearchParams(location.search || "");
+      var p = params();
       var done = p.get("chatResetDone") === "1" ||
         sessionStorage.getItem("followme_admin_chat_reset_done") === "1";
 
@@ -37397,7 +36718,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
       setTimeout(function(){
         toast("Chat resettata. Servizio chat spento.");
-      }, 450);
+      }, 400);
 
       if(history && history.replaceState){
         history.replaceState(null, "", "/fm/app/" + encodeURIComponent(code()));
@@ -37406,29 +36727,61 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   }
 
   function boot(){
-    killOldModal();
-    hookExistingButtons();
-    ensureVisibleReset();
-    showHomeConfirmation();
+    if(!isRealAdminConversation()){
+      removeCleanReset();
+      showHomeConfirmation();
+      return;
+    }
+
+    hideOldChatControlsOnce();
+    ensureSingleReset();
   }
 
-  window.followMeAdminResetVisibleHookFinal20260527 = {
+  function startObserver(){
+    if(observer || !window.MutationObserver) return;
+
+    var root = document.getElementById("followmeOwnerChatScreen") || document.body;
+    if(!root) return;
+
+    observer = new MutationObserver(function(){
+      /*
+        Niente setInterval: solo reazione leggera se vecchi script ridisegnano la testata.
+      */
+      if(window.__fmSingleResetCleanQueued) return;
+      window.__fmSingleResetCleanQueued = true;
+
+      setTimeout(function(){
+        window.__fmSingleResetCleanQueued = false;
+        boot();
+      }, 80);
+    });
+
+    observer.observe(root, {
+      childList:true,
+      subtree:true
+    });
+  }
+
+  window.followMeAdminSingleResetClean20260527 = {
     reset:resetAllAndExit,
     boot:boot
   };
 
   if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", boot);
+    document.addEventListener("DOMContentLoaded", function(){
+      boot();
+      startObserver();
+    });
   }else{
     boot();
+    startObserver();
   }
 
   window.addEventListener("pageshow", function(){
-    setTimeout(boot, 100);
-    setTimeout(boot, 400);
-    setTimeout(boot, 1000);
+    setTimeout(function(){
+      boot();
+      startObserver();
+    }, 150);
   });
-
-  setInterval(boot, 700);
 })();
 </script>
