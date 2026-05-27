@@ -16612,6 +16612,35 @@ function makeFollowMeChatV2Token() {
          Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
+
+async function rotateFollowMeChatV2Token(projectId) {
+  await ensureFollowMeChatV2Runtime();
+
+  for (let i = 0; i < 12; i++) {
+    const token = makeFollowMeChatV2Token();
+
+    try {
+      await pool.query(
+        `UPDATE followme_projects
+         SET chat_public_token = $2,
+             chat_token_rotated_at = NOW(),
+             bot_enabled = FALSE,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [projectId, token]
+      );
+
+      return token;
+    } catch (err) {
+      if (!String(err.message || '').toLowerCase().includes('duplicate')) {
+        throw err;
+      }
+    }
+  }
+
+  throw new Error('Impossibile ruotare token Chat V2.');
+}
+
 async function ensureFollowMeChatV2Token(projectId) {
   await ensureFollowMeChatV2Runtime();
 
@@ -16654,7 +16683,7 @@ app.post('/api/followme/:code/chat-v2/enable', express.json(), async (req, res) 
 
     const code = normalizeFollowMeChatV2Code(req.params.code);
     const q = await pool.query(
-      `SELECT id, code, public_id FROM followme_projects WHERE code = $1 OR public_id = $1 LIMIT 1`,
+      `SELECT id, code, public_id, chat_mode_enabled, chat_public_token FROM followme_projects WHERE code = $1 OR public_id = $1 LIMIT 1`,
       [code]
     );
 
@@ -16663,7 +16692,15 @@ app.post('/api/followme/:code/chat-v2/enable', express.json(), async (req, res) 
     }
 
     const project = q.rows[0];
-    const token = await ensureFollowMeChatV2Token(project.id);
+
+    /*
+      Chat V2: ogni nuova attivazione dopo Reset deve generare un token nuovo.
+      Se la chat è già attiva e ha già un token, lo manteniamo.
+      Se è spenta o senza token, ruotiamo.
+    */
+    const token = (project.chat_mode_enabled === true && project.chat_public_token)
+      ? project.chat_public_token
+      : await rotateFollowMeChatV2Token(project.id);
 
     await pool.query(
       `UPDATE followme_projects
@@ -16726,6 +16763,8 @@ app.post('/api/followme/:code/chat-v2/reset', express.json(), async (req, res) =
       `UPDATE followme_projects
        SET chat_mode_enabled = FALSE,
            bot_enabled = FALSE,
+           chat_public_token = NULL,
+           chat_token_rotated_at = NOW(),
            updated_at = NOW()
        WHERE id = $1`,
       [project.id]
