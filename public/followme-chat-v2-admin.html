@@ -340,6 +340,60 @@
       opacity:1;
       transform:translateX(-50%) translateY(0);
     }
+
+    /* admin-extra-v2-menu-20260527 */
+    .extra-menu{
+      position:fixed;
+      left:10px;
+      bottom:calc(64px + env(safe-area-inset-bottom));
+      z-index:40;
+      display:none;
+      gap:8px;
+      padding:8px;
+      border-radius:22px;
+      background:rgba(255,255,255,.96);
+      box-shadow:0 16px 46px rgba(0,0,0,.22);
+      border:1px solid rgba(0,0,0,.08);
+    }
+    .extra-menu.open{display:flex}
+    .extra-menu button{
+      height:38px;
+      border:0;
+      border-radius:999px;
+      padding:0 13px;
+      background:#f0f2f5;
+      color:#1f2c33;
+      font-weight:900;
+      font-size:12px;
+      white-space:nowrap;
+    }
+    .attachment-card{
+      display:grid;
+      gap:6px;
+    }
+    .attachment-card img{
+      max-width:240px;
+      width:100%;
+      border-radius:12px;
+      display:block;
+    }
+    .attachment-file{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:9px 10px;
+      border-radius:12px;
+      background:rgba(255,255,255,.55);
+      color:#111b21;
+      text-decoration:none;
+      font-weight:850;
+    }
+    .attachment-file span{
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      max-width:220px;
+    }
   </style>
 </head>
 <body>
@@ -378,6 +432,16 @@
     </footer>
   </main>
 
+  <div class="extra-menu" id="adminExtraMenuV2">
+    <button type="button" id="adminPickPhotoV2">Foto</button>
+    <button type="button" id="adminTakePhotoV2">Camera</button>
+    <button type="button" id="adminPickFileV2">File</button>
+  </div>
+
+  <input id="adminPhotoInputV2" type="file" accept="image/*,video/*" style="display:none">
+  <input id="adminCameraInputV2" type="file" accept="image/*" capture="environment" style="display:none">
+  <input id="adminFileInputV2" type="file" accept=".pdf,image/*,video/*,application/pdf,text/plain" style="display:none">
+
   <div class="toast" id="toast"></div>
 
   <script>
@@ -405,6 +469,13 @@
       extra:document.getElementById("extraBtn"),
       block:document.getElementById("blockBtn"),
       plus:document.getElementById("plusBtn"),
+      extraMenu:document.getElementById("adminExtraMenuV2"),
+      pickPhoto:document.getElementById("adminPickPhotoV2"),
+      takePhoto:document.getElementById("adminTakePhotoV2"),
+      pickFile:document.getElementById("adminPickFileV2"),
+      photoInput:document.getElementById("adminPhotoInputV2"),
+      cameraInput:document.getElementById("adminCameraInputV2"),
+      fileInput:document.getElementById("adminFileInputV2"),
       toast:document.getElementById("toast")
     };
 
@@ -506,6 +577,35 @@
       lastMessageId = 0;
     }
 
+    function parseAttachmentV2(raw){
+      try{
+        const obj = JSON.parse(String(raw || ""));
+        if(obj && obj.__followme_attachment_v2) return obj;
+      }catch(e){}
+      return null;
+    }
+
+    function renderAttachmentV2(att, createdAt){
+      const isImage = String(att.mime || "").startsWith("image/");
+      const label = esc(att.label || att.filename || "Allegato");
+      const url = esc(att.url || "#");
+
+      if(isImage){
+        return '<div class="attachment-card">' +
+          '<a href="' + url + '" target="_blank" rel="noopener">' +
+          '<img src="' + url + '" alt="' + label + '">' +
+          '</a>' +
+          '<a class="attachment-file" href="' + url + '" target="_blank" rel="noopener">📎 <span>' + label + '</span></a>' +
+          '<span class="time">' + esc(timeOf(createdAt)) + '</span>' +
+        '</div>';
+      }
+
+      return '<div class="attachment-card">' +
+        '<a class="attachment-file" href="' + url + '" target="_blank" rel="noopener">📎 <span>' + label + '</span></a>' +
+        '<span class="time">' + esc(timeOf(createdAt)) + '</span>' +
+      '</div>';
+    }
+
     function appendMessage(m){
       if(!m || !m.id) return;
       const id = String(m.id);
@@ -515,8 +615,12 @@
       const div = document.createElement("div");
       div.className = "bubble " + (m.sender === "owner" ? "owner" : "visitor");
       div.dataset.id = id;
-      div.innerHTML = esc(m.message).replace(/\n/g,"<br>") +
-        '<span class="time">' + esc(timeOf(m.created_at)) + '</span>';
+
+      const att = parseAttachmentV2(m.message);
+      div.innerHTML = att
+        ? renderAttachmentV2(att, m.created_at)
+        : esc(m.message).replace(/\n/g,"<br>") + '<span class="time">' + esc(timeOf(m.created_at)) + '</span>';
+
       els.messages.appendChild(div);
       els.messages.scrollTop = els.messages.scrollHeight;
       lastMessageId = Math.max(lastMessageId, Number(m.id) || 0);
@@ -651,6 +755,53 @@
       els.input.style.height = Math.min(110, els.input.scrollHeight) + "px";
     }
 
+    function fileToDataUrlV2(file){
+      return new Promise((resolve,reject)=>{
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result || ""));
+        r.onerror = () => reject(new Error("Lettura file non riuscita."));
+        r.readAsDataURL(file);
+      });
+    }
+
+    async function sendAdminAttachmentV2(file, kind){
+      if(!selectedId || !file) return;
+
+      const max = 20 * 1024 * 1024;
+      if(file.size > max){
+        toast("File troppo grande. Limite 20 MB.");
+        return;
+      }
+
+      try{
+        toast("Invio allegato...");
+        const dataUrl = await fileToDataUrlV2(file);
+
+        const data = await post("/api/followme/chat-v2/session/" + encodeURIComponent(selectedId) + "/attachment", {
+          sender:"owner",
+          kind:kind || "file",
+          filename:file.name || "allegato",
+          mime:file.type || "application/octet-stream",
+          label:file.name || "Allegato",
+          data_url:dataUrl
+        });
+
+        if(data.message) appendMessage(data.message);
+        toast("Allegato inviato");
+      }catch(err){
+        toast("Errore allegato: " + err.message);
+      }
+    }
+
+    function toggleExtraMenuV2(){
+      if(!els.extraMenu) return;
+      els.extraMenu.classList.toggle("open");
+    }
+
+    function closeExtraMenuV2(){
+      if(els.extraMenu) els.extraMenu.classList.remove("open");
+    }
+
 
     function bind(){
       els.send.onclick = send;
@@ -665,7 +816,35 @@
       els.block.onclick = toggleBlock;
       els.reset.onclick = resetAll;
       els.back.onclick = () => { location.href = "/fm/app/" + encodeURIComponent(CODE); };
-      els.plus.onclick = () => toast("Gli allegati arriveranno nella fase Extra V2.");
+      els.plus.onclick = () => toggleExtraMenuV2();
+
+      if(els.pickPhoto) els.pickPhoto.onclick = () => { closeExtraMenuV2(); els.photoInput && els.photoInput.click(); };
+      if(els.takePhoto) els.takePhoto.onclick = () => { closeExtraMenuV2(); els.cameraInput && els.cameraInput.click(); };
+      if(els.pickFile) els.pickFile.onclick = () => { closeExtraMenuV2(); els.fileInput && els.fileInput.click(); };
+
+      if(els.photoInput) els.photoInput.onchange = () => {
+        const f = els.photoInput.files && els.photoInput.files[0];
+        els.photoInput.value = "";
+        if(f) sendAdminAttachmentV2(f, "media");
+      };
+
+      if(els.cameraInput) els.cameraInput.onchange = () => {
+        const f = els.cameraInput.files && els.cameraInput.files[0];
+        els.cameraInput.value = "";
+        if(f) sendAdminAttachmentV2(f, "camera");
+      };
+
+      if(els.fileInput) els.fileInput.onchange = () => {
+        const f = els.fileInput.files && els.fileInput.files[0];
+        els.fileInput.value = "";
+        if(f) sendAdminAttachmentV2(f, "file");
+      };
+
+      document.addEventListener("click", ev=>{
+        if(!els.extraMenu || !els.extraMenu.classList.contains("open")) return;
+        if(ev.target === els.plus || els.extraMenu.contains(ev.target)) return;
+        closeExtraMenuV2();
+      });
     }
 
     function start(){

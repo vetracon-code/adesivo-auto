@@ -16983,6 +16983,148 @@ app.post('/api/followme/chat-v2/session/:session_id/message', express.json(), as
   }
 });
 
+
+
+/* ============================================================
+   FOLLOWME CHAT V2 ADMIN ATTACHMENTS 20260527
+   Allegati inviati da Admin verso utente.
+   ============================================================ */
+app.post('/api/followme/chat-v2/session/:session_id/attachment', express.json({ limit:'28mb' }), async (req, res) => {
+  try {
+    await ensureFollowMeChatV2Runtime();
+
+    const sessionId = Number(req.params.session_id || 0);
+    const sender = String(req.body?.sender || '') === 'owner' ? 'owner' : 'visitor';
+
+    if (!sessionId) {
+      return res.status(400).json({ success:false, error:'Sessione mancante.' });
+    }
+
+    /*
+      Fase 1: abilitiamo allegati solo da Admin.
+      Lato utente lo attiveremo dopo con controllo uploads_enabled.
+    */
+    if (sender !== 'owner') {
+      return res.status(403).json({ success:false, error:'Allegati utente non ancora abilitati in Chat V2.' });
+    }
+
+    const kind = String(req.body?.kind || 'file').trim().toLowerCase();
+    const dataUrl = String(req.body?.data_url || '');
+    const originalName = String(req.body?.filename || 'allegato').trim();
+    const mime = String(req.body?.mime || '').trim();
+    const label = String(req.body?.label || originalName || 'Allegato').trim();
+
+    if (!dataUrl || !/^data:[^;]+;base64,/.test(dataUrl)) {
+      return res.status(400).json({ success:false, error:'File non valido.' });
+    }
+
+    const sessionRes = await pool.query(
+      `SELECT id, project_id, status, is_blocked
+       FROM followme_chat_sessions
+       WHERE id = $1
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!sessionRes.rows.length) {
+      return res.status(404).json({ success:false, error:'Sessione non trovata.' });
+    }
+
+    const session = sessionRes.rows[0];
+
+    if (session.status !== 'open') {
+      return res.status(409).json({ success:false, closed:true, error:'Chat chiusa.' });
+    }
+
+    const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (!m) {
+      return res.status(400).json({ success:false, error:'Formato file non valido.' });
+    }
+
+    const realMime = mime || m[1];
+    const buffer = Buffer.from(m[2], 'base64');
+
+    const maxBytes = 20 * 1024 * 1024;
+    if (buffer.length > maxBytes) {
+      return res.status(413).json({ success:false, error:'File troppo grande. Limite 20 MB.' });
+    }
+
+    const path = require('path');
+    const fs = require('fs');
+
+    const extByMime = {
+      'image/jpeg': '.jpg',
+      'image/png': '.png',
+      'image/webp': '.webp',
+      'image/gif': '.gif',
+      'image/heic': '.heic',
+      'image/heif': '.heif',
+      'video/mp4': '.mp4',
+      'video/quicktime': '.mov',
+      'application/pdf': '.pdf',
+      'text/plain': '.txt'
+    };
+
+    const safeOriginal = originalName
+      .replace(/[^\w.\-àèéìòùÀÈÉÌÒÙ ]+/g, '')
+      .replace(/\s+/g, '_')
+      .slice(0, 90) || 'allegato';
+
+    const currentExt = path.extname(safeOriginal);
+    const ext = currentExt || extByMime[realMime] || '';
+    const base = path.basename(safeOriginal, currentExt).replace(/[^\w.\-]+/g, '_') || 'allegato';
+
+    const storedName = `${Date.now()}_${Math.random().toString(16).slice(2,8)}_${base}${ext}`;
+    const uploadDir = path.join(__dirname, 'public', 'uploads', 'followme-chat-v2');
+
+    fs.mkdirSync(uploadDir, { recursive:true });
+
+    const fullPath = path.join(uploadDir, storedName);
+    fs.writeFileSync(fullPath, buffer);
+
+    const publicUrl = `/uploads/followme-chat-v2/${storedName}`;
+
+    const payload = {
+      __followme_attachment_v2: true,
+      kind,
+      sender,
+      url: publicUrl,
+      filename: safeOriginal,
+      mime: realMime,
+      label,
+      size_bytes: buffer.length,
+      created_at: new Date().toISOString()
+    };
+
+    const inserted = await pool.query(
+      `INSERT INTO followme_chat_messages
+       (session_id, project_id, sender, message, created_at)
+       VALUES ($1,$2,$3,$4,NOW())
+       RETURNING id, sender, message, created_at`,
+      [session.id, session.project_id, sender, JSON.stringify(payload)]
+    );
+
+    await pool.query(
+      `UPDATE followme_chat_sessions SET updated_at = NOW(), last_seen_at = NOW() WHERE id = $1`,
+      [session.id]
+    );
+
+    return res.json({
+      success:true,
+      message:inserted.rows[0],
+      attachment:payload
+    });
+  } catch (err) {
+    console.error('followme chat-v2 admin attachment error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore invio allegato Chat V2.',
+      detail:String(err && err.message ? err.message : err)
+    });
+  }
+});
+
+
 app.post('/api/followme/chat-v2/session/:session_id/settings', express.json(), async (req, res) => {
   try {
     await ensureFollowMeChatV2Runtime();

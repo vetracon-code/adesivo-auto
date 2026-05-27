@@ -142,6 +142,13 @@
       text-align:center;
     }
     .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    .attachment-card{display:grid;gap:6px}
+    .attachment-card img{max-width:240px;width:100%;border-radius:12px;display:block}
+    .attachment-file{
+      display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:12px;
+      background:rgba(255,255,255,.55);color:#111b21;text-decoration:none;font-weight:850;
+    }
+    .attachment-file span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
   </style>
 </head>
 <body>
@@ -234,6 +241,35 @@
       toast("Sei stato bloccato dal sistema.");
     }
 
+    function parseAttachmentV2(raw){
+      try{
+        const obj = JSON.parse(String(raw || ""));
+        if(obj && obj.__followme_attachment_v2) return obj;
+      }catch(e){}
+      return null;
+    }
+
+    function renderAttachmentV2(att, createdAt){
+      const isImage = String(att.mime || "").startsWith("image/");
+      const label = esc(att.label || att.filename || "Allegato");
+      const url = esc(att.url || "#");
+
+      if(isImage){
+        return '<div class="attachment-card">' +
+          '<a href="' + url + '" target="_blank" rel="noopener">' +
+          '<img src="' + url + '" alt="' + label + '">' +
+          '</a>' +
+          '<a class="attachment-file" href="' + url + '" target="_blank" rel="noopener">📎 <span>' + label + '</span></a>' +
+          '<span class="time">' + esc(timeOf(createdAt)) + '</span>' +
+        '</div>';
+      }
+
+      return '<div class="attachment-card">' +
+        '<a class="attachment-file" href="' + url + '" target="_blank" rel="noopener">📎 <span>' + label + '</span></a>' +
+        '<span class="time">' + esc(timeOf(createdAt)) + '</span>' +
+      '</div>';
+    }
+
     function appendMessage(m){
       if(!m || !m.id) return;
       const id = String(m.id);
@@ -243,8 +279,11 @@
       const div = document.createElement("div");
       div.className = "bubble " + (m.sender === "owner" ? "owner" : "visitor");
       div.dataset.id = id;
-      div.innerHTML = esc(m.message).replace(/\n/g,"<br>") +
-        '<span class="time">' + esc(timeOf(m.created_at)) + '</span>';
+
+      const att = parseAttachmentV2(m.message);
+      div.innerHTML = att
+        ? renderAttachmentV2(att, m.created_at)
+        : esc(m.message).replace(/\n/g,"<br>") + '<span class="time">' + esc(timeOf(m.created_at)) + '</span>';
 
       if(els.messages.querySelector(".notice")) els.messages.innerHTML = "";
       els.messages.appendChild(div);
