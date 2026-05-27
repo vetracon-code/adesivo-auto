@@ -4229,13 +4229,13 @@
         <div class="timeline-card" style="padding:18px;border:1px solid rgba(63,121,216,.16);box-shadow:0 0 30px rgba(63,121,216,.06) inset;">
           <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
             <div>
-              <h2 class="section-title" style="margin-bottom:8px;font-size:.9rem;">Anteprima adesivo</h2>
+              <h2 class="section-title" style="margin-bottom:8px;font-size:.9rem;">Prova segnalazione</h2>
               <div class="muted" style="line-height:1.45;font-size:.84rem;">Qui puoi vedere quasi a pagina piena l’adesivo esatto da stampare o mostrare per una verifica rapida.</div>
             </div>
-            <button id="closeStickerPreviewBtn" class="btn btn-secondary" type="button" style="background:#4f8df0;color:#fff;border-color:#4f8df0;">Chiudi anteprima</button>
+            <button id="closeStickerPreviewBtn" class="btn btn-secondary" type="button" style="background:#4f8df0;color:#fff;border-color:#4f8df0;">Torna alla App</button>
           </div>
           <div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-            <button id="previewTryQrBtn" class="btn btn-secondary" type="button" style="background:#4f8df0;color:#fff;border-color:#4f8df0;">Mostralo a un amico</button>
+            <button id="previewTryQrBtn" class="btn btn-secondary" type="button" style="background:#4f8df0;color:#fff;border-color:#4f8df0;">Apri fuori dalla App</button>
           </div>
           <div style="border-radius:20px;overflow:hidden;border:1px solid rgba(34,48,70,.08);background:#f3f7fc;min-height:72vh;">
             <iframe id="stickerPreviewFrame" src="about:blank" style="width:100%;height:72vh;border:0;background:#fff;" loading="lazy"></iframe>
@@ -5371,9 +5371,12 @@ if(!res.ok || !data.success){
 
       const stickerPrintUrl = buildStickerPrintUrl(code, d.plate || plate);
       const publicQrUrl = buildPublicQrUrl(d.public_id);
+      const publicUserFrameUrl = publicQrUrl && publicQrUrl !== '#'
+        ? publicQrUrl + (publicQrUrl.indexOf('?') >= 0 ? '&' : '?') + 'ownerTest=1&insideOwnerApp=1'
+        : publicQrUrl;
 
       if (stickerPreviewFrame) {
-        stickerPreviewFrame.dataset.src = stickerPrintUrl;
+        stickerPreviewFrame.dataset.src = publicUserFrameUrl || publicQrUrl || stickerPrintUrl;
       }
 
       if (printStickerBtn) {
@@ -5429,12 +5432,14 @@ if(!res.ok || !data.success){
           }
 
           /*
-            Ripristino comportamento storico:
-            Prova segnalazione deve mostrare prima l'anteprima adesivo,
-            non portare subito fuori dalla Web App.
-            Dal riquadro l'utente potrà usare "Mostralo a un amico"
-            per aprire il flusso pubblico reale e ricevere la notifica.
+            Prova segnalazione:
+            apre dentro la Web App la stessa pagina pubblica che vede l'utente
+            quando inquadra il QR. Da qui puoi testare notifica, messaggio e posizione.
           */
+          if (stickerPreviewFrame) {
+            stickerPreviewFrame.dataset.src = publicUserFrameUrl || publicQrUrl;
+          }
+
           if (typeof openStickerPreview === 'function') {
             openStickerPreview();
 
@@ -5445,7 +5450,7 @@ if(!res.ok || !data.success){
               }, 80);
             }
           } else {
-            window.location.href = publicQrUrl;
+            window.location.href = publicUserFrameUrl || publicQrUrl;
           }
         };
       }
