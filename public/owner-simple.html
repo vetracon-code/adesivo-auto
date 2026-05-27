@@ -11231,5 +11231,159 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 })();
 </script>
+<script id="owner-messages-loading-fallback-script">
+(function(){
+  if (window.__ownerMessagesLoadingFallbackLoaded) return;
+  window.__ownerMessagesLoadingFallbackLoaded = true;
+
+  function esc(v){
+    return String(v == null ? '' : v)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#39;');
+  }
+
+  function getCtx(){
+    var params = new URLSearchParams(window.location.search || '');
+    var code = (params.get('code') || window.__OWNER_CODE__ || '').trim().toUpperCase();
+    var plate = (params.get('plate') || window.__OWNER_PLATE__ || '').trim();
+
+    try {
+      if (!code) code = (localStorage.getItem('owner_saved_code') || sessionStorage.getItem('owner_saved_code') || '').trim().toUpperCase();
+      if (!plate) plate = (localStorage.getItem('owner_saved_plate') || sessionStorage.getItem('owner_saved_plate') || '').trim();
+    } catch(e) {}
+
+    return { code: code, plate: plate };
+  }
+
+  function findMessagesList(){
+    return document.getElementById('messagesList') ||
+           document.getElementById('ownerMessagesList') ||
+           document.querySelector('#ownerMessagesSection [id*="messages"][id*="List"]') ||
+           document.querySelector('#ownerMessagesSection .messages-list') ||
+           document.querySelector('#ownerMessagesSection .timeline-card');
+  }
+
+  function renderFallbackMessages(items){
+    var list = findMessagesList();
+    if (!list) return false;
+
+    if (!items || !items.length) {
+      list.innerHTML = '<div class="muted">Nessuna segnalazione ricevuta fino ad ora.</div>';
+      return true;
+    }
+
+    list.innerHTML = items.slice(0, 20).map(function(item){
+      var reason = item.reason || 'Segnalazione';
+      var text = item.message_text || '';
+      var date = item.created_at ? new Date(item.created_at).toLocaleString('it-IT') : '';
+      var unread = !item.read_at;
+
+      return ''
+        + '<div class="timeline-card owner-message-fallback-card" style="margin:0 0 12px;padding:14px;border-radius:16px;border:1px solid rgba(34,48,70,.10);background:#fff;">'
+        +   '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">'
+        +     '<div style="min-width:0;">'
+        +       '<div style="font-size:.98rem;font-weight:900;color:#223046;line-height:1.18;">' + esc(reason) + '</div>'
+        +       '<div style="font-size:.78rem;color:#667085;margin-top:4px;">' + esc(date) + '</div>'
+        +     '</div>'
+        +     (unread ? '<span style="display:inline-flex;padding:5px 8px;border-radius:999px;background:#eaf7ef;color:#166534;font-size:.72rem;font-weight:900;">NUOVO</span>' : '')
+        +   '</div>'
+        +   (text ? '<div style="margin-top:10px;font-size:.88rem;line-height:1.45;color:#344054;white-space:pre-wrap;">' + esc(text) + '</div>' : '')
+        + '</div>';
+    }).join('');
+
+    return true;
+  }
+
+  async function fallbackLoadOwnerMessages(){
+    var ctx = getCtx();
+    var list = findMessagesList();
+
+    if (!ctx.code) {
+      if (list) {
+        list.innerHTML = '<div class="muted">Codice veicolo non disponibile. Riapri la Web App dal link proprietario.</div>';
+      }
+      return false;
+    }
+
+    try {
+      var res = await fetch('/api/owner-messages', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code: ctx.code, plate: ctx.plate })
+      });
+
+      var data = await res.json().catch(function(){ return {}; });
+
+      if (!res.ok || !data.success) {
+        if (list) {
+          list.innerHTML = '<div class="muted">Non riesco a caricare i messaggi. Premi Aggiorna App e riprova.</div>';
+        }
+        console.warn('owner messages fallback response:', res.status, data);
+        return false;
+      }
+
+      window.ownerMessages = data.items || [];
+      renderFallbackMessages(window.ownerMessages);
+
+      try {
+        var badge = document.getElementById('ownerMessagesBadge') || document.getElementById('messagesUnreadBadge');
+        var unread = Number(data.unread_count || data.unread || 0);
+        if (badge) {
+          badge.textContent = unread ? String(unread) : '';
+          badge.style.display = unread ? 'inline-flex' : 'none';
+        }
+      } catch(e) {}
+
+      return true;
+    } catch(e) {
+      if (list) {
+        list.innerHTML = '<div class="muted">Errore durante il caricamento dei messaggi. Verifica la connessione e premi Aggiorna App.</div>';
+      }
+      console.error('owner messages fallback error:', e);
+      return false;
+    }
+  }
+
+  window.ownerFallbackLoadMessages = fallbackLoadOwnerMessages;
+
+  function looksStillLoading(){
+    var list = findMessagesList();
+    if (!list) return false;
+    var txt = (list.textContent || '').toLowerCase();
+    return txt.includes('caricamento messaggi');
+  }
+
+  function runFallbackIfNeeded(){
+    setTimeout(function(){
+      if (looksStillLoading()) fallbackLoadOwnerMessages();
+    }, 1200);
+
+    setTimeout(function(){
+      if (looksStillLoading()) fallbackLoadOwnerMessages();
+    }, 3000);
+
+    setTimeout(function(){
+      if (looksStillLoading()) fallbackLoadOwnerMessages();
+    }, 6000);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', runFallbackIfNeeded);
+  } else {
+    runFallbackIfNeeded();
+  }
+
+  window.addEventListener('focus', function(){
+    fallbackLoadOwnerMessages();
+  });
+
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden) fallbackLoadOwnerMessages();
+  });
+})();
+</script>
 </body>
 </html>
