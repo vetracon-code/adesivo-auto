@@ -6621,6 +6621,7 @@ function getOwnerParams(){
 
     async function loadOwnerMessages(){
       try { window.loadOwnerMessages = loadOwnerMessages; } catch(e) {}
+      try { window.loadOwnerMessages = loadOwnerMessages; } catch(e) {}
       try {
         const { code, plate } = getOwnerParams();
         const list = document.getElementById('messagesList');
@@ -11844,6 +11845,200 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   window.addEventListener('load', init);
+})();
+</script>
+
+
+<script id="force-delete-button-under-each-message-script">
+(function(){
+  if (window.__forceDeleteButtonUnderEachMessageInstalled) return;
+  window.__forceDeleteButtonUnderEachMessageInstalled = true;
+
+  function getMessagesList(){
+    return document.getElementById('messagesList');
+  }
+
+  function getMessageIdFromCard(card){
+    if (!card) return 0;
+    return Number(card.getAttribute('data-message-id') || 0);
+  }
+
+  function forceWhiteTexts(card){
+    if (!card) return;
+
+    card.style.color = '#fff';
+
+    card.querySelectorAll('*').forEach(function(el){
+      const tag = String(el.tagName || '').toLowerCase();
+
+      if (tag === 'button' || tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+      const text = (el.textContent || '').trim();
+
+      if (!text) return;
+
+      // Mantiene leggibili anche i badge, ma non forza il colore dentro elementi già chiaramente colorati.
+      if (el.classList && el.classList.contains('expiry-badge')) return;
+
+      el.style.color = '#fff';
+    });
+  }
+
+  function injectDeleteButtons(){
+    const list = getMessagesList();
+    if (!list) return;
+
+    const cards = list.querySelectorAll('[data-message-id]');
+
+    cards.forEach(function(card){
+      const id = getMessageIdFromCard(card);
+      if (!id) return;
+
+      forceWhiteTexts(card);
+
+      let footer = card.querySelector('.forced-delete-message-footer');
+
+      if (!footer) {
+        footer = document.createElement('div');
+        footer.className = 'forced-delete-message-footer';
+        footer.style.cssText = [
+          'display:flex',
+          'justify-content:flex-end',
+          'align-items:center',
+          'gap:10px',
+          'margin-top:14px',
+          'padding-top:12px',
+          'border-top:1px solid rgba(255,255,255,.16)'
+        ].join(';');
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'forced-delete-message-btn';
+        btn.textContent = 'Elimina';
+        btn.setAttribute('data-delete-message-id', String(id));
+        btn.style.cssText = [
+          'display:inline-flex',
+          'align-items:center',
+          'justify-content:center',
+          'min-height:38px',
+          'padding:0 16px',
+          'border-radius:13px',
+          'border:1px solid rgba(255,255,255,.26)',
+          'background:linear-gradient(135deg,#ef4444 0%,#b91c1c 100%)',
+          'color:#fff',
+          'font-size:.86rem',
+          'font-weight:900',
+          'cursor:pointer',
+          'box-shadow:0 10px 24px rgba(185,28,28,.28)'
+        ].join(';');
+
+        footer.appendChild(btn);
+        card.appendChild(footer);
+      } else {
+        const btn = footer.querySelector('[data-delete-message-id]');
+        if (btn) btn.setAttribute('data-delete-message-id', String(id));
+      }
+    });
+  }
+
+  async function hardDeleteMessage(id){
+    id = Number(id || 0);
+
+    if (!id) {
+      alert('Messaggio non valido. Premi Aggiorna App e riprova.');
+      return;
+    }
+
+    if (!confirm('Vuoi eliminare questo messaggio?')) return;
+
+    try {
+      if (typeof window.deleteMessage === 'function') {
+        await window.deleteMessage(id);
+      } else if (typeof deleteMessage === 'function') {
+        await deleteMessage(id);
+      } else {
+        alert('Funzione elimina non disponibile. Premi Aggiorna App e riprova.');
+        return;
+      }
+
+      // Rimuove subito la card dalla pagina, anche se il renderer tarda ad aggiornarsi.
+      const card = document.querySelector('[data-message-id="' + String(id) + '"]');
+      if (card) card.remove();
+
+      // Riallinea col server.
+      setTimeout(function(){
+        try {
+          if (typeof window.loadOwnerMessages === 'function') {
+            window.loadOwnerMessages();
+          } else if (typeof loadOwnerMessages === 'function') {
+            loadOwnerMessages();
+          }
+        } catch(e) {}
+      }, 500);
+
+      setTimeout(injectDeleteButtons, 900);
+      setTimeout(injectDeleteButtons, 1800);
+    } catch(e) {
+      console.error('Errore elimina messaggio forzato:', e);
+      alert('Errore eliminazione messaggio.');
+    }
+  }
+
+  document.addEventListener('click', function(e){
+    const btn = e.target && e.target.closest
+      ? e.target.closest('.forced-delete-message-btn,[data-delete-message-id]')
+      : null;
+
+    if (!btn) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+
+    const id = Number(btn.getAttribute('data-delete-message-id') || 0);
+    hardDeleteMessage(id);
+  }, true);
+
+  function installObserver(){
+    const list = getMessagesList();
+    if (!list || list.dataset.forceDeleteObserver === '1') return;
+
+    list.dataset.forceDeleteObserver = '1';
+
+    const observer = new MutationObserver(function(){
+      setTimeout(injectDeleteButtons, 30);
+    });
+
+    observer.observe(list, {
+      childList:true,
+      subtree:true
+    });
+  }
+
+  function init(){
+    injectDeleteButtons();
+    installObserver();
+
+    setTimeout(injectDeleteButtons, 300);
+    setTimeout(injectDeleteButtons, 900);
+    setTimeout(injectDeleteButtons, 1800);
+    setTimeout(injectDeleteButtons, 3500);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+  window.addEventListener('load', init);
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden) setTimeout(init, 300);
+  });
+
+  setInterval(function(){
+    injectDeleteButtons();
+  }, 3000);
 })();
 </script>
 
