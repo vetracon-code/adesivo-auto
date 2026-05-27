@@ -34868,6 +34868,213 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="FOLLOWME_FORCE_CHAT_V2_ACTIVATION_SAFE_20260528">
+(function(){
+  if (window.__FOLLOWME_FORCE_CHAT_V2_ACTIVATION_SAFE_20260528) return;
+  window.__FOLLOWME_FORCE_CHAT_V2_ACTIVATION_SAFE_20260528 = true;
+
+  function getFollowMeCodeSafe(){
+    try {
+      const q = new URLSearchParams(location.search);
+      const fromQuery = String(q.get("code") || "").trim();
+      if (fromQuery) return fromQuery.toUpperCase();
+
+      const pathMatch = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if (pathMatch && pathMatch[1]) return decodeURIComponent(pathMatch[1]).trim().toUpperCase();
+
+      if (window.FOLLOWME_CODE) return String(window.FOLLOWME_CODE).trim().toUpperCase();
+      if (window.__FOLLOWME_CODE__) return String(window.__FOLLOWME_CODE__).trim().toUpperCase();
+    } catch(e) {}
+
+    return "FMDEMO";
+  }
+
+  function isChatActivationButton(btn){
+    if (!btn) return false;
+
+    const id = String(btn.id || "").toLowerCase();
+    const cls = String(btn.className || "").toLowerCase();
+    const txt = String(btn.textContent || "").toLowerCase();
+
+    return (
+      id.includes("chat") ||
+      cls.includes("chat") ||
+      txt.includes("attiva chat") ||
+      txt.includes("parla con gli utenti") ||
+      txt.includes("parla con gli utente") ||
+      txt.includes("apri chat") ||
+      txt.includes("chat")
+    );
+  }
+
+  async function fetchJsonSafe(url, options, timeoutMs){
+    const ctrl = new AbortController();
+    const t = setTimeout(function(){
+      try { ctrl.abort(); } catch(e) {}
+    }, timeoutMs || 18000);
+
+    try {
+      const res = await fetch(url, Object.assign({
+        cache: "no-store",
+        credentials: "same-origin",
+        signal: ctrl.signal,
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        }
+      }, options || {}));
+
+      const text = await res.text();
+      let data = null;
+
+      try { data = text ? JSON.parse(text) : null; }
+      catch(e) { data = { success:false, error:text || "Risposta non JSON." }; }
+
+      if (!res.ok || !data || data.success === false) {
+        const err = new Error((data && (data.error || data.detail)) || ("HTTP " + res.status));
+        err.status = res.status;
+        err.data = data;
+        throw err;
+      }
+
+      return data;
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  function showChatActivationStatus(msg, danger){
+    try {
+      let box = document.getElementById("followmeChatV2ActivationStatusSafe");
+      if (!box) {
+        box = document.createElement("div");
+        box.id = "followmeChatV2ActivationStatusSafe";
+        box.style.cssText = [
+          "position:fixed",
+          "left:16px",
+          "right:16px",
+          "bottom:calc(18px + env(safe-area-inset-bottom))",
+          "z-index:999999",
+          "padding:14px 16px",
+          "border-radius:18px",
+          "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif",
+          "font-weight:850",
+          "font-size:14px",
+          "line-height:1.35",
+          "box-shadow:0 18px 50px rgba(0,0,0,.28)",
+          "text-align:center"
+        ].join(";");
+
+        document.body.appendChild(box);
+      }
+
+      box.style.background = danger ? "#fee2e2" : "#dcfce7";
+      box.style.color = danger ? "#7f1d1d" : "#064e3b";
+      box.style.border = danger ? "1px solid rgba(185,28,28,.25)" : "1px solid rgba(22,101,52,.20)";
+      box.textContent = msg;
+      box.style.display = "block";
+
+      clearTimeout(box.__hideTimer);
+      box.__hideTimer = setTimeout(function(){
+        box.style.display = "none";
+      }, danger ? 4500 : 2200);
+    } catch(e) {
+      alert(msg);
+    }
+  }
+
+  async function activateChatV2Safe(btn){
+    const code = getFollowMeCodeSafe();
+
+    if (!code) {
+      showChatActivationStatus("Codice FollowMe mancante. Riapri la WebApp dal link corretto.", true);
+      return;
+    }
+
+    const oldText = btn ? btn.textContent : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.dataset.chatV2Activating = "1";
+      btn.textContent = "Attivo la chat...";
+    }
+
+    try {
+      const enable = await fetchJsonSafe(
+        "/api/followme/" + encodeURIComponent(code) + "/chat-v2/enable?v=" + Date.now(),
+        {
+          method: "POST",
+          body: JSON.stringify({ source:"owner-webapp-safe-activation" })
+        },
+        20000
+      );
+
+      const ready = await fetchJsonSafe(
+        "/api/followme/" + encodeURIComponent(code) + "/chat-v2/ready?v=" + Date.now(),
+        { method:"GET" },
+        16000
+      );
+
+      if (!ready || ready.ready !== true || !ready.chat_public_token) {
+        throw new Error("Chat non pronta. Attivazione non confermata dal server.");
+      }
+
+      const adminUrl =
+        ready.admin_url ||
+        enable.admin_url ||
+        ("/fm/chat-v2/admin/" + encodeURIComponent(ready.code || code));
+
+      showChatActivationStatus("Chat attiva. Apertura pannello admin...", false);
+
+      setTimeout(function(){
+        location.href = adminUrl + (adminUrl.includes("?") ? "&" : "?") + "v=" + Date.now();
+      }, 350);
+
+    } catch(err) {
+      console.error("followme chat v2 safe activation failed:", err);
+
+      showChatActivationStatus(
+        "Errore attivazione chat: " + (err && err.message ? err.message : "Load failed") + ". La chat non viene aperta perché non è pronta.",
+        true
+      );
+
+      if (btn) {
+        btn.disabled = false;
+        btn.dataset.chatV2Activating = "0";
+        btn.textContent = oldText || "Attiva chat";
+      }
+    }
+  }
+
+  document.addEventListener("click", function(ev){
+    const btn = ev.target && ev.target.closest ? ev.target.closest("button,a") : null;
+    if (!btn || !isChatActivationButton(btn)) return;
+
+    const txt = String(btn.textContent || "").toLowerCase();
+
+    /*
+      Non intercetto link tecnici tipo "torna", "chiudi", "scarica", "elimina".
+      Intercetto solo i pulsanti coerenti con attivazione/apertura chat.
+    */
+    if (
+      txt.includes("elimina") ||
+      txt.includes("cancella") ||
+      txt.includes("scarica") ||
+      txt.includes("torna") ||
+      txt.includes("chiudi")
+    ) {
+      return;
+    }
+
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation();
+
+    activateChatV2Safe(btn);
+  }, true);
+})();
+</script>
+
 </body>
 </html>
 
