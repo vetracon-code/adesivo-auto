@@ -17273,13 +17273,7 @@ document.addEventListener("visibilitychange", function(){
   window.addEventListener("pageshow", function(){
     setTimeout(boot, 200);
   });
-
-  setInterval(function(){
-    killInstallBalloons();
-    bindNameButtons();
-    refreshTabs();
-    scanNameProposal();
-  }, 5000);
+  /* disabled 20260527: refreshTabs periodico nome rimosso perché rallentava/paralizzava la chat dopo salvataggio nome */
 })();
 </script>
 
@@ -36141,3 +36135,253 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 
 <script id="followme-name-save-minimal-stable-20260527-disabled-duplicate-clean-controller">/* disabled: controller minimale duplicato; resta attivo solo il controller clean con /name */</script>
+
+<script id="followme-admin-name-hard-safe-save-reload-20260527">
+(function(){
+  if(window.__followmeAdminNameHardSafeSaveReload20260527) return;
+  window.__followmeAdminNameHardSafeSaveReload20260527 = true;
+
+  /*
+    SOLO ADMIN - salvataggio nome sicuro.
+    Problema risolto:
+    dopo conferma nome, refreshTabs/boot/poller multipli mandavano doppi messaggi e rallentavano tutto.
+    
+    Regola:
+    - una sola chiamata /name;
+    - nessun refresh globale;
+    - chiusura card;
+    - piccolo aggiornamento locale;
+    - reload pulito della stessa chat.
+  */
+
+  var saving = false;
+
+  function code(){
+    try{
+      var m = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m && m[1]) return decodeURIComponent(m[1]).trim().toUpperCase();
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function currentSessionId(){
+    try{
+      var p = new URLSearchParams(location.search || "");
+      return p.get("chatSession") || window.__followMePendingNameSessionId || "";
+    }catch(e){
+      return window.__followMePendingNameSessionId || "";
+    }
+  }
+
+  function titleName(raw){
+    var t = String(raw || "")
+      .trim()
+      .replace(/[<>]/g, "")
+      .replace(/[.,;:!?()[\]{}"“”]/g, "")
+      .replace(/\s+/g, " ");
+
+    t = t.split(" ").filter(Boolean).slice(0, 2).join(" ");
+
+    if(t.length < 2 || t.length > 32) return "";
+
+    if(!/^[A-Za-zÀ-ÖØ-öø-ÿ0-9 .'-]+$/.test(t)) return "";
+
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+
+  function closeNameCard(){
+    var card = document.getElementById("followmeNameDetectCard");
+    if(card){
+      card.classList.remove("is-open");
+      card.setAttribute("aria-hidden", "true");
+      card.style.display = "none";
+    }
+
+    var old = document.getElementById("followmeNameSuggestionBox");
+    if(old){
+      old.style.display = "none";
+      old.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  function setButtonsDisabled(disabled){
+    ["followmeNameDetectConfirm", "followmeNameConfirmBtn"].forEach(function(id){
+      var b = document.getElementById(id);
+      if(!b) return;
+      b.disabled = !!disabled;
+      if(disabled){
+        b.dataset.oldText = b.textContent || "";
+        b.textContent = "Salvo...";
+      }else if(b.dataset.oldText){
+        b.textContent = b.dataset.oldText;
+      }
+    });
+  }
+
+  function updateLocalLabel(sessionId, name){
+    try{
+      document.querySelectorAll("#followmeOwnerChatSessionStrip .followme-chat-session-chip").forEach(function(chip){
+        var sid =
+          chip.getAttribute("data-session-id") ||
+          chip.dataset.sessionId ||
+          chip.getAttribute("data-id") ||
+          chip.dataset.id ||
+          "";
+
+        if(!sid && chip.classList.contains("active")){
+          sid = sessionId;
+        }
+
+        if(String(sid) === String(sessionId)){
+          chip.textContent = name;
+          chip.classList.add("has-name");
+          chip.title = name;
+        }
+      });
+
+      var label = document.getElementById("followmeCurrentChatUserLabel");
+      if(label){
+        label.textContent = "Stai scrivendo a: " + name;
+      }
+
+      var sub = document.getElementById("followmeOwnerChatSubtitle");
+      if(sub){
+        sub.textContent = name;
+      }
+    }catch(e){}
+  }
+
+  function cleanSameUrlReload(){
+    try{
+      var url = new URL(location.href);
+      url.searchParams.set("v", "name-safe-" + Date.now());
+      location.replace(url.toString());
+    }catch(e){
+      location.reload();
+    }
+  }
+
+  async function saveNameHardSafe(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+    }
+
+    if(saving) return false;
+    saving = true;
+
+    var input =
+      document.getElementById("followmeNameDetectInput") ||
+      document.querySelector("#followmeNameSuggestionBox input");
+
+    var sid =
+      window.__followMePendingNameSessionId ||
+      currentSessionId();
+
+    var name = titleName(input ? input.value : "");
+
+    /*
+      Se il vecchio box non ha input, prova a leggere il nome dal testo.
+    */
+    if(!name){
+      var txt = "";
+      var t1 = document.getElementById("followmeNameSuggestionTitle");
+      var t2 = document.getElementById("followmeNameSuggestionText");
+      txt = ((t1 && t1.textContent) || "") + " " + ((t2 && t2.textContent) || "");
+      var m = txt.match(/[“"]([^”"]{2,32})[”"]/);
+      if(m && m[1]) name = titleName(m[1]);
+      if(!name){
+        m = txt.match(/Nome rilevato:\s*([A-Za-zÀ-ÖØ-öø-ÿ0-9 .'-]{2,32})/i);
+        if(m && m[1]) name = titleName(m[1]);
+      }
+    }
+
+    if(!sid){
+      saving = false;
+      alert("Non riesco a identificare la chat da aggiornare.");
+      return false;
+    }
+
+    if(!name){
+      saving = false;
+      alert("Nome non valido.");
+      return false;
+    }
+
+    setButtonsDisabled(true);
+
+    try{
+      var res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/name", {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "Accept":"application/json"
+        },
+        body:JSON.stringify({ display_name:name })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || ("HTTP " + res.status));
+      }
+
+      updateLocalLabel(sid, name);
+      closeNameCard();
+
+      /*
+        Punto chiave: niente refreshTabs(), niente boot(), niente poller extra.
+        Ricarica controllata per azzerare eventuali doppioni accumulati.
+      */
+      setTimeout(cleanSameUrlReload, 300);
+
+    }catch(err){
+      saving = false;
+      setButtonsDisabled(false);
+      alert("Errore salvataggio nome: " + (err.message || String(err)));
+    }
+
+    return false;
+  }
+
+  function bindHardSafe(){
+    var confirmNew = document.getElementById("followmeNameDetectConfirm");
+    var confirmOld = document.getElementById("followmeNameConfirmBtn");
+
+    [confirmNew, confirmOld].forEach(function(btn){
+      if(!btn || btn.dataset.nameHardSafeBound === "1") return;
+
+      /*
+        Cloniamo il bottone per eliminare vecchi listener già agganciati.
+      */
+      var fresh = btn.cloneNode(true);
+      fresh.dataset.nameHardSafeBound = "1";
+      btn.parentNode.replaceChild(fresh, btn);
+
+      fresh.addEventListener("click", saveNameHardSafe, true);
+    });
+  }
+
+  function boot(){
+    bindHardSafe();
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 200);
+  });
+
+  setInterval(bindHardSafe, 2000);
+
+  window.followMeAdminNameHardSafeSaveReload20260527 = {
+    save: saveNameHardSafe,
+    bind: bindHardSafe
+  };
+})();
+</script>
