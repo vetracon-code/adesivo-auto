@@ -16546,6 +16546,269 @@ app.post('/api/owner-deadlines/disable-from-message', async (req, res) => {
 
 
 
+
+
+/* ============================================================
+   FOLLOWME STORAGE AUDIT 20260527
+   Endpoint protetto per controllare spazio e residui temporanei.
+   Richiede env FOLLOWME_AUDIT_TOKEN.
+   ============================================================ */
+
+function getDirectorySizeAndFiles20260527(dirPath, options = {}) {
+  const fs = require('fs');
+  const path = require('path');
+
+  const maxFiles = options.maxFiles || 80;
+  const baseDir = path.resolve(dirPath);
+
+  const result = {
+    path: dirPath,
+    exists: false,
+    bytes: 0,
+    files_count: 0,
+    directories_count: 0,
+    newest_files: [],
+    largest_files: []
+  };
+
+  if (!fs.existsSync(baseDir)) return result;
+
+  result.exists = true;
+  const files = [];
+
+  function walk(current) {
+    let entries = [];
+
+    try {
+      entries = fs.readdirSync(current, { withFileTypes:true });
+    } catch (e) {
+      return;
+    }
+
+    for (const entry of entries) {
+      const full = path.join(current, entry.name);
+
+      let st;
+      try {
+        st = fs.statSync(full);
+      } catch (e) {
+        continue;
+      }
+
+      if (entry.isDirectory()) {
+        result.directories_count += 1;
+        walk(full);
+      } else if (entry.isFile()) {
+        result.files_count += 1;
+        result.bytes += st.size;
+
+        files.push({
+          name: path.relative(baseDir, full),
+          bytes: st.size,
+          mtime: st.mtime.toISOString()
+        });
+      }
+    }
+  }
+
+  walk(baseDir);
+
+  result.newest_files = files
+    .slice()
+    .sort((a,b) => String(b.mtime).localeCompare(String(a.mtime)))
+    .slice(0, maxFiles);
+
+  result.largest_files = files
+    .slice()
+    .sort((a,b) => b.bytes - a.bytes)
+    .slice(0, maxFiles);
+
+  return result;
+}
+
+function getDiskInfo20260527(targetPath) {
+  const fs = require('fs');
+
+  try {
+    if (typeof fs.statfsSync === 'function') {
+      const st = fs.statfsSync(targetPath);
+      const total = Number(st.blocks) * Number(st.bsize);
+      const free = Number(st.bavail) * Number(st.bsize);
+      const used = total - free;
+
+      return {
+        path: targetPath,
+        supported: true,
+        total_bytes: total,
+        free_bytes: free,
+        used_bytes: used,
+        used_percent: total ? Math.round((used / total) * 10000) / 100 : null
+      };
+    }
+  } catch (e) {
+    return {
+      path: targetPath,
+      supported: false,
+      error: String(e.message || e)
+    };
+  }
+
+  return {
+    path: targetPath,
+    supported: false,
+    error: 'fs.statfsSync non disponibile in questa versione Node.'
+  };
+}
+
+app.get('/api/followme/admin/storage-audit', async (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+
+    const expected = process.env.FOLLOWME_AUDIT_TOKEN || '';
+    const provided = String(req.query.token || req.headers['x-followme-audit-token'] || '');
+
+    if (!expected) {
+      return res.status(403).json({
+        success:false,
+        error:'FOLLOWME_AUDIT_TOKEN non configurato su Render.'
+      });
+    }
+
+    if (!provided || provided !== expected) {
+      return res.status(401).json({
+        success:false,
+        error:'Token audit non valido.'
+      });
+    }
+
+    await ensureFollowMeChatV2Runtime();
+
+    if (String(req.query.cleanup || '') === '1' && typeof cleanupExpiredFollowMeChatV2Attachments === 'function') {
+      await cleanupExpiredFollowMeChatV2Attachments();
+    }
+
+    const chatV2Dir = path.join(__dirname, 'public', 'uploads', 'followme-chat-v2');
+    const chatOldDir = path.join(__dirname, 'public', 'uploads', 'followme-chat');
+    const publicUploadsDir = path.join(__dirname, 'public', 'uploads');
+    const followmeDocumentsDir = path.join(__dirname, 'public', 'uploads', 'followme-documents');
+    const persistentDir = process.env.FOLLOWME_STORAGE_DIR || '/var/data';
+
+    const dbRows = await pool.query(
+      `SELECT id, session_id, sender, message, created_at
+       FROM followme_chat_messages
+       WHERE message LIKE '%__followme_attachment_v2%'
+       ORDER BY id DESC
+       LIMIT 500`
+    );
+
+    const now = Date.now();
+    const attachmentMessages = [];
+    const referencedUrls = new Set();
+    const expiredInDb = [];
+
+    for (const row of dbRows.rows) {
+      let payload = null;
+      try {
+        payload = JSON.parse(String(row.message || ''));
+      } catch(e) {
+        continue;
+      }
+
+      if (!payload || payload.__followme_attachment_v2 !== true) continue;
+
+      const expiresAtMs = payload.expires_at ? Date.parse(payload.expires_at) : null;
+      const isExpired = !!expiresAtMs && expiresAtMs <= now;
+      const url = String(payload.url || '');
+
+      if (url) referencedUrls.add(url);
+
+      const item = {
+        id: row.id,
+        session_id: row.session_id,
+        sender: row.sender,
+        kind: payload.kind || null,
+        url,
+        filename: payload.filename || null,
+        bytes: payload.size_bytes || null,
+        created_at: row.created_at,
+        expires_at: payload.expires_at || null,
+        expired: isExpired,
+        listen_count: payload.listen_count ?? null,
+        max_listens: payload.max_listens ?? null
+      };
+
+      attachmentMessages.push(item);
+      if (isExpired) expiredInDb.push(item);
+    }
+
+    const orphanFiles = [];
+
+    if (fs.existsSync(chatV2Dir)) {
+      const files = fs.readdirSync(chatV2Dir);
+
+      for (const filename of files) {
+        const full = path.join(chatV2Dir, filename);
+        let st;
+
+        try {
+          st = fs.statSync(full);
+        } catch(e) {
+          continue;
+        }
+
+        if (!st.isFile()) continue;
+
+        const url = '/uploads/followme-chat-v2/' + filename;
+
+        if (!referencedUrls.has(url)) {
+          orphanFiles.push({
+            filename,
+            url,
+            bytes: st.size,
+            mtime: st.mtime.toISOString()
+          });
+        }
+      }
+    }
+
+    return res.json({
+      success:true,
+      cleanup_requested:String(req.query.cleanup || '') === '1',
+      generated_at:new Date().toISOString(),
+      disk:{
+        root:getDiskInfo20260527('/'),
+        app:getDiskInfo20260527(__dirname),
+        persistent:getDiskInfo20260527(persistentDir)
+      },
+      directories:{
+        chat_v2:getDirectorySizeAndFiles20260527(chatV2Dir),
+        old_chat:getDirectorySizeAndFiles20260527(chatOldDir),
+        public_uploads:getDirectorySizeAndFiles20260527(publicUploadsDir, { maxFiles:30 }),
+        followme_documents:getDirectorySizeAndFiles20260527(followmeDocumentsDir, { maxFiles:30 }),
+        persistent_storage:getDirectorySizeAndFiles20260527(persistentDir, { maxFiles:30 })
+      },
+      chat_v2_attachments:{
+        db_attachment_messages_count:attachmentMessages.length,
+        expired_in_db_count:expiredInDb.length,
+        expired_in_db:expiredInDb.slice(0, 80),
+        orphan_files_count:orphanFiles.length,
+        orphan_files:orphanFiles.slice(0, 80),
+        latest_attachment_messages:attachmentMessages.slice(0, 80)
+      }
+    });
+  } catch (err) {
+    console.error('followme storage audit error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore storage audit.',
+      detail:String(err && err.message ? err.message : err)
+    });
+  }
+});
+
+
+
 app.listen(PORT, () => {
       console.log(`Server attivo su ${BASE_URL}`);
     });
