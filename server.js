@@ -17817,11 +17817,7 @@ app.post('/api/followme/chat-v2/session/:session_id/attachment-raw', express.raw
     /*
       Fase attuale: allegati binari solo da Admin.
     */
-    if (sender !== 'owner') {
-      return res.status(403).json({ success:false, error:'Allegati utente non ancora abilitati in Chat V2.' });
-    }
-
-    const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || '');
+const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || '');
 
     if (!buffer.length) {
       return res.status(400).json({ success:false, error:'File vuoto o mancante.' });
@@ -17853,6 +17849,22 @@ app.post('/api/followme/chat-v2/session/:session_id/attachment-raw', express.raw
 
     if (session.status !== 'open') {
       return res.status(409).json({ success:false, closed:true, error:'Chat chiusa.' });
+    }
+
+    if (sender === 'visitor' && session.is_blocked === true) {
+      return res.status(403).json({
+        success:false,
+        blocked:true,
+        error:'Sei stato bloccato dal sistema.'
+      });
+    }
+
+    if (sender === 'visitor' && session.uploads_enabled !== true) {
+      return res.status(403).json({
+        success:false,
+        uploads_enabled:false,
+        error:'Extra non abilitato dal proprietario.'
+      });
     }
 
     /*
