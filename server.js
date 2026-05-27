@@ -17523,6 +17523,29 @@ app.post('/api/followme/chat-v2/session/:session_id/message', express.json(), as
       return res.status(403).json({ success:false, blocked:true, error:'Sei stato bloccato dal sistema.' });
     }
 
+    /* followme-chat-v2-visitor-json-attachment-extra-guard-20260528
+       Blocca posizione/allegati JSON lato utente quando Extra non è attivo.
+       L'admin resta libero; il visitatore dipende da uploads_enabled.
+    */
+    if (sender === 'visitor') {
+      let maybeAttachmentV2 = null;
+      try {
+        maybeAttachmentV2 = JSON.parse(String(message || ''));
+      } catch (e) {}
+
+      if (
+        maybeAttachmentV2 &&
+        maybeAttachmentV2.__followme_attachment_v2 === true &&
+        session.uploads_enabled !== true
+      ) {
+        return res.status(403).json({
+          success:false,
+          uploads_enabled:false,
+          error:'Funzioni Extra non abilitate dal proprietario.'
+        });
+      }
+    }
+
     const inserted = await pool.query(
       `INSERT INTO followme_chat_messages
        (session_id, project_id, sender, message, created_at)
