@@ -6526,7 +6526,7 @@ function getOwnerParams(){
         return `
           <div data-message-id="${item.id || ''}" style="border-radius:${isDeadlineAlert ? '18px' : '8px'};padding:${isDeadlineAlert ? '16px 16px' : '14px 14px'};background:${isDeadlineAlert ? 'linear-gradient(135deg,rgba(255,122,0,.18),rgba(255,122,0,.08))' : (isNew ? 'rgba(103,176,255,.08)' : 'rgba(255,255,255,.03)')};border:1px solid ${isDeadlineAlert ? 'rgba(255,174,0,.48)' : (isNew ? 'rgba(103,176,255,.20)' : 'rgba(255,255,255,.06)')};box-shadow:${isDeadlineAlert ? '0 12px 34px rgba(255,122,0,.12)' : 'none'};">
             <div style="display:flex;gap:12px;align-items:flex-start;">
-              ${messagesSelectionMode ? `<input type="checkbox" ${selected ? 'checked' : ''} onchange="toggleMessageSelect(${item.id}, this.checked)" style="margin-top:4px;">` : ''}
+              <input class="owner-force-message-check" type="checkbox" ${selected ? 'checked' : ''} onchange="toggleMessageSelect(${item.id}, this.checked)" style="margin-top:4px;width:24px;height:24px;accent-color:#22c55e;">
               <div style="flex:1;min-width:0;">
                 <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
                   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -12426,6 +12426,313 @@ document.addEventListener('DOMContentLoaded', function () {
   setTimeout(init, 1800);
   setTimeout(init, 3500);
   setInterval(init, 3000);
+})();
+</script>
+
+
+<style id="owner-message-flags-force-css">
+  .owner-force-message-check{
+    display:inline-block !important;
+    width:24px !important;
+    height:24px !important;
+    min-width:24px !important;
+    margin:4px 10px 0 0 !important;
+    accent-color:#22c55e !important;
+    cursor:pointer !important;
+    opacity:1 !important;
+    visibility:visible !important;
+    position:relative !important;
+    z-index:20 !important;
+  }
+  .owner-force-select-bar{
+    margin:12px 0 14px !important;
+    padding:12px !important;
+    border-radius:16px !important;
+    background:rgba(255,255,255,.08) !important;
+    border:1px solid rgba(255,255,255,.18) !important;
+    display:flex !important;
+    gap:8px !important;
+    flex-wrap:wrap !important;
+    align-items:center !important;
+  }
+  .owner-force-select-bar button{
+    min-height:36px !important;
+    border-radius:12px !important;
+    border:1px solid rgba(255,255,255,.22) !important;
+    color:#fff !important;
+    font-weight:900 !important;
+    padding:0 12px !important;
+    cursor:pointer !important;
+  }
+</style>
+
+<script id="owner-message-flags-delete-single-loop">
+(function(){
+  const SELECTED = new Set();
+
+  function byId(id){
+    return document.getElementById(id);
+  }
+
+  function getMessages(){
+    try {
+      if (Array.isArray(ownerMessages)) return ownerMessages;
+    } catch(e) {}
+    try {
+      if (Array.isArray(window.ownerMessages)) return window.ownerMessages;
+    } catch(e) {}
+    return [];
+  }
+
+  function setMessages(next){
+    try { ownerMessages = next; } catch(e) {}
+    try { window.ownerMessages = next; } catch(e) {}
+  }
+
+  function getCtxFallback(){
+    try {
+      if (typeof getOwnerParams === 'function') return getOwnerParams() || {};
+    } catch(e) {}
+    return {};
+  }
+
+  function findMessage(id){
+    id = Number(id);
+    return getMessages().find(function(m){ return Number(m.id) === id; }) || null;
+  }
+
+  function ensureBar(){
+    const section = byId('ownerMessagesSection');
+    const list = byId('messagesList');
+    if (!section || !list) return null;
+
+    let bar = byId('ownerForceSelectBar');
+    if (bar) return bar;
+
+    bar = document.createElement('div');
+    bar.id = 'ownerForceSelectBar';
+    bar.className = 'owner-force-select-bar';
+    bar.innerHTML =
+      '<button type="button" id="ownerForceSelectAllBtn" style="background:#2563eb;">Seleziona tutti</button>' +
+      '<button type="button" id="ownerForceClearBtn" style="background:#475569;">Deseleziona</button>' +
+      '<button type="button" id="ownerForceDeleteBtn" style="background:#dc2626;display:none;">Elimina selezionati</button>' +
+      '<span id="ownerForceCount" style="color:#fff;font-size:.86rem;font-weight:900;">0 selezionati</span>';
+
+    section.insertBefore(bar, list);
+
+    byId('ownerForceSelectAllBtn').addEventListener('click', function(){
+      const ids = getVisibleIds();
+      ids.forEach(function(id){ SELECTED.add(Number(id)); });
+      syncChecks();
+      updateBar();
+    });
+
+    byId('ownerForceClearBtn').addEventListener('click', function(){
+      SELECTED.clear();
+      syncChecks();
+      updateBar();
+    });
+
+    byId('ownerForceDeleteBtn').addEventListener('click', deleteSelectedOneByOne);
+
+    return bar;
+  }
+
+  function getVisibleCards(){
+    const list = byId('messagesList');
+    if (!list) return [];
+
+    return Array.from(list.querySelectorAll('[data-message-id]')).filter(function(card){
+      const id = Number(card.getAttribute('data-message-id') || 0);
+      return !!id;
+    });
+  }
+
+  function getVisibleIds(){
+    return getVisibleCards()
+      .map(function(card){ return Number(card.getAttribute('data-message-id') || 0); })
+      .filter(Boolean);
+  }
+
+  function updateBar(){
+    ensureBar();
+
+    const n = SELECTED.size;
+    const count = byId('ownerForceCount');
+    const del = byId('ownerForceDeleteBtn');
+
+    if (count) count.textContent = n === 1 ? '1 selezionato' : n + ' selezionati';
+    if (del) del.style.display = n ? 'inline-flex' : 'none';
+
+    const oldDelete = byId('messagesDeleteBtn');
+    if (oldDelete) {
+      oldDelete.style.display = n ? 'inline-flex' : 'none';
+      oldDelete.textContent = n ? 'Elimina selezionati (' + n + ')' : 'Elimina';
+      if (oldDelete.dataset.forceSingleLoopBound !== '1') {
+        oldDelete.dataset.forceSingleLoopBound = '1';
+        oldDelete.addEventListener('click', function(e){
+          if (!SELECTED.size) return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+          deleteSelectedOneByOne();
+        }, true);
+      }
+    }
+  }
+
+  function syncChecks(){
+    getVisibleCards().forEach(function(card){
+      const id = Number(card.getAttribute('data-message-id') || 0);
+      let check = card.querySelector('input.owner-force-message-check');
+
+      if (!check) {
+        check = document.createElement('input');
+        check.type = 'checkbox';
+        check.className = 'owner-force-message-check';
+        check.setAttribute('data-owner-force-check', '1');
+
+        const firstFlex = card.querySelector('div[style*="display:flex"]');
+        if (firstFlex) {
+          firstFlex.insertBefore(check, firstFlex.firstChild);
+        } else {
+          card.insertBefore(check, card.firstChild);
+        }
+
+        check.addEventListener('change', function(){
+          if (check.checked) SELECTED.add(id);
+          else SELECTED.delete(id);
+          updateBar();
+        });
+      }
+
+      check.checked = SELECTED.has(id);
+    });
+
+    updateBar();
+  }
+
+  async function deleteOne(id){
+    const msg = findMessage(id);
+    const ctx = getCtxFallback();
+
+    let code = msg && msg.code ? msg.code : (ctx.code || '');
+    let plate = msg && msg.plate ? msg.plate : (ctx.plate || '');
+
+    code = String(code || '').trim().toUpperCase();
+    plate = String(plate || '').trim().toUpperCase();
+
+    if (!code || !plate) {
+      throw new Error('Dati veicolo mancanti per messaggio ' + id);
+    }
+
+    const res = await fetch('/api/owner-messages/delete', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ code, plate, id:Number(id) })
+    });
+
+    const data = await res.json().catch(function(){ return {}; });
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Errore eliminazione messaggio ' + id);
+    }
+
+    return true;
+  }
+
+  async function deleteSelectedOneByOne(){
+    const ids = Array.from(SELECTED).map(Number).filter(Boolean);
+
+    if (!ids.length) {
+      alert('Seleziona almeno un messaggio da eliminare.');
+      return;
+    }
+
+    if (!confirm('Vuoi eliminare ' + ids.length + ' messaggi selezionati?')) return;
+
+    let ok = 0;
+    let failed = 0;
+
+    for (const id of ids) {
+      try {
+        await deleteOne(id);
+        ok++;
+        SELECTED.delete(id);
+      } catch(e) {
+        console.error(e);
+        failed++;
+      }
+    }
+
+    const remaining = getMessages().filter(function(m){
+      return !ids.includes(Number(m.id)) || SELECTED.has(Number(m.id));
+    });
+
+    setMessages(remaining);
+
+    try {
+      if (typeof renderMessages === 'function') renderMessages();
+    } catch(e) {}
+
+    syncChecks();
+
+    try {
+      if (typeof loadOwnerMessages === 'function') setTimeout(loadOwnerMessages, 500);
+      if (typeof window.loadOwnerMessages === 'function') setTimeout(window.loadOwnerMessages, 900);
+    } catch(e) {}
+
+    if (failed) {
+      alert('Eliminati: ' + ok + '. Non eliminati: ' + failed + '. Premi Aggiorna App e riprova.');
+    }
+  }
+
+  function exposeRefresh(){
+    try {
+      if (typeof loadOwnerMessages === 'function' && typeof window.loadOwnerMessages !== 'function') {
+        window.loadOwnerMessages = loadOwnerMessages;
+      }
+    } catch(e) {}
+  }
+
+  function refreshMessages(){
+    exposeRefresh();
+    try {
+      if (typeof window.loadOwnerMessages === 'function') {
+        window.loadOwnerMessages();
+      } else if (typeof loadOwnerMessages === 'function') {
+        loadOwnerMessages();
+      }
+    } catch(e) {}
+    setTimeout(syncChecks, 600);
+    setTimeout(syncChecks, 1500);
+  }
+
+  function init(){
+    exposeRefresh();
+    ensureBar();
+    syncChecks();
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+  window.addEventListener('load', function(){
+    init();
+    refreshMessages();
+  });
+  window.addEventListener('focus', refreshMessages);
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden) refreshMessages();
+  });
+
+  setInterval(function(){
+    ensureBar();
+    syncChecks();
+  }, 700);
+
+  setInterval(refreshMessages, 8000);
+
+  window.ownerForceDeleteSelectedMessages = deleteSelectedOneByOne;
+  window.ownerForceSyncMessageFlags = syncChecks;
 })();
 </script>
 
