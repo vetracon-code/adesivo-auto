@@ -37369,10 +37369,12 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
 })();
 </script>
 
-<script id="followme-home-chat-v2-button-hook-20260527">
+<script id="followme-home-chat-v2-button-hook-20260527">/* disabled: replaced by robust Chat V2 home launcher */</script>
+
+<script id="followme-home-chat-v2-robust-launcher-20260527">
 (function(){
-  if(window.__followmeHomeChatV2ButtonHook20260527) return;
-  window.__followmeHomeChatV2ButtonHook20260527 = true;
+  if(window.__followmeHomeChatV2RobustLauncher20260527) return;
+  window.__followmeHomeChatV2RobustLauncher20260527 = true;
 
   function code(){
     try{
@@ -37390,19 +37392,28 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
     return "FMDEMO";
   }
 
-  function isMainApp(){
+  function isHomeApp(){
     try{
       var p = new URLSearchParams(location.search || "");
       if(p.get("chatSession")) return false;
+      if(p.get("chatWaiting")) return false;
     }catch(e){}
+
     return /\/fm\/app\//i.test(location.pathname);
+  }
+
+  function adminUrl(c){
+    return "/fm/chat-v2/admin/" + encodeURIComponent(c);
   }
 
   function toast(msg){
     try{
-      if(typeof window.toast === "function") return window.toast(msg);
+      if(typeof window.toast === "function"){
+        window.toast(msg);
+        return;
+      }
     }catch(e){}
-    alert(msg);
+    console.warn(msg);
   }
 
   async function activateChatV2(ev){
@@ -37412,57 +37423,93 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
       ev.stopImmediatePropagation();
     }
 
+    var c = code();
     var btn = document.getElementById("followmeOtherOpenChat");
-    var old = btn ? btn.textContent : "";
+    var oldText = btn ? btn.textContent : "";
 
     if(btn){
       btn.disabled = true;
       btn.textContent = "Attivo chat...";
     }
 
+    /*
+      Prima tentiamo l’attivazione pulita.
+      Se la fetch della Home viene disturbata da vecchi script/browser,
+      apriamo comunque Admin V2: la pagina Admin continuerà a leggere le sessioni.
+    */
     try{
-      var c = code();
-      var res = await fetch("/api/followme/" + encodeURIComponent(c) + "/chat-v2/enable", {
+      var controller = new AbortController();
+      var timer = setTimeout(function(){
+        try{ controller.abort(); }catch(e){}
+      }, 4500);
+
+      var res = await fetch("/api/followme/" + encodeURIComponent(c) + "/chat-v2/enable?v=" + Date.now(), {
         method:"POST",
-        headers:{"Content-Type":"application/json","Accept":"application/json"},
+        headers:{
+          "Content-Type":"application/json",
+          "Accept":"application/json"
+        },
         cache:"no-store",
+        credentials:"same-origin",
+        signal:controller.signal,
         body:JSON.stringify({})
       });
 
+      clearTimeout(timer);
+
       var data = await res.json().catch(function(){ return null; });
 
-      if(!res.ok || !data || !data.success){
-        throw new Error((data && data.error) || ("HTTP " + res.status));
+      if(res.ok && data && data.success){
+        location.href = data.admin_url || adminUrl(c);
+        return false;
       }
 
-      location.href = data.admin_url || ("/fm/chat-v2/admin/" + encodeURIComponent(c));
+      throw new Error((data && data.error) || ("HTTP " + res.status));
 
     }catch(err){
+      /*
+        Fallback intenzionale:
+        non blocchiamo l’Admin per un Load failed del frontend.
+      */
+      console.warn("Chat V2 enable fetch failed, fallback admin open:", err);
+      toast("Apro Chat V2...");
+      location.href = adminUrl(c);
+      return false;
+    }finally{
       if(btn){
-        btn.disabled = false;
-        btn.textContent = old || "Parla con gli utenti";
+        setTimeout(function(){
+          try{
+            btn.disabled = false;
+            btn.textContent = oldText || "Parla con gli utenti";
+          }catch(e){}
+        }, 800);
       }
-      toast("Errore Chat V2: " + (err.message || String(err)));
     }
-
-    return false;
   }
 
   function bind(){
-    if(!isMainApp()) return;
+    if(!isHomeApp()) return;
 
     var btn = document.getElementById("followmeOtherOpenChat");
     if(!btn) return;
 
     btn.textContent = "Parla con gli utenti";
-    btn.setAttribute("data-followme-chat-v2", "1");
+    btn.setAttribute("data-followme-chat-v2-robust", "1");
 
-    if(btn.dataset.chatV2Bound === "1") return;
-    btn.dataset.chatV2Bound = "1";
+    /*
+      Evitiamo doppio bind.
+    */
+    if(btn.dataset.chatV2RobustBound === "1") return;
+    btn.dataset.chatV2RobustBound = "1";
 
     btn.onclick = activateChatV2;
     btn.addEventListener("click", activateChatV2, true);
   }
+
+  window.followMeHomeChatV2RobustLauncher20260527 = {
+    bind:bind,
+    activate:activateChatV2
+  };
 
   if(document.readyState === "loading"){
     document.addEventListener("DOMContentLoaded", bind);
@@ -37471,8 +37518,9 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
   }
 
   window.addEventListener("pageshow", function(){
-    setTimeout(bind, 150);
-    setTimeout(bind, 800);
+    setTimeout(bind, 100);
+    setTimeout(bind, 600);
+    setTimeout(bind, 1500);
   });
 })();
 </script>
