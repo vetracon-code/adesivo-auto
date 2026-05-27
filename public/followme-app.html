@@ -36394,51 +36394,194 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 <script id="followme-admin-single-sender-definitive-20260527-disabled-blocks-after-one-message">/* disabled: bloccava invio admin dopo il primo messaggio */</script>
 
-<script id="followme-admin-send-light-guard-20260527">
+<script id="followme-admin-send-light-guard-20260527-disabled-final">/* disabled: replaced by clean admin send controller */</script>
+
+<script id="followme-admin-clean-send-controller-final-20260527">
 (function(){
-  if(window.__followmeAdminSendLightGuard20260527) return;
-  window.__followmeAdminSendLightGuard20260527 = true;
+  if(window.__followmeAdminCleanSendControllerFinal20260527) return;
+  window.__followmeAdminCleanSendControllerFinal20260527 = true;
 
-  /*
-    Guardia leggera, NON sostituisce il sender.
-    Serve solo a evitare doppio click ravvicinato, senza bloccare il bottone dopo il primo invio.
-  */
-
+  var sending = false;
   var lastText = "";
   var lastAt = 0;
+
+  function getSessionId(){
+    try{
+      var p = new URLSearchParams(location.search || "");
+      var sid = p.get("chatSession");
+      if(sid) return String(sid);
+    }catch(e){}
+
+    try{
+      var active = document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active");
+      if(active){
+        return active.getAttribute("data-session-id") ||
+               active.getAttribute("data-id") ||
+               active.dataset.sessionId ||
+               active.dataset.id ||
+               "";
+      }
+    }catch(e){}
+
+    return "";
+  }
 
   function input(){
     return document.getElementById("followmeOwnerChatInput");
   }
 
-  function isAdminSendTarget(el){
-    return !!(
-      el &&
-      (
-        el.id === "followmeOwnerChatSend" ||
-        el.id === "followmeAdminSendInline" ||
-        el.closest("#followmeOwnerChatSend") ||
-        el.closest("#followmeAdminSendInline")
-      )
-    );
+  function messagesBox(){
+    return document.getElementById("followmeOwnerChatMessages");
   }
 
-  document.addEventListener("click", function(ev){
-    if(!isAdminSendTarget(ev.target)) return;
+  function esc(s){
+    return String(s || "").replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
 
-    var inp = input();
-    var txt = inp ? String(inp.value || "").trim() : "";
-    var now = Date.now();
+  function addLocalOwnerMessage(id, text){
+    var box = messagesBox();
+    if(!box) return;
 
-    if(txt && txt === lastText && now - lastAt < 700){
+    if(id && box.querySelector('[data-message-id="' + CSS.escape(String(id)) + '"]')) return;
+
+    var div = document.createElement("div");
+    div.className = "followme-owner-chat-bubble owner";
+    if(id) div.setAttribute("data-message-id", String(id));
+    div.innerHTML = esc(text).replace(/\n/g, "<br>");
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function addLocalSystemMessage(text){
+    var box = messagesBox();
+    if(!box) return;
+
+    var div = document.createElement("div");
+    div.className = "followme-owner-chat-bubble system";
+    div.innerHTML = esc(text);
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  async function cleanSend(ev){
+    if(ev){
       ev.preventDefault();
       ev.stopPropagation();
       ev.stopImmediatePropagation();
+    }
+
+    if(sending) return false;
+
+    var sid = getSessionId();
+    var inp = input();
+    var text = inp ? String(inp.value || "").trim() : "";
+
+    if(!sid){
+      addLocalSystemMessage("Errore: sessione chat non trovata.");
       return false;
     }
 
-    lastText = txt;
+    if(!text) return false;
+
+    var now = Date.now();
+    if(text === lastText && now - lastAt < 700){
+      return false;
+    }
+
+    lastText = text;
     lastAt = now;
-  }, true);
+    sending = true;
+
+    if(inp) inp.value = "";
+
+    try{
+      var res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/message", {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "Accept":"application/json"
+        },
+        cache:"no-store",
+        body:JSON.stringify({
+          sender:"owner",
+          message:text
+        })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        if(inp && !inp.value) inp.value = text;
+        throw new Error((data && data.error) || ("HTTP " + res.status));
+      }
+
+      if(data.message){
+        addLocalOwnerMessage(data.message.id, data.message.message || text);
+      }else{
+        addLocalOwnerMessage("", text);
+      }
+
+      try{
+        if(typeof window.playFollowMeSendSound === "function"){
+          window.playFollowMeSendSound();
+        }
+      }catch(e){}
+
+      setTimeout(function(){
+        try{
+          if(window.followMeOwnerChatFinalFix && typeof window.followMeOwnerChatFinalFix.pollOwnerMessages === "function"){
+            window.followMeOwnerChatFinalFix.pollOwnerMessages(false);
+          }
+        }catch(e){}
+      }, 250);
+
+    }catch(err){
+      addLocalSystemMessage("Errore invio messaggio: " + (err.message || String(err)));
+    }finally{
+      sending = false;
+    }
+
+    return false;
+  }
+
+  function bind(){
+    var real = document.getElementById("followmeOwnerChatSend");
+    var inline = document.getElementById("followmeAdminSendInline");
+    var inp = input();
+
+    [real, inline].forEach(function(btn){
+      if(!btn || btn.dataset.cleanSendControllerBound === "1") return;
+      btn.dataset.cleanSendControllerBound = "1";
+      btn.addEventListener("click", cleanSend, true);
+    });
+
+    if(inp && inp.dataset.cleanSendControllerBound !== "1"){
+      inp.dataset.cleanSendControllerBound = "1";
+      inp.addEventListener("keydown", function(ev){
+        if(ev.key === "Enter" && !ev.shiftKey){
+          cleanSend(ev);
+        }
+      }, true);
+    }
+  }
+
+  window.followMeAdminCleanSendController20260527 = {
+    send: cleanSend,
+    bind: bind
+  };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bind);
+  }else{
+    bind();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(bind, 200);
+  });
+
+  setInterval(bind, 1000);
 })();
 </script>
