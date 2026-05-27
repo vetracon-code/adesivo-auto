@@ -10026,6 +10026,7 @@ async function ensureFollowMeChatSchema() {
   await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS chat_public_token TEXT`);
   await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS chat_token_rotated_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS bot_enabled BOOLEAN DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`);
   // followme-bot-default-off-db-normalize-20260527
   await pool.query(`UPDATE followme_projects SET bot_enabled = FALSE WHERE bot_enabled IS NULL`);
 
@@ -16544,6 +16545,19 @@ async function ensureFollowMeChatV2Runtime() {
   await pool.query(`CREATE INDEX IF NOT EXISTS followme_chat_messages_session_id_v2_idx ON followme_chat_messages(session_id, id ASC)`);
 }
 
+function normalizeFollowMeChatV2Code(raw) {
+  try {
+    if (typeof normalizeFollowMeCode === 'function') {
+      return normalizeFollowMeCode(raw);
+    }
+  } catch (e) {}
+
+  return String(raw || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, '');
+}
+
 function makeFollowMeChatV2Token() {
   return Math.random().toString(36).slice(2, 8).toUpperCase() +
          Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -16589,7 +16603,7 @@ app.post('/api/followme/:code/chat-v2/enable', express.json(), async (req, res) 
   try {
     await ensureFollowMeChatV2Runtime();
 
-    const code = normalizeFollowMeCode(req.params.code);
+    const code = normalizeFollowMeChatV2Code(req.params.code);
     const q = await pool.query(
       `SELECT id, code, public_id FROM followme_projects WHERE code = $1 OR public_id = $1 LIMIT 1`,
       [code]
@@ -16622,7 +16636,11 @@ app.post('/api/followme/:code/chat-v2/enable', express.json(), async (req, res) 
     });
   } catch (err) {
     console.error('followme chat-v2 enable error:', err);
-    return res.status(500).json({ success:false, error:'Errore attivazione Chat V2.' });
+    return res.status(500).json({
+      success:false,
+      error:'Errore attivazione Chat V2.',
+      detail:String(err && err.message ? err.message : err)
+    });
   }
 });
 
@@ -16630,7 +16648,7 @@ app.post('/api/followme/:code/chat-v2/reset', express.json(), async (req, res) =
   try {
     await ensureFollowMeChatV2Runtime();
 
-    const code = normalizeFollowMeCode(req.params.code);
+    const code = normalizeFollowMeChatV2Code(req.params.code);
     const q = await pool.query(
       `SELECT id, code, public_id FROM followme_projects WHERE code = $1 OR public_id = $1 LIMIT 1`,
       [code]
@@ -16681,7 +16699,7 @@ app.get('/api/followme/:code/chat-v2/sessions', async (req, res) => {
   try {
     await ensureFollowMeChatV2Runtime();
 
-    const code = normalizeFollowMeCode(req.params.code);
+    const code = normalizeFollowMeChatV2Code(req.params.code);
     const q = await pool.query(
       `SELECT id, code, chat_mode_enabled
        FROM followme_projects
