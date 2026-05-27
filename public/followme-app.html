@@ -36405,28 +36405,51 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
-<script id="followme-admin-chat-exit-controls-final-20260527">/* disabled: replaced by clean single reset controller */</script>
+<script id="followme-admin-chat-exit-controls-final-20260527">/* disabled: total reset cleanup */</script>
 
-<script id="followme-admin-chat-reset-definitive-20260527">/* disabled: replaced by clean single reset controller */</script>
+<script id="followme-admin-chat-reset-definitive-20260527">/* disabled: total reset cleanup */</script>
 
-<script id="followme-admin-reset-visible-hook-final-20260527">/* disabled: replaced by clean single reset controller */</script>
+<script id="followme-admin-reset-visible-hook-final-20260527">/* disabled: total reset cleanup */</script>
 
-<script id="followme-admin-single-reset-clean-final-20260527">
+<script id="followme-admin-single-reset-clean-final-20260527">/* disabled: total reset cleanup */</script>
+
+<style id="followme-total-reset-cleanup-style-20260527">
+/*
+  Pulizia Reset:
+  - in home e attesa non deve apparire nessun reset aggiunto dalle patch.
+  - nella conversazione vera mostriamo solo #fmOnlyChatReset20260527.
+*/
+body:not(.fm-admin-real-chat-session) #fmOnlyChatResetWrap20260527,
+body:not(.fm-admin-real-chat-session) #fmAdminChatExitControlsFinal20260527,
+body:not(.fm-admin-real-chat-session) #fmAdminDefinitiveResetWrap20260527,
+body:not(.fm-admin-real-chat-session) #fmAdminVisibleResetWrapFinal20260527,
+body:not(.fm-admin-real-chat-session) #fmAdminSingleResetCleanWrap20260527{
+  display:none !important;
+  visibility:hidden !important;
+  opacity:0 !important;
+  pointer-events:none !important;
+}
+
+body.fm-admin-real-chat-session #fmOnlyChatResetWrap20260527{
+  display:flex !important;
+}
+</style>
+
+<script id="followme-only-one-chat-reset-no-loop-20260527">
 (function(){
-  if(window.__followmeAdminSingleResetCleanFinal20260527) return;
-  window.__followmeAdminSingleResetCleanFinal20260527 = true;
-
-  /*
-    Reset unico e pulito:
-    - NON appare nella home.
-    - NON appare nella pagina attesa collegamenti.
-    - Appare solo dentro chat Admin con chatSession.
-    - Non usa setInterval continuo.
-    - Nasconde i vecchi Reset/Chiudi TUTTO/Spegni solo dentro chatSession.
-  */
+  if(window.__followmeOnlyOneChatResetNoLoop20260527) return;
+  window.__followmeOnlyOneChatResetNoLoop20260527 = true;
 
   var running = false;
-  var observer = null;
+
+  function getParams(){
+    try{ return new URLSearchParams(location.search || ""); }
+    catch(e){ return new URLSearchParams(""); }
+  }
+
+  function isChatSession(){
+    return !!getParams().get("chatSession");
+  }
 
   function code(){
     try{
@@ -36444,23 +36467,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     return "FMDEMO";
   }
 
-  function params(){
-    try{
-      return new URLSearchParams(location.search || "");
-    }catch(e){
-      return new URLSearchParams("");
-    }
-  }
-
-  function isRealAdminConversation(){
-    /*
-      Regola rigida:
-      compare SOLO nella conversazione Admin con chatSession.
-      Così sparisce dalla home e dalla pagina attesa.
-    */
-    return !!params().get("chatSession");
-  }
-
   function toast(msg){
     try{
       if(typeof window.toast === "function"){
@@ -36469,20 +36475,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       }
     }catch(e){}
 
-    try{
-      var el = document.createElement("div");
-      el.textContent = msg;
-      el.style.cssText =
-        "position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));" +
-        "transform:translateX(-50%);z-index:2147483647;" +
-        "background:rgba(18,18,24,.96);color:white;padding:12px 16px;" +
-        "border-radius:999px;font:800 13px system-ui,-apple-system,sans-serif;" +
-        "box-shadow:0 16px 46px rgba(0,0,0,.35);max-width:88vw;text-align:center;";
-      document.body.appendChild(el);
-      setTimeout(function(){ try{ el.remove(); }catch(e){} }, 2600);
-    }catch(e){
-      alert(msg);
-    }
+    alert(msg);
   }
 
   async function postJson(url, body){
@@ -36498,18 +36491,93 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
     var data = await res.json().catch(function(){ return null; });
 
-    return {
-      ok:res.ok,
-      status:res.status,
-      data:data
-    };
+    return { ok:res.ok, status:res.status, data:data };
   }
 
-  function homeUrl(){
-    return "/fm/app/" + encodeURIComponent(code()) + "?chatResetDone=1&v=" + Date.now();
+  function removeAllPatchResetButtons(){
+    [
+      "fmAdminChatExitControlsFinal20260527",
+      "fmAdminDefinitiveResetWrap20260527",
+      "fmAdminVisibleResetWrapFinal20260527",
+      "fmAdminSingleResetCleanWrap20260527"
+    ].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el) el.remove();
+    });
   }
 
-  async function resetAllAndExit(ev){
+  function hideLegacyInsideChat(){
+    if(!isChatSession()) return;
+
+    [
+      "followmeTopResetChatBtn",
+      "followmeResetChatBtn",
+      "followmeOwnerChatDisable",
+      "followmeResetAllChatsBtn",
+      "followmeChatWaitingReset"
+    ].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el){
+        el.style.setProperty("display","none","important");
+        el.style.setProperty("pointer-events","none","important");
+        el.setAttribute("aria-hidden","true");
+      }
+    });
+
+    var overlay = document.getElementById("followmeResetChoiceOverlay");
+    if(overlay){
+      overlay.classList.remove("is-open");
+      overlay.style.setProperty("display","none","important");
+      overlay.style.setProperty("pointer-events","none","important");
+      overlay.setAttribute("aria-hidden","true");
+    }
+  }
+
+  function ensureOnlyReset(){
+    removeAllPatchResetButtons();
+
+    document.body.classList.toggle("fm-admin-real-chat-session", isChatSession());
+
+    var old = document.getElementById("fmOnlyChatResetWrap20260527");
+    if(!isChatSession()){
+      if(old) old.remove();
+      return;
+    }
+
+    hideLegacyInsideChat();
+
+    if(document.getElementById("fmOnlyChatReset20260527")) return;
+
+    var target =
+      document.querySelector(".followme-owner-chat-actions") ||
+      document.querySelector("#followmeOwnerChatScreen header") ||
+      document.getElementById("followmeOwnerChatScreen");
+
+    if(!target) return;
+
+    var wrap = document.createElement("div");
+    wrap.id = "fmOnlyChatResetWrap20260527";
+    wrap.style.cssText =
+      "display:flex;align-items:center;justify-content:center;padding:4px 8px;";
+
+    var btn = document.createElement("button");
+    btn.id = "fmOnlyChatReset20260527";
+    btn.type = "button";
+    btn.textContent = "Reset";
+    btn.style.cssText =
+      "min-height:36px;border-radius:999px;border:0;background:#ff3b30;color:white;" +
+      "font-weight:950;padding:0 16px;box-shadow:0 8px 22px rgba(255,59,48,.24);";
+
+    btn.addEventListener("click", resetAll, true);
+    btn.onclick = resetAll;
+
+    wrap.appendChild(btn);
+
+    try{ target.insertBefore(wrap, target.firstChild); }
+    catch(e){ target.appendChild(wrap); }
+  }
+
+  async function resetAll(ev){
     if(ev){
       ev.preventDefault();
       ev.stopPropagation();
@@ -36519,7 +36587,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     if(running) return false;
     running = true;
 
-    var btn = document.getElementById("fmAdminSingleResetClean20260527");
+    var btn = document.getElementById("fmOnlyChatReset20260527");
     if(btn){
       btn.disabled = true;
       btn.textContent = "Reset...";
@@ -36531,7 +36599,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       var r1 = await postJson(
         "/api/followme/" + encodeURIComponent(c) + "/chat/close-all-with-reset",
         {
-          source:"admin_single_reset_clean_final",
+          source:"only_one_chat_reset_no_loop",
           close_all:true,
           disable_chat:true,
           keep_current_project:true
@@ -36539,18 +36607,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       );
 
       if(!r1.ok || !r1.data || !r1.data.success){
-        throw new Error((r1.data && r1.data.error) || ("close-all HTTP " + r1.status));
+        throw new Error((r1.data && r1.data.error) || ("HTTP " + r1.status));
       }
 
-      /*
-        Fallback di sicurezza: spegne comunque il servizio chat.
-      */
       try{
         await postJson(
           "/api/followme/" + encodeURIComponent(c) + "/chat/disable",
-          {
-            source:"admin_single_reset_clean_disable_fallback"
-          }
+          { source:"only_one_chat_reset_disable_fallback" }
         );
       }catch(e){}
 
@@ -36561,154 +36624,25 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
         localStorage.removeItem("followme_chat_session_id");
       }catch(e){}
 
-      window.location.replace(homeUrl());
+      location.replace("/fm/app/" + encodeURIComponent(c) + "?chatResetDone=1&v=" + Date.now());
       return false;
 
     }catch(err){
       running = false;
-
       if(btn){
         btn.disabled = false;
         btn.textContent = "Reset";
       }
-
       toast("Reset non riuscito: " + (err.message || String(err)));
       return false;
     }
   }
 
-  function removeCleanReset(){
-    var wrap = document.getElementById("fmAdminSingleResetCleanWrap20260527");
-    if(wrap) wrap.remove();
-  }
-
-  function hideOldChatControlsOnce(){
-    if(!isRealAdminConversation()) return;
-
-    /*
-      Nascondiamo solo vecchi comandi dentro la conversazione vera.
-      Non tocchiamo la home.
-    */
-    Array.from(document.querySelectorAll("button,a")).forEach(function(el){
-      if(!el) return;
-      if(el.closest("#fmAdminSingleResetCleanWrap20260527")) return;
-
-      var text = String(el.textContent || "")
-        .replace(/\s+/g, " ")
-        .trim()
-        .toLowerCase();
-
-      var id = String(el.id || "");
-
-      var old =
-        id === "followmeTopResetChatBtn" ||
-        id === "followmeResetChatBtn" ||
-        id === "followmeOwnerChatDisable" ||
-        id === "followmeResetAllChatsBtn" ||
-        id === "fmAdminCloseAllChatsFinal20260527" ||
-        id === "fmAdminCloseCurrentChatFinal20260527" ||
-        id === "fmAdminDefinitiveReset20260527" ||
-        id === "fmAdminVisibleResetFinal20260527" ||
-        text === "reset" ||
-        text === "reset..." ||
-        text === "chiudi tutto" ||
-        text === "chiudi questa chat" ||
-        text === "spegni" ||
-        text === "tutte le chat";
-
-      if(!old) return;
-
-      if(
-        el.closest("#followmeOwnerChatScreen") ||
-        el.closest(".followme-owner-chat-actions") ||
-        el.closest("#followmeResetChoiceOverlay") ||
-        document.body.classList.contains("followme-chat-only-mode")
-      ){
-        el.style.setProperty("display", "none", "important");
-        el.style.setProperty("pointer-events", "none", "important");
-        el.setAttribute("aria-hidden", "true");
-      }
-    });
-
-    /*
-      Chiude e neutralizza il vecchio popup reset a scelta.
-    */
-    var overlay = document.getElementById("followmeResetChoiceOverlay");
-    if(overlay){
-      overlay.classList.remove("is-open");
-      overlay.setAttribute("aria-hidden", "true");
-      overlay.style.setProperty("display", "none", "important");
-      overlay.style.setProperty("pointer-events", "none", "important");
-    }
-
-    /*
-      Nasconde eventuali wrapper precedenti.
-    */
-    [
-      "fmAdminChatExitControlsFinal20260527",
-      "fmAdminDefinitiveResetWrap20260527",
-      "fmAdminVisibleResetWrapFinal20260527"
-    ].forEach(function(id){
-      var el = document.getElementById(id);
-      if(el){
-        el.style.setProperty("display", "none", "important");
-        el.style.setProperty("pointer-events", "none", "important");
-        el.setAttribute("aria-hidden", "true");
-      }
-    });
-  }
-
-  function ensureSingleReset(){
-    if(!isRealAdminConversation()){
-      removeCleanReset();
-      return;
-    }
-
-    if(document.getElementById("fmAdminSingleResetClean20260527")){
-      return;
-    }
-
-    var target =
-      document.querySelector(".followme-owner-chat-actions") ||
-      document.querySelector("#followmeOwnerChatScreen header") ||
-      document.getElementById("followmeOwnerChatScreen");
-
-    if(!target) return;
-
-    var wrap = document.createElement("div");
-    wrap.id = "fmAdminSingleResetCleanWrap20260527";
-    wrap.style.cssText =
-      "display:flex;align-items:center;justify-content:center;" +
-      "gap:8px;padding:6px 8px;position:relative;z-index:20;";
-
-    var btn = document.createElement("button");
-    btn.id = "fmAdminSingleResetClean20260527";
-    btn.type = "button";
-    btn.textContent = "Reset";
-    btn.setAttribute("aria-label", "Reset chat");
-    btn.style.cssText =
-      "min-height:36px;border-radius:999px;border:0;background:#ff3b30;color:#fff;" +
-      "font-weight:950;padding:0 16px;box-shadow:0 8px 22px rgba(255,59,48,.24);" +
-      "font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;";
-
-    btn.addEventListener("click", resetAllAndExit, true);
-    btn.onclick = resetAllAndExit;
-
-    wrap.appendChild(btn);
+  function homeConfirmation(){
+    if(isChatSession()) return;
 
     try{
-      target.insertBefore(wrap, target.firstChild);
-    }catch(e){
-      target.appendChild(wrap);
-    }
-  }
-
-  function showHomeConfirmation(){
-    /*
-      In home non mostriamo Reset. Mostriamo solo eventuale conferma e puliamo URL.
-    */
-    try{
-      var p = params();
+      var p = getParams();
       var done = p.get("chatResetDone") === "1" ||
         sessionStorage.getItem("followme_admin_chat_reset_done") === "1";
 
@@ -36718,7 +36652,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
       setTimeout(function(){
         toast("Chat resettata. Servizio chat spento.");
-      }, 400);
+      }, 300);
 
       if(history && history.replaceState){
         history.replaceState(null, "", "/fm/app/" + encodeURIComponent(code()));
@@ -36727,61 +36661,21 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   }
 
   function boot(){
-    if(!isRealAdminConversation()){
-      removeCleanReset();
-      showHomeConfirmation();
-      return;
-    }
-
-    hideOldChatControlsOnce();
-    ensureSingleReset();
+    ensureOnlyReset();
+    homeConfirmation();
   }
 
-  function startObserver(){
-    if(observer || !window.MutationObserver) return;
-
-    var root = document.getElementById("followmeOwnerChatScreen") || document.body;
-    if(!root) return;
-
-    observer = new MutationObserver(function(){
-      /*
-        Niente setInterval: solo reazione leggera se vecchi script ridisegnano la testata.
-      */
-      if(window.__fmSingleResetCleanQueued) return;
-      window.__fmSingleResetCleanQueued = true;
-
-      setTimeout(function(){
-        window.__fmSingleResetCleanQueued = false;
-        boot();
-      }, 80);
-    });
-
-    observer.observe(root, {
-      childList:true,
-      subtree:true
-    });
-  }
-
-  window.followMeAdminSingleResetClean20260527 = {
-    reset:resetAllAndExit,
-    boot:boot
+  window.followMeOnlyOneChatResetNoLoop20260527 = {
+    boot:boot,
+    reset:resetAll
   };
 
   if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", function(){
-      boot();
-      startObserver();
-    });
+    document.addEventListener("DOMContentLoaded", boot);
   }else{
     boot();
-    startObserver();
   }
 
-  window.addEventListener("pageshow", function(){
-    setTimeout(function(){
-      boot();
-      startObserver();
-    }, 150);
-  });
+  window.addEventListener("pageshow", boot);
 })();
 </script>
