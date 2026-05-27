@@ -394,6 +394,19 @@
       white-space:nowrap;
       max-width:220px;
     }
+    .attachment-countdown{
+      display:block;
+      margin-top:2px;
+      font-size:10px;
+      line-height:1.2;
+      color:#667781;
+      text-align:right;
+      font-weight:800;
+      opacity:.86;
+    }
+    .attachment-countdown.expiring{
+      color:#b42318;
+    }
   </style>
 </head>
 <body>
@@ -596,16 +609,51 @@
           '<img src="' + url + '" alt="' + label + '">' +
           '</a>' +
           '<a class="attachment-file" href="' + url + '" target="_blank" rel="noopener">📎 <span>' + label + '</span></a>' +
+          (att.expires_at ? '<span class="attachment-countdown" data-countdown-expires="' + esc(att.expires_at) + '">si cancella tra --</span>' : '') +
           '<span class="time">' + esc(timeOf(createdAt)) + '</span>' +
         '</div>';
       }
 
       return '<div class="attachment-card">' +
         '<a class="attachment-file" href="' + url + '" target="_blank" rel="noopener">📎 <span>' + label + '</span></a>' +
+        (att.expires_at ? '<span class="attachment-countdown" data-countdown-expires="' + esc(att.expires_at) + '">si cancella tra --</span>' : '') +
         '<span class="time">' + esc(timeOf(createdAt)) + '</span>' +
       '</div>';
     }
 
+
+
+    function updateAttachmentCountdownsV2(){
+      const now = Date.now();
+
+      document.querySelectorAll("[data-countdown-expires]").forEach(el=>{
+        const t = Date.parse(el.getAttribute("data-countdown-expires") || "");
+        if(!t){
+          el.textContent = "";
+          return;
+        }
+
+        const diff = Math.max(0, Math.ceil((t - now) / 1000));
+
+        if(diff <= 0){
+          el.textContent = "in cancellazione...";
+          el.classList.add("expiring");
+          return;
+        }
+
+        const min = Math.floor(diff / 60);
+        const sec = diff % 60;
+        const mmss = min + ":" + String(sec).padStart(2, "0");
+
+        el.textContent = "si cancella tra " + mmss;
+
+        if(diff <= 20){
+          el.classList.add("expiring");
+        }else{
+          el.classList.remove("expiring");
+        }
+      });
+    }
 
     function pruneExpiredAttachmentsV2(){
       const now = Date.now();
@@ -639,6 +687,7 @@
       els.messages.appendChild(div);
       els.messages.scrollTop = els.messages.scrollHeight;
       lastMessageId = Math.max(lastMessageId, Number(m.id) || 0);
+      updateAttachmentCountdownsV2();
     }
 
     async function loadSessions(){
@@ -869,14 +918,17 @@
         if(document.visibilityState === "visible") loadSessions();
       }, 900);
       pollMessagesTimer = setInterval(()=>{
-        if(document.visibilityState === "visible" && selectedId) { pruneExpiredAttachmentsV2(); loadMessages(false); }
+        if(document.visibilityState === "visible" && selectedId) { updateAttachmentCountdownsV2(); pruneExpiredAttachmentsV2(); loadMessages(false); }
       }, 400);
       document.addEventListener("visibilitychange", ()=>{
         if(document.visibilityState === "visible"){
           loadSessions();
+          updateAttachmentCountdownsV2();
           loadMessages(false);
         }
       });
+
+      setInterval(updateAttachmentCountdownsV2, 1000);
     }
 
     start();
