@@ -14551,9 +14551,11 @@ app.post('/api/followme/chat/session/:session_id/name', express.json(), async (r
 
     const updated = await pool.query(
       `UPDATE followme_chat_sessions
-       SET display_name = $2
+       SET display_name = $2,
+           updated_at = NOW(),
+           last_seen_at = NOW()
        WHERE id = $1
-       RETURNING id, display_name`,
+       RETURNING id, display_name, updated_at`,
       [sessionId, displayName]
     );
 
@@ -14735,9 +14737,11 @@ app.post('/api/followme/:code/chat/session/:session_id/rename', express.json(), 
 
     const updated = await pool.query(
       `UPDATE followme_chat_sessions
-       SET display_name = $3
+       SET display_name = $3,
+           updated_at = NOW(),
+           last_seen_at = NOW()
        WHERE id = $1 AND project_id = $2
-       RETURNING id, visitor_label, display_name`,
+       RETURNING id, visitor_label, display_name, updated_at`,
       [sessionId, project.id, displayName]
     );
 

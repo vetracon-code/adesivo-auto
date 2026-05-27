@@ -6367,22 +6367,20 @@
 
 
 
-<script id="followme-public-chat-canonical-fast-render-20260527">
+
+<script id="followme-public-chat-light-sync-no-loadfailed-20260527">
 (function(){
-  if(window.__followmePublicChatCanonicalFastRender20260527) return;
-  window.__followmePublicChatCanonicalFastRender20260527 = true;
+  if(window.__followmePublicChatLightSyncNoLoadFailed20260527) return;
+  window.__followmePublicChatLightSyncNoLoadFailed20260527 = true;
 
   /*
     SOLO CHAT UTENTE.
-    Fonte unica: server /messages?after=0.
-    Obiettivo:
-    - niente doppi temporanei;
-    - risposte admin più rapide;
-    - bot spento: nasconde prompt extra se già arrivano da cache/storico.
+    Niente render totale aggressivo.
+    Aggiunge solo i nuovi messaggi non ancora presenti.
   */
 
   var running = false;
-  var lastSignature = "";
+  var lastAt = 0;
 
   function sid(){
     try{
@@ -6401,16 +6399,24 @@
            document.querySelector(".chat .messages");
   }
 
+  function maxMessageId(){
+    var max = 0;
+    document.querySelectorAll("[data-message-id]").forEach(function(el){
+      var n = Number(el.getAttribute("data-message-id") || el.dataset.messageId || 0);
+      if(n > max) max = n;
+    });
+    return max;
+  }
+
   function esc(v){
     return String(v || "").replace(/[&<>"']/g, function(c){
       return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
     });
   }
 
-  function cleanBotText(text){
+  function cleanText(text){
     var t = String(text || "");
     var low = t.toLowerCase();
-
     if(
       low.includes("vuoi sapere cosa sono") ||
       low.includes("vuoi maggiori informazioni") ||
@@ -6421,118 +6427,73 @@
     ){
       return "";
     }
-
     return t;
   }
 
-  function render(messages){
+  function append(m){
+    if(!m || !m.id) return;
+
     var b = box();
-    if(!b || !Array.isArray(messages)) return;
+    if(!b) return;
 
-    var seen = new Set();
-    var html = "";
+    var id = String(m.id);
+    if(document.querySelector('[data-message-id="' + CSS.escape(id) + '"]')) return;
 
-    messages.forEach(function(m){
-      if(!m || !m.id) return;
+    var text = cleanText(m.message);
+    if(!text) return;
 
-      var id = String(m.id);
-      if(seen.has(id)) return;
-      seen.add(id);
+    var sender = String(m.sender || "").toLowerCase();
+    var cls = "message ";
 
-      var text = cleanBotText(m.message);
-      if(!text) return;
+    if(sender === "owner" || sender === "admin") cls += "admin";
+    else if(sender === "user") cls += "user";
+    else if(sender === "bot") cls += "bot";
+    else cls += "system";
 
-      var sender = String(m.sender || "").toLowerCase();
-      var cls = "message ";
+    var wrap = document.createElement("div");
+    wrap.className = cls;
+    wrap.setAttribute("data-message-id", id);
 
-      if(sender === "owner" || sender === "admin"){
-        cls += "admin";
-      }else if(sender === "user"){
-        cls += "user";
-      }else if(sender === "bot"){
-        cls += "bot";
-      }else{
-        cls += "system";
-      }
+    var bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.innerHTML = esc(text).replace(/\n/g, "<br>");
 
-      html +=
-        '<div class="' + cls + '" data-message-id="' + esc(id) + '">' +
-          '<div class="bubble">' +
-            esc(text).replace(/\n/g, "<br>") +
-          '</div>' +
-        '</div>';
-    });
-
-    var signature = sid() + "::" + html;
-
-    if(signature !== lastSignature){
-      var nearBottom = (b.scrollHeight - b.scrollTop - b.clientHeight) < 120;
-      b.innerHTML = html;
-      if(nearBottom) b.scrollTop = b.scrollHeight;
-      lastSignature = signature;
-    }
+    wrap.appendChild(bubble);
+    b.appendChild(wrap);
+    b.scrollTop = b.scrollHeight;
   }
 
-  async function loadCanonical(){
+  async function refresh(){
     var sessionId = sid();
     if(!sessionId || running) return;
 
+    var now = Date.now();
+    if(now - lastAt < 900) return;
+    lastAt = now;
     running = true;
 
     try{
-      var res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/messages?after=0&v=" + Date.now(), {
+      var after = maxMessageId();
+
+      var res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/messages?after=" + encodeURIComponent(after) + "&v=" + Date.now(), {
         cache:"no-store"
       });
 
       var data = await res.json().catch(function(){ return null; });
 
       if(res.ok && data && data.success && Array.isArray(data.messages)){
-        render(data.messages);
+        data.messages.forEach(append);
       }
     }catch(e){
+      console.warn("public chat light refresh error:", e && e.message ? e.message : e);
     }finally{
       running = false;
     }
   }
 
-  function patchFetch(){
-    if(window.__followmePublicCanonicalFetchPatch20260527) return;
-    window.__followmePublicCanonicalFetchPatch20260527 = true;
-
-    var oldFetch = window.fetch;
-    if(!oldFetch) return;
-
-    window.fetch = async function(){
-      var args = arguments;
-      var url = "";
-
-      try{
-        url = String(args[0] && args[0].url ? args[0].url : args[0] || "");
-      }catch(e){}
-
-      var res = await oldFetch.apply(this, args);
-
-      try{
-        if(url.includes("/api/followme/chat/session/") && (
-          url.includes("/message") ||
-          url.includes("/messages") ||
-          url.includes("/attachment")
-        )){
-          setTimeout(loadCanonical, 60);
-          setTimeout(loadCanonical, 220);
-          setTimeout(loadCanonical, 650);
-        }
-      }catch(e){}
-
-      return res;
-    };
-  }
-
   function boot(){
-    patchFetch();
-    setTimeout(loadCanonical, 80);
-    setTimeout(loadCanonical, 280);
-    setTimeout(loadCanonical, 700);
+    setTimeout(refresh, 300);
+    setTimeout(refresh, 900);
   }
 
   if(document.readyState === "loading"){
@@ -6542,292 +6503,13 @@
   }
 
   window.addEventListener("pageshow", boot);
-  window.addEventListener("focus", function(){
-    setTimeout(loadCanonical, 80);
-    setTimeout(loadCanonical, 300);
-  });
+  window.addEventListener("focus", function(){ setTimeout(refresh, 150); });
 
   setInterval(function(){
     if(document.visibilityState === "hidden") return;
-    loadCanonical();
-  }, 650);
+    refresh();
+  }, 1200);
 
-  window.followMePublicCanonicalFastRender20260527 = loadCanonical;
-})();
-</script>
-
-<script id="followme-public-extra-fast-flow-20260527">
-(function(){
-  if(window.__followmePublicExtraFastFlow20260527) return;
-  window.__followmePublicExtraFastFlow20260527 = true;
-
-  /*
-    SOLO EXTRA UTENTE.
-    - invio richiesta Extra immediato;
-    - feedback immediato;
-    - polling rapido solo se richiesta pendente;
-    - applica subito uploads_enabled quando admin approva.
-  */
-
-  var requesting = false;
-  var polling = false;
-  var pendingRequestId = "";
-
-  function sid(){
-    try{
-      return sessionStorage.getItem("followme_chat_session_id") ||
-             window.sessionId ||
-             window.followMeChatSessionId ||
-             "";
-    }catch(e){
-      return "";
-    }
-  }
-
-  function esc(v){
-    return String(v || "").replace(/[&<>"']/g, function(c){
-      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
-    });
-  }
-
-  function messagesBox(){
-    return document.querySelector(".messages") ||
-           document.getElementById("messages") ||
-           document.querySelector(".chat .messages");
-  }
-
-  function addSystem(text){
-    var box = messagesBox();
-    if(!box || !text) return;
-
-    var div = document.createElement("div");
-    div.className = "message bot fm-extra-fast-status";
-    div.innerHTML = '<div class="bubble">' + esc(text).replace(/\n/g, "<br>") + '</div>';
-    box.appendChild(div);
-    box.scrollTop = box.scrollHeight;
-  }
-
-  function setExtraEnabled(on){
-    document.body.classList.toggle("fm-public-extra-inline-on", !!on);
-    document.body.classList.toggle("fm-public-extra-enabled-live", !!on);
-    document.body.classList.toggle("fm-public-extra-adminlike-on", !!on);
-
-    try{ window.fetchState?.(true); }catch(e){}
-    try{ window.renderAllAttachments?.(); }catch(e){}
-  }
-
-  function getPending(requests){
-    if(!Array.isArray(requests)) return null;
-    if(pendingRequestId){
-      var exact = requests.find(function(r){ return String(r.request_id) === String(pendingRequestId); });
-      if(exact) return exact;
-    }
-    return requests[0] || null;
-  }
-
-  async function pollExtra(){
-    var sessionId = sid();
-    if(!sessionId || polling) return;
-
-    polling = true;
-
-    try{
-      var res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/extra-requests?v=" + Date.now(), {
-        cache:"no-store"
-      });
-
-      var data = await res.json().catch(function(){ return null; });
-
-      if(!res.ok || !data || !data.success) return;
-
-      if(data.session && data.session.uploads_enabled === true){
-        pendingRequestId = "";
-        setExtraEnabled(true);
-        return;
-      }
-
-      var req = getPending(data.requests);
-
-      if(!req) return;
-
-      if(req.status === "accepted"){
-        pendingRequestId = "";
-        setExtraEnabled(true);
-        addSystem(req.response_message || "Richiesta accettata. Ora puoi inviare contenuti Extra.");
-      }
-
-      if(req.status === "rejected"){
-        pendingRequestId = "";
-        setExtraEnabled(false);
-        addSystem(req.response_message || "Richiesta Extra rifiutata.");
-      }
-
-    }catch(e){
-    }finally{
-      polling = false;
-    }
-  }
-
-  async function requestExtraFast(button){
-    var sessionId = sid();
-    if(!sessionId || requesting) return false;
-
-    requesting = true;
-
-    var requestId = "extra-" + sessionId + "-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
-    pendingRequestId = requestId;
-
-    if(button){
-      button.disabled = true;
-      button.dataset.originalText20260527 = button.textContent || "";
-      button.textContent = "Richiesta inviata...";
-    }
-
-    addSystem("Richiesta Extra inviata. Attendi la risposta del proprietario.");
-
-    try{
-      var res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/request-extra", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ request_id:requestId, fast:true })
-      });
-
-      var data = await res.json().catch(function(){ return null; });
-
-      if(!res.ok || !data || !data.success){
-        throw new Error((data && data.error) || "Richiesta Extra non riuscita");
-      }
-
-      if(data.already_enabled || (data.session && data.session.uploads_enabled === true)){
-        pendingRequestId = "";
-        setExtraEnabled(true);
-        addSystem("Extra è già attivo.");
-      }else if(data.request && data.request.request_id){
-        pendingRequestId = data.request.request_id;
-      }
-
-      setTimeout(pollExtra, 200);
-      setTimeout(pollExtra, 700);
-      setTimeout(pollExtra, 1300);
-
-    }catch(err){
-      console.error("extra fast request error:", err);
-      addSystem("Errore richiesta Extra: " + (err.message || String(err)));
-      pendingRequestId = "";
-    }finally{
-      setTimeout(function(){
-        requesting = false;
-        if(button){
-          button.disabled = false;
-          button.textContent = button.dataset.originalText20260527 || "Richiedi Extra";
-        }
-      }, 700);
-    }
-
-    return false;
-  }
-
-  function findExtraButtonFromClick(target){
-    if(!target || !target.closest) return null;
-
-    var btn = target.closest(
-      "#fmExtraDedicatedButton20260519, " +
-      "#fmExtraCleanButton20260519, " +
-      "#followmePublicRequestExtraBtn20260519, " +
-      ".fm-extra-dedicated-confirm, " +
-      "button"
-    );
-
-    if(!btn) return null;
-
-    if(btn.id === "fmExtraDedicatedButton20260519") return btn;
-    if(btn.id === "fmExtraCleanButton20260519") return btn;
-    if(btn.id === "followmePublicRequestExtraBtn20260519") return btn;
-    if(btn.classList.contains("fm-extra-dedicated-confirm")) return btn;
-
-    var txt = String(btn.textContent || "").trim().toLowerCase();
-    if(txt === "richiedi extra" || txt === "extra" || txt.includes("richiedi") && txt.includes("extra")){
-      return btn;
-    }
-
-    return null;
-  }
-
-  function bind(){
-    if(window.__followmePublicExtraFastClick20260527) return;
-    window.__followmePublicExtraFastClick20260527 = true;
-
-    document.addEventListener("click", function(ev){
-      var btn = findExtraButtonFromClick(ev.target);
-      if(!btn) return;
-
-      ev.preventDefault();
-      ev.stopPropagation();
-      ev.stopImmediatePropagation();
-
-      requestExtraFast(btn);
-      return false;
-    }, true);
-  }
-
-  function patchFetch(){
-    if(window.__followmePublicExtraFastFetch20260527) return;
-    window.__followmePublicExtraFastFetch20260527 = true;
-
-    var oldFetch = window.fetch;
-    if(!oldFetch) return;
-
-    window.fetch = async function(){
-      var args = arguments;
-      var url = "";
-
-      try{
-        url = String(args[0] && args[0].url ? args[0].url : args[0] || "");
-      }catch(e){}
-
-      var res = await oldFetch.apply(this, args);
-
-      try{
-        if(url.includes("/api/followme/chat/session/") && (
-          url.includes("/request-extra") ||
-          url.includes("/extra-requests") ||
-          url.includes("/state")
-        )){
-          setTimeout(pollExtra, 150);
-          setTimeout(pollExtra, 700);
-        }
-      }catch(e){}
-
-      return res;
-    };
-  }
-
-  function boot(){
-    bind();
-    patchFetch();
-
-    setTimeout(pollExtra, 500);
-    setTimeout(pollExtra, 1500);
-  }
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", boot);
-  }else{
-    boot();
-  }
-
-  window.addEventListener("pageshow", boot);
-  window.addEventListener("focus", function(){ setTimeout(pollExtra, 120); });
-
-  setInterval(function(){
-    if(document.visibilityState === "hidden") return;
-    if(!pendingRequestId) return;
-    pollExtra();
-  }, 700);
-
-  window.fmExtraFastPublic20260527 = {
-    requestExtraFast:requestExtraFast,
-    pollExtra:pollExtra
-  };
+  window.followMePublicChatLightSyncNoLoadFailed20260527 = refresh;
 })();
 </script>
