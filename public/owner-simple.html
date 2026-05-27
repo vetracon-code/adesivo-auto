@@ -5428,12 +5428,24 @@ if(!res.ok || !data.success){
             return;
           }
 
-          const isStandalone = (typeof isStandaloneMode === 'function' && isStandaloneMode()) || window.matchMedia('(display-mode: standalone)').matches;
-          const isAndroid = /Android/i.test(navigator.userAgent || '');
-          if (isStandalone || isAndroid) {
-            window.location.href = publicQrUrl;
+          /*
+            Ripristino comportamento storico:
+            Prova segnalazione deve mostrare prima l'anteprima adesivo,
+            non portare subito fuori dalla Web App.
+            Dal riquadro l'utente potrà usare "Mostralo a un amico"
+            per aprire il flusso pubblico reale e ricevere la notifica.
+          */
+          if (typeof openStickerPreview === 'function') {
+            openStickerPreview();
+
+            const section = document.getElementById('stickerPreviewSection');
+            if (section && section.scrollIntoView) {
+              setTimeout(function(){
+                section.scrollIntoView({ behavior:'smooth', block:'start' });
+              }, 80);
+            }
           } else {
-            window.open(publicQrUrl, '_blank', 'noopener');
+            window.location.href = publicQrUrl;
           }
         };
       }
