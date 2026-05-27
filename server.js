@@ -14087,7 +14087,7 @@ app.post('/api/followme/chat/session/:session_id/message', express.json(), async
     }
 
     const sessionRes = await pool.query(
-      `SELECT id, project_id, is_blocked FROM followme_chat_sessions WHERE id = $1 LIMIT 1`,
+      `SELECT id, project_id, is_blocked, status FROM followme_chat_sessions WHERE id = $1 LIMIT 1`,
       [sessionId]
     );
 
@@ -14103,9 +14103,51 @@ app.post('/api/followme/chat/session/:session_id/message', express.json(), async
       });
     }
 
+    /* followme-server-message-block-closed-session-20260527 */
+    if (String(sessionRes.rows[0].status || '').toLowerCase() === 'closed') {
+      return res.status(409).json({
+        success:false,
+        closed:true,
+        chat_closed:true,
+        error:'Chat chiusa.'
+      });
+    }
+
     const projectId = sessionRes.rows[0].project_id;
 
-    const inserted = await pool.query(
+    
+    /* followme-server-message-dedupe-before-insert-20260527
+       Protezione server-side:
+       se il front-end manda lo stesso messaggio più volte in pochi secondi,
+       NON creiamo righe duplicate nel database.
+    */
+    const existingRecentMessage = await pool.query(
+      `SELECT id, sender, message, created_at
+       FROM followme_chat_messages
+       WHERE session_id = $1
+         AND project_id = $2
+         AND sender = $3
+         AND message = $4
+         AND created_at > NOW() - INTERVAL '4 seconds'
+       ORDER BY id DESC
+       LIMIT 1`,
+      [sessionId, projectId, sender, message]
+    );
+
+    if (existingRecentMessage.rows.length) {
+      await pool.query(
+        `UPDATE followme_chat_sessions SET last_seen_at = NOW() WHERE id = $1`,
+        [sessionId]
+      );
+
+      return res.json({
+        success:true,
+        duplicate_ignored:true,
+        message:existingRecentMessage.rows[0]
+      });
+    }
+
+const inserted = await pool.query(
       
     
 
