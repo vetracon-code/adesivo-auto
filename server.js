@@ -14894,6 +14894,45 @@ app.get('/api/followme/:code/chat/session/:session_id', async (req, res) => {
 
 
 app.get('/fm/u/:public_id', async (req, res) => {
+
+    /* followme-fmu-chat-v2-first-line-fix-20260527
+       Prima di qualunque logica storica:
+       se Chat V2 è attiva, il QR pubblico apre subito la chat V2 utente.
+    */
+    try {
+      await ensureFollowMeChatV2Runtime();
+
+      const __code = String(
+        req.params.code ||
+        req.params.public_id ||
+        ''
+      )
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9_-]/g, '');
+
+      if (__code) {
+        const __r = await pool.query(
+          `SELECT code, public_id, chat_mode_enabled, chat_public_token
+           FROM followme_projects
+           WHERE code = $1 OR public_id = $1
+           LIMIT 1`,
+          [__code]
+        );
+
+        if (
+          __r.rows.length &&
+          __r.rows[0].chat_mode_enabled === true &&
+          __r.rows[0].chat_public_token
+        ) {
+          return res.redirect(302, '/fm/chat-v2/c/' + encodeURIComponent(__r.rows[0].chat_public_token));
+        }
+      }
+    } catch(__e) {
+      console.error('followme /fm/u chat-v2 first-line redirect error:', __e);
+    }
+
+
   try {
     const publicId = normalizeFollowMePublicId(req.params.public_id);
 
