@@ -16936,6 +16936,7 @@ app.get('/api/followme/chat-v2/session/:session_id/state', async (req, res) => {
 app.get('/api/followme/chat-v2/session/:session_id/messages', async (req, res) => {
   try {
     await ensureFollowMeChatV2Runtime();
+    await cleanupExpiredFollowMeChatV2Attachments();
 
     const sessionId = Number(req.params.session_id || 0);
     const after = Number(req.query.after || 0);
@@ -17022,6 +17023,88 @@ app.post('/api/followme/chat-v2/session/:session_id/message', express.json(), as
   }
 });
 
+
+
+
+
+async function cleanupExpiredFollowMeChatV2Attachments() {
+  try {
+    const path = require('path');
+    const fs = require('fs');
+
+    const q = await pool.query(
+      `SELECT id, message
+       FROM followme_chat_messages
+       WHERE message LIKE '%__followme_attachment_v2%'
+       ORDER BY id ASC
+       LIMIT 300`
+    );
+
+    const now = Date.now();
+    const toDelete = [];
+
+    for (const row of q.rows) {
+      let payload = null;
+
+      try {
+        payload = JSON.parse(String(row.message || ''));
+      } catch (e) {
+        continue;
+      }
+
+      if (!payload || payload.__followme_attachment_v2 !== true) continue;
+
+      const expiresAt = payload.expires_at ? Date.parse(payload.expires_at) : 0;
+      if (!expiresAt || expiresAt > now) continue;
+
+      const url = String(payload.url || '');
+
+      /*
+        Sicurezza: cancelliamo solo file dentro la cartella pubblica prevista.
+      */
+      if (url.startsWith('/uploads/followme-chat-v2/')) {
+        const filename = path.basename(url);
+        const fullPath = path.join(__dirname, 'public', 'uploads', 'followme-chat-v2', filename);
+
+        try {
+          if (fs.existsSync(fullPath)) {
+            fs.unlinkSync(fullPath);
+          }
+        } catch (e) {
+          console.error('followme chat-v2 attachment unlink error:', e.message || e);
+        }
+      }
+
+      toDelete.push(Number(row.id));
+    }
+
+    if (toDelete.length) {
+      await pool.query(
+        `DELETE FROM followme_chat_messages
+         WHERE id = ANY($1::int[])`,
+        [toDelete]
+      );
+    }
+
+    return { success:true, deleted:toDelete.length };
+  } catch (err) {
+    console.error('cleanupExpiredFollowMeChatV2Attachments error:', err);
+    return { success:false, deleted:0, error:String(err.message || err) };
+  }
+}
+
+function startFollowMeChatV2AttachmentCleanupOnce() {
+  if (global.__followmeChatV2AttachmentCleanupStarted) return;
+  global.__followmeChatV2AttachmentCleanupStarted = true;
+
+  setInterval(function(){
+    cleanupExpiredFollowMeChatV2Attachments().catch(function(err){
+      console.error('followme chat-v2 cleanup interval error:', err);
+    });
+  }, 30000);
+}
+
+startFollowMeChatV2AttachmentCleanupOnce();
 
 
 /* ============================================================
@@ -17125,6 +17208,8 @@ app.post('/api/followme/chat-v2/session/:session_id/attachment', express.json({ 
 
     const payload = {
       __followme_attachment_v2: true,
+      temporary: true,
+      ttl_seconds: 120,
       kind,
       sender,
       url: publicUrl,
@@ -17132,7 +17217,8 @@ app.post('/api/followme/chat-v2/session/:session_id/attachment', express.json({ 
       mime: realMime,
       label,
       size_bytes: buffer.length,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 120000).toISOString()
     };
 
     const inserted = await pool.query(
@@ -17147,6 +17233,16 @@ app.post('/api/followme/chat-v2/session/:session_id/attachment', express.json({ 
       `UPDATE followme_chat_sessions SET updated_at = NOW(), last_seen_at = NOW() WHERE id = $1`,
       [session.id]
     );
+
+    /*
+      Cleanup mirato: prova a cancellare poco dopo la scadenza.
+      Il cleanup globale ogni 30s copre comunque riavvii/ritardi.
+    */
+    setTimeout(function(){
+      cleanupExpiredFollowMeChatV2Attachments().catch(function(err){
+        console.error('followme chat-v2 delayed cleanup error:', err);
+      });
+    }, 125000);
 
     return res.json({
       success:true,

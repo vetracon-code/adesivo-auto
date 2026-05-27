@@ -606,6 +606,17 @@
       '</div>';
     }
 
+
+    function pruneExpiredAttachmentsV2(){
+      const now = Date.now();
+      document.querySelectorAll("[data-expires-at]").forEach(el=>{
+        const t = Date.parse(el.getAttribute("data-expires-at") || "");
+        if(t && t <= now){
+          el.remove();
+        }
+      });
+    }
+
     function appendMessage(m){
       if(!m || !m.id) return;
       const id = String(m.id);
@@ -617,6 +628,10 @@
       div.dataset.id = id;
 
       const att = parseAttachmentV2(m.message);
+      if(att && att.expires_at){
+        div.setAttribute("data-expires-at", att.expires_at);
+      }
+
       div.innerHTML = att
         ? renderAttachmentV2(att, m.created_at)
         : esc(m.message).replace(/\n/g,"<br>") + '<span class="time">' + esc(timeOf(m.created_at)) + '</span>';
@@ -854,7 +869,7 @@
         if(document.visibilityState === "visible") loadSessions();
       }, 900);
       pollMessagesTimer = setInterval(()=>{
-        if(document.visibilityState === "visible" && selectedId) loadMessages(false);
+        if(document.visibilityState === "visible" && selectedId) { pruneExpiredAttachmentsV2(); loadMessages(false); }
       }, 400);
       document.addEventListener("visibilitychange", ()=>{
         if(document.visibilityState === "visible"){
