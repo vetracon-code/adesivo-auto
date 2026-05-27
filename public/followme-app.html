@@ -35970,3 +35970,220 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   });
 })();
 </script>
+
+<script id="followme-admin-atomic-reset-final-20260527">
+(function(){
+  if(window.__followmeAdminAtomicResetFinal20260527) return;
+  window.__followmeAdminAtomicResetFinal20260527 = true;
+
+  /*
+    Reset Admin definitivo:
+    - chiude tutte le chat;
+    - spegne modalità chat;
+    - non modifica active_url / documento / card / ultimo progetto trasmesso;
+    - torna alla home della Web App;
+    - mostra conferma al rientro.
+  */
+
+  var running = false;
+
+  function code(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+    }catch(e){}
+
+    try{
+      if(typeof getCode === "function"){
+        var c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+
+    return "FMDEMO";
+  }
+
+  function toast(msg){
+    try{
+      if(typeof window.toast === "function"){
+        window.toast(msg);
+        return;
+      }
+    }catch(e){}
+
+    try{
+      var box = document.createElement("div");
+      box.textContent = msg;
+      box.style.cssText =
+        "position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));" +
+        "transform:translateX(-50%);z-index:2147483647;" +
+        "background:rgba(20,20,26,.94);color:#fff;padding:12px 16px;" +
+        "border-radius:999px;font:800 13px system-ui,-apple-system,BlinkMacSystemFont,sans-serif;" +
+        "box-shadow:0 18px 48px rgba(0,0,0,.28);max-width:88vw;text-align:center;";
+      document.body.appendChild(box);
+      setTimeout(function(){ try{ box.remove(); }catch(e){} }, 2800);
+    }catch(e){
+      alert(msg);
+    }
+  }
+
+  function homeUrl(){
+    return "/fm/app/" + encodeURIComponent(code()) +
+      "?resetChatDone=1&v=" + Date.now();
+  }
+
+  async function atomicReset(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+    }
+
+    if(running) return false;
+    running = true;
+
+    var c = code();
+
+    var buttons = [
+      "followmeTopResetChatBtn",
+      "followmeResetChatBtn",
+      "followmeChatWaitingReset"
+    ];
+
+    buttons.forEach(function(id){
+      var b = document.getElementById(id);
+      if(b){
+        b.disabled = true;
+        b.textContent = "Reset...";
+      }
+    });
+
+    try{
+      var res = await fetch("/api/followme/" + encodeURIComponent(c) + "/chat/close-all-with-reset", {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "Accept":"application/json"
+        },
+        cache:"no-store",
+        body:JSON.stringify({
+          source:"admin_atomic_reset",
+          keep_current_project:true
+        })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || ("HTTP " + res.status));
+      }
+
+      try{
+        sessionStorage.setItem("followme_admin_reset_done", "1");
+        sessionStorage.setItem("followme_admin_reset_message", "Chat resettata. Ultimo progetto ripristinato.");
+      }catch(e){}
+
+      window.location.href = homeUrl();
+
+    }catch(err){
+      running = false;
+
+      buttons.forEach(function(id){
+        var b = document.getElementById(id);
+        if(b){
+          b.disabled = false;
+          b.textContent = "Reset";
+        }
+      });
+
+      toast("Errore reset chat: " + (err.message || String(err)));
+    }
+
+    return false;
+  }
+
+  function bindResetButtons(){
+    var ids = [
+      "followmeTopResetChatBtn",
+      "followmeResetChatBtn",
+      "followmeChatWaitingReset"
+    ];
+
+    ids.forEach(function(id){
+      var btn = document.getElementById(id);
+      if(!btn) return;
+
+      /*
+        Uso capture + stopImmediatePropagation:
+        neutralizza i vecchi reset che aprivano modali o tornavano a chatWaiting.
+      */
+      if(btn.dataset.atomicResetBound === "1") return;
+      btn.dataset.atomicResetBound = "1";
+
+      btn.addEventListener("click", atomicReset, true);
+    });
+  }
+
+  function closeOldResetModalIfAny(){
+    try{
+      var overlay = document.getElementById("followmeResetChoiceOverlay");
+      if(overlay){
+        overlay.classList.remove("is-open");
+        overlay.setAttribute("aria-hidden", "true");
+        overlay.style.display = "none";
+      }
+    }catch(e){}
+  }
+
+  function showReturnConfirmation(){
+    try{
+      var p = new URLSearchParams(location.search || "");
+      var fromUrl = p.get("resetChatDone") === "1";
+      var fromStorage = sessionStorage.getItem("followme_admin_reset_done") === "1";
+
+      if(!fromUrl && !fromStorage) return;
+
+      sessionStorage.removeItem("followme_admin_reset_done");
+
+      setTimeout(function(){
+        toast("Chat resettata. Ultimo progetto ripristinato.");
+      }, 450);
+
+      /*
+        Pulizia URL: resta sulla home app senza parametro tecnico.
+      */
+      if(fromUrl && history && history.replaceState){
+        var clean = "/fm/app/" + encodeURIComponent(code());
+        history.replaceState(null, "", clean);
+      }
+    }catch(e){}
+  }
+
+  function boot(){
+    closeOldResetModalIfAny();
+    bindResetButtons();
+    showReturnConfirmation();
+  }
+
+  window.followMeAdminAtomicReset20260527 = {
+    reset: atomicReset,
+    bind: bindResetButtons
+  };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 150);
+    setTimeout(bindResetButtons, 600);
+  });
+
+  setInterval(function(){
+    closeOldResetModalIfAny();
+    bindResetButtons();
+  }, 1000);
+})();
+</script>
