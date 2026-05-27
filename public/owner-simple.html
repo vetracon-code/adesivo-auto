@@ -6622,6 +6622,7 @@ function getOwnerParams(){
     async function loadOwnerMessages(){
       try { window.loadOwnerMessages = loadOwnerMessages; } catch(e) {}
       try { window.loadOwnerMessages = loadOwnerMessages; } catch(e) {}
+      try { window.loadOwnerMessages = loadOwnerMessages; } catch(e) {}
       try {
         const { code, plate } = getOwnerParams();
         const list = document.getElementById('messagesList');
@@ -12039,6 +12040,389 @@ document.addEventListener('DOMContentLoaded', function () {
   setInterval(function(){
     injectDeleteButtons();
   }, 3000);
+})();
+</script>
+
+
+<script id="force-message-selection-toolbar-script">
+(function(){
+  if (window.__forceMessageSelectionToolbarInstalled) return;
+  window.__forceMessageSelectionToolbarInstalled = true;
+
+  var selectedIds = new Set();
+
+  function $(id){
+    return document.getElementById(id);
+  }
+
+  function getList(){
+    return $('messagesList');
+  }
+
+  function getCards(){
+    var list = getList();
+    if (!list) return [];
+    return Array.from(list.querySelectorAll('[data-message-id]'));
+  }
+
+  function getCardId(card){
+    return Number(card && card.getAttribute('data-message-id') || 0);
+  }
+
+  function ensureToolbar(){
+    var list = getList();
+    if (!list) return;
+
+    var section =
+      $('ownerMessagesSection') ||
+      list.parentElement ||
+      document.body;
+
+    var oldToolbar = $('forcedMessagesSelectionToolbar');
+    if (oldToolbar) return;
+
+    var toolbar = document.createElement('div');
+    toolbar.id = 'forcedMessagesSelectionToolbar';
+    toolbar.style.cssText = [
+      'display:flex',
+      'flex-wrap:wrap',
+      'gap:8px',
+      'align-items:center',
+      'justify-content:space-between',
+      'margin:0 0 14px',
+      'padding:12px',
+      'border-radius:16px',
+      'background:rgba(255,255,255,.08)',
+      'border:1px solid rgba(255,255,255,.14)',
+      'box-shadow:0 10px 28px rgba(0,0,0,.18)'
+    ].join(';');
+
+    toolbar.innerHTML = ''
+      + '<div id="forcedSelectionCount" style="color:#fff;font-size:.86rem;font-weight:900;">0 selezionati</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-end;">'
+      +   '<button type="button" id="forcedSelectAllMessagesBtn" style="min-height:36px;padding:0 12px;border-radius:12px;border:1px solid rgba(255,255,255,.22);background:#2563eb;color:#fff;font-weight:900;font-size:.82rem;cursor:pointer;">Seleziona tutti</button>'
+      +   '<button type="button" id="forcedClearSelectedMessagesBtn" style="min-height:36px;padding:0 12px;border-radius:12px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.12);color:#fff;font-weight:900;font-size:.82rem;cursor:pointer;">Annulla</button>'
+      +   '<button type="button" id="forcedDeleteSelectedMessagesBtn" style="min-height:36px;padding:0 12px;border-radius:12px;border:1px solid rgba(255,255,255,.22);background:linear-gradient(135deg,#ef4444,#991b1b);color:#fff;font-weight:900;font-size:.82rem;cursor:pointer;">Elimina selezionati</button>'
+      + '</div>';
+
+    section.insertBefore(toolbar, list);
+
+    $('forcedSelectAllMessagesBtn').addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+
+      getCards().forEach(function(card){
+        var id = getCardId(card);
+        if (id) selectedIds.add(id);
+      });
+
+      syncCheckboxes();
+      updateCount();
+    }, true);
+
+    $('forcedClearSelectedMessagesBtn').addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+
+      selectedIds.clear();
+      syncCheckboxes();
+      updateCount();
+    }, true);
+
+    $('forcedDeleteSelectedMessagesBtn').addEventListener('click', async function(e){
+      e.preventDefault();
+      e.stopPropagation();
+
+      await deleteSelected();
+    }, true);
+  }
+
+  function forceWhiteTexts(card){
+    if (!card) return;
+
+    card.style.color = '#fff';
+
+    card.querySelectorAll('*').forEach(function(el){
+      var tag = String(el.tagName || '').toLowerCase();
+      if (tag === 'button' || tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      if (el.classList && el.classList.contains('expiry-badge')) return;
+      if ((el.textContent || '').trim()) el.style.color = '#fff';
+    });
+  }
+
+  function ensureCheckboxes(){
+    getCards().forEach(function(card){
+      var id = getCardId(card);
+      if (!id) return;
+
+      forceWhiteTexts(card);
+
+      var existing = card.querySelector('.forced-message-select-wrap');
+      if (!existing) {
+        var wrap = document.createElement('label');
+        wrap.className = 'forced-message-select-wrap';
+        wrap.style.cssText = [
+          'display:flex',
+          'align-items:center',
+          'gap:9px',
+          'margin:0 0 12px',
+          'padding:9px 10px',
+          'border-radius:13px',
+          'background:rgba(255,255,255,.10)',
+          'border:1px solid rgba(255,255,255,.16)',
+          'color:#fff',
+          'font-size:.84rem',
+          'font-weight:900',
+          'cursor:pointer',
+          'user-select:none'
+        ].join(';');
+
+        wrap.innerHTML = ''
+          + '<input type="checkbox" class="forced-message-checkbox" data-message-select-id="' + String(id) + '" style="width:20px;height:20px;accent-color:#22c55e;cursor:pointer;">'
+          + '<span>Seleziona questo messaggio</span>';
+
+        card.insertBefore(wrap, card.firstChild);
+      }
+
+      var cb = card.querySelector('.forced-message-checkbox');
+      if (cb) {
+        cb.setAttribute('data-message-select-id', String(id));
+        cb.checked = selectedIds.has(id);
+      }
+
+      ensureSingleDeleteButton(card, id);
+    });
+
+    updateCount();
+  }
+
+  function ensureSingleDeleteButton(card, id){
+    var footer = card.querySelector('.forced-delete-message-footer');
+
+    if (!footer) {
+      footer = document.createElement('div');
+      footer.className = 'forced-delete-message-footer';
+      footer.style.cssText = [
+        'display:flex',
+        'justify-content:flex-end',
+        'align-items:center',
+        'gap:10px',
+        'margin-top:14px',
+        'padding-top:12px',
+        'border-top:1px solid rgba(255,255,255,.16)'
+      ].join(';');
+
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'forced-delete-message-btn';
+      btn.textContent = 'Elimina';
+      btn.setAttribute('data-delete-message-id', String(id));
+      btn.style.cssText = [
+        'display:inline-flex',
+        'align-items:center',
+        'justify-content:center',
+        'min-height:38px',
+        'padding:0 16px',
+        'border-radius:13px',
+        'border:1px solid rgba(255,255,255,.26)',
+        'background:linear-gradient(135deg,#ef4444 0%,#b91c1c 100%)',
+        'color:#fff',
+        'font-size:.86rem',
+        'font-weight:900',
+        'cursor:pointer',
+        'box-shadow:0 10px 24px rgba(185,28,28,.28)'
+      ].join(';');
+
+      footer.appendChild(btn);
+      card.appendChild(footer);
+    } else {
+      var btn2 = footer.querySelector('[data-delete-message-id]');
+      if (btn2) btn2.setAttribute('data-delete-message-id', String(id));
+    }
+  }
+
+  function syncCheckboxes(){
+    document.querySelectorAll('.forced-message-checkbox').forEach(function(cb){
+      var id = Number(cb.getAttribute('data-message-select-id') || 0);
+      cb.checked = id && selectedIds.has(id);
+    });
+  }
+
+  function updateCount(){
+    var count = $('forcedSelectionCount');
+    if (count) {
+      var n = selectedIds.size;
+      count.textContent = n === 1 ? '1 selezionato' : String(n) + ' selezionati';
+    }
+
+    var del = $('forcedDeleteSelectedMessagesBtn');
+    if (del) {
+      del.style.opacity = selectedIds.size ? '1' : '.48';
+    }
+  }
+
+  async function callDeleteMessage(id){
+    id = Number(id || 0);
+    if (!id) return false;
+
+    if (typeof window.deleteMessage === 'function') {
+      await window.deleteMessage(id);
+      return true;
+    }
+
+    if (typeof deleteMessage === 'function') {
+      await deleteMessage(id);
+      return true;
+    }
+
+    return false;
+  }
+
+  async function deleteSelected(){
+    var ids = Array.from(selectedIds).map(Number).filter(Boolean);
+
+    if (!ids.length) {
+      alert('Seleziona almeno un messaggio da eliminare.');
+      return;
+    }
+
+    if (!confirm('Vuoi eliminare ' + ids.length + ' messaggi selezionati?')) return;
+
+    var okCount = 0;
+
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i];
+
+      try {
+        var ok = await callDeleteMessage(id);
+        if (ok) {
+          okCount++;
+          selectedIds.delete(id);
+
+          var card = document.querySelector('[data-message-id="' + String(id) + '"]');
+          if (card) card.remove();
+        }
+      } catch(e) {
+        console.error('Errore eliminazione messaggio selezionato:', id, e);
+      }
+    }
+
+    syncCheckboxes();
+    updateCount();
+
+    try {
+      if (typeof window.loadOwnerMessages === 'function') {
+        setTimeout(window.loadOwnerMessages, 600);
+      } else if (typeof loadOwnerMessages === 'function') {
+        setTimeout(loadOwnerMessages, 600);
+      }
+    } catch(e) {}
+
+    setTimeout(init, 900);
+
+    if (!okCount) {
+      alert('Non sono riuscito a eliminare i messaggi selezionati. Premi Aggiorna App e riprova.');
+    }
+  }
+
+  document.addEventListener('change', function(e){
+    var cb = e.target && e.target.closest
+      ? e.target.closest('.forced-message-checkbox')
+      : null;
+
+    if (!cb) return;
+
+    e.stopPropagation();
+
+    var id = Number(cb.getAttribute('data-message-select-id') || 0);
+    if (!id) return;
+
+    if (cb.checked) selectedIds.add(id);
+    else selectedIds.delete(id);
+
+    updateCount();
+  }, true);
+
+  document.addEventListener('click', async function(e){
+    var del = e.target && e.target.closest
+      ? e.target.closest('.forced-delete-message-btn,[data-delete-message-id]')
+      : null;
+
+    if (!del) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+
+    var id = Number(del.getAttribute('data-delete-message-id') || 0);
+    if (!id) return;
+
+    if (!confirm('Vuoi eliminare questo messaggio?')) return;
+
+    try {
+      var ok = await callDeleteMessage(id);
+      if (ok) {
+        selectedIds.delete(id);
+        var card = document.querySelector('[data-message-id="' + String(id) + '"]');
+        if (card) card.remove();
+        updateCount();
+      }
+    } catch(err) {
+      console.error('Errore elimina messaggio singolo:', err);
+      alert('Errore eliminazione messaggio.');
+    }
+  }, true);
+
+  function installObserver(){
+    var list = getList();
+    if (!list || list.dataset.forceSelectionObserver === '1') return;
+
+    list.dataset.forceSelectionObserver = '1';
+
+    var observer = new MutationObserver(function(){
+      setTimeout(function(){
+        ensureToolbar();
+        ensureCheckboxes();
+      }, 50);
+    });
+
+    observer.observe(list, {
+      childList:true,
+      subtree:true
+    });
+  }
+
+  function exposeLoader(){
+    try {
+      if (typeof loadOwnerMessages === 'function') {
+        window.loadOwnerMessages = loadOwnerMessages;
+      }
+    } catch(e) {}
+  }
+
+  function init(){
+    exposeLoader();
+    ensureToolbar();
+    ensureCheckboxes();
+    installObserver();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+  window.addEventListener('load', init);
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden) setTimeout(init, 250);
+  });
+
+  setTimeout(init, 300);
+  setTimeout(init, 900);
+  setTimeout(init, 1800);
+  setTimeout(init, 3500);
+  setInterval(init, 3000);
 })();
 </script>
 
