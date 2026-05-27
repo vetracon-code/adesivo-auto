@@ -10025,7 +10025,10 @@ async function ensureFollowMeChatSchema() {
   await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS chat_mode_enabled BOOLEAN DEFAULT FALSE`);
   await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS chat_public_token TEXT`);
   await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS chat_token_rotated_at TIMESTAMPTZ`);
-  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS bot_enabled BOOLEAN DEFAULT TRUE`);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS bot_enabled BOOLEAN DEFAULT FALSE`);
+  // followme-bot-default-off-db-normalize-20260527
+  await pool.query(`UPDATE followme_projects SET bot_enabled = FALSE WHERE bot_enabled IS NULL`);
+
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS followme_chat_sessions (
@@ -10211,7 +10214,8 @@ app.post('/api/followme/:code/chat/enable', express.json(), async (req, res) => 
 
     await pool.query(
       `UPDATE followme_projects
-       SET chat_mode_enabled = TRUE
+       SET chat_mode_enabled = TRUE,
+           bot_enabled = FALSE
        WHERE id = $1`,
       [project.id]
     );
@@ -10219,6 +10223,7 @@ app.post('/api/followme/:code/chat/enable', express.json(), async (req, res) => 
     return res.json({
       success:true,
       chat_mode_enabled:true,
+      bot_enabled:false,
       chat_public_token:token,
       chat_url:`/fm/chat/c/${token}`
     });
@@ -12448,7 +12453,7 @@ app.get('/fm/chat/c/:chat_token', async (req, res) => {
 
 // followme-bot-enabled-admin-only-20260521
 async function ensureFollowMeBotEnabledColumn20260521() {
-  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS bot_enabled BOOLEAN DEFAULT TRUE`);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS bot_enabled BOOLEAN DEFAULT FALSE`);
 }
 
 /*
@@ -12462,7 +12467,7 @@ app.get('/api/followme/:code/bot-state', async (req, res) => {
     const code = String(req.params.code || '').trim();
 
     const r = await pool.query(
-      `SELECT code, public_id, COALESCE(bot_enabled, TRUE) AS bot_enabled
+      `SELECT code, public_id, COALESCE(bot_enabled, FALSE) AS bot_enabled
        FROM followme_projects
        WHERE code = $1 OR public_id = $1
        LIMIT 1`,
@@ -12501,7 +12506,7 @@ app.post('/api/followme/:code/bot-state', express.json(), async (req, res) => {
        SET bot_enabled = $2,
            updated_at = NOW()
        WHERE code = $1 OR public_id = $1
-       RETURNING code, public_id, COALESCE(bot_enabled, TRUE) AS bot_enabled`,
+       RETURNING code, public_id, COALESCE(bot_enabled, FALSE) AS bot_enabled`,
       [code, enabled]
     );
 
@@ -12535,7 +12540,7 @@ app.get('/api/followme/chat/:chat_token/bot-state', async (req, res) => {
     const token = String(req.params.chat_token || '').trim();
 
     const r = await pool.query(
-      `SELECT code, public_id, COALESCE(bot_enabled, TRUE) AS bot_enabled
+      `SELECT code, public_id, COALESCE(bot_enabled, FALSE) AS bot_enabled
        FROM followme_projects
        WHERE chat_public_token = $1
        LIMIT 1`,
@@ -14126,6 +14131,33 @@ app.post('/api/followme/chat/session/:session_id/message', express.json(), async
         });
       }
     } catch(e) {}
+
+
+    /* followme-block-system-explanation-anywhere-20260527
+       Questo prompt NON deve mai essere inviato all'utente.
+       Il bot è spento di default; anche se qualche script prova a generarlo, viene bloccato qui.
+    */
+    try {
+      const __txt = String(message || req.body?.message || '').toLowerCase();
+      const __bad =
+        __txt.includes('vuoi sapere cosa sono') ||
+        __txt.includes('vuoi sapere cosa sono?') ||
+        __txt.includes('cosa sono?') ||
+        __txt.includes('ti spiego come funziona') ||
+        __txt.includes('vuoi che ti spieghi') ||
+        __txt.includes('spiegare il sistema') ||
+        __txt.includes('maggiori informazioni sul sistema') ||
+        __txt.includes('più informazioni sul sistema') ||
+        __txt.includes('piu informazioni sul sistema');
+
+      if(__bad){
+        return res.json({
+          success:true,
+          blocked_system_explanation_prompt:true,
+          message:null
+        });
+      }
+    }catch(e){}
 
 `INSERT INTO followme_chat_messages
        (session_id, project_id, sender, message, created_at)
