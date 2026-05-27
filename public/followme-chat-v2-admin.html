@@ -344,31 +344,31 @@
     /* admin-extra-v2-menu-20260527 */
     .extra-menu{
       position:fixed;
-      left:12px;
-      right:12px;
+      left:10px;
+      right:10px;
       bottom:calc(64px + env(safe-area-inset-bottom));
       z-index:40;
       display:none;
       padding:10px;
-      border-radius:28px;
-      background:rgba(248,248,248,.92);
-      -webkit-backdrop-filter:blur(22px) saturate(1.35);
-      backdrop-filter:blur(22px) saturate(1.35);
-      box-shadow:0 22px 60px rgba(0,0,0,.28);
-      border:1px solid rgba(255,255,255,.72);
+      border-radius:24px;
+      background:rgba(255,255,255,.96);
+      -webkit-backdrop-filter:blur(18px);
+      backdrop-filter:blur(18px);
+      box-shadow:0 18px 52px rgba(0,0,0,.24);
+      border:1px solid rgba(0,0,0,.07);
     }
     .extra-menu.open{display:block}
     .extra-menu-grid{
       display:grid;
       grid-template-columns:repeat(4, minmax(0, 1fr));
-      gap:9px;
+      gap:8px;
     }
     .extra-menu button{
-      min-height:86px;
+      min-height:72px;
       border:0;
-      border-radius:22px;
-      padding:9px 6px 8px;
-      background:rgba(255,255,255,.92);
+      border-radius:18px;
+      padding:8px 4px;
+      background:#f5f5f7;
       color:#1f2c33;
       font-weight:900;
       font-size:11px;
@@ -377,27 +377,22 @@
       flex-direction:column;
       align-items:center;
       justify-content:center;
-      gap:6px;
-      box-shadow:0 1px 0 rgba(255,255,255,.8) inset, 0 8px 20px rgba(0,0,0,.07);
+      gap:5px;
       -webkit-tap-highlight-color:transparent;
     }
     .extra-menu button:active{
       transform:scale(.97);
-      background:#f2f2f7;
-    }
-    .extra-menu button[disabled]{
-      opacity:.55;
-      filter:grayscale(.15);
+      background:#e9e9ee;
     }
     .extra-icon{
-      width:38px;
-      height:38px;
-      border-radius:14px;
+      width:34px;
+      height:34px;
+      border-radius:12px;
       display:grid;
       place-items:center;
-      font-size:20px;
+      font-size:19px;
       color:white;
-      box-shadow:0 8px 16px rgba(0,0,0,.16);
+      box-shadow:0 7px 14px rgba(0,0,0,.14);
     }
     .extra-icon.photo{background:linear-gradient(135deg,#34c759,#30d158)}
     .extra-icon.file{background:linear-gradient(135deg,#007aff,#5ac8fa)}
@@ -410,13 +405,7 @@
       text-align:center;
     }
     .extra-hint{
-      display:block;
-      font-size:9px;
-      line-height:1.1;
-      font-weight:800;
-      color:#8e8e93;
-      margin-top:-2px;
-      text-align:center;
+      display:none;
     }
     .attachment-card{
       display:grid;
@@ -745,6 +734,19 @@
       const isVoice = String(att.kind || "") === "voice" || String(att.mime || "").startsWith("audio/");
       const label = esc(att.label || att.filename || "Allegato");
       const url = esc(att.url || "#");
+
+      if(String(att.kind || "") === "location"){
+        const lat = Number(att.latitude || 0);
+        const lng = Number(att.longitude || 0);
+        const acc = att.accuracy_m ? " · ±" + Number(att.accuracy_m) + "m" : "";
+        const maps = esc(att.url || ("https://maps.google.com/?q=" + lat + "," + lng));
+
+        return '<div class="attachment-card">' +
+          '<a class="attachment-file" href="' + maps + '" target="_blank" rel="noopener">📍 <span>Posizione condivisa' + esc(acc) + '</span></a>' +
+          (att.expires_at ? '<span class="attachment-countdown" data-countdown-expires="' + esc(att.expires_at) + '">si cancella tra --</span>' : '') +
+          '<span class="time">' + esc(timeOf(createdAt)) + '</span>' +
+        '</div>';
+      }
 
       if(isVoice){
         return '<div class="voice-card">' +
@@ -1150,6 +1152,58 @@ async function sendAdminAttachmentV2(file, kind){
       startVoiceRecordingV2();
     }
 
+    async function sendAdminLocationV2(){
+      if(!selectedId) return;
+
+      if(!navigator.geolocation){
+        toast("Posizione non supportata da questo dispositivo.");
+        return;
+      }
+
+      closeExtraMenuV2();
+      toast("Rilevo posizione...");
+
+      navigator.geolocation.getCurrentPosition(async function(pos){
+        try{
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const acc = Math.round(pos.coords.accuracy || 0);
+          const mapsUrl = "https://maps.google.com/?q=" + encodeURIComponent(lat + "," + lng);
+
+          const payload = {
+            __followme_attachment_v2:true,
+            temporary:true,
+            ttl_seconds:120,
+            kind:"location",
+            sender:"owner",
+            url:mapsUrl,
+            label:"Posizione condivisa",
+            latitude:lat,
+            longitude:lng,
+            accuracy_m:acc,
+            created_at:new Date().toISOString(),
+            expires_at:new Date(Date.now() + 120000).toISOString()
+          };
+
+          const data = await post("/api/followme/chat-v2/session/" + encodeURIComponent(selectedId) + "/message", {
+            sender:"owner",
+            message:JSON.stringify(payload)
+          });
+
+          if(data.message) appendMessage(data.message);
+          toast("Posizione inviata");
+        }catch(err){
+          toast("Errore posizione: " + (err.message || String(err)));
+        }
+      }, function(err){
+        toast("Posizione non disponibile: " + (err.message || "permesso negato"));
+      }, {
+        enableHighAccuracy:true,
+        timeout:9000,
+        maximumAge:0
+      });
+    }
+
     async function sendVoiceV2(){
       if(!voiceBlobV2 || !voiceBlobV2.size){
         toast("Nessun vocale registrato.");
@@ -1166,7 +1220,22 @@ async function sendAdminAttachmentV2(file, kind){
       }
     }
 
+    function isIOSDeviceV2(){
+      return /iPad|iPhone|iPod/.test(navigator.userAgent || "") ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    }
+
     function toggleExtraMenuV2(){
+      /*
+        Su iPhone/iPad non imitiamo il menu Apple:
+        apriamo direttamente il picker nativo del sistema.
+      */
+      if(isIOSDeviceV2()){
+        closeExtraMenuV2();
+        if(els.photoInput) els.photoInput.click();
+        return;
+      }
+
       if(!els.extraMenu) return;
       const open = !els.extraMenu.classList.contains("open");
       els.extraMenu.classList.toggle("open", open);
