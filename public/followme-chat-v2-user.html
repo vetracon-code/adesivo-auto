@@ -156,6 +156,38 @@
     }
     .voice-row audio{width:190px;max-width:100%;height:34px}
     .voice-temp{font-size:10px;color:#667781;font-weight:850;text-align:right}
+    /* followme-map-preview-css-20260528 */
+    .map-preview-card{min-width:240px;max-width:280px}
+    .map-preview-link{
+      position:relative;
+      display:block;
+      width:100%;
+      height:150px;
+      overflow:hidden;
+      border-radius:14px;
+      background:#dfe5e7;
+      box-shadow:0 1px 2px rgba(0,0,0,.10);
+    }
+    .map-preview-frame{
+      width:100%;
+      height:100%;
+      border:0;
+      display:block;
+      pointer-events:none;
+    }
+    .map-preview-overlay{
+      position:absolute;
+      right:8px;
+      bottom:8px;
+      padding:6px 9px;
+      border-radius:999px;
+      background:rgba(17,27,33,.82);
+      color:#fff;
+      font-size:11px;
+      font-weight:900;
+      box-shadow:0 6px 18px rgba(0,0,0,.24);
+    }
+
   </style>
 </head>
 <body>
@@ -318,12 +350,18 @@
       const url = esc(att.url || "#");
 
       if(String(att.kind || "") === "location"){
-        const lat = Number(att.latitude || 0);
-        const lng = Number(att.longitude || 0);
-        const maps = esc(att.url || ("https://maps.google.com/?q=" + lat + "," + lng));
+        const openMap = esc(buildDeviceMapUrlV2(att));
+        const embedMap = esc(buildEmbeddedMapUrlV2(att));
+        const acc = att.accuracy_m ? " · precisione " + Math.round(Number(att.accuracy_m)) + " m" : "";
 
-        return '<div class="attachment-card">' +
-          '<a class="attachment-file" href="' + maps + '" target="_blank" rel="noopener">📍 <span>Posizione condivisa</span></a>' +
+        return '<div class="attachment-card map-preview-card">' +
+          (embedMap
+            ? '<a class="map-preview-link" href="' + openMap + '" target="_blank" rel="noopener" aria-label="Apri posizione condivisa">' +
+                '<iframe class="map-preview-frame" src="' + embedMap + '" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>' +
+                '<span class="map-preview-overlay">Apri in Maps</span>' +
+              '</a>'
+            : '') +
+          '<a class="attachment-file" href="' + openMap + '" target="_blank" rel="noopener">📍 <span>Posizione condivisa' + esc(acc) + '</span></a>' +
           '<span class="voice-temp">messaggio temporaneo</span>' +
           '<span class="time">' + esc(timeOf(createdAt)) + '</span>' +
         '</div>';

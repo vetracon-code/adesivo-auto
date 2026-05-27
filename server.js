@@ -16952,6 +16952,67 @@ app.use('/api/followme/:code/chat-v2/enable', function(req, res, next){
   next();
 });
 
+
+
+// followme-chat-v2-ready-priority-fix-20260528-start
+app.get('/api/followme/:code/chat-v2/ready', async function(req, res){
+  try {
+    const code = String(req.params.code || '').trim();
+
+    if (!code) {
+      return res.status(400).json({
+        success:false,
+        ready:false,
+        error:'Codice FollowMe mancante.'
+      });
+    }
+
+    /*
+      Route volutamente snella:
+      non chiama funzioni runtime pesanti e non usa colonne dubbie.
+      Serve solo a verificare se la Chat V2 è realmente pronta.
+    */
+    const q = await pool.query(
+      `SELECT id, code, public_id, chat_mode_enabled, chat_public_token
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).json({
+        success:false,
+        ready:false,
+        error:'Progetto FollowMe non trovato.'
+      });
+    }
+
+    const row = q.rows[0];
+    const token = String(row.chat_public_token || '').trim();
+    const enabled = row.chat_mode_enabled === true;
+
+    return res.json({
+      success:true,
+      ready:!!(enabled && token),
+      chat_mode_enabled:enabled,
+      chat_public_token:token || null,
+      code:row.code,
+      public_id:row.public_id,
+      chat_url: token ? '/fm/chat-v2/c/' + encodeURIComponent(token) : null,
+      admin_url:'/fm/chat-v2/admin/' + encodeURIComponent(row.code || code)
+    });
+  } catch (err) {
+    console.error('followme chat-v2 ready priority error:', err);
+    return res.status(500).json({
+      success:false,
+      ready:false,
+      error:err.message || 'Errore verifica stato chat.'
+    });
+  }
+});
+// followme-chat-v2-ready-priority-fix-20260528-end
+
 app.get('/api/followme/:code/chat-v2/ready', async function(req, res){
   try {
     if (typeof ensureFollowMeChatV2Runtime === 'function') {
