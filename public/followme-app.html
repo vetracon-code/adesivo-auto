@@ -36755,3 +36755,527 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   window.followMeChatOnlyRefreshFast20260526 = refreshChatSoon;
 })();
 </script>
+
+<script id="followme-chat-only-fast-actions-20260527">
+(function(){
+  if(window.__followmeChatOnlyFastActions20260527) return;
+  window.__followmeChatOnlyFastActions20260527 = true;
+
+  /*
+    SOLO MODULO CHAT ADMIN.
+    Non tocca:
+    - QR
+    - preview
+    - PDF
+    - card destinazioni
+    - update URL
+    - riattiva URL/card
+
+    Scopo:
+    - Attiva chat: feedback immediato e waiting screen subito.
+    - Reset: effetto UI immediato + chiamata server.
+    - Chiudi TUTTO: effetto UI immediato + chiusura servizio.
+    - Evita vecchi handler doppi/lenti con stopImmediatePropagation solo sui comandi chat.
+  */
+
+  var actionLock = {
+    enable:false,
+    reset:false,
+    closeAll:false
+  };
+
+  function code(){
+    try{
+      var m = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m && m[1]) return decodeURIComponent(m[1]).trim().toUpperCase();
+
+      if(typeof getCode === "function"){
+        var c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function toastFast(msg){
+    try{
+      if(typeof toast === "function") toast(msg);
+      else console.log("[FollowMe chat]", msg);
+    }catch(e){
+      console.log("[FollowMe chat]", msg);
+    }
+  }
+
+  function isChatElement(el){
+    if(!el) return false;
+    return !!(
+      el.closest("#followmeOwnerChatScreen") ||
+      el.closest("#followmeOwnerChatWaitingScreen") ||
+      el.closest("#followmeOwnerChatSessionStrip") ||
+      el.closest("#followmeChatWaitingList") ||
+      el.closest("#followmeResetChoiceOverlay") ||
+      el.id === "followmeOtherOpenChat"
+    );
+  }
+
+  function showWaitingNow(){
+    try{
+      document.body.classList.remove("followme-chat-only-mode");
+      document.body.classList.add("followme-chat-waiting-mode");
+
+      var waiting = document.getElementById("followmeOwnerChatWaitingScreen");
+      if(waiting) waiting.style.display = "grid";
+
+      var chat = document.getElementById("followmeOwnerChatScreen");
+      if(chat) chat.style.display = "none";
+
+      var card = document.querySelector(".followme-chat-waiting-card h2");
+      if(card) card.textContent = "Chat attiva";
+
+      var pulse = document.querySelector(".followme-chat-waiting-pulse");
+      if(pulse) pulse.innerHTML = "<i></i> In attesa di collegamenti...";
+
+      try{
+        var u = "/fm/app/" + encodeURIComponent(code()) + "?chatWaiting=1&focus=chat-waiting";
+        history.replaceState(null, "", u);
+      }catch(e){}
+    }catch(e){}
+  }
+
+  function exitChatUiNow(message){
+    try{
+      document.body.classList.remove("followme-chat-only-mode");
+      document.body.classList.remove("followme-chat-waiting-mode");
+
+      var chat = document.getElementById("followmeOwnerChatScreen");
+      if(chat) chat.style.display = "none";
+
+      var waiting = document.getElementById("followmeOwnerChatWaitingScreen");
+      if(waiting) waiting.style.display = "none";
+
+      var box = document.getElementById("followmeOwnerChatMessages");
+      if(box) box.innerHTML = "";
+
+      var strip = document.getElementById("followmeOwnerChatSessionStrip");
+      if(strip) strip.innerHTML = "";
+
+      var list = document.getElementById("followmeChatWaitingList");
+      if(list) list.innerHTML = "";
+
+      if(message) toastFast(message);
+
+      try{
+        history.replaceState(null, "", "/fm/app/" + encodeURIComponent(code()) + "?v=chat-action-" + Date.now());
+      }catch(e){}
+    }catch(e){}
+  }
+
+  function clearCurrentChatUiNow(){
+    try{
+      var box = document.getElementById("followmeOwnerChatMessages");
+      if(box){
+        box.innerHTML =
+          '<div class="followme-owner-chat-bubble system" data-chat-fast-reset="1">' +
+          'Chat azzerata. In attesa di nuovi messaggi.' +
+          '</div>';
+      }
+
+      var active = document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active");
+      if(active) active.remove();
+
+      var list = document.getElementById("followmeChatWaitingList");
+      if(list){
+        list.querySelectorAll(".followme-chat-waiting-row").forEach(function(row){
+          var txt = String(row.textContent || "").toLowerCase();
+          if(txt.includes("apri")) row.remove();
+        });
+      }
+
+      toastFast("Reset chat eseguito.");
+    }catch(e){}
+  }
+
+  function activeSessionId(){
+    try{
+      var p = new URLSearchParams(location.search || "");
+      var fromUrl = p.get("chatSession");
+      if(fromUrl) return String(fromUrl);
+
+      var active = document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active");
+      if(active){
+        return active.getAttribute("data-session-id") ||
+               active.dataset.sessionId ||
+               active.getAttribute("data-id") ||
+               active.dataset.id ||
+               "";
+      }
+    }catch(e){}
+    return "";
+  }
+
+  async function refreshSessionsFast(){
+    try{ window.refreshFollowMeOwnerChatSessions?.(); }catch(e){}
+    try{ window.followMeOwnerChatFinalFix?.refreshSessionsAndMaybeOpenLatest?.(); }catch(e){}
+    try{ window.checkFollowMeWaitingLatestSession?.(); }catch(e){}
+    try{ window.checkLatestOpenFollowMeChat?.(); }catch(e){}
+  }
+
+  async function pollLatestAndOpenFast(){
+    var c = code();
+
+    for(var i = 0; i < 8; i++){
+      try{
+        var res = await fetch("/api/followme/" + encodeURIComponent(c) + "/chat/latest-open-session?v=" + Date.now(), {
+          cache:"no-store"
+        });
+
+        var data = await res.json().catch(function(){ return null; });
+
+        if(data && data.success && data.chat_mode_enabled === true && data.session && data.session.id){
+          location.href = "/fm/app/" + encodeURIComponent(data.project_code || c) +
+            "?chatSession=" + encodeURIComponent(data.session.id) +
+            "&focus=chat&fast=1";
+          return;
+        }
+      }catch(e){}
+
+      await new Promise(function(resolve){ setTimeout(resolve, i < 3 ? 700 : 1200); });
+    }
+
+    setTimeout(refreshSessionsFast, 300);
+  }
+
+  async function fastEnableChat(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+    }
+
+    if(actionLock.enable) return false;
+    actionLock.enable = true;
+
+    var btn = document.getElementById("followmeOtherOpenChat");
+    var original = btn ? btn.textContent : "";
+
+    if(btn){
+      btn.disabled = true;
+      btn.textContent = "Chat attiva...";
+    }
+
+    showWaitingNow();
+    toastFast("Chat attivata. In attesa di collegamenti.");
+
+    try{
+      var res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/enable", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ fast:true })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Errore attivazione chat");
+      }
+
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = "Chat attiva";
+      }
+
+      setTimeout(refreshSessionsFast, 150);
+      setTimeout(pollLatestAndOpenFast, 450);
+      setTimeout(refreshSessionsFast, 1200);
+
+    }catch(err){
+      console.error("fastEnableChat error:", err);
+
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = original || "Attiva chat";
+      }
+
+      exitChatUiNow("");
+      toastFast("Errore attivazione chat: " + (err.message || String(err)));
+    }finally{
+      setTimeout(function(){ actionLock.enable = false; }, 1500);
+    }
+
+    return false;
+  }
+
+  async function fastResetCurrent(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+    }
+
+    if(actionLock.reset) return false;
+    actionLock.reset = true;
+
+    var sid = activeSessionId();
+
+    if(!sid){
+      /*
+        Se non c'è sessione attiva, ha più senso fare reset globale chat.
+      */
+      return fastResetAll(ev);
+    }
+
+    clearCurrentChatUiNow();
+
+    try{
+      var res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/session/" + encodeURIComponent(sid) + "/reset", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ fast:true })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Errore reset chat");
+      }
+
+      setTimeout(refreshSessionsFast, 150);
+      setTimeout(refreshSessionsFast, 700);
+
+      /*
+        Dopo reset della chat corrente, torno alla schermata di attesa
+        invece di restare su una sessione ormai cancellata.
+      */
+      showWaitingNow();
+
+    }catch(err){
+      console.error("fastResetCurrent error:", err);
+      toastFast("Errore reset chat: " + (err.message || String(err)));
+    }finally{
+      setTimeout(function(){ actionLock.reset = false; }, 1200);
+    }
+
+    return false;
+  }
+
+  async function fastResetAll(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+    }
+
+    if(actionLock.reset) return false;
+    actionLock.reset = true;
+
+    exitChatUiNow("Reset totale chat eseguito.");
+
+    try{
+      var res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/reset", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ fast:true })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || "Errore reset totale");
+      }
+
+      setTimeout(refreshSessionsFast, 200);
+
+    }catch(err){
+      console.error("fastResetAll error:", err);
+      toastFast("Errore reset totale: " + (err.message || String(err)));
+    }finally{
+      setTimeout(function(){ actionLock.reset = false; }, 1200);
+    }
+
+    return false;
+  }
+
+  async function fastCloseAll(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+    }
+
+    if(actionLock.closeAll) return false;
+    actionLock.closeAll = true;
+
+    exitChatUiNow("Chat chiusa.");
+
+    try{
+      var res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/close-all-with-reset", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ fast:true })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        /*
+          Fallback all'endpoint più semplice.
+        */
+        var res2 = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/close-all", {
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body:JSON.stringify({ fast:true })
+        });
+
+        var data2 = await res2.json().catch(function(){ return null; });
+
+        if(!res2.ok || !data2 || !data2.success){
+          throw new Error((data && data.error) || (data2 && data2.error) || "Errore chiusura chat");
+        }
+      }
+
+      setTimeout(function(){
+        location.href = "/fm/app/" + encodeURIComponent(code()) + "?v=chat-closed-" + Date.now();
+      }, 350);
+
+    }catch(err){
+      console.error("fastCloseAll error:", err);
+      toastFast("Errore chiusura chat: " + (err.message || String(err)));
+    }finally{
+      setTimeout(function(){ actionLock.closeAll = false; }, 1500);
+    }
+
+    return false;
+  }
+
+  function closeResetOverlay(){
+    try{
+      var o = document.getElementById("followmeResetChoiceOverlay");
+      if(o){
+        o.classList.remove("is-open");
+        o.setAttribute("aria-hidden", "true");
+      }
+    }catch(e){}
+  }
+
+  function bindDirectButtons(){
+    var open = document.getElementById("followmeOtherOpenChat");
+    if(open && open.dataset.chatFastEnable20260527 !== "1"){
+      open.dataset.chatFastEnable20260527 = "1";
+      open.addEventListener("click", fastEnableChat, true);
+    }
+
+    var resetCurrent = document.getElementById("followmeResetCurrentChatBtn");
+    if(resetCurrent && resetCurrent.dataset.chatFastResetCurrent20260527 !== "1"){
+      resetCurrent.dataset.chatFastResetCurrent20260527 = "1";
+      resetCurrent.addEventListener("click", function(ev){
+        closeResetOverlay();
+        fastResetCurrent(ev);
+      }, true);
+    }
+
+    var resetAll = document.getElementById("followmeResetAllChatsBtn");
+    if(resetAll && resetAll.dataset.chatFastResetAll20260527 !== "1"){
+      resetAll.dataset.chatFastResetAll20260527 = "1";
+      resetAll.addEventListener("click", function(ev){
+        closeResetOverlay();
+        fastResetAll(ev);
+      }, true);
+    }
+  }
+
+  function isResetButton(t, txt){
+    if(!t) return false;
+
+    if(
+      t.id === "followmeTopResetChatBtn" ||
+      t.id === "followmeResetChatBtn" ||
+      t.id === "followmeChatWaitingReset"
+    ){
+      return true;
+    }
+
+    return isChatElement(t) && txt === "reset";
+  }
+
+  function isCloseAllButton(t, txt){
+    if(!t) return false;
+
+    if(txt.includes("chiudi tutto") || txt.includes("chiudi tutto")) return true;
+
+    return false;
+  }
+
+  function bindCaptureRouter(){
+    if(window.__followmeChatOnlyFastCaptureRouter20260527) return;
+    window.__followmeChatOnlyFastCaptureRouter20260527 = true;
+
+    document.addEventListener("click", function(ev){
+      var t = ev.target && ev.target.closest ? ev.target.closest("button,a") : null;
+      if(!t) return;
+
+      var txt = String(t.textContent || "").trim().toLowerCase();
+
+      if(t.id === "followmeOtherOpenChat"){
+        return fastEnableChat(ev);
+      }
+
+      if(isResetButton(t, txt)){
+        /*
+          Mantengo il comportamento con scelta se esiste il modal:
+          il click su Reset apre il modal storico, ma i bottoni del modal sono ora veloci.
+          Se il modal non esiste, resetto la chat corrente.
+        */
+        var overlay = document.getElementById("followmeResetChoiceOverlay");
+        if(overlay){
+          ev.preventDefault();
+          ev.stopPropagation();
+          ev.stopImmediatePropagation();
+
+          overlay.classList.add("is-open");
+          overlay.setAttribute("aria-hidden", "false");
+          bindDirectButtons();
+          return false;
+        }
+
+        return fastResetCurrent(ev);
+      }
+
+      if(isChatElement(t) && isCloseAllButton(t, txt)){
+        return fastCloseAll(ev);
+      }
+    }, true);
+  }
+
+  function boot(){
+    bindDirectButtons();
+    bindCaptureRouter();
+
+    setTimeout(bindDirectButtons, 300);
+    setTimeout(bindDirectButtons, 900);
+    setTimeout(bindDirectButtons, 1800);
+  }
+
+  window.followMeChatFastActions20260527 = {
+    fastEnableChat,
+    fastResetCurrent,
+    fastResetAll,
+    fastCloseAll,
+    refreshSessionsFast,
+    showWaitingNow,
+    exitChatUiNow
+  };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", boot);
+  window.addEventListener("focus", function(){
+    setTimeout(refreshSessionsFast, 250);
+  });
+
+  setInterval(bindDirectButtons, 1500);
+})();
+</script>
