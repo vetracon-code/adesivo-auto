@@ -10186,7 +10186,42 @@ app.get('/fm/u/:public_id', async (req, res, next) => {
 
     if (project.chat_mode_enabled === true) {
       const token = project.chat_public_token || await ensureFollowMeChatToken(project.id);
-      return res.redirect(302, `/fm/chat/c/${encodeURIComponent(token)}`);
+      return 
+    /* followme-public-qr-chat-v2-redirect-20260527
+       Se la Chat V2 è attiva, il QR pubblico deve aprire la chat, non l'active_url.
+    */
+    try {
+      const __fmProjectId =
+        (typeof project !== 'undefined' && project && project.id) ? project.id :
+        (typeof row !== 'undefined' && row && row.id) ? row.id :
+        (typeof qr !== 'undefined' && qr && qr.id) ? qr.id :
+        (typeof result !== 'undefined' && result && result.rows && result.rows[0] && result.rows[0].id) ? result.rows[0].id :
+        null;
+
+      if (__fmProjectId) {
+        await ensureFollowMeChatV2Runtime();
+
+        const __chatV2 = await pool.query(
+          `SELECT chat_mode_enabled, chat_public_token
+           FROM followme_projects
+           WHERE id = $1
+           LIMIT 1`,
+          [__fmProjectId]
+        );
+
+        if (
+          __chatV2.rows.length &&
+          __chatV2.rows[0].chat_mode_enabled === true &&
+          __chatV2.rows[0].chat_public_token
+        ) {
+          return res.redirect(302, '/fm/chat-v2/c/' + encodeURIComponent(__chatV2.rows[0].chat_public_token));
+        }
+      }
+    } catch(__chatV2RedirectErr) {
+      console.error('followme public QR chat-v2 redirect guard error:', __chatV2RedirectErr);
+    }
+
+res.redirect(302, `/fm/chat/c/${encodeURIComponent(token)}`);
     }
 
     return next();
