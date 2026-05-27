@@ -37092,3 +37092,343 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   setInterval(boot, 800);
 })();
 </script>
+
+<script id="followme-admin-reset-visible-hook-final-20260527">
+(function(){
+  if(window.__followmeAdminResetVisibleHookFinal20260527) return;
+  window.__followmeAdminResetVisibleHookFinal20260527 = true;
+
+  var running = false;
+
+  function code(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m && m[1]) return decodeURIComponent(m[1]).trim().toUpperCase();
+    }catch(e){}
+
+    try{
+      if(typeof getCode === "function"){
+        var c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+
+    return "FMDEMO";
+  }
+
+  function inAdminChat(){
+    try{
+      var p = new URLSearchParams(location.search || "");
+      if(p.get("chatSession")) return true;
+    }catch(e){}
+
+    return (
+      document.body.classList.contains("followme-chat-only-mode") ||
+      !!document.getElementById("followmeOwnerChatMessages") ||
+      !!document.getElementById("followmeOwnerChatScreen")
+    );
+  }
+
+  function toast(msg){
+    try{
+      if(typeof window.toast === "function"){
+        window.toast(msg);
+        return;
+      }
+    }catch(e){}
+
+    try{
+      var el = document.createElement("div");
+      el.textContent = msg;
+      el.style.cssText =
+        "position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));" +
+        "transform:translateX(-50%);z-index:2147483647;" +
+        "background:rgba(18,18,24,.96);color:white;padding:12px 16px;" +
+        "border-radius:999px;font:800 13px system-ui,-apple-system,sans-serif;" +
+        "box-shadow:0 16px 46px rgba(0,0,0,.35);max-width:88vw;text-align:center;";
+      document.body.appendChild(el);
+      setTimeout(function(){ try{ el.remove(); }catch(e){} }, 2800);
+    }catch(e){
+      alert(msg);
+    }
+  }
+
+  async function postJson(url, body){
+    var res = await fetch(url, {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "Accept":"application/json"
+      },
+      cache:"no-store",
+      body:JSON.stringify(body || {})
+    });
+
+    var data = await res.json().catch(function(){ return null; });
+
+    return {
+      ok:res.ok,
+      status:res.status,
+      data:data
+    };
+  }
+
+  function homeUrl(){
+    return "/fm/app/" + encodeURIComponent(code()) + "?chatResetDone=1&v=" + Date.now();
+  }
+
+  async function resetAllAndExit(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+    }
+
+    if(running) return false;
+    running = true;
+
+    var c = code();
+
+    Array.from(document.querySelectorAll("button,a")).forEach(function(el){
+      var t = String(el.textContent || "").replace(/\s+/g," ").trim().toLowerCase();
+      if(
+        el.id === "fmAdminVisibleResetFinal20260527" ||
+        t === "reset" ||
+        t === "chiudi tutto" ||
+        t === "tutte le chat"
+      ){
+        try{
+          el.disabled = true;
+          el.textContent = "Reset...";
+        }catch(e){}
+      }
+    });
+
+    try{
+      var r1 = await postJson(
+        "/api/followme/" + encodeURIComponent(c) + "/chat/close-all-with-reset",
+        {
+          source:"admin_visible_reset_hook_final",
+          close_all:true,
+          disable_chat:true,
+          keep_current_project:true
+        }
+      );
+
+      if(!r1.ok || !r1.data || !r1.data.success){
+        throw new Error((r1.data && r1.data.error) || ("close-all HTTP " + r1.status));
+      }
+
+      /*
+        Fallback esplicito per spegnere comunque il servizio chat.
+      */
+      try{
+        await postJson(
+          "/api/followme/" + encodeURIComponent(c) + "/chat/disable",
+          {
+            source:"admin_visible_reset_hook_disable_fallback"
+          }
+        );
+      }catch(e){}
+
+      /*
+        Pulizia locale: evita rientro nella chat chiusa.
+      */
+      try{
+        sessionStorage.setItem("followme_admin_chat_reset_done", "1");
+        sessionStorage.removeItem("followme_chat_session_id");
+        sessionStorage.removeItem("followme_selected_chat_closed");
+        localStorage.removeItem("followme_chat_session_id");
+      }catch(e){}
+
+      window.location.replace(homeUrl());
+      return false;
+
+    }catch(err){
+      running = false;
+      toast("Reset non riuscito: " + (err.message || String(err)));
+
+      Array.from(document.querySelectorAll("button,a")).forEach(function(el){
+        var t = String(el.textContent || "").replace(/\s+/g," ").trim().toLowerCase();
+        if(t === "reset..." || el.id === "fmAdminVisibleResetFinal20260527"){
+          try{
+            el.disabled = false;
+            el.textContent = "Reset";
+          }catch(e){}
+        }
+      });
+
+      return false;
+    }
+  }
+
+  function killOldModal(){
+    try{
+      var overlay = document.getElementById("followmeResetChoiceOverlay");
+      if(overlay){
+        overlay.classList.remove("is-open");
+        overlay.setAttribute("aria-hidden", "true");
+        overlay.style.setProperty("display", "none", "important");
+        overlay.style.setProperty("pointer-events", "none", "important");
+      }
+    }catch(e){}
+  }
+
+  function hookExistingButtons(){
+    if(!inAdminChat()) return;
+
+    Array.from(document.querySelectorAll("button,a")).forEach(function(el){
+      if(!el) return;
+      if(el.closest("#fmAdminVisibleResetWrapFinal20260527")) return;
+
+      var text = String(el.textContent || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+
+      var id = String(el.id || "");
+
+      var mustBecomeReset =
+        id === "followmeTopResetChatBtn" ||
+        id === "followmeResetChatBtn" ||
+        id === "followmeResetAllChatsBtn" ||
+        id === "fmAdminCloseAllChatsFinal20260527" ||
+        text === "reset" ||
+        text === "chiudi tutto" ||
+        text === "tutte le chat";
+
+      if(!mustBecomeReset) return;
+
+      /*
+        Non lo nascondo: lo trasformo in Reset definitivo.
+      */
+      el.style.removeProperty("display");
+      el.style.removeProperty("pointer-events");
+      el.removeAttribute("aria-hidden");
+      el.textContent = "Reset";
+      el.setAttribute("data-followme-reset-visible-hook", "1");
+
+      if(el.dataset.resetVisibleHookBound === "1") return;
+      el.dataset.resetVisibleHookBound = "1";
+
+      el.onclick = resetAllAndExit;
+      el.addEventListener("click", resetAllAndExit, true);
+    });
+
+    /*
+      Nascondo solo comandi ambigui che non devono più comandare nulla.
+    */
+    Array.from(document.querySelectorAll("button,a")).forEach(function(el){
+      if(!el) return;
+      if(el.closest("#fmAdminVisibleResetWrapFinal20260527")) return;
+      if(el.getAttribute("data-followme-reset-visible-hook") === "1") return;
+
+      var text = String(el.textContent || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+
+      var id = String(el.id || "");
+
+      var ambiguous =
+        id === "followmeOwnerChatDisable" ||
+        id === "fmAdminCloseCurrentChatFinal20260527" ||
+        text === "spegni" ||
+        text === "chiudi questa chat";
+
+      if(!ambiguous) return;
+
+      if(
+        el.closest("#followmeOwnerChatScreen") ||
+        document.body.classList.contains("followme-chat-only-mode")
+      ){
+        el.style.setProperty("display", "none", "important");
+        el.style.setProperty("pointer-events", "none", "important");
+        el.setAttribute("aria-hidden", "true");
+      }
+    });
+  }
+
+  function ensureVisibleReset(){
+    if(!inAdminChat()) return;
+
+    var existing = document.getElementById("fmAdminVisibleResetFinal20260527");
+    if(existing) return;
+
+    var screen =
+      document.getElementById("followmeOwnerChatScreen") ||
+      document.querySelector("#followmeOwnerChatMessages")?.parentElement ||
+      document.body;
+
+    if(!screen) return;
+
+    var wrap = document.createElement("div");
+    wrap.id = "fmAdminVisibleResetWrapFinal20260527";
+    wrap.style.cssText =
+      "position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;" +
+      "z-index:2147483647;display:flex;align-items:center;justify-content:center;" +
+      "pointer-events:auto;";
+
+    var btn = document.createElement("button");
+    btn.id = "fmAdminVisibleResetFinal20260527";
+    btn.type = "button";
+    btn.textContent = "Reset";
+    btn.style.cssText =
+      "min-height:40px;border-radius:999px;border:0;background:#ff3b30;color:#fff;" +
+      "font-weight:950;padding:0 18px;box-shadow:0 12px 30px rgba(255,59,48,.35);" +
+      "font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;";
+
+    btn.onclick = resetAllAndExit;
+    btn.addEventListener("click", resetAllAndExit, true);
+
+    wrap.appendChild(btn);
+    document.body.appendChild(wrap);
+  }
+
+  function showHomeConfirmation(){
+    try{
+      var p = new URLSearchParams(location.search || "");
+      var done = p.get("chatResetDone") === "1" ||
+        sessionStorage.getItem("followme_admin_chat_reset_done") === "1";
+
+      if(!done) return;
+
+      sessionStorage.removeItem("followme_admin_chat_reset_done");
+
+      setTimeout(function(){
+        toast("Chat resettata. Servizio chat spento.");
+      }, 450);
+
+      if(history && history.replaceState){
+        history.replaceState(null, "", "/fm/app/" + encodeURIComponent(code()));
+      }
+    }catch(e){}
+  }
+
+  function boot(){
+    killOldModal();
+    hookExistingButtons();
+    ensureVisibleReset();
+    showHomeConfirmation();
+  }
+
+  window.followMeAdminResetVisibleHookFinal20260527 = {
+    reset:resetAllAndExit,
+    boot:boot
+  };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 100);
+    setTimeout(boot, 400);
+    setTimeout(boot, 1000);
+  });
+
+  setInterval(boot, 700);
+})();
+</script>
