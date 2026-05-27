@@ -10979,5 +10979,118 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
+
+<script id="definitive-contact-preview-button-fix-20260527">
+(function(){
+  async function getCtx(){
+    var code = "";
+    var plate = "";
+
+    try {
+      var params = new URLSearchParams(window.location.search || "");
+      code = (params.get("code") || "").trim().toUpperCase();
+      plate = (params.get("plate") || "").trim().toUpperCase();
+    } catch(e) {}
+
+    try {
+      if (!code && window.__OWNER_CODE__) code = String(window.__OWNER_CODE__ || "").trim().toUpperCase();
+      if (!plate && window.__OWNER_PLATE__) plate = String(window.__OWNER_PLATE__ || "").trim().toUpperCase();
+    } catch(e) {}
+
+    try {
+      if (!code) code = String(localStorage.getItem("owner_saved_code") || localStorage.getItem("owner_code") || "").trim().toUpperCase();
+      if (!plate) plate = String(localStorage.getItem("owner_saved_plate") || localStorage.getItem("owner_plate") || "").trim().toUpperCase();
+    } catch(e) {}
+
+    try {
+      if ((!code || !plate) && window.location.pathname) {
+        var m = String(window.location.pathname || "").match(/\/owner-app\/([^\/?#]+)\/([^\/?#]+)/i);
+        if (m) {
+          if (!code) code = decodeURIComponent(m[1] || "").trim().toUpperCase();
+          if (!plate) plate = decodeURIComponent(m[2] || "").trim().toUpperCase();
+        }
+      }
+    } catch(e) {}
+
+    return { code: code, plate: plate };
+  }
+
+  async function getPublicId(ctx){
+    try {
+      var stored = localStorage.getItem("owner_public_id") || sessionStorage.getItem("owner_public_id") || "";
+      if (stored) return String(stored).trim().toUpperCase();
+    } catch(e) {}
+
+    if (!ctx || !ctx.code) return "";
+
+    try {
+      var res = await fetch("/api/owner-dashboard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: ctx.code, plate: ctx.plate || "" })
+      });
+
+      var data = await res.json().catch(function(){ return {}; });
+      var publicId = data && data.success && data.data ? String(data.data.public_id || "").trim().toUpperCase() : "";
+
+      if (publicId) {
+        try {
+          localStorage.setItem("owner_public_id", publicId);
+          sessionStorage.setItem("owner_public_id", publicId);
+        } catch(e) {}
+      }
+
+      return publicId;
+    } catch(e) {
+      return "";
+    }
+  }
+
+  function openContactPreview(publicId, ctx){
+    var qs = new URLSearchParams();
+    qs.set("from_owner_preview", "1");
+    qs.set("ownerTest", "1");
+    qs.set("insideOwnerApp", "1");
+
+    if (ctx && ctx.code) qs.set("code", ctx.code);
+    if (ctx && ctx.plate) qs.set("plate", ctx.plate);
+
+    var url = "/contact-preview/u/" + encodeURIComponent(publicId) + "?" + qs.toString();
+    window.location.href = url;
+  }
+
+  async function handlePreviewClick(e){
+    var btn = e.target && e.target.closest ? e.target.closest("#previewStickerBtn") : null;
+    if (!btn) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+
+    var ctx = await getCtx();
+    var publicId = await getPublicId(ctx);
+
+    if (!publicId) {
+      alert("Dati QR non ancora disponibili. Premi Aggiorna App e riprova.");
+      return;
+    }
+
+    openContactPreview(publicId, ctx);
+  }
+
+  document.addEventListener("click", handlePreviewClick, true);
+
+  window.openOwnerContactPreviewDefinitive = async function(){
+    var ctx = await getCtx();
+    var publicId = await getPublicId(ctx);
+    if (!publicId) {
+      alert("Dati QR non ancora disponibili. Premi Aggiorna App e riprova.");
+      return;
+    }
+    openContactPreview(publicId, ctx);
+  };
+})();
+</script>
+
 </body>
 </html>
