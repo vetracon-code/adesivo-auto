@@ -17504,7 +17504,7 @@ app.post('/api/followme/chat-v2/session/:session_id/message', express.json(), as
     }
 
     const q = await pool.query(
-      `SELECT id, project_id, status, is_blocked
+      `SELECT id, project_id, status, is_blocked, uploads_enabled
        FROM followme_chat_sessions
        WHERE id = $1
        LIMIT 1`,
@@ -17517,6 +17517,23 @@ app.post('/api/followme/chat-v2/session/:session_id/message', express.json(), as
 
     if (session.status !== 'open') {
       return res.status(409).json({ success:false, closed:true, error:'Chat chiusa.' });
+    }
+
+    /*
+      FOLLOWME_CHAT_V2_USER_EXTRA_UPLOAD_PERMISSION_20260528
+      Admin/owner può sempre inviare allegati.
+      Visitor può inviare allegati solo quando admin ha attivato Extra sulla sua sessione.
+    */
+    if (sender === 'visitor' && session.is_blocked === true) {
+      return res.status(403).json({ success:false, blocked:true, error:'Sei stato bloccato dal sistema.' });
+    }
+
+    if (sender === 'visitor' && session.uploads_enabled !== true) {
+      return res.status(403).json({
+        success:false,
+        uploads_enabled:false,
+        error:'Caricamento extra non abilitato per questo utente.'
+      });
     }
 
     if (sender === 'visitor' && session.is_blocked === true) {
@@ -17821,7 +17838,7 @@ app.post('/api/followme/chat-v2/session/:session_id/attachment-raw', express.raw
     const label = String(req.query.label || originalName || 'Allegato').trim();
 
     const sessionRes = await pool.query(
-      `SELECT id, project_id, status, is_blocked
+      `SELECT id, project_id, status, is_blocked, uploads_enabled
        FROM followme_chat_sessions
        WHERE id = $1
        LIMIT 1`,
@@ -17836,6 +17853,23 @@ app.post('/api/followme/chat-v2/session/:session_id/attachment-raw', express.raw
 
     if (session.status !== 'open') {
       return res.status(409).json({ success:false, closed:true, error:'Chat chiusa.' });
+    }
+
+    /*
+      FOLLOWME_CHAT_V2_USER_EXTRA_UPLOAD_PERMISSION_20260528
+      Admin/owner può sempre inviare allegati.
+      Visitor può inviare allegati solo quando admin ha attivato Extra sulla sua sessione.
+    */
+    if (sender === 'visitor' && session.is_blocked === true) {
+      return res.status(403).json({ success:false, blocked:true, error:'Sei stato bloccato dal sistema.' });
+    }
+
+    if (sender === 'visitor' && session.uploads_enabled !== true) {
+      return res.status(403).json({
+        success:false,
+        uploads_enabled:false,
+        error:'Caricamento extra non abilitato per questo utente.'
+      });
     }
 
     const path = require('path');
@@ -17943,14 +17977,6 @@ app.post('/api/followme/chat-v2/session/:session_id/attachment', express.json({ 
       return res.status(400).json({ success:false, error:'Sessione mancante.' });
     }
 
-    /*
-      Fase 1: abilitiamo allegati solo da Admin.
-      Lato utente lo attiveremo dopo con controllo uploads_enabled.
-    */
-    if (sender !== 'owner') {
-      return res.status(403).json({ success:false, error:'Allegati utente non ancora abilitati in Chat V2.' });
-    }
-
     const kind = String(req.body?.kind || 'file').trim().toLowerCase();
     const dataUrl = String(req.body?.data_url || '');
     const originalName = String(req.body?.filename || 'allegato').trim();
@@ -17962,7 +17988,7 @@ app.post('/api/followme/chat-v2/session/:session_id/attachment', express.json({ 
     }
 
     const sessionRes = await pool.query(
-      `SELECT id, project_id, status, is_blocked
+      `SELECT id, project_id, status, is_blocked, uploads_enabled
        FROM followme_chat_sessions
        WHERE id = $1
        LIMIT 1`,
