@@ -4097,6 +4097,25 @@
   }
 </style>
 
+<script id="owner-preserve-push-message-id-script">
+(function(){
+  try {
+    var params = new URLSearchParams(window.location.search || '');
+    var mid = params.get('messageId') || '';
+    var focus = params.get('focus') || '';
+
+    if (mid) {
+      window.__OWNER_PENDING_MESSAGE_ID__ = String(mid);
+      sessionStorage.setItem('owner_pending_message_id', String(mid));
+      sessionStorage.setItem('owner_push_focus_messages', '1');
+    }
+
+    if (focus === 'messages') {
+      sessionStorage.setItem('owner_push_focus_messages', '1');
+    }
+  } catch(e) {}
+})();
+</script>
 </head>
 <body>
   
@@ -11092,5 +11111,125 @@ document.addEventListener('DOMContentLoaded', function () {
 })();
 </script>
 
+<script id="owner-push-messages-visible-fix-script">
+(function(){
+  if (window.__ownerPushMessagesVisibleFixLoaded) return;
+  window.__ownerPushMessagesVisibleFixLoaded = true;
+
+  function getPendingMessageId(){
+    try {
+      return String(
+        window.__OWNER_PENDING_MESSAGE_ID__ ||
+        sessionStorage.getItem('owner_pending_message_id') ||
+        ''
+      ).trim();
+    } catch(e) {
+      return String(window.__OWNER_PENDING_MESSAGE_ID__ || '').trim();
+    }
+  }
+
+  function getPushFocusFlag(){
+    try {
+      var params = new URLSearchParams(window.location.search || '');
+      return params.get('focus') === 'messages' ||
+             !!params.get('messageId') ||
+             sessionStorage.getItem('owner_push_focus_messages') === '1';
+    } catch(e) {
+      return false;
+    }
+  }
+
+  function scrollToMessages(){
+    try {
+      var target = document.getElementById('ownerMessagesSection') ||
+                   document.getElementById('messagesList');
+      if (target && target.scrollIntoView) {
+        target.scrollIntoView({ behavior:'smooth', block:'start' });
+      }
+    } catch(e) {}
+  }
+
+  async function callLoadOwnerMessages(){
+    try {
+      if (typeof window.loadOwnerMessages === 'function') {
+        await window.loadOwnerMessages();
+        return true;
+      }
+      if (typeof loadOwnerMessages === 'function') {
+        await loadOwnerMessages();
+        return true;
+      }
+    } catch(e) {
+      console.warn('owner push refresh loadOwnerMessages error:', e);
+    }
+    return false;
+  }
+
+  async function tryOpenPendingMessage(){
+    var mid = getPendingMessageId();
+    if (!mid) return false;
+
+    try {
+      if (typeof window.openMessageDetail === 'function') {
+        window.openMessageDetail(Number(mid));
+        return true;
+      }
+      if (typeof openMessageDetail === 'function') {
+        openMessageDetail(Number(mid));
+        return true;
+      }
+    } catch(e) {
+      console.warn('owner push openMessageDetail error:', e);
+    }
+
+    return false;
+  }
+
+  async function refreshMessagesFromPush(reason){
+    var shouldFocus = getPushFocusFlag();
+    var pendingId = getPendingMessageId();
+
+    await callLoadOwnerMessages();
+
+    if (shouldFocus || pendingId) {
+      scrollToMessages();
+      setTimeout(tryOpenPendingMessage, 250);
+      setTimeout(tryOpenPendingMessage, 900);
+      setTimeout(tryOpenPendingMessage, 1800);
+    }
+  }
+
+  function scheduleRefresh(reason){
+    refreshMessagesFromPush(reason);
+    setTimeout(function(){ refreshMessagesFromPush(reason + ':600'); }, 600);
+    setTimeout(function(){ refreshMessagesFromPush(reason + ':1500'); }, 1500);
+    setTimeout(function(){ refreshMessagesFromPush(reason + ':3500'); }, 3500);
+  }
+
+  window.ownerForceMessagesRefresh = function(){
+    scheduleRefresh('manual');
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function(){
+      scheduleRefresh('dom');
+    });
+  } else {
+    scheduleRefresh('ready');
+  }
+
+  window.addEventListener('pageshow', function(){
+    scheduleRefresh('pageshow');
+  });
+
+  window.addEventListener('focus', function(){
+    scheduleRefresh('focus');
+  });
+
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden) scheduleRefresh('visible');
+  });
+})();
+</script>
 </body>
 </html>
