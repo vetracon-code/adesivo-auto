@@ -36679,3 +36679,457 @@ body.fm-admin-real-chat-session #fmOnlyChatResetWrap20260527{
   window.addEventListener("pageshow", boot);
 })();
 </script>
+
+<style id="followme-admin-send-reset-clean-style-20260527">
+/* Nasconde tutti i reset patch precedenti: ne resta uno solo gestito da questo controller */
+body.followme-chat-only-mode #fmAdminChatExitControlsFinal20260527,
+body.followme-chat-only-mode #fmAdminDefinitiveResetWrap20260527,
+body.followme-chat-only-mode #fmAdminVisibleResetWrapFinal20260527,
+body.followme-chat-only-mode #fmAdminSingleResetCleanWrap20260527,
+body.followme-chat-only-mode #fmOnlyChatResetWrap20260527,
+body.followme-chat-only-mode #followmeResetChoiceOverlay{
+  display:none !important;
+  visibility:hidden !important;
+  opacity:0 !important;
+  pointer-events:none !important;
+}
+
+/* Il solo Reset valido */
+body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
+  display:inline-flex !important;
+}
+</style>
+
+<script id="followme-admin-send-and-one-reset-final-20260527">
+(function(){
+  if(window.__followmeAdminSendAndOneResetFinal20260527) return;
+  window.__followmeAdminSendAndOneResetFinal20260527 = true;
+
+  var sending = false;
+  var resetting = false;
+  var lastSendAt = 0;
+
+  function params(){
+    try{ return new URLSearchParams(location.search || ""); }
+    catch(e){ return new URLSearchParams(""); }
+  }
+
+  function sessionId(){
+    return params().get("chatSession") || "";
+  }
+
+  function code(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m && m[1]) return decodeURIComponent(m[1]).trim().toUpperCase();
+    }catch(e){}
+
+    try{
+      if(typeof getCode === "function"){
+        var c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+
+    return "FMDEMO";
+  }
+
+  function isAdminChat(){
+    return !!sessionId();
+  }
+
+  function input(){
+    return document.getElementById("followmeOwnerChatInput") ||
+           document.querySelector("#followmeOwnerChatComposer textarea") ||
+           document.querySelector("textarea");
+  }
+
+  function realSendButton(){
+    return document.getElementById("followmeOwnerChatSend");
+  }
+
+  function inlineSendButton(){
+    return document.getElementById("followmeAdminSendInline");
+  }
+
+  function messagesBox(){
+    return document.getElementById("followmeOwnerChatMessages");
+  }
+
+  function esc(s){
+    return String(s || "").replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function toast(msg){
+    try{
+      if(typeof window.toast === "function"){
+        window.toast(msg);
+        return;
+      }
+    }catch(e){}
+
+    try{
+      var el = document.createElement("div");
+      el.textContent = msg;
+      el.style.cssText =
+        "position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));" +
+        "transform:translateX(-50%);z-index:2147483647;background:rgba(18,18,24,.96);" +
+        "color:white;padding:11px 15px;border-radius:999px;font:800 13px system-ui,-apple-system,sans-serif;" +
+        "box-shadow:0 16px 44px rgba(0,0,0,.34);max-width:88vw;text-align:center;";
+      document.body.appendChild(el);
+      setTimeout(function(){ try{ el.remove(); }catch(e){} }, 2400);
+    }catch(e){
+      alert(msg);
+    }
+  }
+
+  function appendOwnerMessageOnce(messageId, text){
+    var box = messagesBox();
+    if(!box) return;
+
+    var id = String(messageId || "");
+    if(id && box.querySelector('[data-message-id="' + CSS.escape(id) + '"]')) return;
+
+    var div = document.createElement("div");
+    div.className = "followme-owner-chat-bubble owner";
+    if(id) div.setAttribute("data-message-id", id);
+    div.innerHTML = esc(text).replace(/\n/g, "<br>");
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  async function postJson(url, body){
+    var res = await fetch(url, {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "Accept":"application/json"
+      },
+      cache:"no-store",
+      body:JSON.stringify(body || {})
+    });
+
+    var data = await res.json().catch(function(){ return null; });
+    return { ok:res.ok, status:res.status, data:data };
+  }
+
+  async function sendAdminMessage(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+    }
+
+    if(!isAdminChat()) return false;
+
+    var now = Date.now();
+    if(now - lastSendAt < 450) return false;
+    lastSendAt = now;
+
+    if(sending) return false;
+    sending = true;
+
+    var sid = sessionId();
+    var inp = input();
+    var text = inp ? String(inp.value || "").trim() : "";
+
+    if(!sid || !text){
+      sending = false;
+      return false;
+    }
+
+    if(inp) inp.value = "";
+
+    var sendBtn = inlineSendButton() || realSendButton();
+    if(sendBtn) sendBtn.disabled = true;
+
+    try{
+      var r = await postJson(
+        "/api/followme/chat/session/" + encodeURIComponent(sid) + "/message",
+        {
+          sender:"owner",
+          message:text,
+          client_id:"admin-" + Date.now() + "-" + Math.random().toString(36).slice(2,8)
+        }
+      );
+
+      if(!r.ok || !r.data || !r.data.success){
+        throw new Error((r.data && r.data.error) || ("HTTP " + r.status));
+      }
+
+      var msg = r.data.message || {};
+      appendOwnerMessageOnce(msg.id, text);
+
+      try{
+        if(typeof window.playFollowMeSendSound === "function"){
+          window.playFollowMeSendSound();
+        }
+      }catch(e){}
+
+      /*
+        Chiediamo un refresh leggero solo se esiste già la funzione.
+        Non chiamiamo vecchi click, non tocchiamo altri sender.
+      */
+      try{
+        if(window.followMeOwnerChatFinalFix && typeof window.followMeOwnerChatFinalFix.pollOwnerMessages === "function"){
+          setTimeout(function(){
+            try{ window.followMeOwnerChatFinalFix.pollOwnerMessages(false); }catch(e){}
+          }, 120);
+        }
+      }catch(e){}
+
+    }catch(err){
+      if(inp && !inp.value) inp.value = text;
+      toast("Errore invio Admin: " + (err.message || String(err)));
+    }finally{
+      sending = false;
+      if(sendBtn) sendBtn.disabled = false;
+      try{ inp && inp.focus(); }catch(e){}
+    }
+
+    return false;
+  }
+
+  function hideAllResetExceptMine(){
+    if(!isAdminChat()) return;
+
+    var keep = document.getElementById("fmAdminOneResetFinal20260527");
+
+    Array.from(document.querySelectorAll("button,a")).forEach(function(el){
+      if(!el || el === keep) return;
+      if(el.closest("#fmAdminOneResetWrapFinal20260527")) return;
+
+      var id = String(el.id || "");
+      var text = String(el.textContent || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+
+      var isResetLike =
+        id === "followmeTopResetChatBtn" ||
+        id === "followmeResetChatBtn" ||
+        id === "followmeResetAllChatsBtn" ||
+        id === "followmeChatWaitingReset" ||
+        id === "fmAdminCloseAllChatsFinal20260527" ||
+        id === "fmAdminCloseCurrentChatFinal20260527" ||
+        id === "fmAdminDefinitiveReset20260527" ||
+        id === "fmAdminVisibleResetFinal20260527" ||
+        id === "fmOnlyChatReset20260527" ||
+        id === "fmAdminSingleResetClean20260527" ||
+        text === "reset" ||
+        text === "reset..." ||
+        text === "chiudi tutto" ||
+        text === "chiudi questa chat" ||
+        text === "tutte le chat" ||
+        text === "spegni";
+
+      if(!isResetLike) return;
+
+      if(
+        el.closest("#followmeOwnerChatScreen") ||
+        el.closest(".followme-owner-chat-actions") ||
+        el.closest("#followmeResetChoiceOverlay") ||
+        document.body.classList.contains("followme-chat-only-mode")
+      ){
+        el.style.setProperty("display", "none", "important");
+        el.style.setProperty("visibility", "hidden", "important");
+        el.style.setProperty("opacity", "0", "important");
+        el.style.setProperty("pointer-events", "none", "important");
+        el.setAttribute("aria-hidden", "true");
+      }
+    });
+
+    [
+      "fmAdminChatExitControlsFinal20260527",
+      "fmAdminDefinitiveResetWrap20260527",
+      "fmAdminVisibleResetWrapFinal20260527",
+      "fmAdminSingleResetCleanWrap20260527",
+      "fmOnlyChatResetWrap20260527",
+      "followmeResetChoiceOverlay"
+    ].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el){
+        el.style.setProperty("display", "none", "important");
+        el.style.setProperty("visibility", "hidden", "important");
+        el.style.setProperty("opacity", "0", "important");
+        el.style.setProperty("pointer-events", "none", "important");
+        el.setAttribute("aria-hidden", "true");
+      }
+    });
+  }
+
+  function ensureOneReset(){
+    if(!isAdminChat()){
+      var old = document.getElementById("fmAdminOneResetWrapFinal20260527");
+      if(old) old.remove();
+      return;
+    }
+
+    if(document.getElementById("fmAdminOneResetFinal20260527")){
+      hideAllResetExceptMine();
+      return;
+    }
+
+    var target =
+      document.querySelector(".followme-owner-chat-actions") ||
+      document.querySelector("#followmeOwnerChatScreen header") ||
+      document.getElementById("followmeOwnerChatScreen");
+
+    if(!target) return;
+
+    var wrap = document.createElement("div");
+    wrap.id = "fmAdminOneResetWrapFinal20260527";
+    wrap.style.cssText = "display:flex;align-items:center;justify-content:center;padding:4px 8px;";
+
+    var btn = document.createElement("button");
+    btn.id = "fmAdminOneResetFinal20260527";
+    btn.type = "button";
+    btn.textContent = "Reset";
+    btn.style.cssText =
+      "min-height:36px;border-radius:999px;border:0;background:#ff3b30;color:white;" +
+      "font-weight:950;padding:0 16px;box-shadow:0 8px 22px rgba(255,59,48,.24);";
+
+    btn.onclick = resetAllAndExit;
+    btn.addEventListener("click", resetAllAndExit, true);
+
+    wrap.appendChild(btn);
+
+    try{ target.insertBefore(wrap, target.firstChild); }
+    catch(e){ target.appendChild(wrap); }
+
+    hideAllResetExceptMine();
+  }
+
+  async function resetAllAndExit(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+    }
+
+    if(resetting) return false;
+    resetting = true;
+
+    var btn = document.getElementById("fmAdminOneResetFinal20260527");
+    if(btn){
+      btn.disabled = true;
+      btn.textContent = "Reset...";
+    }
+
+    var c = code();
+
+    try{
+      var r1 = await postJson(
+        "/api/followme/" + encodeURIComponent(c) + "/chat/close-all-with-reset",
+        {
+          source:"admin_one_reset_send_fix",
+          close_all:true,
+          disable_chat:true,
+          keep_current_project:true
+        }
+      );
+
+      if(!r1.ok || !r1.data || !r1.data.success){
+        throw new Error((r1.data && r1.data.error) || ("HTTP " + r1.status));
+      }
+
+      try{
+        await postJson(
+          "/api/followme/" + encodeURIComponent(c) + "/chat/disable",
+          { source:"admin_one_reset_disable_fallback" }
+        );
+      }catch(e){}
+
+      try{
+        sessionStorage.setItem("followme_admin_chat_reset_done", "1");
+        sessionStorage.removeItem("followme_chat_session_id");
+        sessionStorage.removeItem("followme_selected_chat_closed");
+        localStorage.removeItem("followme_chat_session_id");
+      }catch(e){}
+
+      location.replace("/fm/app/" + encodeURIComponent(c) + "?chatResetDone=1&v=" + Date.now());
+      return false;
+
+    }catch(err){
+      resetting = false;
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = "Reset";
+      }
+      toast("Reset non riuscito: " + (err.message || String(err)));
+      return false;
+    }
+  }
+
+  function bindSendClean(){
+    if(!isAdminChat()) return;
+
+    var real = realSendButton();
+    var inline = inlineSendButton();
+    var inp = input();
+
+    /*
+      Cloniamo i bottoni send per eliminare listener precedenti.
+      Lo facciamo una volta sola.
+    */
+    [real, inline].forEach(function(btn){
+      if(!btn || btn.dataset.adminCleanSendFinal === "1") return;
+
+      var clone = btn.cloneNode(true);
+      clone.dataset.adminCleanSendFinal = "1";
+      clone.onclick = sendAdminMessage;
+      clone.addEventListener("click", sendAdminMessage, true);
+
+      try{
+        btn.parentNode.replaceChild(clone, btn);
+      }catch(e){
+        btn.dataset.adminCleanSendFinal = "1";
+        btn.onclick = sendAdminMessage;
+        btn.addEventListener("click", sendAdminMessage, true);
+      }
+    });
+
+    if(inp && inp.dataset.adminCleanEnterFinal !== "1"){
+      inp.dataset.adminCleanEnterFinal = "1";
+      inp.addEventListener("keydown", function(ev){
+        if(ev.key === "Enter" && !ev.shiftKey){
+          sendAdminMessage(ev);
+        }
+      }, true);
+    }
+  }
+
+  function boot(){
+    if(!isAdminChat()){
+      var wrap = document.getElementById("fmAdminOneResetWrapFinal20260527");
+      if(wrap) wrap.remove();
+      return;
+    }
+
+    document.body.classList.add("followme-chat-only-mode");
+
+    bindSendClean();
+    ensureOneReset();
+    hideAllResetExceptMine();
+  }
+
+  window.followMeAdminSendAndOneResetFinal20260527 = {
+    boot:boot,
+    send:sendAdminMessage,
+    reset:resetAllAndExit
+  };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 150);
+    setTimeout(boot, 700);
+  });
+})();
+</script>
