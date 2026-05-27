@@ -681,6 +681,15 @@
       });
     }
 
+    function preferredSessionFromUrlV2(){
+      try{
+        const p = new URLSearchParams(location.search || "");
+        return String(p.get("session") || p.get("session_id") || "").trim();
+      }catch(e){
+        return "";
+      }
+    }
+
     function selectedSession(){
       return sessions.find(s => String(s.id) === String(selectedId)) || null;
     }
@@ -872,7 +881,9 @@
         sessions = Array.isArray(data.sessions) ? data.sessions : [];
 
         if(!selectedId && sessions.length){
-          selectedId = String(sessions[0].id);
+          const preferred = preferredSessionFromUrlV2();
+          const found = preferred && sessions.some(s => String(s.id) === String(preferred));
+          selectedId = found ? String(preferred) : String(sessions[0].id);
           clearMessages();
           await loadMessages(true);
         }

@@ -17105,6 +17105,108 @@ app.get('/api/followme/:code/chat-v2/sessions', async (req, res) => {
   }
 });
 
+
+
+/* ============================================================
+   FOLLOWME CHAT V2 NEW USER PUSH 20260527
+   Avvisa i possessori iscritti quando un nuovo utente entra in chat.
+   ============================================================ */
+
+async function sendFollowMeChatV2NewUserPush(project, sessionId) {
+  try {
+    if (!project || !project.id || !project.code || !sessionId) return { sent:0, failed:0 };
+
+    if (typeof webpush === 'undefined' || !webpush || typeof webpush.sendNotification !== 'function') {
+      console.warn('followme chat-v2 new user push skipped: webpush non disponibile');
+      return { sent:0, failed:0, skipped:true };
+    }
+
+    const adminUrl = `/fm/chat-v2/admin/${encodeURIComponent(project.code)}?session=${encodeURIComponent(sessionId)}`;
+
+    const payload = JSON.stringify({
+      title: 'FollowMe',
+      body: 'HAI UN NUOVO CONNESSO IN CHAT',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag: `followme-chat-v2-new-user-${project.id}-${sessionId}`,
+      renotify: true,
+      requireInteraction: false,
+      vibrate: [120, 60, 120],
+      url: adminUrl,
+      targetUrl: adminUrl,
+      relativeTargetUrl: adminUrl,
+      data: {
+        type: 'followme_chat_v2_new_user',
+        code: project.code,
+        public_id: project.public_id || project.code,
+        session_id: String(sessionId),
+        url: adminUrl,
+        targetUrl: adminUrl,
+        relativeTargetUrl: adminUrl
+      }
+    });
+
+    /*
+      Recupero robusto iscrizioni:
+      usiamo project_id se presente; in caso di vecchie righe, proviamo anche code/public_id.
+    */
+    let subs;
+    try {
+      subs = await pool.query(
+        `SELECT id, endpoint, p256dh, auth
+         FROM followme_push_subscriptions
+         WHERE is_active IS DISTINCT FROM FALSE
+           AND (
+             project_id = $1
+             OR code = $2
+             OR public_id = $3
+           )
+         LIMIT 200`,
+        [project.id, project.code, project.public_id || project.code]
+      );
+    } catch (err) {
+      /*
+        Fallback per schema vecchio senza code/public_id/project_id.
+      */
+      subs = await pool.query(
+        `SELECT id, endpoint, p256dh, auth
+         FROM followme_push_subscriptions
+         WHERE is_active IS DISTINCT FROM FALSE
+         LIMIT 200`
+      );
+    }
+
+    let sent = 0;
+    let failed = 0;
+
+    for (const sub of subs.rows) {
+      try {
+        await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          payload
+        );
+        sent += 1;
+      } catch (err) {
+        failed += 1;
+
+        if (err && (err.statusCode === 404 || err.statusCode === 410)) {
+          try {
+            await pool.query('DELETE FROM followme_push_subscriptions WHERE endpoint = $1', [sub.endpoint]);
+          } catch(e) {}
+        } else {
+          console.error('followme chat-v2 new user push error:', err.statusCode || '', err.body || err.message || err);
+        }
+      }
+    }
+
+    return { sent, failed };
+  } catch (err) {
+    console.error('sendFollowMeChatV2NewUserPush error:', err.message || err);
+    return { sent:0, failed:1, error:String(err.message || err) };
+  }
+}
+
+
 app.post('/api/followme/chat-v2/c/:chat_token/session', express.json(), async (req, res) => {
   try {
     await ensureFollowMeChatV2Runtime();
@@ -17157,12 +17259,15 @@ app.post('/api/followme/chat-v2/c/:chat_token/session', express.json(), async (r
       [project.id, token, visitorLabel]
     );
 
+    const pushResult = await sendFollowMeChatV2NewUserPush(project, inserted.rows[0].id);
+
     return res.json({
       success:true,
       reused:false,
       project_code:project.code,
       session_id:inserted.rows[0].id,
-      session:inserted.rows[0]
+      session:inserted.rows[0],
+      push:pushResult
     });
   } catch (err) {
     console.error('followme chat-v2 create session error:', err);

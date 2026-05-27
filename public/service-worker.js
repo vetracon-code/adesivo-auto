@@ -147,3 +147,43 @@ self.addEventListener('message', (event) => {
     event.waitUntil(setBadgeCount(Number(data.count || 0)));
   }
 });
+
+
+/* followme-chat-v2-new-user-notification-click-20260527 */
+self.addEventListener('notificationclick', function(event) {
+  try {
+    const n = event.notification;
+    const data = (n && n.data) || {};
+    const url =
+      data.url ||
+      data.targetUrl ||
+      data.relativeTargetUrl ||
+      (data.data && (data.data.url || data.data.targetUrl || data.data.relativeTargetUrl)) ||
+      '/fm/app/FMDEMO';
+
+    if (n) n.close();
+
+    event.waitUntil((async function(){
+      const allClients = await clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true
+      });
+
+      const absoluteUrl = new URL(url, self.location.origin).href;
+
+      for (const client of allClients) {
+        try {
+          if ('focus' in client && client.url && client.url.includes('/fm/chat-v2/admin/')) {
+            await client.focus();
+            if ('navigate' in client) return client.navigate(absoluteUrl);
+            return;
+          }
+        } catch(e) {}
+      }
+
+      if (clients.openWindow) {
+        return clients.openWindow(absoluteUrl);
+      }
+    })());
+  } catch(e) {}
+});
