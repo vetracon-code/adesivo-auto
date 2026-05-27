@@ -17107,6 +17107,152 @@ function startFollowMeChatV2AttachmentCleanupOnce() {
 startFollowMeChatV2AttachmentCleanupOnce();
 
 
+
+
+/* ============================================================
+   FOLLOWME CHAT V2 ADMIN RAW BINARY ATTACHMENTS 20260527
+   Upload binario diretto: evita base64/JSON e riduce errori 413 su iPhone.
+   ============================================================ */
+app.post('/api/followme/chat-v2/session/:session_id/attachment-raw', express.raw({
+  type: '*/*',
+  limit: '80mb'
+}), async (req, res) => {
+  try {
+    await ensureFollowMeChatV2Runtime();
+
+    const sessionId = Number(req.params.session_id || 0);
+    const sender = String(req.query.sender || req.headers['x-followme-sender'] || 'owner') === 'owner' ? 'owner' : 'visitor';
+
+    if (!sessionId) {
+      return res.status(400).json({ success:false, error:'Sessione mancante.' });
+    }
+
+    /*
+      Fase attuale: allegati binari solo da Admin.
+    */
+    if (sender !== 'owner') {
+      return res.status(403).json({ success:false, error:'Allegati utente non ancora abilitati in Chat V2.' });
+    }
+
+    const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || '');
+
+    if (!buffer.length) {
+      return res.status(400).json({ success:false, error:'File vuoto o mancante.' });
+    }
+
+    const maxBytes = 55 * 1024 * 1024;
+    if (buffer.length > maxBytes) {
+      return res.status(413).json({ success:false, error:'File troppo grande. Limite 55 MB.' });
+    }
+
+    const kind = String(req.query.kind || req.headers['x-followme-kind'] || 'file').trim().toLowerCase();
+    const originalName = String(req.query.filename || req.headers['x-followme-filename'] || 'allegato').trim();
+    const mime = String(req.headers['content-type'] || req.query.mime || 'application/octet-stream').split(';')[0].trim();
+    const label = String(req.query.label || originalName || 'Allegato').trim();
+
+    const sessionRes = await pool.query(
+      `SELECT id, project_id, status, is_blocked
+       FROM followme_chat_sessions
+       WHERE id = $1
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!sessionRes.rows.length) {
+      return res.status(404).json({ success:false, error:'Sessione non trovata.' });
+    }
+
+    const session = sessionRes.rows[0];
+
+    if (session.status !== 'open') {
+      return res.status(409).json({ success:false, closed:true, error:'Chat chiusa.' });
+    }
+
+    const path = require('path');
+    const fs = require('fs');
+
+    const extByMime = {
+      'image/jpeg': '.jpg',
+      'image/png': '.png',
+      'image/webp': '.webp',
+      'image/gif': '.gif',
+      'image/heic': '.heic',
+      'image/heif': '.heif',
+      'video/mp4': '.mp4',
+      'video/quicktime': '.mov',
+      'application/pdf': '.pdf',
+      'text/plain': '.txt'
+    };
+
+    const safeOriginal = originalName
+      .replace(/[^\w.\-àèéìòùÀÈÉÌÒÙ ]+/g, '')
+      .replace(/\s+/g, '_')
+      .slice(0, 90) || 'allegato';
+
+    const currentExt = path.extname(safeOriginal);
+    const ext = currentExt || extByMime[mime] || '';
+    const base = path.basename(safeOriginal, currentExt).replace(/[^\w.\-]+/g, '_') || 'allegato';
+
+    const storedName = `${Date.now()}_${Math.random().toString(16).slice(2,8)}_${base}${ext}`;
+    const uploadDir = path.join(__dirname, 'public', 'uploads', 'followme-chat-v2');
+
+    fs.mkdirSync(uploadDir, { recursive:true });
+
+    const fullPath = path.join(uploadDir, storedName);
+    fs.writeFileSync(fullPath, buffer);
+
+    const publicUrl = `/uploads/followme-chat-v2/${storedName}`;
+
+    const payload = {
+      __followme_attachment_v2: true,
+      temporary: true,
+      ttl_seconds: 120,
+      kind,
+      sender,
+      url: publicUrl,
+      filename: safeOriginal,
+      mime,
+      label,
+      size_bytes: buffer.length,
+      created_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 120000).toISOString()
+    };
+
+    const inserted = await pool.query(
+      `INSERT INTO followme_chat_messages
+       (session_id, project_id, sender, message, created_at)
+       VALUES ($1,$2,$3,$4,NOW())
+       RETURNING id, sender, message, created_at`,
+      [session.id, session.project_id, sender, JSON.stringify(payload)]
+    );
+
+    await pool.query(
+      `UPDATE followme_chat_sessions SET updated_at = NOW(), last_seen_at = NOW() WHERE id = $1`,
+      [session.id]
+    );
+
+    setTimeout(function(){
+      cleanupExpiredFollowMeChatV2Attachments().catch(function(err){
+        console.error('followme chat-v2 delayed cleanup raw error:', err);
+      });
+    }, 125000);
+
+    return res.json({
+      success:true,
+      message:inserted.rows[0],
+      attachment:payload
+    });
+  } catch (err) {
+    console.error('followme chat-v2 raw attachment error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore invio allegato binario Chat V2.',
+      detail:String(err && err.message ? err.message : err)
+    });
+  }
+});
+
+
 /* ============================================================
    FOLLOWME CHAT V2 ADMIN ATTACHMENTS 20260527
    Allegati inviati da Admin verso utente.

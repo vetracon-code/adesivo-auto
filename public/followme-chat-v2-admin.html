@@ -828,7 +828,41 @@
       });
     }
 
-    async function sendAdminAttachmentV2(file, kind){
+    
+    async function uploadRawAttachmentV2(file, kind){
+      const qs = new URLSearchParams({
+        sender:"owner",
+        kind:kind || "file",
+        filename:file.name || "allegato",
+        label:file.name || "Allegato",
+        mime:file.type || "application/octet-stream"
+      });
+
+      const res = await fetch(
+        "/api/followme/chat-v2/session/" + encodeURIComponent(selectedId) + "/attachment-raw?" + qs.toString(),
+        {
+          method:"POST",
+          headers:{
+            "Content-Type": file.type || "application/octet-stream",
+            "X-FollowMe-Sender":"owner",
+            "X-FollowMe-Kind":kind || "file",
+            "X-FollowMe-Filename":file.name || "allegato"
+          },
+          cache:"no-store",
+          body:file
+        }
+      );
+
+      const data = await res.json().catch(()=>null);
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && (data.detail || data.error)) || ("HTTP " + res.status));
+      }
+
+      return data;
+    }
+
+async function sendAdminAttachmentV2(file, kind){
       if(!selectedId || !file) return;
 
       const max = 20 * 1024 * 1024;
@@ -839,16 +873,7 @@
 
       try{
         toast("Invio allegato...");
-        const dataUrl = await fileToDataUrlV2(file);
-
-        const data = await post("/api/followme/chat-v2/session/" + encodeURIComponent(selectedId) + "/attachment", {
-          sender:"owner",
-          kind:kind || "file",
-          filename:file.name || "allegato",
-          mime:file.type || "application/octet-stream",
-          label:file.name || "Allegato",
-          data_url:dataUrl
-        });
+        const data = await uploadRawAttachmentV2(file, kind || "file");
 
         if(data.message) appendMessage(data.message);
         toast("Allegato inviato");
