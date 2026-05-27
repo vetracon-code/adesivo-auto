@@ -10981,5 +10981,171 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
+
+<script id="fix-prova-segnalazione-real-flow-20260527">
+(function(){
+  if (window.__fixProvaSegnalazioneRealFlow20260527) return;
+  window.__fixProvaSegnalazioneRealFlow20260527 = true;
+
+  function $(id){ return document.getElementById(id); }
+
+  function getOwnerCtx(){
+    var params = new URLSearchParams(window.location.search || "");
+
+    var code =
+      params.get("code") ||
+      window.__OWNER_CODE__ ||
+      document.body.getAttribute("data-owner-code") ||
+      localStorage.getItem("owner_saved_code") ||
+      sessionStorage.getItem("owner_saved_code") ||
+      "";
+
+    var plate =
+      params.get("plate") ||
+      window.__OWNER_PLATE__ ||
+      document.body.getAttribute("data-owner-plate") ||
+      localStorage.getItem("owner_saved_plate") ||
+      sessionStorage.getItem("owner_saved_plate") ||
+      "";
+
+    if ((!code || !plate) && window.location.pathname) {
+      var m = String(window.location.pathname).match(/\/owner-app\/([^\/?#]+)\/([^\/?#]+)/i);
+      if (m) {
+        code = code || decodeURIComponent(m[1] || "");
+        plate = plate || decodeURIComponent(m[2] || "");
+      }
+    }
+
+    return {
+      code: String(code || "").trim().toUpperCase(),
+      plate: String(plate || "").trim().toUpperCase()
+    };
+  }
+
+  async function getPublicId(){
+    try {
+      var stored =
+        localStorage.getItem("owner_public_id") ||
+        sessionStorage.getItem("owner_public_id") ||
+        window.__CURRENT_PUBLIC_ID__ ||
+        "";
+      if (stored) return String(stored).trim();
+    } catch(e) {}
+
+    var ctx = getOwnerCtx();
+    if (!ctx.code || !ctx.plate) return "";
+
+    try {
+      var res = await fetch("/api/owner-dashboard", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ code:ctx.code, plate:ctx.plate })
+      });
+
+      var data = await res.json().catch(function(){ return {}; });
+      var publicId = data && data.success && data.data ? String(data.data.public_id || "").trim() : "";
+
+      if (publicId) {
+        try {
+          localStorage.setItem("owner_public_id", publicId);
+          sessionStorage.setItem("owner_public_id", publicId);
+        } catch(e) {}
+      }
+
+      return publicId;
+    } catch(e) {
+      return "";
+    }
+  }
+
+  async function getPublicQrUrl(){
+    var publicId = await getPublicId();
+    if (!publicId) return "";
+
+    if (typeof window.buildPublicQrUrl === "function") {
+      try {
+        var url = window.buildPublicQrUrl(publicId);
+        if (url && url !== "#") return url;
+      } catch(e) {}
+    }
+
+    return "/contact/u/" + encodeURIComponent(publicId);
+  }
+
+  function showRealTestBox(publicQrUrl){
+    var resultEl = $("installActionResult");
+    var explain = $("installExplainBox");
+    var primaryBtn = $("systemCheckPrimaryBtn");
+    var topBox = $("installAppSection") || explain || resultEl || document.body;
+
+    if (explain) explain.style.display = "block";
+
+    if (resultEl) {
+      resultEl.textContent = "Ora puoi fare una prova reale della segnalazione e verificare come ti arriverà l’avviso.";
+    }
+
+    if (primaryBtn) {
+      primaryBtn.textContent = "Prova segnalazione";
+      primaryBtn.style.display = "inline-flex";
+      primaryBtn.dataset.realPublicQrUrl = publicQrUrl || "";
+
+      primaryBtn.onclick = function(ev){
+        if (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (typeof ev.stopImmediatePropagation === "function") ev.stopImmediatePropagation();
+        }
+
+        var url = primaryBtn.dataset.realPublicQrUrl || publicQrUrl || "";
+        if (!url || url === "#") {
+          alert("QR pubblico non ancora disponibile. Premi Aggiorna App e riprova.");
+          return false;
+        }
+
+        window.location.href = url;
+        return false;
+      };
+    }
+
+    if (topBox && topBox.scrollIntoView) {
+      topBox.scrollIntoView({ behavior:"smooth", block:"start" });
+    }
+  }
+
+  async function handlePreviewClick(ev){
+    var btn = ev.target && ev.target.closest ? ev.target.closest("#previewStickerBtn") : null;
+    if (!btn) return;
+
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (typeof ev.stopImmediatePropagation === "function") ev.stopImmediatePropagation();
+
+    var url = await getPublicQrUrl();
+
+    if (!url || url === "#") {
+      alert("QR pubblico non ancora disponibile. Premi Aggiorna App e riprova.");
+      return false;
+    }
+
+    showRealTestBox(url);
+    return false;
+  }
+
+  /*
+    Capture phase: vince sugli handler vecchi che aprivano anteprima adesivo,
+    frame errato o redirect Android diretto.
+  */
+  document.addEventListener("click", handlePreviewClick, true);
+
+  window.fixProvaSegnalazioneRealFlow20260527 = {
+    open: async function(){
+      var url = await getPublicQrUrl();
+      showRealTestBox(url);
+    },
+    url: getPublicQrUrl
+  };
+})();
+</script>
+
 </body>
 </html>
