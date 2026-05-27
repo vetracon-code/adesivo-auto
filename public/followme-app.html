@@ -37133,3 +37133,238 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
   });
 })();
 </script>
+
+<script id="followme-admin-send-hard-stop-final-20260527">
+(function(){
+  if(window.__followmeAdminSendHardStopFinal20260527) return;
+  window.__followmeAdminSendHardStopFinal20260527 = true;
+
+  var sending = false;
+  var lastAt = 0;
+  var sentLocal = Object.create(null);
+
+  function params(){
+    try{ return new URLSearchParams(location.search || ""); }
+    catch(e){ return new URLSearchParams(""); }
+  }
+
+  function sessionId(){
+    return params().get("chatSession") || "";
+  }
+
+  function isAdminChat(){
+    return !!sessionId();
+  }
+
+  function input(){
+    return document.getElementById("followmeOwnerChatInput") ||
+           document.querySelector("#followmeOwnerChatComposer textarea") ||
+           document.querySelector("textarea#followmeOwnerChatInput");
+  }
+
+  function messagesBox(){
+    return document.getElementById("followmeOwnerChatMessages");
+  }
+
+  function esc(s){
+    return String(s || "").replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function toast(msg){
+    try{
+      if(typeof window.toast === "function"){
+        window.toast(msg);
+        return;
+      }
+    }catch(e){}
+
+    try{
+      var el = document.createElement("div");
+      el.textContent = msg;
+      el.style.cssText =
+        "position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));" +
+        "transform:translateX(-50%);z-index:2147483647;background:rgba(18,18,24,.96);" +
+        "color:white;padding:11px 15px;border-radius:999px;font:800 13px system-ui,-apple-system,sans-serif;" +
+        "box-shadow:0 16px 44px rgba(0,0,0,.34);max-width:88vw;text-align:center;";
+      document.body.appendChild(el);
+      setTimeout(function(){ try{ el.remove(); }catch(e){} }, 2300);
+    }catch(e){
+      alert(msg);
+    }
+  }
+
+  function appendOwnerOnce(id, text){
+    var box = messagesBox();
+    if(!box) return;
+
+    id = String(id || "");
+    if(id && sentLocal[id]) return;
+    if(id && box.querySelector('[data-message-id="' + CSS.escape(id) + '"]')) return;
+
+    var div = document.createElement("div");
+    div.className = "followme-owner-chat-bubble owner";
+    if(id) div.setAttribute("data-message-id", id);
+    div.innerHTML = esc(text).replace(/\n/g, "<br>");
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+
+    if(id) sentLocal[id] = true;
+  }
+
+  async function postJson(url, body){
+    var res = await fetch(url, {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "Accept":"application/json"
+      },
+      cache:"no-store",
+      body:JSON.stringify(body || {})
+    });
+
+    var data = await res.json().catch(function(){ return null; });
+
+    return {
+      ok:res.ok,
+      status:res.status,
+      data:data
+    };
+  }
+
+  async function send(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+    }
+
+    if(!isAdminChat()) return false;
+
+    var now = Date.now();
+    if(now - lastAt < 500) return false;
+    lastAt = now;
+
+    if(sending) return false;
+    sending = true;
+
+    var sid = sessionId();
+    var inp = input();
+    var text = inp ? String(inp.value || "").trim() : "";
+
+    if(!sid || !text){
+      sending = false;
+      return false;
+    }
+
+    if(inp) inp.value = "";
+
+    try{
+      var r = await postJson(
+        "/api/followme/chat/session/" + encodeURIComponent(sid) + "/message",
+        {
+          sender:"owner",
+          message:text,
+          client_id:"admin-hard-" + Date.now() + "-" + Math.random().toString(36).slice(2,8)
+        }
+      );
+
+      if(!r.ok || !r.data || !r.data.success){
+        throw new Error((r.data && r.data.error) || ("HTTP " + r.status));
+      }
+
+      var msg = r.data.message || {};
+      appendOwnerOnce(msg.id, text);
+
+      try{
+        if(typeof window.playFollowMeSendSound === "function"){
+          window.playFollowMeSendSound();
+        }
+      }catch(e){}
+
+    }catch(err){
+      if(inp && !inp.value) inp.value = text;
+      toast("Errore invio Admin: " + (err.message || String(err)));
+    }finally{
+      sending = false;
+      try{ inp && inp.focus(); }catch(e){}
+    }
+
+    return false;
+  }
+
+  function isSendTarget(el){
+    if(!el) return false;
+
+    var id = String(el.id || "");
+    var txt = String(el.textContent || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+
+    return (
+      id === "followmeOwnerChatSend" ||
+      id === "followmeAdminSendInline" ||
+      el.closest && (
+        el.closest("#followmeOwnerChatSend") ||
+        el.closest("#followmeAdminSendInline")
+      ) ||
+      txt === "invia"
+    );
+  }
+
+  function globalClickCapture(ev){
+    if(!isAdminChat()) return;
+
+    var target = ev.target;
+    if(isSendTarget(target)){
+      send(ev);
+    }
+  }
+
+  function globalKeyCapture(ev){
+    if(!isAdminChat()) return;
+
+    var inp = input();
+    if(!inp || ev.target !== inp) return;
+
+    if(ev.key === "Enter" && !ev.shiftKey){
+      send(ev);
+    }
+  }
+
+  function boot(){
+    if(!isAdminChat()) return;
+
+    /*
+      Neutralizza onclick diretti dei due pulsanti più probabili.
+      Non clona: evita di rompere layout e riferimenti.
+    */
+    ["followmeOwnerChatSend", "followmeAdminSendInline"].forEach(function(id){
+      var el = document.getElementById(id);
+      if(!el) return;
+      el.onclick = send;
+      el.setAttribute("data-admin-hard-send", "1");
+    });
+  }
+
+  document.addEventListener("click", globalClickCapture, true);
+  document.addEventListener("keydown", globalKeyCapture, true);
+
+  window.followMeAdminSendHardStopFinal20260527 = {
+    send:send,
+    boot:boot
+  };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 150);
+  });
+})();
+</script>
