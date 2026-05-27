@@ -36254,44 +36254,31 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 
 
-<script id="followme-chat-light-sync-no-loadfailed-20260527">
+
+<script id="followme-admin-chat-stable-realtime-20260527">
 (function(){
-  if(window.__followmeChatLightSyncNoLoadFailed20260527) return;
-  window.__followmeChatLightSyncNoLoadFailed20260527 = true;
+  if(window.__followmeAdminChatStableRealtime20260527) return;
+  window.__followmeAdminChatStableRealtime20260527 = true;
 
   /*
     SOLO CHAT ADMIN.
-    Niente wrapper fetch globali.
-    Niente render totale aggressivo ogni 650ms.
-    Refresh leggero e rate-limitato per evitare Load failed.
+    Obiettivo:
+    - messaggi più rapidi senza saturare il browser;
+    - niente doppi persistenti o temporanei;
+    - nessun wrapper fetch globale;
+    - non tocca QR, PDF, preview, URL, card, Extra.
   */
 
-  var runningMessages = false;
-  var runningSessions = false;
-  var lastMessagesAt = 0;
-  var lastSessionsAt = 0;
+  var running = false;
+  var lastPollAt = 0;
+  var failCount = 0;
+  var observerReady = false;
 
-  function code(){
-    try{
-      var m = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/i);
-      if(m && m[1]) return decodeURIComponent(m[1]).trim().toUpperCase();
-    }catch(e){}
-    return "FM-DEMO";
-  }
-
-  function isChatMode(){
-    return document.body && (
-      document.body.classList.contains("followme-chat-only-mode") ||
-      document.body.classList.contains("followme-chat-waiting-mode") ||
-      !!document.getElementById("followmeOwnerChatMessages")
-    );
-  }
-
-  function sid(){
+  function sessionId(){
     try{
       var p = new URLSearchParams(location.search || "");
-      var fromUrl = p.get("chatSession");
-      if(fromUrl) return String(fromUrl);
+      var urlSid = p.get("chatSession");
+      if(urlSid) return String(urlSid);
 
       var active = document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active");
       if(active){
@@ -36305,13 +36292,16 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     return "";
   }
 
-  function maxMessageId(){
-    var max = 0;
-    document.querySelectorAll("#followmeOwnerChatMessages [data-message-id]").forEach(function(el){
-      var n = Number(el.getAttribute("data-message-id") || el.dataset.messageId || 0);
-      if(n > max) max = n;
-    });
-    return max;
+  function isChatOpen(){
+    return !!(
+      document.body.classList.contains("followme-chat-only-mode") ||
+      document.body.classList.contains("followme-chat-waiting-mode") ||
+      document.getElementById("followmeOwnerChatMessages")
+    );
+  }
+
+  function box(){
+    return document.getElementById("followmeOwnerChatMessages");
   }
 
   function esc(v){
@@ -36320,9 +36310,10 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     });
   }
 
-  function cleanText(text){
-    var t = String(text || "");
+  function cleanText(v){
+    var t = String(v || "");
     var low = t.toLowerCase();
+
     if(
       low.includes("vuoi sapere cosa sono") ||
       low.includes("vuoi maggiori informazioni") ||
@@ -36333,130 +36324,259 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     ){
       return "";
     }
+
     return t;
   }
 
-  function appendMessage(m){
-    if(!m || !m.id) return;
+  function bubbleSignature(el){
+    if(!el) return "";
 
-    var box = document.getElementById("followmeOwnerChatMessages");
-    if(!box) return;
+    var id = el.getAttribute("data-message-id") || el.dataset.messageId || "";
+    if(id && !String(id).startsWith("local-")) return "id:" + id;
 
-    var id = String(m.id);
-    if(box.querySelector('[data-message-id="' + CSS.escape(id) + '"]')) return;
+    var txt = String(el.textContent || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
 
-    var text = cleanText(m.message);
-    if(!text) return;
+    if(!txt) return "";
 
-    var sender = String(m.sender || "").toLowerCase();
-    var cls = "followme-owner-chat-bubble";
-    if(sender === "owner" || sender === "admin") cls += " owner";
-    if(sender === "system") cls += " system";
-
-    var div = document.createElement("div");
-    div.className = cls;
-    div.setAttribute("data-message-id", id);
-    div.innerHTML = esc(text).replace(/\n/g, "<br>");
-
-    box.appendChild(div);
-    box.scrollTop = box.scrollHeight;
+    var sender = el.classList.contains("owner") ? "owner" : "visitor";
+    return sender + ":" + txt;
   }
 
-  async function refreshMessages(){
-    var sessionId = sid();
-    if(!sessionId || runningMessages) return;
+  function dedupeNow(){
+    var b = box();
+    if(!b) return;
 
-    var now = Date.now();
-    if(now - lastMessagesAt < 900) return;
-    lastMessagesAt = now;
-    runningMessages = true;
+    var seen = new Set();
+    var items = Array.from(b.querySelectorAll(".followme-owner-chat-bubble, .message, .bubble"));
 
-    try{
-      var after = maxMessageId();
+    items.forEach(function(el){
+      /*
+        Deduplichiamo solo bolle dirette/realistiche dentro il box chat.
+        Evita di toccare allegati interni.
+      */
+      if(!b.contains(el)) return;
+      if(el.closest(".followme-attachment-card")) return;
 
-      var res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/messages?after=" + encodeURIComponent(after) + "&v=" + Date.now(), {
-        cache:"no-store"
-      });
+      var sig = bubbleSignature(el);
+      if(!sig) return;
 
-      var data = await res.json().catch(function(){ return null; });
-
-      if(res.ok && data && data.success && Array.isArray(data.messages)){
-        data.messages.forEach(appendMessage);
-      }
-    }catch(e){
-      console.warn("chat light refresh messages error:", e && e.message ? e.message : e);
-    }finally{
-      runningMessages = false;
-    }
-  }
-
-  function updateChipNames(sessions){
-    if(!Array.isArray(sessions)) return;
-
-    sessions.forEach(function(s, index){
-      if(!s || !s.id) return;
-
-      var chip = document.querySelector(
-        '#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + CSS.escape(String(s.id)) + '"], ' +
-        '#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-id="' + CSS.escape(String(s.id)) + '"]'
-      );
-
-      if(!chip) return;
-
-      var name = String(s.display_name || "").trim();
-      if(name){
-        chip.textContent = name;
-        chip.classList.add("has-name");
+      if(seen.has(sig)){
+        try{ el.remove(); }catch(e){}
+      }else{
+        seen.add(sig);
       }
     });
   }
 
-  async function refreshSessions(){
-    if(runningSessions) return;
+  function maxServerMessageId(){
+    var max = 0;
+
+    var b = box();
+    if(!b) return 0;
+
+    b.querySelectorAll("[data-message-id]").forEach(function(el){
+      var raw = String(el.getAttribute("data-message-id") || el.dataset.messageId || "");
+      if(raw.startsWith("local-")) return;
+
+      var n = Number(raw || 0);
+      if(Number.isFinite(n) && n > max) max = n;
+    });
+
+    return max;
+  }
+
+  function appendServerMessage(m){
+    var b = box();
+    if(!b || !m || !m.id) return;
+
+    var id = String(m.id);
+
+    if(b.querySelector('[data-message-id="' + CSS.escape(id) + '"]')) return;
+
+    var text = cleanText(m.message);
+    if(!text) return;
+
+    /*
+      Se esiste già una bolla locale uguale, la trasformo in bolla server
+      invece di aggiungerne un'altra.
+    */
+    var sender = String(m.sender || "").toLowerCase();
+    var isOwner = sender === "owner" || sender === "admin";
+
+    var normalized = text.replace(/\s+/g, " ").trim().toLowerCase();
+    var localMatch = null;
+
+    b.querySelectorAll(".followme-owner-chat-bubble").forEach(function(el){
+      if(localMatch) return;
+
+      var raw = String(el.getAttribute("data-message-id") || "");
+      if(raw && !raw.startsWith("local-")) return;
+
+      var sameSender = isOwner ? el.classList.contains("owner") : !el.classList.contains("owner");
+      var sameText = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase() === normalized;
+
+      if(sameSender && sameText) localMatch = el;
+    });
+
+    if(localMatch){
+      localMatch.setAttribute("data-message-id", id);
+      localMatch.innerHTML = esc(text).replace(/\n/g, "<br>");
+      return;
+    }
+
+    var div = document.createElement("div");
+    div.className = "followme-owner-chat-bubble" + (isOwner ? " owner" : "");
+    div.setAttribute("data-message-id", id);
+    div.innerHTML = esc(text).replace(/\n/g, "<br>");
+
+    b.appendChild(div);
+    b.scrollTop = b.scrollHeight;
+  }
+
+  async function poll(){
+    var sid = sessionId();
+    if(!sid || running || !isChatOpen()) return;
 
     var now = Date.now();
-    if(now - lastSessionsAt < 1600) return;
-    lastSessionsAt = now;
-    runningSessions = true;
+    var minGap = failCount > 0 ? 1400 : 700;
+    if(now - lastPollAt < minGap) return;
+
+    lastPollAt = now;
+    running = true;
 
     try{
-      var res = await fetch("/api/followme/" + encodeURIComponent(code()) + "/chat/sessions?v=" + Date.now(), {
-        cache:"no-store"
+      var after = maxServerMessageId();
+
+      var res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sid) + "/messages?after=" + encodeURIComponent(after) + "&v=" + Date.now(), {
+        cache:"no-store",
+        headers:{ "Accept":"application/json" }
       });
 
       var data = await res.json().catch(function(){ return null; });
 
-      if(res.ok && data && data.success && Array.isArray(data.sessions)){
-        updateChipNames(data.sessions);
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || ("HTTP " + res.status));
       }
-    }catch(e){
-      console.warn("chat light refresh sessions error:", e && e.message ? e.message : e);
+
+      failCount = 0;
+
+      if(Array.isArray(data.messages)){
+        data.messages.forEach(appendServerMessage);
+      }
+
+      dedupeNow();
+
+    }catch(err){
+      failCount = Math.min(5, failCount + 1);
+      console.warn("[FollowMe admin chat sync]", err && err.message ? err.message : err);
     }finally{
-      runningSessions = false;
+      running = false;
     }
   }
 
-  function forceAfterNameClick(){
+  function bindSendRefresh(){
+    var send1 = document.getElementById("followmeOwnerChatSend");
+    var send2 = document.getElementById("followmeAdminSendInline");
+    var input = document.getElementById("followmeOwnerChatInput");
+
+    [send1, send2].forEach(function(btn){
+      if(!btn || btn.dataset.fmStableRealtimeBound === "1") return;
+      btn.dataset.fmStableRealtimeBound = "1";
+      btn.addEventListener("click", function(){
+        setTimeout(poll, 120);
+        setTimeout(poll, 420);
+        setTimeout(poll, 900);
+      }, true);
+    });
+
+    if(input && input.dataset.fmStableRealtimeEnterBound !== "1"){
+      input.dataset.fmStableRealtimeEnterBound = "1";
+      input.addEventListener("keydown", function(ev){
+        if(ev.key === "Enter" && !ev.shiftKey){
+          setTimeout(poll, 120);
+          setTimeout(poll, 420);
+          setTimeout(poll, 900);
+        }
+      }, true);
+    }
+  }
+
+  function bindDedupeObserver(){
+    if(observerReady) return;
+
+    var b = box();
+    if(!b) return;
+
+    observerReady = true;
+
+    var scheduled = false;
+    var obs = new MutationObserver(function(){
+      if(scheduled) return;
+      scheduled = true;
+
+      requestAnimationFrame(function(){
+        scheduled = false;
+        dedupeNow();
+      });
+    });
+
+    obs.observe(b, { childList:true, subtree:false });
+  }
+
+  async function refreshNamesFast(){
+    try{
+      var code = "FM-DEMO";
+      var m = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m && m[1]) code = decodeURIComponent(m[1]).trim().toUpperCase();
+
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/chat/sessions?v=" + Date.now(), {
+        cache:"no-store",
+        headers:{ "Accept":"application/json" }
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+      if(!res.ok || !data || !data.success || !Array.isArray(data.sessions)) return;
+
+      data.sessions.forEach(function(s){
+        if(!s || !s.id || !s.display_name) return;
+
+        var chip = document.querySelector(
+          '#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-session-id="' + CSS.escape(String(s.id)) + '"], ' +
+          '#followmeOwnerChatSessionStrip .followme-chat-session-chip[data-id="' + CSS.escape(String(s.id)) + '"]'
+        );
+
+        if(chip){
+          chip.textContent = String(s.display_name).trim();
+          chip.classList.add("has-name");
+        }
+      });
+    }catch(e){}
+  }
+
+  function bindNameRefresh(){
     document.addEventListener("click", function(ev){
       var btn = ev.target && ev.target.closest ? ev.target.closest("button") : null;
       if(!btn) return;
 
-      var txt = String(btn.textContent || "").trim().toLowerCase();
+      var txt = String(btn.textContent || "").toLowerCase();
       if(txt.includes("conferma") || txt.includes("salva")){
-        setTimeout(refreshSessions, 150);
-        setTimeout(refreshSessions, 700);
-        setTimeout(refreshSessions, 1400);
+        setTimeout(refreshNamesFast, 150);
+        setTimeout(refreshNamesFast, 700);
+        setTimeout(refreshNamesFast, 1600);
       }
     }, true);
   }
 
   function boot(){
-    forceAfterNameClick();
+    bindSendRefresh();
+    bindDedupeObserver();
 
-    if(!isChatMode()) return;
-
-    setTimeout(refreshMessages, 300);
-    setTimeout(refreshSessions, 600);
+    setTimeout(poll, 150);
+    setTimeout(poll, 700);
+    setTimeout(refreshNamesFast, 900);
   }
 
   if(document.readyState === "loading"){
@@ -36467,25 +36587,32 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
   window.addEventListener("pageshow", boot);
   window.addEventListener("focus", function(){
-    setTimeout(refreshMessages, 150);
-    setTimeout(refreshSessions, 250);
+    failCount = 0;
+    setTimeout(poll, 80);
+    setTimeout(refreshNamesFast, 200);
   });
+
+  bindNameRefresh();
 
   setInterval(function(){
     if(document.visibilityState === "hidden") return;
-    if(!isChatMode()) return;
-    refreshMessages();
+    poll();
+  }, 750);
+
+  setInterval(function(){
+    if(document.visibilityState === "hidden") return;
+    dedupeNow();
   }, 1200);
 
   setInterval(function(){
     if(document.visibilityState === "hidden") return;
-    if(!isChatMode()) return;
-    refreshSessions();
+    refreshNamesFast();
   }, 2500);
 
-  window.followMeChatLightSyncNoLoadFailed20260527 = {
-    refreshMessages:refreshMessages,
-    refreshSessions:refreshSessions
+  window.followMeAdminChatStableRealtime20260527 = {
+    poll:poll,
+    dedupe:dedupeNow,
+    refreshNames:refreshNamesFast
   };
 })();
 </script>

@@ -6368,19 +6368,25 @@
 
 
 
-<script id="followme-public-chat-light-sync-no-loadfailed-20260527">
+
+<script id="followme-public-chat-stable-realtime-20260527">
 (function(){
-  if(window.__followmePublicChatLightSyncNoLoadFailed20260527) return;
-  window.__followmePublicChatLightSyncNoLoadFailed20260527 = true;
+  if(window.__followmePublicChatStableRealtime20260527) return;
+  window.__followmePublicChatStableRealtime20260527 = true;
 
   /*
     SOLO CHAT UTENTE.
-    Niente render totale aggressivo.
-    Aggiunge solo i nuovi messaggi non ancora presenti.
+    Obiettivo:
+    - arrivo messaggi più rapido;
+    - niente doppi;
+    - niente render completo aggressivo;
+    - niente wrapper fetch globale.
   */
 
   var running = false;
-  var lastAt = 0;
+  var lastPollAt = 0;
+  var failCount = 0;
+  var observerReady = false;
 
   function sid(){
     try{
@@ -6399,24 +6405,16 @@
            document.querySelector(".chat .messages");
   }
 
-  function maxMessageId(){
-    var max = 0;
-    document.querySelectorAll("[data-message-id]").forEach(function(el){
-      var n = Number(el.getAttribute("data-message-id") || el.dataset.messageId || 0);
-      if(n > max) max = n;
-    });
-    return max;
-  }
-
   function esc(v){
     return String(v || "").replace(/[&<>"']/g, function(c){
       return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
     });
   }
 
-  function cleanText(text){
-    var t = String(text || "");
+  function cleanText(v){
+    var t = String(v || "");
     var low = t.toLowerCase();
+
     if(
       low.includes("vuoi sapere cosa sono") ||
       low.includes("vuoi maggiori informazioni") ||
@@ -6427,14 +6425,69 @@
     ){
       return "";
     }
+
     return t;
   }
 
-  function append(m){
-    if(!m || !m.id) return;
+  function itemSignature(el){
+    if(!el) return "";
 
+    var id = el.getAttribute("data-message-id") || el.dataset.messageId || "";
+    if(id && !String(id).startsWith("local-")) return "id:" + id;
+
+    var txt = String(el.textContent || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+
+    if(!txt) return "";
+
+    var sender = el.classList.contains("user") ? "user" :
+                 el.classList.contains("admin") ? "admin" :
+                 el.classList.contains("bot") ? "bot" :
+                 "system";
+
+    return sender + ":" + txt;
+  }
+
+  function dedupeNow(){
     var b = box();
     if(!b) return;
+
+    var seen = new Set();
+    var items = Array.from(b.querySelectorAll(".message"));
+
+    items.forEach(function(el){
+      if(!b.contains(el)) return;
+
+      var sig = itemSignature(el);
+      if(!sig) return;
+
+      if(seen.has(sig)){
+        try{ el.remove(); }catch(e){}
+      }else{
+        seen.add(sig);
+      }
+    });
+  }
+
+  function maxServerMessageId(){
+    var max = 0;
+
+    document.querySelectorAll("[data-message-id]").forEach(function(el){
+      var raw = String(el.getAttribute("data-message-id") || el.dataset.messageId || "");
+      if(raw.startsWith("local-")) return;
+
+      var n = Number(raw || 0);
+      if(Number.isFinite(n) && n > max) max = n;
+    });
+
+    return max;
+  }
+
+  function appendServerMessage(m){
+    var b = box();
+    if(!b || !m || !m.id) return;
 
     var id = String(m.id);
     if(document.querySelector('[data-message-id="' + CSS.escape(id) + '"]')) return;
@@ -6446,9 +6499,35 @@
     var cls = "message ";
 
     if(sender === "owner" || sender === "admin") cls += "admin";
-    else if(sender === "user") cls += "user";
+    else if(sender === "user" || sender === "visitor") cls += "user";
     else if(sender === "bot") cls += "bot";
     else cls += "system";
+
+    var normalized = text.replace(/\s+/g, " ").trim().toLowerCase();
+    var localMatch = null;
+
+    b.querySelectorAll(".message").forEach(function(el){
+      if(localMatch) return;
+
+      var raw = String(el.getAttribute("data-message-id") || "");
+      if(raw && !raw.startsWith("local-")) return;
+
+      var sameText = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase() === normalized;
+      var sameSender =
+        (cls.includes("admin") && el.classList.contains("admin")) ||
+        (cls.includes("user") && el.classList.contains("user")) ||
+        (cls.includes("bot") && el.classList.contains("bot")) ||
+        (cls.includes("system") && el.classList.contains("system"));
+
+      if(sameText && sameSender) localMatch = el;
+    });
+
+    if(localMatch){
+      localMatch.setAttribute("data-message-id", id);
+      var bubble0 = localMatch.querySelector(".bubble");
+      if(bubble0) bubble0.innerHTML = esc(text).replace(/\n/g, "<br>");
+      return;
+    }
 
     var wrap = document.createElement("div");
     wrap.className = cls;
@@ -6463,37 +6542,100 @@
     b.scrollTop = b.scrollHeight;
   }
 
-  async function refresh(){
+  async function poll(){
     var sessionId = sid();
     if(!sessionId || running) return;
 
     var now = Date.now();
-    if(now - lastAt < 900) return;
-    lastAt = now;
+    var minGap = failCount > 0 ? 1400 : 700;
+    if(now - lastPollAt < minGap) return;
+
+    lastPollAt = now;
     running = true;
 
     try{
-      var after = maxMessageId();
+      var after = maxServerMessageId();
 
       var res = await fetch("/api/followme/chat/session/" + encodeURIComponent(sessionId) + "/messages?after=" + encodeURIComponent(after) + "&v=" + Date.now(), {
-        cache:"no-store"
+        cache:"no-store",
+        headers:{ "Accept":"application/json" }
       });
 
       var data = await res.json().catch(function(){ return null; });
 
-      if(res.ok && data && data.success && Array.isArray(data.messages)){
-        data.messages.forEach(append);
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || ("HTTP " + res.status));
       }
-    }catch(e){
-      console.warn("public chat light refresh error:", e && e.message ? e.message : e);
+
+      failCount = 0;
+
+      if(Array.isArray(data.messages)){
+        data.messages.forEach(appendServerMessage);
+      }
+
+      dedupeNow();
+
+    }catch(err){
+      failCount = Math.min(5, failCount + 1);
+      console.warn("[FollowMe public chat sync]", err && err.message ? err.message : err);
     }finally{
       running = false;
     }
   }
 
+  function bindSendRefresh(){
+    var send = document.getElementById("sendBtn");
+    var input = document.querySelector("textarea");
+
+    if(send && send.dataset.fmStableRealtimeBound !== "1"){
+      send.dataset.fmStableRealtimeBound = "1";
+      send.addEventListener("click", function(){
+        setTimeout(poll, 120);
+        setTimeout(poll, 420);
+        setTimeout(poll, 900);
+      }, true);
+    }
+
+    if(input && input.dataset.fmStableRealtimeEnterBound !== "1"){
+      input.dataset.fmStableRealtimeEnterBound = "1";
+      input.addEventListener("keydown", function(ev){
+        if(ev.key === "Enter" && !ev.shiftKey){
+          setTimeout(poll, 120);
+          setTimeout(poll, 420);
+          setTimeout(poll, 900);
+        }
+      }, true);
+    }
+  }
+
+  function bindDedupeObserver(){
+    if(observerReady) return;
+
+    var b = box();
+    if(!b) return;
+
+    observerReady = true;
+
+    var scheduled = false;
+    var obs = new MutationObserver(function(){
+      if(scheduled) return;
+      scheduled = true;
+
+      requestAnimationFrame(function(){
+        scheduled = false;
+        dedupeNow();
+      });
+    });
+
+    obs.observe(b, { childList:true, subtree:false });
+  }
+
   function boot(){
-    setTimeout(refresh, 300);
-    setTimeout(refresh, 900);
+    bindSendRefresh();
+    bindDedupeObserver();
+
+    setTimeout(poll, 150);
+    setTimeout(poll, 700);
   }
 
   if(document.readyState === "loading"){
@@ -6503,13 +6645,24 @@
   }
 
   window.addEventListener("pageshow", boot);
-  window.addEventListener("focus", function(){ setTimeout(refresh, 150); });
+  window.addEventListener("focus", function(){
+    failCount = 0;
+    setTimeout(poll, 80);
+  });
 
   setInterval(function(){
     if(document.visibilityState === "hidden") return;
-    refresh();
+    poll();
+  }, 750);
+
+  setInterval(function(){
+    if(document.visibilityState === "hidden") return;
+    dedupeNow();
   }, 1200);
 
-  window.followMePublicChatLightSyncNoLoadFailed20260527 = refresh;
+  window.followMePublicChatStableRealtime20260527 = {
+    poll:poll,
+    dedupe:dedupeNow
+  };
 })();
 </script>
