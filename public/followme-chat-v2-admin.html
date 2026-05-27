@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>FollowMe Chat V2 Admin</title>
+  <style>
+    :root{
+      --wa-green:#00a884;
+      --wa-green-dark:#008069;
+      --wa-bg:#efeae2;
+      --wa-panel:#f0f2f5;
+      --wa-line:rgba(0,0,0,.08);
+      --wa-text:#111b21;
+      --wa-muted:#667781;
+      --bubble-admin:#d9fdd3;
+      --bubble-user:#ffffff;
+      --danger:#ff3b30;
+      --shadow:0 14px 40px rgba(0,0,0,.16);
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+      background:var(--wa-bg);
+      color:var(--wa-text);
+      overflow:hidden;
+    }
+
+    .app{
+      height:100dvh;
+      display:grid;
+      grid-template-rows:auto auto 1fr auto;
+      background:
+        radial-gradient(circle at 20% 10%,rgba(255,255,255,.35),transparent 28%),
+        linear-gradient(180deg,#e6ddd4,var(--wa-bg));
+    }
+
+    .top{
+      min-height:58px;
+      padding:calc(8px + env(safe-area-inset-top)) 10px 8px;
+      background:var(--wa-green-dark);
+      color:white;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      box-shadow:0 2px 12px rgba(0,0,0,.12);
+      z-index:5;
+    }
+
+    .back{
+      width:38px;
+      height:38px;
+      border-radius:999px;
+      border:0;
+      background:rgba(255,255,255,.12);
+      color:white;
+      font-size:22px;
+      font-weight:800;
+    }
+
+    .title{
+      flex:1;
+      min-width:0;
+      display:grid;
+      gap:1px;
+    }
+
+    .title strong{
+      font-size:16px;
+      line-height:1.15;
+      letter-spacing:-.02em;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    .title span{
+      font-size:12px;
+      opacity:.9;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    .reset{
+      border:0;
+      border-radius:999px;
+      background:var(--danger);
+      color:white;
+      min-height:34px;
+      padding:0 13px;
+      font-weight:900;
+      box-shadow:0 8px 20px rgba(255,59,48,.24);
+    }
+
+    .sessions{
+      height:54px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 10px;
+      overflow-x:auto;
+      background:#ffffff;
+      border-bottom:1px solid var(--wa-line);
+      scrollbar-width:none;
+    }
+    .sessions::-webkit-scrollbar{display:none}
+
+    .chip{
+      flex:0 0 auto;
+      min-width:46px;
+      height:36px;
+      border-radius:999px;
+      border:1px solid rgba(0,0,0,.08);
+      background:#f7f8f8;
+      color:#263238;
+      font-size:13px;
+      font-weight:900;
+      padding:0 12px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:5px;
+      box-shadow:0 1px 2px rgba(0,0,0,.04);
+    }
+    .chip.active{
+      background:var(--wa-green);
+      color:white;
+      border-color:transparent;
+    }
+    .chip.new::after{
+      content:"";
+      width:8px;
+      height:8px;
+      border-radius:99px;
+      background:#ff3b30;
+      display:block;
+    }
+    .chip.blocked{
+      opacity:.55;
+      text-decoration:line-through;
+    }
+
+    .controls{
+      min-height:48px;
+      padding:7px 10px;
+      display:flex;
+      gap:8px;
+      background:rgba(255,255,255,.86);
+      border-bottom:1px solid var(--wa-line);
+      overflow-x:auto;
+      scrollbar-width:none;
+    }
+    .controls::-webkit-scrollbar{display:none}
+    .control{
+      flex:0 0 auto;
+      min-height:34px;
+      border-radius:999px;
+      padding:0 12px;
+      border:1px solid rgba(0,0,0,.08);
+      background:#fff;
+      color:#1f2c33;
+      font-weight:850;
+      font-size:12px;
+    }
+    .control.on{
+      background:#d9fdd3;
+      border-color:rgba(0,168,132,.26);
+      color:#056b55;
+    }
+    .control.danger{
+      background:#fff4f2;
+      color:#b42318;
+      border-color:rgba(255,59,48,.18);
+    }
+
+    .messages{
+      min-height:0;
+      overflow-y:auto;
+      padding:14px 10px 16px;
+      display:flex;
+      flex-direction:column;
+      gap:7px;
+      background:
+        linear-gradient(rgba(239,234,226,.88),rgba(239,234,226,.88)),
+        radial-gradient(circle at 10% 20%,rgba(0,0,0,.04) 0 1px,transparent 1px);
+      background-size:auto,22px 22px;
+    }
+
+    .empty{
+      margin:auto;
+      max-width:320px;
+      text-align:center;
+      background:rgba(255,255,255,.76);
+      border:1px solid rgba(0,0,0,.06);
+      border-radius:22px;
+      padding:18px;
+      color:var(--wa-muted);
+      box-shadow:0 10px 30px rgba(0,0,0,.08);
+    }
+    .empty strong{
+      display:block;
+      color:#263238;
+      margin-bottom:5px;
+      font-size:16px;
+    }
+
+    .bubble{
+      max-width:82%;
+      padding:8px 10px 6px;
+      border-radius:12px;
+      line-height:1.28;
+      font-size:15px;
+      box-shadow:0 1px 1px rgba(0,0,0,.08);
+      word-wrap:break-word;
+      white-space:pre-wrap;
+    }
+    .bubble.visitor{
+      align-self:flex-start;
+      background:var(--bubble-user);
+      border-top-left-radius:4px;
+    }
+    .bubble.owner{
+      align-self:flex-end;
+      background:var(--bubble-admin);
+      border-top-right-radius:4px;
+    }
+    .time{
+      display:block;
+      margin-top:3px;
+      font-size:10px;
+      color:#667781;
+      text-align:right;
+    }
+
+    .composer{
+      padding:8px 8px calc(8px + env(safe-area-inset-bottom));
+      background:var(--wa-panel);
+      display:flex;
+      align-items:flex-end;
+      gap:7px;
+      border-top:1px solid rgba(0,0,0,.06);
+    }
+
+    .plus{
+      width:42px;
+      height:42px;
+      flex:0 0 auto;
+      border-radius:999px;
+      border:0;
+      background:transparent;
+      color:#54656f;
+      font-size:30px;
+      line-height:1;
+    }
+
+    .input-wrap{
+      flex:1;
+      min-height:42px;
+      background:white;
+      border-radius:22px;
+      display:flex;
+      align-items:center;
+      padding:0 12px;
+      box-shadow:0 1px 2px rgba(0,0,0,.06);
+    }
+
+    textarea{
+      width:100%;
+      border:0;
+      outline:0;
+      resize:none;
+      max-height:110px;
+      min-height:22px;
+      line-height:22px;
+      font:500 16px/22px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+      color:#111b21;
+      background:transparent;
+      padding:10px 0;
+    }
+
+    .send{
+      width:44px;
+      height:44px;
+      flex:0 0 auto;
+      border-radius:999px;
+      border:0;
+      background:var(--wa-green);
+      color:white;
+      display:grid;
+      place-items:center;
+      box-shadow:0 8px 18px rgba(0,168,132,.28);
+    }
+    .send svg{
+      width:22px;
+      height:22px;
+      fill:none;
+      stroke:currentColor;
+      stroke-width:2.4;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+      transform:translateX(1px);
+    }
+
+    .send:disabled,
+    .reset:disabled,
+    .control:disabled{
+      opacity:.55;
+    }
+
+    .toast{
+      position:fixed;
+      left:50%;
+      bottom:calc(74px + env(safe-area-inset-bottom));
+      transform:translateX(-50%) translateY(12px);
+      z-index:50;
+      max-width:88vw;
+      padding:11px 15px;
+      border-radius:999px;
+      background:rgba(17,27,33,.94);
+      color:white;
+      font-size:13px;
+      font-weight:800;
+      opacity:0;
+      pointer-events:none;
+      transition:.18s ease;
+      box-shadow:var(--shadow);
+      text-align:center;
+    }
+    .toast.show{
+      opacity:1;
+      transform:translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="top">
+      <button class="back" id="backBtn" type="button">‹</button>
+      <div class="title">
+        <strong id="title">FollowMe Chat V2</strong>
+        <span id="subtitle">In attesa di utenti...</span>
+      </div>
+      <button class="reset" id="resetBtn" type="button">Reset</button>
+    </header>
+
+    <nav class="sessions" id="sessions"></nav>
+
+    <section class="controls" id="controls">
+      <button class="control" id="extraBtn" type="button" disabled>Extra OFF</button>
+      <button class="control danger" id="blockBtn" type="button" disabled>Blocca</button>
+      <button class="control" id="qrBtn" type="button">Link utente</button>
+    </section>
+
+    <section class="messages" id="messages">
+      <div class="empty">
+        <strong>Chat attiva</strong>
+        Fai entrare un utente dal QR. Quando si collega, comparirà qui.
+      </div>
+    </section>
+
+    <footer class="composer">
+      <button class="plus" id="plusBtn" type="button">+</button>
+      <div class="input-wrap">
+        <textarea id="textInput" rows="1" placeholder="Scrivi un messaggio..."></textarea>
+      </div>
+      <button class="send" id="sendBtn" type="button" aria-label="Invia">
+        <svg viewBox="0 0 24 24"><path d="M4 12h15"></path><path d="M13 6l6 6-6 6"></path></svg>
+      </button>
+    </footer>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+  (function(){
+    const pathMatch = location.pathname.match(/\/fm\/chat-v2\/admin\/([^\/?#]+)/i);
+    const CODE = pathMatch ? decodeURIComponent(pathMatch[1]).trim().toUpperCase() : "FMDEMO";
+
+    let sessions = [];
+    let selectedId = "";
+    let lastMessageId = 0;
+    let messagesById = new Set();
+    let pollMessagesTimer = null;
+    let pollSessionsTimer = null;
+    let sending = false;
+
+    const els = {
+      title:document.getElementById("title"),
+      subtitle:document.getElementById("subtitle"),
+      sessions:document.getElementById("sessions"),
+      messages:document.getElementById("messages"),
+      input:document.getElementById("textInput"),
+      send:document.getElementById("sendBtn"),
+      reset:document.getElementById("resetBtn"),
+      back:document.getElementById("backBtn"),
+      extra:document.getElementById("extraBtn"),
+      block:document.getElementById("blockBtn"),
+      qr:document.getElementById("qrBtn"),
+      plus:document.getElementById("plusBtn"),
+      toast:document.getElementById("toast")
+    };
+
+    function toast(msg){
+      els.toast.textContent = msg;
+      els.toast.classList.add("show");
+      clearTimeout(els.toast._t);
+      els.toast._t = setTimeout(()=>els.toast.classList.remove("show"), 2200);
+    }
+
+    function esc(s){
+      return String(s || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function timeOf(v){
+      try{
+        return new Date(v).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"});
+      }catch(e){
+        return "";
+      }
+    }
+
+    async function api(url, opts){
+      const res = await fetch(url, Object.assign({cache:"no-store"}, opts || {}));
+      const data = await res.json().catch(()=>null);
+      if(!res.ok || !data || data.success === false){
+        throw new Error((data && data.error) || ("HTTP " + res.status));
+      }
+      return data;
+    }
+
+    async function post(url, body){
+      return api(url, {
+        method:"POST",
+        headers:{"Content-Type":"application/json","Accept":"application/json"},
+        body:JSON.stringify(body || {})
+      });
+    }
+
+    function selectedSession(){
+      return sessions.find(s => String(s.id) === String(selectedId)) || null;
+    }
+
+    function labelFor(s, idx){
+      const n = Number(s.display_index || idx + 1);
+      return "U" + n;
+    }
+
+    function renderSessions(){
+      els.sessions.innerHTML = "";
+      sessions.forEach((s, idx)=>{
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "chip" +
+          (String(s.id) === String(selectedId) ? " active" : "") +
+          (!s.owner_opened_at ? " new" : "") +
+          (s.is_blocked ? " blocked" : "");
+        b.textContent = s.display_name ? labelFor(s,idx) + " · " + s.display_name : labelFor(s,idx);
+        b.onclick = () => selectSession(s.id);
+        els.sessions.appendChild(b);
+      });
+    }
+
+    function renderControls(){
+      const s = selectedSession();
+      const has = !!s;
+      els.extra.disabled = !has;
+      els.block.disabled = !has;
+      els.input.disabled = !has || (s && s.is_blocked);
+      els.send.disabled = !has || (s && s.is_blocked);
+
+      if(!has){
+        els.subtitle.textContent = "In attesa di utenti...";
+        els.extra.textContent = "Extra OFF";
+        els.extra.className = "control";
+        els.block.textContent = "Blocca";
+        els.block.className = "control danger";
+        return;
+      }
+
+      els.subtitle.textContent = (s.display_name || s.visitor_label || "Utente collegato") +
+        (s.is_blocked ? " · bloccato" : " · online");
+
+      els.extra.textContent = s.uploads_enabled ? "Extra ON" : "Extra OFF";
+      els.extra.className = "control" + (s.uploads_enabled ? " on" : "");
+
+      els.block.textContent = s.is_blocked ? "Sblocca" : "Blocca";
+      els.block.className = "control" + (s.is_blocked ? " on" : " danger");
+    }
+
+    function emptyMessage(text){
+      els.messages.innerHTML =
+        '<div class="empty"><strong>FollowMe Chat</strong>' + esc(text) + '</div>';
+    }
+
+    function clearMessages(){
+      els.messages.innerHTML = "";
+      messagesById = new Set();
+      lastMessageId = 0;
+    }
+
+    function appendMessage(m){
+      if(!m || !m.id) return;
+      const id = String(m.id);
+      if(messagesById.has(id)) return;
+      messagesById.add(id);
+
+      const div = document.createElement("div");
+      div.className = "bubble " + (m.sender === "owner" ? "owner" : "visitor");
+      div.dataset.id = id;
+      div.innerHTML = esc(m.message).replace(/\n/g,"<br>") +
+        '<span class="time">' + esc(timeOf(m.created_at)) + '</span>';
+      els.messages.appendChild(div);
+      els.messages.scrollTop = els.messages.scrollHeight;
+      lastMessageId = Math.max(lastMessageId, Number(m.id) || 0);
+    }
+
+    async function loadSessions(){
+      try{
+        const data = await api("/api/followme/" + encodeURIComponent(CODE) + "/chat-v2/sessions?v=" + Date.now());
+        sessions = Array.isArray(data.sessions) ? data.sessions : [];
+
+        if(!selectedId && sessions.length){
+          selectedId = String(sessions[0].id);
+          clearMessages();
+          await loadMessages(true);
+        }
+
+        if(selectedId && !sessions.some(s => String(s.id) === String(selectedId))){
+          selectedId = sessions[0] ? String(sessions[0].id) : "";
+          clearMessages();
+          if(selectedId) await loadMessages(true);
+        }
+
+        renderSessions();
+        renderControls();
+
+        if(!sessions.length){
+          emptyMessage("Nessun utente collegato. Lascia questa schermata aperta.");
+        }
+      }catch(err){
+        toast("Errore sessioni: " + err.message);
+      }
+    }
+
+    async function selectSession(id){
+      selectedId = String(id || "");
+      clearMessages();
+      renderSessions();
+      renderControls();
+      await loadMessages(true);
+    }
+
+    async function loadMessages(initial){
+      if(!selectedId) return;
+      try{
+        const after = initial ? 0 : lastMessageId;
+        const data = await api("/api/followme/chat-v2/session/" + encodeURIComponent(selectedId) + "/messages?after=" + after + "&v=" + Date.now());
+        const rows = Array.isArray(data.messages) ? data.messages : [];
+        if(initial && !rows.length){
+          emptyMessage("Conversazione aperta. Scrivi il primo messaggio.");
+        }else if(initial){
+          els.messages.innerHTML = "";
+        }
+        rows.forEach(appendMessage);
+      }catch(err){
+        toast("Errore messaggi: " + err.message);
+      }
+    }
+
+    async function send(){
+      if(sending || !selectedId) return;
+      const text = els.input.value.trim();
+      if(!text) return;
+
+      sending = true;
+      els.input.value = "";
+      autosize();
+
+      try{
+        const data = await post("/api/followme/chat-v2/session/" + encodeURIComponent(selectedId) + "/message", {
+          sender:"owner",
+          message:text
+        });
+        if(data.message) appendMessage(data.message);
+      }catch(err){
+        els.input.value = text;
+        autosize();
+        toast("Errore invio: " + err.message);
+      }finally{
+        sending = false;
+        els.input.focus();
+      }
+    }
+
+    async function toggleExtra(){
+      const s = selectedSession();
+      if(!s) return;
+      try{
+        const data = await post("/api/followme/chat-v2/session/" + encodeURIComponent(s.id) + "/settings", {
+          uploads_enabled: !s.uploads_enabled
+        });
+        Object.assign(s, data.session || {});
+        renderSessions();
+        renderControls();
+        toast(s.uploads_enabled ? "Extra attivati" : "Extra disattivati");
+      }catch(err){
+        toast("Errore Extra: " + err.message);
+      }
+    }
+
+    async function toggleBlock(){
+      const s = selectedSession();
+      if(!s) return;
+      try{
+        const data = await post("/api/followme/chat-v2/session/" + encodeURIComponent(s.id) + "/settings", {
+          is_blocked: !s.is_blocked
+        });
+        Object.assign(s, data.session || {});
+        renderSessions();
+        renderControls();
+        toast(s.is_blocked ? "Utente bloccato" : "Utente sbloccato");
+      }catch(err){
+        toast("Errore blocco: " + err.message);
+      }
+    }
+
+    async function resetAll(){
+      if(!confirm("Vuoi chiudere tutte le chat e spegnere il servizio chat?")) return;
+      els.reset.disabled = true;
+      els.reset.textContent = "Reset...";
+      try{
+        await post("/api/followme/" + encodeURIComponent(CODE) + "/chat-v2/reset", {});
+        location.href = "/fm/app/" + encodeURIComponent(CODE);
+      }catch(err){
+        els.reset.disabled = false;
+        els.reset.textContent = "Reset";
+        toast("Reset non riuscito: " + err.message);
+      }
+    }
+
+    function autosize(){
+      els.input.style.height = "auto";
+      els.input.style.height = Math.min(110, els.input.scrollHeight) + "px";
+    }
+
+    function userUrl(){
+      return location.origin + "/fm/u/" + encodeURIComponent(CODE);
+    }
+
+    function bind(){
+      els.send.onclick = send;
+      els.input.addEventListener("input", autosize);
+      els.input.addEventListener("keydown", ev=>{
+        if(ev.key === "Enter" && !ev.shiftKey){
+          ev.preventDefault();
+          send();
+        }
+      });
+      els.extra.onclick = toggleExtra;
+      els.block.onclick = toggleBlock;
+      els.reset.onclick = resetAll;
+      els.back.onclick = () => { location.href = "/fm/app/" + encodeURIComponent(CODE); };
+      els.qr.onclick = async () => {
+        const u = userUrl();
+        try{
+          await navigator.clipboard.writeText(u);
+          toast("Link utente copiato");
+        }catch(e){
+          prompt("Link utente", u);
+        }
+      };
+      els.plus.onclick = () => toast("Gli allegati arriveranno nella fase Extra V2.");
+    }
+
+    function start(){
+      bind();
+      loadSessions();
+      pollSessionsTimer = setInterval(()=>{
+        if(document.visibilityState === "visible") loadSessions();
+      }, 1500);
+      pollMessagesTimer = setInterval(()=>{
+        if(document.visibilityState === "visible" && selectedId) loadMessages(false);
+      }, 800);
+      document.addEventListener("visibilitychange", ()=>{
+        if(document.visibilityState === "visible"){
+          loadSessions();
+          loadMessages(false);
+        }
+      });
+    }
+
+    start();
+  })();
+  </script>
+</body>
+</html>

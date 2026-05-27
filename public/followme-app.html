@@ -37368,3 +37368,111 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
   });
 })();
 </script>
+
+<script id="followme-home-chat-v2-button-hook-20260527">
+(function(){
+  if(window.__followmeHomeChatV2ButtonHook20260527) return;
+  window.__followmeHomeChatV2ButtonHook20260527 = true;
+
+  function code(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m && m[1]) return decodeURIComponent(m[1]).trim().toUpperCase();
+    }catch(e){}
+
+    try{
+      if(typeof getCode === "function"){
+        var c = getCode();
+        if(c) return String(c).trim().toUpperCase();
+      }
+    }catch(e){}
+
+    return "FMDEMO";
+  }
+
+  function isMainApp(){
+    try{
+      var p = new URLSearchParams(location.search || "");
+      if(p.get("chatSession")) return false;
+    }catch(e){}
+    return /\/fm\/app\//i.test(location.pathname);
+  }
+
+  function toast(msg){
+    try{
+      if(typeof window.toast === "function") return window.toast(msg);
+    }catch(e){}
+    alert(msg);
+  }
+
+  async function activateChatV2(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+    }
+
+    var btn = document.getElementById("followmeOtherOpenChat");
+    var old = btn ? btn.textContent : "";
+
+    if(btn){
+      btn.disabled = true;
+      btn.textContent = "Attivo chat...";
+    }
+
+    try{
+      var c = code();
+      var res = await fetch("/api/followme/" + encodeURIComponent(c) + "/chat-v2/enable", {
+        method:"POST",
+        headers:{"Content-Type":"application/json","Accept":"application/json"},
+        cache:"no-store",
+        body:JSON.stringify({})
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        throw new Error((data && data.error) || ("HTTP " + res.status));
+      }
+
+      location.href = data.admin_url || ("/fm/chat-v2/admin/" + encodeURIComponent(c));
+
+    }catch(err){
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = old || "Parla con gli utenti";
+      }
+      toast("Errore Chat V2: " + (err.message || String(err)));
+    }
+
+    return false;
+  }
+
+  function bind(){
+    if(!isMainApp()) return;
+
+    var btn = document.getElementById("followmeOtherOpenChat");
+    if(!btn) return;
+
+    btn.textContent = "Parla con gli utenti";
+    btn.setAttribute("data-followme-chat-v2", "1");
+
+    if(btn.dataset.chatV2Bound === "1") return;
+    btn.dataset.chatV2Bound = "1";
+
+    btn.onclick = activateChatV2;
+    btn.addEventListener("click", activateChatV2, true);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bind);
+  }else{
+    bind();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(bind, 150);
+    setTimeout(bind, 800);
+  });
+})();
+</script>

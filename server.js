@@ -16509,3 +16509,461 @@ if (require.main === module) {
 }
 
 module.exports = { app, startServer, initDb, validateRuntimeEnv };
+
+
+/* ============================================================
+   FOLLOWME CHAT V2 CLEAN 20260527
+   Frontend nuovo, tabelle esistenti, bot spento.
+   ============================================================ */
+
+async function ensureFollowMeChatV2Runtime() {
+  if (typeof ensureFollowMeRuntimeFast === 'function') {
+    await ensureFollowMeRuntimeFast();
+  } else if (typeof ensureFollowMeChatSchemaFast === 'function') {
+    await ensureFollowMeChatSchemaFast();
+  } else if (typeof ensureFollowMeChatSchema === 'function') {
+    await ensureFollowMeChatSchema();
+  }
+
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS chat_mode_enabled BOOLEAN DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS chat_public_token TEXT`);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS chat_token_rotated_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS bot_enabled BOOLEAN DEFAULT FALSE`);
+  await pool.query(`UPDATE followme_projects SET bot_enabled = FALSE WHERE bot_enabled IS NULL`);
+
+  await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS display_name TEXT`);
+  await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS uploads_enabled BOOLEAN DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS blocked_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS owner_opened_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ`);
+
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS followme_projects_chat_public_token_uq ON followme_projects(chat_public_token) WHERE chat_public_token IS NOT NULL`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS followme_chat_sessions_project_open_v2_idx ON followme_chat_sessions(project_id, status, created_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS followme_chat_messages_session_id_v2_idx ON followme_chat_messages(session_id, id ASC)`);
+}
+
+function makeFollowMeChatV2Token() {
+  return Math.random().toString(36).slice(2, 8).toUpperCase() +
+         Math.random().toString(36).slice(2, 8).toUpperCase();
+}
+
+async function ensureFollowMeChatV2Token(projectId) {
+  await ensureFollowMeChatV2Runtime();
+
+  const current = await pool.query(
+    `SELECT chat_public_token FROM followme_projects WHERE id = $1 LIMIT 1`,
+    [projectId]
+  );
+
+  if (current.rows[0]?.chat_public_token) return current.rows[0].chat_public_token;
+
+  for (let i = 0; i < 8; i++) {
+    const token = makeFollowMeChatV2Token();
+    try {
+      await pool.query(
+        `UPDATE followme_projects
+         SET chat_public_token = $2, chat_token_rotated_at = NOW(), bot_enabled = FALSE
+         WHERE id = $1`,
+        [projectId, token]
+      );
+      return token;
+    } catch (err) {
+      if (!String(err.message || '').includes('duplicate')) throw err;
+    }
+  }
+
+  throw new Error('Impossibile generare token chat V2.');
+}
+
+app.get('/fm/chat-v2/admin/:code', async (req, res) => {
+  return res.sendFile(require('path').join(__dirname, 'public', 'followme-chat-v2-admin.html'));
+});
+
+app.get('/fm/chat-v2/c/:chat_token', async (req, res) => {
+  return res.sendFile(require('path').join(__dirname, 'public', 'followme-chat-v2-user.html'));
+});
+
+app.post('/api/followme/:code/chat-v2/enable', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeChatV2Runtime();
+
+    const code = normalizeFollowMeCode(req.params.code);
+    const q = await pool.query(
+      `SELECT id, code, public_id FROM followme_projects WHERE code = $1 OR public_id = $1 LIMIT 1`,
+      [code]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).json({ success:false, error:'FollowMe QR non trovato.' });
+    }
+
+    const project = q.rows[0];
+    const token = await ensureFollowMeChatV2Token(project.id);
+
+    await pool.query(
+      `UPDATE followme_projects
+       SET chat_mode_enabled = TRUE,
+           bot_enabled = FALSE,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [project.id]
+    );
+
+    return res.json({
+      success:true,
+      chat_mode_enabled:true,
+      bot_enabled:false,
+      project_code:project.code,
+      chat_public_token:token,
+      chat_url:`/fm/chat-v2/c/${token}`,
+      admin_url:`/fm/chat-v2/admin/${encodeURIComponent(project.code)}`
+    });
+  } catch (err) {
+    console.error('followme chat-v2 enable error:', err);
+    return res.status(500).json({ success:false, error:'Errore attivazione Chat V2.' });
+  }
+});
+
+app.post('/api/followme/:code/chat-v2/reset', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeChatV2Runtime();
+
+    const code = normalizeFollowMeCode(req.params.code);
+    const q = await pool.query(
+      `SELECT id, code, public_id FROM followme_projects WHERE code = $1 OR public_id = $1 LIMIT 1`,
+      [code]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).json({ success:false, error:'FollowMe QR non trovato.' });
+    }
+
+    const project = q.rows[0];
+
+    const closed = await pool.query(
+      `UPDATE followme_chat_sessions
+       SET status = 'closed',
+           uploads_enabled = FALSE,
+           is_blocked = FALSE,
+           blocked_at = NULL,
+           updated_at = NOW()
+       WHERE project_id = $1
+         AND status = 'open'
+       RETURNING id`,
+      [project.id]
+    );
+
+    await pool.query(
+      `UPDATE followme_projects
+       SET chat_mode_enabled = FALSE,
+           bot_enabled = FALSE,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [project.id]
+    );
+
+    return res.json({
+      success:true,
+      project_code:project.code,
+      closed_sessions:closed.rows.length,
+      chat_mode_enabled:false,
+      bot_enabled:false
+    });
+  } catch (err) {
+    console.error('followme chat-v2 reset error:', err);
+    return res.status(500).json({ success:false, error:'Errore reset Chat V2.' });
+  }
+});
+
+app.get('/api/followme/:code/chat-v2/sessions', async (req, res) => {
+  try {
+    await ensureFollowMeChatV2Runtime();
+
+    const code = normalizeFollowMeCode(req.params.code);
+    const q = await pool.query(
+      `SELECT id, code, chat_mode_enabled
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).json({ success:false, error:'FollowMe QR non trovato.' });
+    }
+
+    const project = q.rows[0];
+
+    const sessions = await pool.query(
+      `WITH ordered AS (
+        SELECT
+          s.*,
+          ROW_NUMBER() OVER (ORDER BY s.created_at ASC, s.id ASC) AS display_index
+        FROM followme_chat_sessions s
+        WHERE s.project_id = $1
+          AND s.status = 'open'
+      )
+      SELECT
+        id,
+        display_index,
+        visitor_label,
+        display_name,
+        COALESCE(uploads_enabled, FALSE) AS uploads_enabled,
+        COALESCE(is_blocked, FALSE) AS is_blocked,
+        blocked_at,
+        status,
+        created_at,
+        last_seen_at,
+        owner_opened_at,
+        updated_at
+      FROM ordered
+      ORDER BY created_at ASC, id ASC
+      LIMIT 50`,
+      [project.id]
+    );
+
+    return res.json({
+      success:true,
+      project_code:project.code,
+      chat_mode_enabled:project.chat_mode_enabled === true,
+      sessions:sessions.rows
+    });
+  } catch (err) {
+    console.error('followme chat-v2 sessions error:', err);
+    return res.status(500).json({ success:false, error:'Errore lettura sessioni Chat V2.' });
+  }
+});
+
+app.post('/api/followme/chat-v2/c/:chat_token/session', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeChatV2Runtime();
+
+    const token = String(req.params.chat_token || '').trim();
+
+    const q = await pool.query(
+      `SELECT id, code, public_id, chat_mode_enabled, chat_public_token
+       FROM followme_projects
+       WHERE chat_public_token = $1
+       LIMIT 1`,
+      [token]
+    );
+
+    if (!q.rows.length || q.rows[0].chat_mode_enabled !== true) {
+      return res.status(404).json({ success:false, error:'Chat non disponibile.' });
+    }
+
+    const project = q.rows[0];
+    const existingId = Number(req.body?.session_id || 0);
+
+    if (existingId) {
+      const existing = await pool.query(
+        `SELECT id, project_id, visitor_label, display_name, uploads_enabled, is_blocked, status, created_at, last_seen_at
+         FROM followme_chat_sessions
+         WHERE id = $1 AND project_id = $2
+         LIMIT 1`,
+        [existingId, project.id]
+      );
+
+      if (existing.rows.length) {
+        await pool.query(`UPDATE followme_chat_sessions SET last_seen_at = NOW() WHERE id = $1`, [existingId]);
+        return res.json({
+          success:true,
+          reused:true,
+          project_code:project.code,
+          session_id:existing.rows[0].id,
+          session:existing.rows[0]
+        });
+      }
+    }
+
+    const visitorLabel = 'Utente ' + Math.random().toString(36).slice(2, 6).toUpperCase();
+
+    const inserted = await pool.query(
+      `INSERT INTO followme_chat_sessions
+       (project_id, chat_public_token, visitor_label, status, created_at, last_seen_at, uploads_enabled, is_blocked)
+       VALUES ($1,$2,$3,'open',NOW(),NOW(),FALSE,FALSE)
+       RETURNING id, project_id, visitor_label, display_name, uploads_enabled, is_blocked, status, created_at, last_seen_at`,
+      [project.id, token, visitorLabel]
+    );
+
+    return res.json({
+      success:true,
+      reused:false,
+      project_code:project.code,
+      session_id:inserted.rows[0].id,
+      session:inserted.rows[0]
+    });
+  } catch (err) {
+    console.error('followme chat-v2 create session error:', err);
+    return res.status(500).json({ success:false, error:'Errore creazione sessione Chat V2.' });
+  }
+});
+
+app.get('/api/followme/chat-v2/session/:session_id/state', async (req, res) => {
+  try {
+    await ensureFollowMeChatV2Runtime();
+
+    const sessionId = Number(req.params.session_id || 0);
+    if (!sessionId) return res.status(400).json({ success:false, error:'Sessione mancante.' });
+
+    const q = await pool.query(
+      `SELECT id, project_id, visitor_label, display_name, uploads_enabled, is_blocked, blocked_at, status, created_at, last_seen_at, updated_at
+       FROM followme_chat_sessions
+       WHERE id = $1
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!q.rows.length) return res.status(404).json({ success:false, error:'Sessione non trovata.' });
+
+    await pool.query(`UPDATE followme_chat_sessions SET last_seen_at = NOW() WHERE id = $1`, [sessionId]);
+
+    return res.json({ success:true, session:q.rows[0] });
+  } catch (err) {
+    console.error('followme chat-v2 state error:', err);
+    return res.status(500).json({ success:false, error:'Errore stato Chat V2.' });
+  }
+});
+
+app.get('/api/followme/chat-v2/session/:session_id/messages', async (req, res) => {
+  try {
+    await ensureFollowMeChatV2Runtime();
+
+    const sessionId = Number(req.params.session_id || 0);
+    const after = Number(req.query.after || 0);
+
+    if (!sessionId) return res.status(400).json({ success:false, error:'Sessione mancante.' });
+
+    const s = await pool.query(
+      `SELECT id, project_id, status FROM followme_chat_sessions WHERE id = $1 LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!s.rows.length) return res.status(404).json({ success:false, error:'Sessione non trovata.' });
+
+    const messages = await pool.query(
+      `SELECT id, sender, message, created_at
+       FROM followme_chat_messages
+       WHERE session_id = $1
+         AND id > $2
+       ORDER BY id ASC
+       LIMIT 100`,
+      [sessionId, after]
+    );
+
+    return res.json({
+      success:true,
+      session_status:s.rows[0].status,
+      messages:messages.rows
+    });
+  } catch (err) {
+    console.error('followme chat-v2 messages error:', err);
+    return res.status(500).json({ success:false, error:'Errore lettura messaggi Chat V2.' });
+  }
+});
+
+app.post('/api/followme/chat-v2/session/:session_id/message', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeChatV2Runtime();
+
+    const sessionId = Number(req.params.session_id || 0);
+    const sender = String(req.body?.sender || '') === 'owner' ? 'owner' : 'visitor';
+    const message = String(req.body?.message || '').trim();
+
+    if (!sessionId || !message) {
+      return res.status(400).json({ success:false, error:'Messaggio mancante.' });
+    }
+
+    const q = await pool.query(
+      `SELECT id, project_id, status, is_blocked
+       FROM followme_chat_sessions
+       WHERE id = $1
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!q.rows.length) return res.status(404).json({ success:false, error:'Sessione non trovata.' });
+
+    const session = q.rows[0];
+
+    if (session.status !== 'open') {
+      return res.status(409).json({ success:false, closed:true, error:'Chat chiusa.' });
+    }
+
+    if (sender === 'visitor' && session.is_blocked === true) {
+      return res.status(403).json({ success:false, blocked:true, error:'Sei stato bloccato dal sistema.' });
+    }
+
+    const inserted = await pool.query(
+      `INSERT INTO followme_chat_messages
+       (session_id, project_id, sender, message, created_at)
+       VALUES ($1,$2,$3,$4,NOW())
+       RETURNING id, sender, message, created_at`,
+      [session.id, session.project_id, sender, message]
+    );
+
+    await pool.query(`UPDATE followme_chat_sessions SET last_seen_at = NOW(), updated_at = NOW() WHERE id = $1`, [session.id]);
+
+    return res.json({
+      success:true,
+      message:inserted.rows[0]
+    });
+  } catch (err) {
+    console.error('followme chat-v2 post message error:', err);
+    return res.status(500).json({ success:false, error:'Errore invio messaggio Chat V2.' });
+  }
+});
+
+app.post('/api/followme/chat-v2/session/:session_id/settings', express.json(), async (req, res) => {
+  try {
+    await ensureFollowMeChatV2Runtime();
+
+    const sessionId = Number(req.params.session_id || 0);
+    if (!sessionId) return res.status(400).json({ success:false, error:'Sessione mancante.' });
+
+    const hasUploads = typeof req.body?.uploads_enabled === 'boolean';
+    const hasBlocked = typeof req.body?.is_blocked === 'boolean';
+
+    if (!hasUploads && !hasBlocked) {
+      return res.status(400).json({ success:false, error:'Nessuna impostazione valida.' });
+    }
+
+    const current = await pool.query(
+      `SELECT id, project_id, uploads_enabled, is_blocked
+       FROM followme_chat_sessions
+       WHERE id = $1 AND status = 'open'
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!current.rows.length) {
+      return res.status(404).json({ success:false, error:'Sessione non trovata o chiusa.' });
+    }
+
+    const row = current.rows[0];
+    const nextUploads = hasUploads ? req.body.uploads_enabled : !!row.uploads_enabled;
+    const nextBlocked = hasBlocked ? req.body.is_blocked : !!row.is_blocked;
+
+    const updated = await pool.query(
+      `UPDATE followme_chat_sessions
+       SET uploads_enabled = $2,
+           is_blocked = $3,
+           blocked_at = CASE WHEN $3 = TRUE THEN NOW() ELSE NULL END,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, project_id, visitor_label, display_name, uploads_enabled, is_blocked, blocked_at, status, updated_at`,
+      [sessionId, nextUploads, nextBlocked]
+    );
+
+    return res.json({
+      success:true,
+      session:updated.rows[0]
+    });
+  } catch (err) {
+    console.error('followme chat-v2 settings error:', err);
+    return res.status(500).json({ success:false, error:'Errore impostazioni Chat V2.' });
+  }
+});
+
