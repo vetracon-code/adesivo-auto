@@ -601,6 +601,17 @@
   <input id="adminCameraInputV2" type="file" accept="image/*" capture="environment" style="display:none">
   <input id="adminFileInputV2" type="file" accept=".pdf,image/*,video/*,application/pdf,text/plain" style="display:none">
 
+  <div class="voice-recorder-sheet" id="adminVoiceRecorderV2" aria-hidden="true">
+    <div class="voice-recorder-title">Messaggio vocale</div>
+    <div class="voice-recorder-sub">Registra un vocale temporaneo. Durata massima 20 secondi.</div>
+    <div class="voice-recorder-time" id="adminVoiceTimerV2">00:00</div>
+    <div class="voice-recorder-actions">
+      <button class="voice-cancel" id="adminVoiceCancelV2" type="button">Annulla</button>
+      <button class="voice-start" id="adminVoiceStartV2" type="button">Registra</button>
+      <button class="voice-send" id="adminVoiceSendV2" type="button" disabled>Invia</button>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script>
@@ -1063,6 +1074,7 @@ async function sendAdminAttachmentV2(file, kind){
         const data = await uploadRawAttachmentV2(file, kind || "file");
 
         if(data.message) appendMessage(data.message);
+        try { await loadMessages(false); } catch(e) {}
         toast("Allegato inviato");
       }catch(err){
         toast("Errore allegato: " + err.message);
@@ -1079,7 +1091,14 @@ async function sendAdminAttachmentV2(file, kind){
 
     function openVoiceRecorderV2(){
       closeExtraMenuV2();
-      if(!els.voiceSheet) return;
+      if(!selectedId){
+        toast("Seleziona prima un utente collegato.");
+        return;
+      }
+      if(!els.voiceSheet){
+        toast("Registratore vocale non inizializzato.");
+        return;
+      }
       voiceBlobV2 = null;
       voiceChunksV2 = [];
       if(els.voiceSend) els.voiceSend.disabled = true;
@@ -1295,6 +1314,26 @@ async function sendAdminAttachmentV2(file, kind){
       if(els.pickPhoto) els.pickPhoto.onclick = () => { closeExtraMenuV2(); els.photoInput && els.photoInput.click(); };
       if(els.takePhoto) els.takePhoto.onclick = () => { closeExtraMenuV2(); els.cameraInput && els.cameraInput.click(); };
       if(els.pickFile) els.pickFile.onclick = () => { closeExtraMenuV2(); els.fileInput && els.fileInput.click(); };
+
+      if(els.voiceMsg) els.voiceMsg.onclick = () => {
+        if(!selectedId){
+          toast("Seleziona prima un utente collegato.");
+          return;
+        }
+        openVoiceRecorderV2();
+      };
+
+      if(els.voiceStart) els.voiceStart.onclick = stopOrRestartVoiceV2;
+      if(els.voiceCancel) els.voiceCancel.onclick = closeVoiceRecorderV2;
+      if(els.voiceSend) els.voiceSend.onclick = sendVoiceV2;
+
+      if(els.locationBtn) els.locationBtn.onclick = () => {
+        if(!selectedId){
+          toast("Seleziona prima un utente collegato.");
+          return;
+        }
+        sendAdminLocationV2();
+      };
 
       if(els.photoInput) els.photoInput.onchange = () => {
         const f = els.photoInput.files && els.photoInput.files[0];
