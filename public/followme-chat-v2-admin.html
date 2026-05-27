@@ -771,6 +771,61 @@
       return null;
     }
 
+
+    function parseMapCoordsV2(att){
+      const lat = Number(att.latitude || att.lat || 0);
+      const lng = Number(att.longitude || att.lng || att.lon || 0);
+
+      if(Number.isFinite(lat) && Number.isFinite(lng) && lat && lng){
+        return { lat, lng };
+      }
+
+      const raw = String(att.url || att.maps_url || "");
+      const m = raw.match(/q=([^&]+)/i);
+      if(m && m[1]){
+        const q = decodeURIComponent(m[1]).trim();
+        const mm = q.match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
+        if(mm){
+          return { lat:Number(mm[1]), lng:Number(mm[2]) };
+        }
+      }
+
+      const mm2 = raw.match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
+      if(mm2){
+        return { lat:Number(mm2[1]), lng:Number(mm2[2]) };
+      }
+
+      return null;
+    }
+
+    function buildDeviceMapUrlV2(att){
+      const coords = parseMapCoordsV2(att);
+      const fallback = String(att.url || att.maps_url || "");
+      if(!coords) return fallback || "https://maps.google.com";
+
+      const lat = coords.lat;
+      const lng = coords.lng;
+      const ua = navigator.userAgent || "";
+      const isApple = /iPad|iPhone|iPod|Macintosh|Mac OS X/i.test(ua);
+      const isAndroid = /Android/i.test(ua);
+
+      if(isApple){
+        return "https://maps.apple.com/?q=" + encodeURIComponent(lat + "," + lng);
+      }
+
+      if(isAndroid){
+        return "geo:" + encodeURIComponent(lat + "," + lng) + "?q=" + encodeURIComponent(lat + "," + lng);
+      }
+
+      return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(lat + "," + lng);
+    }
+
+    function buildEmbeddedMapUrlV2(att){
+      const coords = parseMapCoordsV2(att);
+      if(!coords) return "";
+      return "https://maps.google.com/maps?q=" + encodeURIComponent(coords.lat + "," + coords.lng) + "&z=16&output=embed";
+    }
+
     function renderAttachmentV2(att, createdAt){
       const isImage = String(att.mime || "").startsWith("image/");
       const isVoice = String(att.kind || "") === "voice" || String(att.mime || "").startsWith("audio/");
