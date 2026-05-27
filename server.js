@@ -17147,34 +17147,59 @@ async function sendFollowMeChatV2NewUserPush(project, sessionId) {
     });
 
     /*
-      Recupero robusto iscrizioni:
-      usiamo project_id se presente; in caso di vecchie righe, proviamo anche code/public_id.
+      Recupero iscrizioni push robusto:
+      la tabella può avere schema vecchio, quindi non assumiamo is_active/project_id/code/public_id.
     */
-    let subs;
-    try {
-      subs = await pool.query(
-        `SELECT id, endpoint, p256dh, auth
-         FROM followme_push_subscriptions
-         WHERE is_active IS DISTINCT FROM FALSE
-           AND (
-             project_id = $1
-             OR code = $2
-             OR public_id = $3
-           )
-         LIMIT 200`,
-        [project.id, project.code, project.public_id || project.code]
-      );
-    } catch (err) {
-      /*
-        Fallback per schema vecchio senza code/public_id/project_id.
-      */
-      subs = await pool.query(
-        `SELECT id, endpoint, p256dh, auth
-         FROM followme_push_subscriptions
-         WHERE is_active IS DISTINCT FROM FALSE
-         LIMIT 200`
-      );
+    const colInfo = await pool.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_name = 'followme_push_subscriptions'`
+    );
+
+    const cols = new Set(colInfo.rows.map(r => r.column_name));
+
+    const where = [];
+    const params = [];
+
+    if (cols.has('is_active')) {
+      where.push(`is_active IS DISTINCT FROM FALSE`);
     }
+
+    const projectFilters = [];
+
+    if (cols.has('project_id')) {
+      params.push(project.id);
+      projectFilters.push(`project_id = $${params.length}`);
+    }
+
+    if (cols.has('code')) {
+      params.push(project.code);
+      projectFilters.push(`code = $${params.length}`);
+    }
+
+    if (cols.has('public_id')) {
+      params.push(project.public_id || project.code);
+      projectFilters.push(`public_id = $${params.length}`);
+    }
+
+    /*
+      Se esistono colonne progetto, filtro sul progetto.
+      Se non esistono, mando a tutte le subscription disponibili:
+      è coerente con la richiesta "tutti i possessori che hanno salvato l'app".
+    */
+    if (projectFilters.length) {
+      where.push(`(${projectFilters.join(' OR ')})`);
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+    const subs = await pool.query(
+      `SELECT id, endpoint, p256dh, auth
+       FROM followme_push_subscriptions
+       ${whereSql}
+       LIMIT 200`,
+      params
+    );
 
     let sent = 0;
     let failed = 0;
