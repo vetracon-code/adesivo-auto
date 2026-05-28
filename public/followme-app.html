@@ -35489,6 +35489,189 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 
 <script id="FOLLOWME_CLEAN_LEGACY_CHAT_PATHS_20260528"></script>
+
+<script id="FOLLOWME_CHAT_V2_STABLE_ACTIVATOR_NO_ABORT_20260528">
+(function(){
+  "use strict";
+
+  function code(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m && m[1]) return decodeURIComponent(m[1]).trim();
+
+      var p = new URLSearchParams(location.search || "");
+      var c = p.get("code") || p.get("public_id") || "";
+      if(c) return String(c).trim();
+
+      if(window.FOLLOWME_CODE) return String(window.FOLLOWME_CODE).trim();
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function isChatButton(el){
+    if(!el) return false;
+
+    var id = String(el.id || "").toLowerCase();
+    var txt = String(el.textContent || el.innerText || "").trim().toLowerCase();
+
+    return (
+      id === "followmeotheropenchat" ||
+      txt === "attiva chat" ||
+      txt.indexOf("attiva chat") >= 0 ||
+      txt === "parla con gli utenti" ||
+      txt.indexOf("parla con gli utenti") >= 0
+    );
+  }
+
+  async function fetchJsonNoAbort(url, opts){
+    /*
+      Niente AbortController qui:
+      il problema attuale è proprio che vecchi script abortiscono il fetch.
+    */
+    var res = await fetch(url, Object.assign({
+      cache:"no-store",
+      credentials:"same-origin",
+      headers:{
+        "Accept":"application/json",
+        "Content-Type":"application/json"
+      }
+    }, opts || {}));
+
+    var data = null;
+    try{ data = await res.json(); }catch(e){}
+
+    if(!res.ok || !data || data.success === false){
+      throw new Error((data && (data.error || data.detail)) || ("HTTP " + res.status));
+    }
+
+    return data;
+  }
+
+  function sleep(ms){
+    return new Promise(function(resolve){ setTimeout(resolve, ms); });
+  }
+
+  async function waitReady(c, fallbackAdminUrl){
+    var last = null;
+
+    for(var i=0; i<12; i++){
+      try{
+        var ready = await fetchJsonNoAbort(
+          "/api/followme/" + encodeURIComponent(c) + "/chat-v2/ready?v=" + Date.now(),
+          { method:"GET" }
+        );
+
+        last = ready;
+
+        if(ready.ready === true && ready.admin_url){
+          return ready.admin_url;
+        }
+
+        if(ready.ready === true && fallbackAdminUrl){
+          return fallbackAdminUrl;
+        }
+      }catch(e){
+        last = e;
+      }
+
+      await sleep(450);
+    }
+
+    throw new Error("Chat V2 non pronta dopo l'attivazione.");
+  }
+
+  async function openChatV2(btn){
+    var c = code();
+    var oldText = btn ? String(btn.textContent || "") : "";
+
+    if(btn){
+      btn.disabled = true;
+      btn.textContent = "Attivo chat...";
+      btn.setAttribute("aria-busy","true");
+    }
+
+    try{
+      var enable = await fetchJsonNoAbort(
+        "/api/followme/" + encodeURIComponent(c) + "/chat-v2/enable?v=" + Date.now(),
+        {
+          method:"POST",
+          body:JSON.stringify({})
+        }
+      );
+
+      var fallbackAdmin = enable.admin_url || ("/fm/chat-v2/admin/" + encodeURIComponent(enable.project_code || c));
+      var adminUrl = await waitReady(c, fallbackAdmin);
+
+      location.href = adminUrl + (adminUrl.indexOf("?") >= 0 ? "&" : "?") + "v=" + Date.now();
+    }catch(err){
+      alert("Errore attivazione chat: " + (err.message || String(err)));
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = oldText || "Parla con gli utenti";
+        btn.removeAttribute("aria-busy");
+      }
+    }
+  }
+
+  function normalizeAndRebindButton(){
+    try{
+      var buttons = Array.prototype.slice.call(document.querySelectorAll("button,a"));
+
+      buttons.forEach(function(el){
+        if(!isChatButton(el)) return;
+
+        /*
+          Clono il pulsante per rimuovere i listener vecchi già agganciati.
+          Questo è il punto decisivo contro fetch abort / vecchie funzioni.
+        */
+        if(el.dataset.chatV2StableActivator === "1") return;
+
+        var clone = el.cloneNode(true);
+        clone.textContent = "Parla con gli utenti";
+        clone.title = "Parla con gli utenti";
+        clone.setAttribute("aria-label","Parla con gli utenti");
+        clone.dataset.chatV2StableActivator = "1";
+
+        clone.addEventListener("click", function(ev){
+          ev.preventDefault();
+          ev.stopPropagation();
+          if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+          openChatV2(clone);
+          return false;
+        }, true);
+
+        if(el.parentNode){
+          el.parentNode.replaceChild(clone, el);
+        }
+      });
+    }catch(e){}
+  }
+
+  /*
+    Intercetto comunque anche eventuali pulsanti creati dopo.
+  */
+  document.addEventListener("click", function(ev){
+    var el = ev.target && ev.target.closest ? ev.target.closest("button,a") : null;
+    if(!el) return;
+
+    if(isChatButton(el)){
+      ev.preventDefault();
+      ev.stopPropagation();
+      if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      openChatV2(el);
+      return false;
+    }
+  }, true);
+
+  document.addEventListener("DOMContentLoaded", normalizeAndRebindButton);
+  window.addEventListener("load", normalizeAndRebindButton);
+  setTimeout(normalizeAndRebindButton, 250);
+  setTimeout(normalizeAndRebindButton, 1000);
+  setTimeout(normalizeAndRebindButton, 2500);
+
+})();
+</script>
+
 </body>
 </html>
 
