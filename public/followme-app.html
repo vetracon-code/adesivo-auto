@@ -38683,6 +38683,326 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="FOLLOWME_VOICE_IPHONE_FORMAT_AND_MANUAL_TOGGLE_20260528">
+(function(){
+  "use strict";
+
+  if(window.__followMeVoiceIphoneFormatAndManualToggle20260528) return;
+  window.__followMeVoiceIphoneFormatAndManualToggle20260528 = true;
+
+  let voiceStatus = null;
+
+  function getCode(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim();
+      var p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim();
+    }catch(e){ return ""; }
+  }
+
+  function $(id){ return document.getElementById(id); }
+
+  function toast(msg){
+    try{
+      if(typeof window.showToast === "function"){ window.showToast(msg); return; }
+      if(typeof window.toast === "function"){ window.toast(msg); return; }
+    }catch(e){}
+    alert(msg);
+  }
+
+  function statusEl(){
+    return $("voiceStatusClean20260528") ||
+           $("voiceStatus20260528") ||
+           document.querySelector("[id*='voiceStatus']");
+  }
+
+  function setStatus(msg){
+    var el = statusEl();
+    if(el) el.textContent = msg;
+  }
+
+  function selectEl(){
+    return $("voiceSelectClean20260528") ||
+           $("voiceSelect20260528") ||
+           document.querySelector("select[id*='voiceSelect']");
+  }
+
+  async function api(url, options){
+    const res = await fetch(url, options || {});
+    const data = await res.json().catch(function(){ return null; });
+    if(!res.ok || !data || data.success === false){
+      throw new Error((data && data.error) || "Errore richiesta.");
+    }
+    return data;
+  }
+
+  async function loadVoiceStatus(){
+    const code = getCode();
+    if(!code) return null;
+
+    voiceStatus = await api("/api/followme/" + encodeURIComponent(code) + "/voice-messages/status?v=" + Date.now());
+
+    refreshToggleButton();
+    refreshMainVoiceButton();
+
+    return voiceStatus;
+  }
+
+  function messages(){
+    return voiceStatus && Array.isArray(voiceStatus.messages) ? voiceStatus.messages : [];
+  }
+
+  function hasActive(){
+    return !!(voiceStatus && voiceStatus.has_active_voice === true && voiceStatus.active_voice);
+  }
+
+  function selectedMessage(){
+    const sel = selectEl();
+    const list = messages();
+
+    if(sel && sel.value){
+      const found = list.find(function(x){ return String(x.id) === String(sel.value); });
+      if(found) return found;
+    }
+
+    return list[0] || null;
+  }
+
+  function findDisableButton(){
+    return $("voiceDisableClean20260528") ||
+           $("voiceDisable20260528") ||
+           document.querySelector("button[id*='voiceDisable']") ||
+           document.querySelector("button[id*='Disable']");
+  }
+
+  function ensureToggleButton(){
+    let btn = $("voiceManualToggle20260528");
+    if(btn) return btn;
+
+    const disableBtn = findDisableButton();
+    const parent = disableBtn && disableBtn.parentNode
+      ? disableBtn.parentNode
+      : (
+          $("followmeVoiceModalClean20260528") ||
+          $("followmeVoiceModal20260528") ||
+          document.body
+        );
+
+    btn = document.createElement("button");
+    btn.id = "voiceManualToggle20260528";
+    btn.type = "button";
+    btn.className = "followme-voice-pill-20260528 red";
+    btn.textContent = "ATTIVA MESSAGGIO VOCALE";
+
+    btn.style.marginTop = "8px";
+    btn.style.width = "100%";
+    btn.style.minHeight = "44px";
+    btn.style.fontWeight = "950";
+
+    btn.addEventListener("click", toggleVoiceManual, true);
+    btn.addEventListener("touchend", toggleVoiceManual, true);
+
+    if(disableBtn && disableBtn.parentNode){
+      disableBtn.parentNode.insertBefore(btn, disableBtn.nextSibling);
+    }else{
+      parent.appendChild(btn);
+    }
+
+    return btn;
+  }
+
+  function refreshToggleButton(){
+    const btn = ensureToggleButton();
+    const list = messages();
+
+    btn.classList.remove("red", "green", "blue");
+    btn.disabled = false;
+
+    if(hasActive()){
+      btn.classList.add("green");
+      btn.textContent = "MESSAGGIO VOCALE ATTIVO — SPEGNI";
+      btn.title = "Il messaggio vocale è acceso. Clicca per spegnerlo senza cancellarlo.";
+      return;
+    }
+
+    if(list.length){
+      btn.classList.add("red");
+      btn.textContent = "MESSAGGIO VOCALE SPENTO — ATTIVA";
+      btn.title = "Il messaggio vocale è spento. Clicca per attivare quello selezionato.";
+      return;
+    }
+
+    btn.classList.add("red");
+    btn.textContent = "NESSUN MESSAGGIO DA ATTIVARE";
+    btn.disabled = true;
+    btn.title = "Registra o carica prima un messaggio vocale.";
+  }
+
+  function refreshMainVoiceButton(){
+    const main =
+      $("followmeVoiceAdminBtnClean20260528") ||
+      $("followmeVoiceAdminBtn20260528") ||
+      $("followmeVoiceAdminBtnBridge20260528");
+
+    if(!main) return;
+
+    main.classList.remove("is-on", "is-off");
+    main.classList.add(hasActive() ? "is-on" : "is-off");
+    main.textContent = hasActive() ? "Registra messaggio ON" : "Registra messaggio OFF";
+  }
+
+  async function toggleVoiceManual(ev){
+    try{
+      if(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      }
+
+      const code = getCode();
+      if(!code) return false;
+
+      await loadVoiceStatus();
+
+      if(hasActive()){
+        if(!confirm("Il messaggio vocale è attivo. Vuoi spegnerlo senza cancellare le registrazioni?")) return false;
+
+        const out = await api("/api/followme/" + encodeURIComponent(code) + "/voice-messages/disable?v=" + Date.now(), {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({})
+        });
+
+        voiceStatus = out;
+        setStatus("Messaggio vocale spento. Le registrazioni restano salvate.");
+        toast("Messaggio vocale spento.");
+        refreshToggleButton();
+        refreshMainVoiceButton();
+        return false;
+      }
+
+      const m = selectedMessage();
+
+      if(!m){
+        toast("Non ci sono messaggi vocali salvati da attivare.");
+        return false;
+      }
+
+      if(!confirm("Il messaggio vocale è spento. Vuoi attivare il messaggio selezionato?")) return false;
+
+      await api("/api/followme/" + encodeURIComponent(code) + "/voice-messages/" + encodeURIComponent(m.id) + "/select?v=" + Date.now(), {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({})
+      });
+
+      await loadVoiceStatus();
+
+      setStatus("Messaggio vocale attivato.");
+      toast("Messaggio vocale attivato.");
+      refreshToggleButton();
+      refreshMainVoiceButton();
+
+      return false;
+
+    }catch(err){
+      toast(err && err.message ? err.message : "Errore gestione messaggio vocale.");
+      return false;
+    }
+  }
+
+  /*
+    Patch importante per iPhone:
+    se il recorder genera video/mp4 o audio/mp4, il backend ora lo accetta,
+    ma qui normalizziamo anche il file name logico lato upload.
+  */
+  function patchFetchForIphoneAudio(){
+    if(window.__followMeVoiceFetchIphonePatch20260528) return;
+    window.__followMeVoiceFetchIphonePatch20260528 = true;
+
+    const originalFetch = window.fetch;
+
+    window.fetch = function(input, init){
+      try{
+        const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+
+        if(
+          url.indexOf("/api/followme/") >= 0 &&
+          url.indexOf("/voice-messages/upload") >= 0 &&
+          init &&
+          typeof init.body === "string"
+        ){
+          const body = JSON.parse(init.body);
+
+          if(body && typeof body.audio_data_url === "string"){
+            /*
+              Alcuni Safari producono data:video/mp4;base64 anche se è solo audio.
+              Lo normalizziamo a audio/mp4.
+            */
+            body.audio_data_url = body.audio_data_url.replace(/^data:video\/mp4;base64,/i, "data:audio/mp4;base64,");
+            body.audio_data_url = body.audio_data_url.replace(/^data:audio\/x-m4a;base64,/i, "data:audio/mp4;base64,");
+
+            init = Object.assign({}, init, {
+              body:JSON.stringify(body)
+            });
+          }
+        }
+      }catch(e){}
+
+      return originalFetch.call(this, input, init);
+    };
+  }
+
+  function bindOpenRefresh(){
+    const openers = Array.prototype.slice.call(document.querySelectorAll("button,a"));
+
+    openers.forEach(function(el){
+      if(el.dataset.voiceToggleRefreshBound20260528 === "1") return;
+
+      const txt = String(el.textContent || el.innerText || "").toLowerCase();
+
+      if(txt.indexOf("registra messaggio") >= 0 || txt.indexOf("messaggio vocale") >= 0){
+        el.dataset.voiceToggleRefreshBound20260528 = "1";
+        el.addEventListener("click", function(){
+          setTimeout(loadVoiceStatus, 350);
+          setTimeout(loadVoiceStatus, 1100);
+        }, true);
+      }
+    });
+  }
+
+  function boot(){
+    patchFetchForIphoneAudio();
+    ensureToggleButton();
+    loadVoiceStatus().catch(function(){});
+    bindOpenRefresh();
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    boot();
+    setTimeout(boot, 700);
+    setTimeout(boot, 1600);
+  });
+
+  setInterval(function(){
+    bindOpenRefresh();
+    if(document.getElementById("voiceManualToggle20260528")){
+      loadVoiceStatus().catch(function(){});
+    }
+  }, 3500);
+
+  try{
+    const mo = new MutationObserver(function(){
+      clearTimeout(window.__followMeVoiceManualToggleTimer20260528);
+      window.__followMeVoiceManualToggleTimer20260528 = setTimeout(boot, 180);
+    });
+    mo.observe(document.documentElement || document.body, { childList:true, subtree:true });
+  }catch(e){}
+})();
+</script>
+
 </body>
 </html>
 

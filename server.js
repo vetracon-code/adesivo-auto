@@ -15605,7 +15605,7 @@ function followMeVoiceMimeExt20260528(mime) {
 function followMeVoiceDecodeDataUrl20260528(dataUrl) {
   const value = String(dataUrl || '');
   const m = value.match(/^data:([^;]+);base64,(.+)$/);
-  if (!m) throw new Error('Formato audio non valido.');
+  if (!m) throw new Error('Formato audio non valido o non supportato. Su iPhone riprova oppure carica un file M4A/MP3.');
   const mime = m[1];
   const base64 = m[2];
   const buffer = Buffer.from(base64, 'base64');
@@ -15752,6 +15752,55 @@ app.get('/api/followme/:code/voice-messages/status', async function(req, res) {
     return res.status(500).json({ success:false, error:'Errore stato messaggi vocali.' });
   }
 });
+
+
+// FOLLOWME_VOICE_ACCEPT_IPHONE_FORMATS_20260528
+function normalizeFollowMeVoiceDataUrl20260528(audioDataUrl) {
+  const raw = String(audioDataUrl || '').trim();
+
+  const m = raw.match(/^data:([^;]+);base64,(.+)$/i);
+  if (!m) {
+    return { ok:false, error:'Formato audio non valido o non supportato. Su iPhone riprova oppure carica un file M4A/MP3.' };
+  }
+
+  let mime = String(m[1] || '').toLowerCase().trim();
+  const b64 = String(m[2] || '').trim();
+
+  const allowed = new Set([
+    'audio/wav',
+    'audio/x-wav',
+    'audio/webm',
+    'audio/ogg',
+    'audio/mpeg',
+    'audio/mp3',
+    'audio/mp4',
+    'audio/x-m4a',
+    'audio/m4a',
+    'audio/aac',
+    'video/mp4'
+  ]);
+
+  /*
+    Safari/iPhone a volte produce audio dentro contenitore MP4
+    oppure usa MIME non perfettamente standard.
+  */
+  if (mime === 'video/mp4') mime = 'audio/mp4';
+
+  if (!allowed.has(mime) && !mime.startsWith('audio/')) {
+    return { ok:false, error:'Formato audio non supportato. Usa MP3, M4A, MP4, WAV, WEBM o OGG.' };
+  }
+
+  let ext = 'webm';
+
+  if (mime.includes('wav')) ext = 'wav';
+  else if (mime.includes('mpeg') || mime.includes('mp3')) ext = 'mp3';
+  else if (mime.includes('mp4') || mime.includes('m4a') || mime.includes('aac')) ext = 'm4a';
+  else if (mime.includes('ogg')) ext = 'ogg';
+  else if (mime.includes('webm')) ext = 'webm';
+
+  return { ok:true, mime, ext, b64 };
+}
+
 
 app.post('/api/followme/:code/voice-messages/upload', express.json({ limit:'10mb' }), async function(req, res) {
   try {
