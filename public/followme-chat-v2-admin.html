@@ -1054,16 +1054,36 @@
       }
     }
 
-    async function resetAll(){
-      if(!confirm("Vuoi chiudere tutte le chat e spegnere il servizio chat?")) return;
-      els.reset.disabled = true;
-      els.reset.textContent = "Reset...";
+    // FOLLOWME_CHAT_V2_BACK_AS_RESET_20260528
+    async function resetAll(source){
+      const isBack = source === "back";
+      const message = isBack
+        ? "Vuoi spegnere la chat e tornare alla WebApp?"
+        : "Vuoi chiudere tutte le chat e spegnere il servizio chat?";
+
+      if(!confirm(message)) return;
+
+      if(els.reset){
+        els.reset.disabled = true;
+        els.reset.textContent = "Reset...";
+      }
+      if(els.back){
+        els.back.disabled = true;
+        els.back.textContent = "...";
+      }
+
       try{
-        await post("/api/followme/" + encodeURIComponent(CODE) + "/chat-v2/reset", {});
-        location.href = "/fm/app/" + encodeURIComponent(CODE);
+        await post("/api/followme/" + encodeURIComponent(CODE) + "/chat-v2/reset?v=" + Date.now(), {});
+        location.href = "/fm/app/" + encodeURIComponent(CODE) + "?v=chat-off-" + Date.now();
       }catch(err){
-        els.reset.disabled = false;
-        els.reset.textContent = "Reset";
+        if(els.reset){
+          els.reset.disabled = false;
+          els.reset.textContent = "Reset";
+        }
+        if(els.back){
+          els.back.disabled = false;
+          els.back.textContent = "←";
+        }
         toast("Reset non riuscito: " + err.message);
       }
     }
@@ -1363,8 +1383,8 @@ async function sendAdminAttachmentV2(file, kind){
       });
       els.extra.onclick = toggleExtra;
       els.block.onclick = toggleBlock;
-      if(els.reset) els.reset.onclick = resetAll;
-      if(els.back) els.back.onclick = () => { location.href = "/fm/app/" + encodeURIComponent(CODE); };
+      if(els.reset) els.reset.onclick = () => resetAll("reset");
+      if(els.back) els.back.onclick = () => resetAll("back");
       if(els.plus) els.plus.onclick = () => toggleExtraMenuV2();
 
       if(els.pickPhoto) els.pickPhoto.onclick = () => { closeExtraMenuV2(); els.photoInput && els.photoInput.click(); };
