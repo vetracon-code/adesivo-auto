@@ -36794,6 +36794,343 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="FOLLOWME_VOICE_PRO_AUDIO_UPLOAD_RUNTIME_20260528">
+(function(){
+  "use strict";
+
+  function getCode(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim();
+      var p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim();
+    }catch(e){ return ""; }
+  }
+
+  function toast(msg){
+    try{
+      if(typeof window.showToast === "function"){ window.showToast(msg); return; }
+      if(typeof window.toast === "function"){ window.toast(msg); return; }
+    }catch(e){}
+    alert(msg);
+  }
+
+  function setStatus(msg){
+    var el = document.getElementById("voiceStatus20260528");
+    if(el) el.textContent = msg;
+  }
+
+  function setDiagnostics(lines){
+    try{
+      var el = document.getElementById("voiceDiagnostics20260528");
+      if(!el) return;
+      if(!Array.isArray(lines)) lines = [String(lines || "")];
+      el.innerHTML = lines.map(function(x){
+        return String(x || "").replace(/[<>&]/g, function(c){
+          return c === "<" ? "&lt;" : c === ">" ? "&gt;" : "&amp;";
+        });
+      }).join("<br>");
+    }catch(e){}
+  }
+
+  async function api(url, options){
+    var res = await fetch(url, options || {});
+    var data = await res.json().catch(function(){ return null; });
+    if(!res.ok || !data || data.success === false){
+      var err = new Error((data && data.error) || "Errore richiesta.");
+      err.data = data;
+      throw err;
+    }
+    return data;
+  }
+
+  function fileToDataUrl(file){
+    return new Promise(function(resolve,reject){
+      var r = new FileReader();
+      r.onload = function(){ resolve(String(r.result || "")); };
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+  }
+
+  function selectedVoiceId(){
+    var sel = document.getElementById("voiceSelect20260528");
+    return sel ? String(sel.value || "") : "";
+  }
+
+  function setMainVoiceButtonState(hasActive){
+    var btn = document.getElementById("followmeVoiceAdminBtn20260528");
+    if(!btn) return;
+    btn.classList.remove("is-on","is-off");
+    btn.classList.add(hasActive ? "is-on" : "is-off");
+    btn.textContent = hasActive ? "Registra messaggio ON" : "Registra messaggio OFF";
+  }
+
+  function refreshVoiceSelect(messages){
+    var sel = document.getElementById("voiceSelect20260528");
+    if(!sel || !Array.isArray(messages)) return;
+
+    sel.innerHTML = "";
+
+    if(!messages.length){
+      var opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "Nessun messaggio salvato";
+      sel.appendChild(opt);
+      return;
+    }
+
+    messages.forEach(function(m){
+      var opt = document.createElement("option");
+      opt.value = m.id;
+      opt.textContent =
+        (m.is_active ? "✓ " : "") +
+        (m.source_label || "messaggio") +
+        " · " +
+        Math.round(Number(m.duration_seconds || 0)) +
+        "s";
+      sel.appendChild(opt);
+    });
+  }
+
+  function allowedAudio(file){
+    if(!file) return { ok:false, error:"Nessun file selezionato." };
+
+    var name = String(file.name || "").toLowerCase();
+    var type = String(file.type || "").toLowerCase();
+
+    var allowedExt = [".mp3",".m4a",".mp4",".wav",".webm",".ogg"];
+    var allowedType = [
+      "audio/mpeg",
+      "audio/mp3",
+      "audio/mp4",
+      "audio/x-m4a",
+      "audio/aac",
+      "audio/wav",
+      "audio/webm",
+      "audio/ogg",
+      "application/ogg"
+    ];
+
+    var extOk = allowedExt.some(function(ext){ return name.endsWith(ext); });
+    var typeOk = allowedType.indexOf(type) >= 0 || type.indexOf("audio/") === 0;
+
+    if(!extOk && !typeOk){
+      return { ok:false, error:"Formato non accettato. Usa MP3, M4A, MP4, WAV, WEBM o OGG." };
+    }
+
+    if(file.size > 8 * 1024 * 1024){
+      return { ok:false, error:"File troppo grande. Massimo tecnico 8 MB." };
+    }
+
+    if(file.size <= 0){
+      return { ok:false, error:"File audio vuoto." };
+    }
+
+    return { ok:true };
+  }
+
+  function readAudioDuration(file){
+    return new Promise(function(resolve){
+      try{
+        var url = URL.createObjectURL(file);
+        var audio = document.createElement("audio");
+        audio.preload = "metadata";
+
+        var done = false;
+
+        function finish(value){
+          if(done) return;
+          done = true;
+          try{ URL.revokeObjectURL(url); }catch(e){}
+          resolve(value);
+        }
+
+        audio.onloadedmetadata = function(){
+          finish(Number(audio.duration || 0));
+        };
+
+        audio.onerror = function(){
+          finish(0);
+        };
+
+        setTimeout(function(){ finish(0); }, 4500);
+        audio.src = url;
+      }catch(e){
+        resolve(0);
+      }
+    });
+  }
+
+  async function handleUpload(ev){
+    try{
+      var input = ev && ev.target ? ev.target : document.getElementById("voiceUploadInputRuntime20260528");
+      var file = input && input.files && input.files[0];
+
+      var check = allowedAudio(file);
+      if(!check.ok){
+        setStatus(check.error);
+        toast(check.error);
+        return;
+      }
+
+      setStatus("Controllo file audio...");
+      setDiagnostics([
+        "File selezionato: " + (file.name || "audio"),
+        "Formato dichiarato: " + (file.type || "non dichiarato"),
+        "Dimensione: " + Math.round(file.size / 1024) + " KB"
+      ]);
+
+      var duration = await readAudioDuration(file);
+
+      if(duration && duration > 20.5){
+        setStatus("Audio troppo lungo.");
+        toast("Audio troppo lungo. Durata massima 20 secondi.");
+        return;
+      }
+
+      if(!duration){
+        duration = 20;
+      }
+
+      var code = getCode();
+      var status = await api("/api/followme/" + encodeURIComponent(code) + "/voice-messages/status?v=" + Date.now());
+      var messages = Array.isArray(status.messages) ? status.messages : [];
+      var replaceId = selectedVoiceId();
+
+      if(messages.length >= 3 && !replaceId){
+        setStatus("Hai già 3 messaggi. Scegli quale sostituire.");
+        toast("Hai già 3 messaggi. Scegli quale sostituire prima di caricarne uno nuovo.");
+        return;
+      }
+
+      var confirmed = confirm(
+        "Vuoi caricare questo audio come messaggio pubblico?\n\n" +
+        "Condizioni:\n" +
+        "• durata massima 20 secondi\n" +
+        "• peso massimo consigliato 5 MB, massimo tecnico 8 MB\n" +
+        "• formati accettati: MP3, M4A, MP4, WAV, WEBM, OGG\n" +
+        "• niente musica protetta o contenuti non autorizzati\n\n" +
+        "Durata rilevata: " + Math.round(duration) + "s\n" +
+        "Dimensione: " + Math.round(file.size / 1024) + " KB\n\n" +
+        "Sarà collegato alla destinazione ora in trasmissione."
+      );
+
+      if(!confirmed) return;
+
+      setStatus("Carico audio professionale...");
+
+      var dataUrl = await fileToDataUrl(file);
+
+      var body = {
+        audio_data_url:dataUrl,
+        duration_seconds:Math.min(20, Math.max(1, duration))
+      };
+
+      if(messages.length >= 3 && replaceId){
+        body.replace_id = replaceId;
+      }
+
+      var out = await api("/api/followme/" + encodeURIComponent(code) + "/voice-messages/upload?v=" + Date.now(), {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(body)
+      });
+
+      refreshVoiceSelect(out.messages || []);
+      setMainVoiceButtonState(true);
+
+      setStatus("Audio professionale caricato e pubblicato.");
+      setDiagnostics([
+        "Upload completato.",
+        "File: " + (file.name || "audio"),
+        "Durata: " + Math.round(duration) + "s",
+        "Dimensione: " + Math.round(file.size / 1024) + " KB"
+      ]);
+
+      toast("Audio professionale pubblicato.");
+
+      try{ input.value = ""; }catch(e){}
+    }catch(e){
+      var msg = e && e.message ? e.message : "Errore caricamento audio.";
+      setStatus(msg);
+      setDiagnostics([
+        "Errore caricamento audio.",
+        "Dettaglio: " + msg,
+        e && e.data ? "Risposta server: " + JSON.stringify(e.data).slice(0, 280) : ""
+      ]);
+      toast(msg);
+    }
+  }
+
+  function injectUploadBlock(){
+    var modal = document.getElementById("followmeVoiceModal20260528");
+    if(!modal || modal.dataset.voiceUploadRuntimeInjected20260528 === "1") return;
+
+    var sheet =
+      modal.querySelector(".followme-voice-sheet-20260528") ||
+      modal.querySelector("[class*='voice-sheet']") ||
+      modal.firstElementChild;
+
+    if(!sheet) return;
+
+    modal.dataset.voiceUploadRuntimeInjected20260528 = "1";
+
+    var block = document.createElement("div");
+    block.id = "followmeVoiceUploadRuntimeBlock20260528";
+    block.style.marginTop = "12px";
+    block.style.padding = "12px";
+    block.style.borderRadius = "18px";
+    block.style.background = "#f8fafc";
+    block.style.border = "1px solid rgba(15,23,42,.08)";
+
+    block.innerHTML =
+      '<div class="followme-voice-small-20260528" style="font-weight:900;color:#0f172a;margin-bottom:8px">Audio professionale</div>' +
+      '<div class="followme-voice-small-20260528" style="margin-bottom:10px">Carica un file già registrato. Durata massima 20 secondi. Peso consigliato 5 MB, massimo tecnico 8 MB. Formati accettati: MP3, M4A, MP4, WAV, WEBM, OGG. Evita musica protetta o contenuti non autorizzati.</div>' +
+      '<button class="followme-voice-pill-20260528 blue" id="voiceUploadBtnRuntime20260528" type="button">Carica audio</button>' +
+      '<input id="voiceUploadInputRuntime20260528" type="file" accept="audio/mpeg,audio/mp3,audio/mp4,audio/x-m4a,audio/aac,audio/wav,audio/webm,audio/ogg,.mp3,.m4a,.mp4,.wav,.webm,.ogg" style="display:none">';
+
+    var disable = document.getElementById("voiceDisable20260528");
+    if(disable && disable.parentElement){
+      disable.parentElement.parentElement.insertBefore(block, disable.parentElement);
+    }else{
+      sheet.appendChild(block);
+    }
+
+    var btn = document.getElementById("voiceUploadBtnRuntime20260528");
+    var input = document.getElementById("voiceUploadInputRuntime20260528");
+
+    if(btn && input){
+      btn.onclick = function(){
+        alert("Carica un messaggio audio professionale.\n\nCondizioni:\n• durata massima 20 secondi\n• peso massimo consigliato 5 MB, massimo tecnico 8 MB\n• formati accettati: MP3, M4A, MP4, WAV, WEBM, OGG\n• il file deve contenere solo audio\n• evita musica protetta da copyright o contenuti non autorizzati\n• il messaggio verrà collegato alla destinazione ora in trasmissione");
+        input.click();
+      };
+      input.onchange = handleUpload;
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    setTimeout(injectUploadBlock, 800);
+    setTimeout(injectUploadBlock, 1800);
+    setTimeout(injectUploadBlock, 3500);
+  });
+
+  document.addEventListener("click", function(){
+    setTimeout(injectUploadBlock, 120);
+    setTimeout(injectUploadBlock, 600);
+  }, true);
+
+  try{
+    var mo = new MutationObserver(function(){
+      clearTimeout(window.__followMeVoiceUploadRuntimeTimer20260528);
+      window.__followMeVoiceUploadRuntimeTimer20260528 = setTimeout(injectUploadBlock, 120);
+    });
+    mo.observe(document.documentElement || document.body, { childList:true, subtree:true });
+  }catch(e){}
+})();
+</script>
+
 </body>
 </html>
 
