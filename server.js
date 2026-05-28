@@ -17270,6 +17270,225 @@ app.get('/api/followme/:code/chat-v2/ready', async function(req, res){
 /* END FOLLOWME CHAT V2 ACTIVATION GUARD 20260527 */
 
 
+
+// FOLLOWME_GOOGLE_SAFE_BROWSING_URL_CHECK_20260528
+function normalizeFollowMeSecurityUrl20260528(rawUrl) {
+  const value = String(rawUrl || '').trim();
+
+  if (!value) {
+    return { ok:false, status:'invalid', error:'URL mancante.' };
+  }
+
+  if (value.length > 4096) {
+    return { ok:false, status:'invalid', error:'URL troppo lungo.' };
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch (err) {
+    return { ok:false, status:'invalid', error:'URL non valido.' };
+  }
+
+  const protocol = String(parsed.protocol || '').toLowerCase();
+
+  if (protocol !== 'https:' && protocol !== 'http:') {
+    return {
+      ok:false,
+      status:'dangerous',
+      error:'Protocollo non consentito. Sono ammessi solo http e https.'
+    };
+  }
+
+  const blockedProtocols = ['javascript:', 'data:', 'file:', 'intent:', 'ftp:', 'blob:'];
+  if (blockedProtocols.includes(protocol)) {
+    return {
+      ok:false,
+      status:'dangerous',
+      error:'Protocollo potenzialmente pericoloso.'
+    };
+  }
+
+  return {
+    ok:true,
+    url: parsed.toString(),
+    hostname: parsed.hostname,
+    protocol
+  };
+}
+
+function googleSafeBrowsingCheck20260528(urlToCheck) {
+  return new Promise((resolve) => {
+    const https = require('https');
+
+    const apiKey = String(process.env.GOOGLE_SAFE_BROWSING_API_KEY || '').trim();
+
+    if (!apiKey) {
+      return resolve({
+        success:false,
+        status:'unknown',
+        safe:false,
+        provider:'Google Safe Browsing',
+        error:'GOOGLE_SAFE_BROWSING_API_KEY non configurata.'
+      });
+    }
+
+    const payload = JSON.stringify({
+      client: {
+        clientId: 'followme',
+        clientVersion: '1.0'
+      },
+      threatInfo: {
+        threatTypes: [
+          'MALWARE',
+          'SOCIAL_ENGINEERING',
+          'UNWANTED_SOFTWARE',
+          'POTENTIALLY_HARMFUL_APPLICATION'
+        ],
+        platformTypes: ['ANY_PLATFORM'],
+        threatEntryTypes: ['URL'],
+        threatEntries: [
+          { url: urlToCheck }
+        ]
+      }
+    });
+
+    const req = https.request(
+      'https://safebrowsing.googleapis.com/v4/threatMatches:find?key=' + encodeURIComponent(apiKey),
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload)
+        },
+        timeout: 12000
+      },
+      (res) => {
+        let body = '';
+
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+          let data = {};
+          try {
+            data = body ? JSON.parse(body) : {};
+          } catch (err) {
+            return resolve({
+              success:false,
+              status:'unknown',
+              safe:false,
+              provider:'Google Safe Browsing',
+              http_status:res.statusCode,
+              error:'Risposta Google Safe Browsing non valida.'
+            });
+          }
+
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            return resolve({
+              success:false,
+              status:'unknown',
+              safe:false,
+              provider:'Google Safe Browsing',
+              http_status:res.statusCode,
+              error:data.error && data.error.message ? data.error.message : 'Errore Google Safe Browsing.',
+              raw:data
+            });
+          }
+
+          const matches = Array.isArray(data.matches) ? data.matches : [];
+
+          if (matches.length) {
+            return resolve({
+              success:true,
+              status:'dangerous',
+              safe:false,
+              provider:'Google Safe Browsing',
+              label:'URL potenzialmente pericoloso segnalato da Google Safe Browsing.',
+              matches,
+              checked_at:new Date().toISOString()
+            });
+          }
+
+          return resolve({
+            success:true,
+            status:'safe',
+            safe:true,
+            provider:'Google Safe Browsing',
+            label:'Nessuna minaccia nota rilevata da Google Safe Browsing al momento della verifica.',
+            matches:[],
+            checked_at:new Date().toISOString()
+          });
+        });
+      }
+    );
+
+    req.on('timeout', () => {
+      req.destroy(new Error('Timeout Google Safe Browsing.'));
+    });
+
+    req.on('error', (err) => {
+      return resolve({
+        success:false,
+        status:'unknown',
+        safe:false,
+        provider:'Google Safe Browsing',
+        error:String(err && err.message ? err.message : err)
+      });
+    });
+
+    req.write(payload);
+    req.end();
+  });
+}
+
+app.post('/api/followme/url-security/check', express.json({ limit:'64kb' }), async function(req, res) {
+  try {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
+    const rawUrl = req.body && req.body.url ? req.body.url : '';
+    const normalized = normalizeFollowMeSecurityUrl20260528(rawUrl);
+
+    if (!normalized.ok) {
+      return res.status(400).json({
+        success:false,
+        status:normalized.status || 'invalid',
+        safe:false,
+        provider:'internal',
+        url:String(rawUrl || '').trim(),
+        error:normalized.error || 'URL non valido.',
+        label:normalized.error || 'URL non valido.'
+      });
+    }
+
+    const result = await googleSafeBrowsingCheck20260528(normalized.url);
+
+    return res.json({
+      success:result.success === true,
+      url:normalized.url,
+      hostname:normalized.hostname,
+      provider:'Google Safe Browsing',
+      status:result.status,
+      safe:result.safe === true,
+      label:result.label || result.error || 'Controllo sicurezza URL completato.',
+      matches:result.matches || [],
+      checked_at:result.checked_at || new Date().toISOString(),
+      error:result.error || null
+    });
+  } catch (err) {
+    console.error('followme url security check error:', err);
+    return res.status(500).json({
+      success:false,
+      status:'unknown',
+      safe:false,
+      provider:'Google Safe Browsing',
+      error:'Errore controllo sicurezza URL.',
+      detail:String(err && err.message ? err.message : err)
+    });
+  }
+});
+
+
 app.post('/api/followme/:code/chat-v2/enable', express.json(), async (req, res) => {
   try {
     await ensureFollowMeChatV2Runtime();
