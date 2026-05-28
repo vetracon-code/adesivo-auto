@@ -10166,7 +10166,7 @@ async function sendFollowMeNewChatPush(project, sessionId) {
 }
 
 /* Intercetta il QR pubblico FollowMe: se chat attiva, apre URL chat randomizzato. */
-app.get('/fm/u/:public_id', async (req, res, next) => {
+app.get('/__disabled_legacy_fm_u/:public_id', async (req, res, next) => {
   try {
     await ensureFollowMeChatSchemaFast();
 
