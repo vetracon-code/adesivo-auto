@@ -10240,6 +10240,94 @@ app.get('/__disabled_legacy_fm_u/:public_id', async (req, res, next) => {
   }
 });
 
+
+// FOLLOWME_LEGACY_CHAT_ENABLE_TO_V2_20260528
+app.post('/api/followme/:code/chat/enable', express.json(), async function(req, res) {
+  try {
+    /*
+      BLOCCO DEFINITIVO VECCHIA CHAT FOLLOWME.
+      Qualsiasi vecchio pulsante/frontend che chiama /chat/enable
+      viene forzato alla Chat V2.
+    */
+
+    if (typeof ensureFollowMeChatV2Runtime === 'function') {
+      await ensureFollowMeChatV2Runtime();
+    }
+
+    const rawCode = String(req.params.code || '').trim();
+    const code = typeof normalizeFollowMeChatV2Code === 'function'
+      ? normalizeFollowMeChatV2Code(rawCode)
+      : rawCode;
+
+    const q = await pool.query(
+      `SELECT id, code, public_id, chat_mode_enabled, chat_public_token
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).json({
+        success:false,
+        error:'FollowMe QR non trovato.'
+      });
+    }
+
+    const project = q.rows[0];
+
+    let token = String(project.chat_public_token || '').trim();
+
+    if (!token) {
+      if (typeof rotateFollowMeChatV2Token === 'function') {
+        token = await rotateFollowMeChatV2Token(project.id);
+      } else if (typeof ensureFollowMeChatV2Token === 'function') {
+        token = await ensureFollowMeChatV2Token(project.id);
+      } else {
+        token = Math.random().toString(36).slice(2, 14).toUpperCase();
+        await pool.query(
+          `UPDATE followme_projects
+           SET chat_public_token = $2,
+               chat_token_rotated_at = NOW(),
+               updated_at = NOW()
+           WHERE id = $1`,
+          [project.id, token]
+        );
+      }
+    }
+
+    await pool.query(
+      `UPDATE followme_projects
+       SET chat_mode_enabled = TRUE,
+           bot_enabled = FALSE,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [project.id]
+    );
+
+    return res.json({
+      success:true,
+      forced_v2:true,
+      legacy_chat_disabled:true,
+      chat_mode_enabled:true,
+      bot_enabled:false,
+      project_code:project.code,
+      public_id:project.public_id,
+      chat_public_token:token,
+      chat_url:'/fm/chat-v2/c/' + encodeURIComponent(token),
+      admin_url:'/fm/chat-v2/admin/' + encodeURIComponent(project.code || code)
+    });
+  } catch (err) {
+    console.error('legacy followme chat enable forced to v2 error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore attivazione Chat V2 da vecchio percorso.',
+      detail:String(err && err.message ? err.message : err)
+    });
+  }
+});
+
+
 app.post('/api/followme/:code/chat/enable', express.json(), async (req, res) => {
   try {
     await ensureFollowMeChatSchemaFast();
