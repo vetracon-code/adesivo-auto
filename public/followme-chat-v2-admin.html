@@ -382,6 +382,60 @@
     });
   }
 
+  // FOLLOWME_CHAT_V2_ADMIN_SELF_HEAL_READY_20260528
+  function sleep(ms){
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  async function ensureChatV2Ready(){
+    /*
+      La pagina admin deve essere autonoma:
+      se viene aperta subito dopo un reset o prima che la WebApp finisca l'attivazione,
+      attiva direttamente Chat V2 e aspetta ready:true.
+    */
+    try{
+      els.subtitle.textContent = "Verifico chat...";
+
+      let ready = null;
+
+      try{
+        ready = await api("/api/followme/" + encodeURIComponent(CODE) + "/chat-v2/ready?v=" + Date.now());
+      }catch(e){
+        ready = null;
+      }
+
+      if(ready && ready.ready === true){
+        els.subtitle.textContent = "Chat attiva";
+        return true;
+      }
+
+      els.subtitle.textContent = "Attivo chat...";
+      await post("/api/followme/" + encodeURIComponent(CODE) + "/chat-v2/enable?v=" + Date.now(), {});
+
+      for(let i = 0; i < 14; i++){
+        try{
+          ready = await api("/api/followme/" + encodeURIComponent(CODE) + "/chat-v2/ready?v=" + Date.now());
+          if(ready && ready.ready === true){
+            els.subtitle.textContent = "Chat attiva";
+            return true;
+          }
+        }catch(e){}
+
+        els.subtitle.textContent = "Attendo chat pronta... " + (i + 1);
+        await sleep(450);
+      }
+
+      els.subtitle.textContent = "Chat non pronta";
+      toast("Chat non pronta. Riprovo tra pochi secondi.");
+      return false;
+    }catch(err){
+      els.subtitle.textContent = "Errore attivazione";
+      toast("Errore attivazione chat: " + (err.message || String(err)));
+      return false;
+    }
+  }
+
+
   function currentSession(){
     return sessions.find(s => String(s.id) === String(selectedId)) || null;
   }
@@ -898,14 +952,25 @@
   }
 
   bind();
-  loadSessions();
 
-  setInterval(()=>{
-    if(document.visibilityState === "visible"){
-      loadSessions();
-      if(selectedId) loadMessages(false);
+  (async function startAdminChatV2(){
+    const ok = await ensureChatV2Ready();
+    if(ok){
+      await loadSessions();
     }
-  }, 900);
+
+    setInterval(async ()=>{
+      if(document.visibilityState === "visible"){
+        /*
+          Se dopo reset o rete lenta la chat torna non pronta,
+          la pagina admin tenta di autoripristinarla senza richiedere chiusura/riapertura.
+        */
+        await ensureChatV2Ready();
+        await loadSessions();
+        if(selectedId) await loadMessages(false);
+      }
+    }, 1200);
+  })();
 
   window.addEventListener("focus", loadSessions);
   document.addEventListener("visibilitychange", ()=>{
