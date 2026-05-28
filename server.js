@@ -15603,7 +15603,12 @@ app.post('/api/followme/:code/update-url', express.json(), async (req, res) => {
       [q.rows[0].id, url]
     );
 
-    return res.json({ success:true, project:q.rows[0] });
+    return res.json({
+      success:true,
+      project:q.rows[0],
+      // FOLLOWME_UPDATE_URL_REAL_ROUTE_RETURN_SAFE_BROWSING_20260528
+      url_security:req.followmeUrlSecurity20260528 || null
+    });
   } catch (err) {
     console.error('followme update-url error:', err);
     return res.status(500).json({ success:false, error:err.message || String(err) });
