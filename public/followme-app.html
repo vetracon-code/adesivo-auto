@@ -6246,6 +6246,40 @@ function followmeSafeClearPdfPreview20260526(preview){
 }
 </style>
 
+
+<style id="FOLLOWME_SAFE_BROWSING_INLINE_NOTICE_STYLE_20260528">
+  .followme-safe-browsing-inline-notice{
+    display:none;
+    margin:12px 0 14px;
+    padding:12px 14px;
+    border-radius:16px;
+    font-size:13px;
+    line-height:1.35;
+    font-weight:850;
+    letter-spacing:-.01em;
+    border:1px solid rgba(0,0,0,.08);
+    box-shadow:0 8px 22px rgba(0,0,0,.08);
+  }
+  .followme-safe-browsing-inline-notice.show{
+    display:block;
+  }
+  .followme-safe-browsing-inline-notice.checking{
+    background:#fff8e1;
+    color:#5f4300;
+    border-color:rgba(255,193,7,.45);
+  }
+  .followme-safe-browsing-inline-notice.safe{
+    background:#eafaf0;
+    color:#145c2e;
+    border-color:rgba(52,199,89,.35);
+  }
+  .followme-safe-browsing-inline-notice.blocked{
+    background:#fff0f0;
+    color:#8f1111;
+    border-color:rgba(255,59,48,.35);
+  }
+</style>
+
 </head>
 <body>
   <main class="app">
@@ -35757,30 +35791,20 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     message = message || "✅ Link verificato con Google Safe Browsing. Nessuna minaccia nota rilevata.";
 
     try{
-      if(typeof window.showToast === "function"){
-        window.showToast(message);
+      if(typeof window.followMeSafeBrowsingInlineNotice20260528 === "function"){
+        window.followMeSafeBrowsingInlineNotice20260528("safe", message);
         return;
       }
     }catch(e){}
 
     try{
-      if(typeof window.toast === "function"){
-        window.toast(message);
-        return;
-      }
-    }catch(e){}
-
-    try{
-      var el = document.getElementById("toast");
+      var el = document.getElementById("followmeSafeBrowsingInlineNotice");
       if(el){
+        el.className = "followme-safe-browsing-inline-notice show safe";
         el.textContent = message;
-        el.style.display = "block";
-        setTimeout(function(){ el.style.display = "none"; }, 3500);
         return;
       }
     }catch(e){}
-
-    alert(message);
   }
 
   if(typeof window.fetch === "function" && !window.__followMeSafeBrowsingSuccessWrapped20260528){
@@ -35821,6 +35845,138 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       return response;
     };
   }
+})();
+</script>
+
+
+<script id="FOLLOWME_SAFE_BROWSING_INLINE_NOTICE_20260528">
+(function(){
+  "use strict";
+
+  function textOf(el){
+    return String(el && (el.textContent || el.innerText) || "").trim().toLowerCase();
+  }
+
+  function findDestinationAnchor(){
+    /*
+      Punto desiderato: appena sopra “Modifica la destinazione”.
+      Cerco prima un titolo/testo con quella dicitura, poi ripiego vicino al campo newUrl.
+    */
+    var all = Array.prototype.slice.call(document.querySelectorAll("h1,h2,h3,h4,strong,b,p,div,label,section,article"));
+    for(var i=0;i<all.length;i++){
+      var t = textOf(all[i]);
+      if(
+        t === "modifica la destinazione" ||
+        t.indexOf("modifica la destinazione") >= 0 ||
+        t.indexOf("modifica destinazione") >= 0
+      ){
+        return all[i];
+      }
+    }
+
+    var input = document.getElementById("newUrl");
+    if(input){
+      var box = input.closest("section,article,.card,.panel,.block,div");
+      return box || input;
+    }
+
+    return null;
+  }
+
+  function ensureNotice(){
+    var existing = document.getElementById("followmeSafeBrowsingInlineNotice");
+    if(existing) return existing;
+
+    var notice = document.createElement("div");
+    notice.id = "followmeSafeBrowsingInlineNotice";
+    notice.className = "followme-safe-browsing-inline-notice";
+    notice.setAttribute("role","status");
+    notice.setAttribute("aria-live","polite");
+
+    var anchor = findDestinationAnchor();
+
+    if(anchor && anchor.parentNode){
+      anchor.parentNode.insertBefore(notice, anchor);
+    }else{
+      document.body.insertBefore(notice, document.body.firstChild);
+    }
+
+    return notice;
+  }
+
+  function showNotice(type, message){
+    var notice = ensureNotice();
+    notice.className = "followme-safe-browsing-inline-notice show " + (type || "checking");
+    notice.textContent = message || "";
+    try{
+      notice.scrollIntoView({ behavior:"smooth", block:"center" });
+    }catch(e){}
+  }
+
+  window.followMeSafeBrowsingInlineNotice20260528 = showNotice;
+
+  function isUpdateUrlRequest(input){
+    var url = typeof input === "string" ? input : String(input && input.url || "");
+    return (
+      url.indexOf("/api/followme/") >= 0 &&
+      (
+        url.indexOf("/update-url") >= 0 ||
+        url.indexOf("/update-existing-qr") >= 0
+      )
+    );
+  }
+
+  if(typeof window.fetch === "function" && !window.__followMeSafeBrowsingInlineFetchWrapped20260528){
+    window.__followMeSafeBrowsingInlineFetchWrapped20260528 = true;
+
+    var originalFetch = window.fetch;
+
+    window.fetch = async function(input, init){
+      var shouldWatch = false;
+
+      try{
+        shouldWatch = isUpdateUrlRequest(input);
+        if(shouldWatch){
+          showNotice(
+            "checking",
+            "Controllo Google Safe Browsing in corso: sto verificando il link prima della pubblicazione..."
+          );
+        }
+      }catch(e){}
+
+      var response = await originalFetch.apply(this, arguments);
+
+      if(shouldWatch){
+        try{
+          var cloned = response.clone();
+          var data = await cloned.json().catch(function(){ return null; });
+
+          if(response.ok && data && data.url_security && data.url_security.safe === true){
+            showNotice(
+              "safe",
+              "✅ Link verificato con Google Safe Browsing. Nessuna minaccia nota rilevata."
+            );
+          }else if(!response.ok && data && data.provider === "Google Safe Browsing"){
+            showNotice(
+              "blocked",
+              data.label || data.error || "⛔ URL bloccato. Google Safe Browsing non consente di considerare affidabile questo link."
+            );
+          }else if(!response.ok){
+            showNotice(
+              "blocked",
+              "⛔ URL non pubblicato: la verifica o il salvataggio non sono andati a buon fine."
+            );
+          }
+        }catch(e){}
+      }
+
+      return response;
+    };
+  }
+
+  document.addEventListener("DOMContentLoaded", ensureNotice);
+  setTimeout(ensureNotice, 300);
+  setTimeout(ensureNotice, 1200);
 })();
 </script>
 
