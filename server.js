@@ -15024,6 +15024,65 @@ app.get('/fm/u/:public_id', async function(req, res, next) {
     }
 
     const activeUrl = String(row.active_url || '').trim();
+
+    // FOLLOWME_FAST_FMU_SCAN_LOG_AND_PUSH_20260528
+    /*
+      La route veloce /fm/u deve fare anche quello che faceva la route storica:
+      - registrare la scansione
+      - aggiornare history/scan_count
+      - inviare push QR scansionato
+      Altrimenti il redirect funziona, ma il proprietario non riceve notifica.
+    */
+    try {
+      const ipAddress = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || null;
+      const userAgent = req.headers['user-agent'] || null;
+      const referrer = req.headers['referer'] || req.headers['referrer'] || null;
+
+      await pool.query(
+        `INSERT INTO followme_scan_logs
+         (project_id, url, ip_address, user_agent, referrer)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [
+          row.id,
+          activeUrl || null,
+          ipAddress,
+          userAgent,
+          referrer
+        ]
+      );
+
+      if (activeUrl) {
+        await pool.query(
+          `INSERT INTO followme_url_history
+           (project_id, url, activated_at, last_used_at, scan_count)
+           VALUES ($1,$2,NOW(),NOW(),1)
+           ON CONFLICT (project_id, url)
+           DO UPDATE SET
+             last_used_at = NOW(),
+             scan_count = COALESCE(followme_url_history.scan_count,0) + 1`,
+          [row.id, activeUrl]
+        );
+      }
+
+      /*
+        Anti-spam push:
+        invio massimo una notifica per QR ogni 60 secondi.
+        La scansione viene comunque registrata sempre.
+      */
+      const pushKey = '__followmeScanPushLast_' + String(row.id);
+      const nowMs = Date.now();
+      const lastMs = Number(global[pushKey] || 0);
+
+      if (typeof sendFollowMeScanPush === 'function' && nowMs - lastMs > 60000) {
+        global[pushKey] = nowMs;
+        sendFollowMeScanPush(row).catch(function(err){
+          console.error('followme fast /fm/u scan push error:', err && err.message ? err.message : err);
+        });
+      }
+    } catch (scanErr) {
+      console.error('followme fast /fm/u scan log/push error:', scanErr && scanErr.message ? scanErr.message : scanErr);
+    }
+
     if (activeUrl) {
       return res.redirect(302, activeUrl);
     }
