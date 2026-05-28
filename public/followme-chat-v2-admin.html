@@ -979,6 +979,133 @@
 
 })();
 </script>
+
+<script id="FOLLOWME_CHAT_V2_ADMIN_CLOSE_THANKS_RETURN_20260528">
+(function(){
+  "use strict";
+
+  if(window.__followMeChatV2AdminCloseThanksReturn20260528) return;
+  window.__followMeChatV2AdminCloseThanksReturn20260528 = true;
+
+  function toast(msg){
+    try{
+      if(typeof window.toast === "function"){ window.toast(msg); return; }
+    }catch(e){}
+    alert(msg);
+  }
+
+  function currentSessionId(){
+    try{
+      if(window.currentSession && window.currentSession.id) return String(window.currentSession.id);
+      if(window.activeSession && window.activeSession.id) return String(window.activeSession.id);
+    }catch(e){}
+
+    const p = new URLSearchParams(location.search || "");
+    const fromUrl = p.get("session");
+    if(fromUrl) return String(fromUrl);
+
+    const active =
+      document.querySelector("[data-session-id].active") ||
+      document.querySelector(".active[data-id]") ||
+      document.querySelector(".session.active");
+
+    if(active){
+      return String(
+        active.getAttribute("data-session-id") ||
+        active.getAttribute("data-id") ||
+        ""
+      );
+    }
+
+    return "";
+  }
+
+  async function closeWithThanks(ev){
+    try{
+      if(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      }
+    }catch(e){}
+
+    const sid = currentSessionId();
+
+    if(!sid){
+      toast("Seleziona prima una conversazione da chiudere.");
+      return false;
+    }
+
+    const ok = confirm(
+      "Vuoi chiudere questa chat?\n\n" +
+      "All’utente verrà inviato un messaggio di ringraziamento e potrà tornare alla pagina di provenienza."
+    );
+
+    if(!ok) return false;
+
+    try{
+      const res = await fetch("/api/followme/chat-v2/session/" + encodeURIComponent(sid) + "/close-thanks?v=" + Date.now(), {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          message:"Grazie per averci contattato. La conversazione è stata chiusa. Puoi tornare a consultare la pagina."
+        })
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || data.success === false){
+        throw new Error((data && data.error) || "Errore chiusura chat.");
+      }
+
+      toast("Chat chiusa con messaggio di ringraziamento.");
+
+      setTimeout(function(){
+        location.href = location.pathname + "?v=" + Date.now();
+      }, 650);
+
+    }catch(err){
+      toast(err.message || "Errore chiusura chat.");
+    }
+
+    return false;
+  }
+
+  function patchCloseButtons(){
+    const buttons = Array.prototype.slice.call(document.querySelectorAll("button,a"));
+
+    buttons.forEach(function(btn){
+      if(btn.dataset.closeThanksBound20260528 === "1") return;
+
+      const txt = String(btn.textContent || btn.innerText || "").trim().toLowerCase();
+      const id = String(btn.id || "").toLowerCase();
+
+      const looksClose =
+        id.indexOf("close") >= 0 ||
+        id.indexOf("chiudi") >= 0 ||
+        txt === "chiudi" ||
+        txt.indexOf("chiudi chat") >= 0 ||
+        txt.indexOf("chiudi conversazione") >= 0;
+
+      if(!looksClose) return;
+
+      btn.dataset.closeThanksBound20260528 = "1";
+
+      btn.addEventListener("click", closeWithThanks, true);
+      btn.addEventListener("touchend", closeWithThanks, true);
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    patchCloseButtons();
+    setTimeout(patchCloseButtons, 800);
+    setTimeout(patchCloseButtons, 1800);
+  });
+
+  setInterval(patchCloseButtons, 2000);
+})();
+</script>
+
 </body>
 </html>
 

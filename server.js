@@ -19137,6 +19137,79 @@ app.post('/api/followme/chat-v2/c/:chat_token/session', express.json(), async (r
   }
 });
 
+
+// FOLLOWME_CHAT_V2_CLOSE_THANKS_RETURN_20260528
+app.post('/api/followme/chat-v2/session/:session_id/close-thanks', express.json({ limit:'64kb' }), async (req, res) => {
+  try {
+    const sessionId = Number(req.params.session_id || 0);
+    if (!sessionId) {
+      return res.status(400).json({ success:false, error:'Sessione non valida.' });
+    }
+
+    const q = await pool.query(
+      `SELECT
+          s.id,
+          s.project_id,
+          s.visitor_label,
+          s.display_name,
+          s.status,
+          s.source_url,
+          s.source_label,
+          p.active_url,
+          p.code,
+          p.public_id
+       FROM followme_chat_sessions s
+       JOIN followme_projects p ON p.id = s.project_id
+       WHERE s.id = $1
+       LIMIT 1`,
+      [sessionId]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).json({ success:false, error:'Sessione non trovata.' });
+    }
+
+    const row = q.rows[0];
+
+    const thanksMessage =
+      String(req.body?.message || '').trim() ||
+      'Grazie per averci contattato. La conversazione è stata chiusa. Puoi tornare a consultare la pagina.';
+
+    const returnUrl =
+      String(row.source_url || '').trim() ||
+      String(row.active_url || '').trim() ||
+      ('/fm/u/' + encodeURIComponent(row.public_id || row.code));
+
+    await pool.query(
+      `INSERT INTO followme_chat_messages
+       (session_id, project_id, sender, message, created_at)
+       VALUES ($1,$2,'system',$3,NOW())`,
+      [sessionId, row.project_id, thanksMessage]
+    );
+
+    const upd = await pool.query(
+      `UPDATE followme_chat_sessions
+       SET status = 'closed',
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, project_id, visitor_label, display_name, status,
+                 source_url, source_label, updated_at`,
+      [sessionId]
+    );
+
+    return res.json({
+      success:true,
+      session:upd.rows[0],
+      message:thanksMessage,
+      return_url:returnUrl
+    });
+  } catch (err) {
+    console.error('followme chat-v2 close-thanks error:', err);
+    return res.status(500).json({ success:false, error:'Errore chiusura chat.' });
+  }
+});
+
+
 app.get('/api/followme/chat-v2/session/:session_id/state', async (req, res) => {
   try {
     await ensureFollowMeChatV2Runtime();

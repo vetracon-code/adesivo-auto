@@ -287,6 +287,55 @@
     #userVoiceSendV2:disabled{opacity:.45}
     
   </style>
+
+<style id="FOLLOWME_CHAT_V2_USER_CLOSED_RETURN_PAGE_STYLE_20260528">
+  .followme-chat-closed-return-20260528{
+    margin:14px auto;
+    max-width:88%;
+    padding:16px;
+    border-radius:22px;
+    background:linear-gradient(180deg,rgba(255,255,255,.96),rgba(248,250,252,.96));
+    border:1px solid rgba(15,23,42,.10);
+    box-shadow:0 18px 50px rgba(15,23,42,.12);
+    text-align:center;
+    color:#0f172a;
+  }
+
+  .followme-chat-closed-return-20260528 strong{
+    display:block;
+    font-size:16px;
+    margin-bottom:7px;
+  }
+
+  .followme-chat-closed-return-20260528 p{
+    margin:0 0 12px;
+    color:#475569;
+    font-size:13px;
+    line-height:1.38;
+  }
+
+  .followme-chat-closed-return-20260528 a{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-height:42px;
+    padding:0 16px;
+    border-radius:999px;
+    background:#0f172a;
+    color:#fff;
+    text-decoration:none;
+    font-weight:900;
+    font-size:13px;
+  }
+
+  body.followme-chat-closed-20260528 .composer,
+  body.followme-chat-closed-20260528 .inputbar,
+  body.followme-chat-closed-20260528 form{
+    opacity:.55;
+    pointer-events:none;
+  }
+</style>
+
 </head>
 <body>
   <main class="app" id="app">
@@ -1263,6 +1312,100 @@
   document.addEventListener("visibilitychange", function(){
     if(document.visibilityState === "visible") refreshState();
   });
+})();
+</script>
+
+
+<script id="FOLLOWME_CHAT_V2_USER_CLOSED_RETURN_PAGE_20260528">
+(function(){
+  "use strict";
+
+  if(window.__followMeChatV2UserClosedReturnPage20260528) return;
+  window.__followMeChatV2UserClosedReturnPage20260528 = true;
+
+  let alreadyRendered = false;
+
+  function $(id){ return document.getElementById(id); }
+
+  function token(){
+    try{
+      const m = location.pathname.match(/\/fm\/chat-v2\/c\/([^\/?#]+)/i);
+      return m ? decodeURIComponent(m[1] || "") : "";
+    }catch(e){ return ""; }
+  }
+
+  function sessionId(){
+    const t = token();
+    if(!t) return "";
+    return localStorage.getItem("fm_chat_v2_session_" + t) || "";
+  }
+
+  function esc(v){
+    return String(v || "").replace(/[<>&"]/g, function(c){
+      return c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === "&" ? "&amp;" : "&quot;";
+    });
+  }
+
+  function sourceUrlFromState(data){
+    if(!data || !data.session) return "";
+
+    return String(
+      data.session.source_url ||
+      data.session.active_url ||
+      data.return_url ||
+      ""
+    ).trim();
+  }
+
+  function renderClosed(returnUrl){
+    if(alreadyRendered) return;
+    alreadyRendered = true;
+
+    document.body.classList.add("followme-chat-closed-20260528");
+
+    const box = $("messages");
+    if(!box) return;
+
+    const url = returnUrl || "#";
+
+    const div = document.createElement("div");
+    div.className = "followme-chat-closed-return-20260528";
+    div.innerHTML =
+      '<strong>Grazie per averci contattato</strong>' +
+      '<p>La conversazione è stata chiusa. Puoi tornare a consultare la pagina di provenienza.</p>' +
+      '<a href="' + esc(url) + '" target="_self" rel="noopener">Torna alla pagina</a>';
+
+    box.appendChild(div);
+
+    try{ box.scrollTop = box.scrollHeight; }catch(e){}
+  }
+
+  async function checkClosed(){
+    const sid = sessionId();
+    if(!sid) return;
+
+    try{
+      const res = await fetch("/api/followme/chat-v2/session/" + encodeURIComponent(sid) + "/state?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+      if(!res.ok || !data || !data.session) return;
+
+      if(String(data.session.status || "").toLowerCase() === "closed"){
+        const returnUrl = sourceUrlFromState(data) || document.referrer || "/";
+        renderClosed(returnUrl);
+      }
+    }catch(e){}
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    checkClosed();
+    setTimeout(checkClosed, 800);
+    setTimeout(checkClosed, 1800);
+  });
+
+  setInterval(checkClosed, 1800);
 })();
 </script>
 
