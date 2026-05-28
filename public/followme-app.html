@@ -35075,6 +35075,174 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="FOLLOWME_WEBAPP_FORCE_REAL_CHAT_V2_ADMIN_20260528">
+(function(){
+  "use strict";
+
+  function getCode(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m && m[1]) return decodeURIComponent(m[1]).trim();
+
+      var p = new URLSearchParams(location.search || "");
+      var c = p.get("code") || p.get("public_id") || "";
+      if(c) return String(c).trim();
+
+      if(typeof window.FOLLOWME_CODE !== "undefined" && window.FOLLOWME_CODE) {
+        return String(window.FOLLOWME_CODE).trim();
+      }
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function isChatActionButton(el){
+    if(!el) return false;
+    var txt = String(el.textContent || el.innerText || "").trim().toLowerCase();
+    var id = String(el.id || "").toLowerCase();
+
+    return (
+      id === "followmeotheropenchat" ||
+      txt === "attiva chat" ||
+      txt.indexOf("attiva chat") >= 0 ||
+      txt === "parla con gli utenti" ||
+      txt.indexOf("parla con gli utenti") >= 0
+    );
+  }
+
+  function isResetChatButton(el){
+    if(!el) return false;
+    var id = String(el.id || "").toLowerCase();
+    var txt = String(el.textContent || el.innerText || "").trim().toLowerCase();
+
+    return (
+      id === "followmechatwaitingreset" ||
+      id === "followmeresetchatbtn" ||
+      id === "followmetopresetchatbtn" ||
+      txt === "reset chat" ||
+      txt === "reset"
+    );
+  }
+
+  function isDisableChatButton(el){
+    if(!el) return false;
+    var id = String(el.id || "").toLowerCase();
+    var txt = String(el.textContent || el.innerText || "").trim().toLowerCase();
+
+    return (
+      id === "followmechatwaitingdisable" ||
+      txt === "spegni" ||
+      txt === "spegni chat"
+    );
+  }
+
+  async function postJson(url, body){
+    var res = await fetch(url, {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "Accept":"application/json"
+      },
+      cache:"no-store",
+      body:JSON.stringify(body || {})
+    });
+
+    var data = null;
+    try{ data = await res.json(); }catch(e){}
+
+    if(!res.ok || !data || data.success === false){
+      throw new Error((data && (data.error || data.detail)) || ("HTTP " + res.status));
+    }
+
+    return data;
+  }
+
+  async function openRealChatV2Admin(btn){
+    var code = getCode();
+
+    var oldText = btn ? String(btn.textContent || "") : "";
+    if(btn){
+      btn.disabled = true;
+      btn.textContent = "Apro chat...";
+    }
+
+    try{
+      var data = await postJson("/api/followme/" + encodeURIComponent(code) + "/chat-v2/enable?v=" + Date.now(), {});
+      var adminUrl = data.admin_url || ("/fm/chat-v2/admin/" + encodeURIComponent(data.project_code || code));
+      location.href = adminUrl + (adminUrl.indexOf("?") >= 0 ? "&" : "?") + "v=" + Date.now();
+    }catch(err){
+      alert("Errore attivazione chat: " + (err.message || String(err)));
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = oldText || "Parla con gli utenti";
+      }
+    }
+  }
+
+  async function resetRealChatV2(btn){
+    var code = getCode();
+
+    if(!confirm("Vuoi chiudere tutte le chat e spegnere il servizio chat?")) return;
+
+    var oldText = btn ? String(btn.textContent || "") : "";
+    if(btn){
+      btn.disabled = true;
+      btn.textContent = "Reset...";
+    }
+
+    try{
+      await postJson("/api/followme/" + encodeURIComponent(code) + "/chat-v2/reset?v=" + Date.now(), {});
+      location.href = "/fm/app/" + encodeURIComponent(code) + "?v=chat-reset-" + Date.now();
+    }catch(err){
+      alert("Reset chat non riuscito: " + (err.message || String(err)));
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = oldText || "Reset";
+      }
+    }
+  }
+
+  function normalizeButtons(){
+    try{
+      document.querySelectorAll("button,a").forEach(function(el){
+        if(isChatActionButton(el)){
+          el.textContent = "Parla con gli utenti";
+          el.setAttribute("aria-label","Parla con gli utenti");
+          el.title = "Parla con gli utenti";
+        }
+      });
+    }catch(e){}
+  }
+
+  document.addEventListener("click", function(ev){
+    var btn = ev.target && ev.target.closest ? ev.target.closest("button,a") : null;
+    if(!btn) return;
+
+    if(isChatActionButton(btn)){
+      ev.preventDefault();
+      ev.stopPropagation();
+      if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      openRealChatV2Admin(btn);
+      return false;
+    }
+
+    if(isResetChatButton(btn) || isDisableChatButton(btn)){
+      ev.preventDefault();
+      ev.stopPropagation();
+      if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      resetRealChatV2(btn);
+      return false;
+    }
+  }, true);
+
+  document.addEventListener("DOMContentLoaded", normalizeButtons);
+  window.addEventListener("load", normalizeButtons);
+  setTimeout(normalizeButtons, 500);
+  setTimeout(normalizeButtons, 1500);
+
+})();
+</script>
+
 </body>
 </html>
 
