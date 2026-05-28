@@ -6393,6 +6393,113 @@ function followmeSafeClearPdfPreview20260526(preview){
   }
 </style>
 
+
+<style id="FOLLOWME_VOICE_MESSAGE_ADMIN_UI_STYLE_20260528">
+  .followme-voice-admin-btn-20260528{
+    appearance:none;
+    -webkit-appearance:none;
+    border:0;
+    border-radius:999px;
+    min-height:38px;
+    padding:9px 15px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    font-size:13px;
+    font-weight:900;
+    letter-spacing:-.01em;
+    color:#fff;
+    box-shadow:0 12px 30px rgba(15,23,42,.14);
+    cursor:pointer;
+    margin:6px 4px;
+  }
+  .followme-voice-admin-btn-20260528.is-on{background:linear-gradient(180deg,#22c55e,#16a34a)}
+  .followme-voice-admin-btn-20260528.is-off{background:linear-gradient(180deg,#ef4444,#dc2626)}
+  .followme-voice-modal-20260528{
+    position:fixed;
+    z-index:99999;
+    inset:0;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:18px;
+    background:rgba(2,6,23,.34);
+    backdrop-filter:blur(18px);
+    -webkit-backdrop-filter:blur(18px);
+  }
+  .followme-voice-modal-20260528.show{display:flex}
+  .followme-voice-sheet-20260528{
+    width:min(520px,100%);
+    max-height:86vh;
+    overflow:auto;
+    border-radius:30px;
+    background:rgba(255,255,255,.94);
+    border:1px solid rgba(255,255,255,.45);
+    box-shadow:0 30px 100px rgba(0,0,0,.28);
+    padding:18px;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  }
+  .followme-voice-title-20260528{
+    font-size:19px;
+    font-weight:950;
+    letter-spacing:-.03em;
+    margin:0;
+    color:#0f172a;
+  }
+  .followme-voice-sub-20260528{
+    margin:5px 0 14px;
+    font-size:13px;
+    color:#64748b;
+    line-height:1.35;
+  }
+  .followme-voice-row-20260528{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+  .followme-voice-pill-20260528{
+    border:1px solid rgba(15,23,42,.10);
+    background:#fff;
+    border-radius:999px;
+    padding:9px 13px;
+    min-height:36px;
+    font-weight:850;
+    font-size:12.5px;
+    color:#111827;
+    box-shadow:0 8px 22px rgba(15,23,42,.08);
+  }
+  .followme-voice-pill-20260528.green{background:#16a34a;color:#fff;border-color:#16a34a}
+  .followme-voice-pill-20260528.red{background:#dc2626;color:#fff;border-color:#dc2626}
+  .followme-voice-pill-20260528.blue{background:#2563eb;color:#fff;border-color:#2563eb}
+  .followme-voice-pill-20260528:disabled{opacity:.48}
+  .followme-voice-select-20260528{
+    width:100%;
+    border:1px solid rgba(15,23,42,.12);
+    border-radius:16px;
+    padding:11px 12px;
+    font:inherit;
+    background:#fff;
+    margin:8px 0;
+  }
+  .followme-voice-meter-20260528{
+    height:8px;
+    border-radius:99px;
+    background:#e2e8f0;
+    overflow:hidden;
+    margin:10px 0 6px;
+  }
+  .followme-voice-meter-20260528 > span{
+    display:block;
+    height:100%;
+    width:0%;
+    background:linear-gradient(90deg,#22c55e,#16a34a);
+    transition:width .12s linear;
+  }
+  .followme-voice-small-20260528{
+    font-size:12px;
+    color:#64748b;
+    line-height:1.35;
+  }
+</style>
+
 </head>
 <body>
   <main class="app">
@@ -36319,6 +36426,368 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     var mo = new MutationObserver(function(){
       clearTimeout(window.__followMeInfoToggleTimer20260528);
       window.__followMeInfoToggleTimer20260528 = setTimeout(ensureToggle, 180);
+    });
+    mo.observe(document.documentElement || document.body, { childList:true, subtree:true });
+  }catch(e){}
+})();
+</script>
+
+
+<script id="FOLLOWME_VOICE_MESSAGE_ADMIN_UI_20260528">
+(function(){
+  "use strict";
+
+  let mediaRecorder = null;
+  let chunks = [];
+  let recordedBlob = null;
+  let recordedUrl = "";
+  let recordTimer = null;
+  let recordStart = 0;
+  let messages = [];
+  let currentAudio = null;
+
+  function getCode(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim();
+      var p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim();
+    }catch(e){ return ""; }
+  }
+
+  function toast(msg){
+    try{
+      if(typeof window.showToast === "function"){ window.showToast(msg); return; }
+      if(typeof window.toast === "function"){ window.toast(msg); return; }
+    }catch(e){}
+    alert(msg);
+  }
+
+  async function api(url, options){
+    var res = await fetch(url, options || {});
+    var data = await res.json().catch(function(){ return null; });
+    if(!res.ok || !data || data.success === false){
+      var err = new Error((data && data.error) || "Errore richiesta.");
+      err.data = data;
+      throw err;
+    }
+    return data;
+  }
+
+  function fileToDataUrl(blob){
+    return new Promise(function(resolve,reject){
+      var r = new FileReader();
+      r.onload = function(){ resolve(String(r.result || "")); };
+      r.onerror = reject;
+      r.readAsDataURL(blob);
+    });
+  }
+
+  function makeModal(){
+    if(document.getElementById("followmeVoiceModal20260528")) return;
+
+    var modal = document.createElement("div");
+    modal.id = "followmeVoiceModal20260528";
+    modal.className = "followme-voice-modal-20260528";
+    modal.innerHTML = ''
+      + '<div class="followme-voice-sheet-20260528">'
+      + '  <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">'
+      + '    <div><h3 class="followme-voice-title-20260528">Registra messaggio</h3><div class="followme-voice-sub-20260528">Messaggio vocale massimo 20 secondi, collegato alla destinazione ora in trasmissione.</div></div>'
+      + '    <button class="followme-voice-pill-20260528" id="voiceClose20260528" type="button">×</button>'
+      + '  </div>'
+      + '  <select class="followme-voice-select-20260528" id="voiceSelect20260528"><option value="">Nessun messaggio salvato</option></select>'
+      + '  <div class="followme-voice-row-20260528">'
+      + '    <button class="followme-voice-pill-20260528 green" id="voiceUse20260528" type="button">Usa selezionato</button>'
+      + '    <button class="followme-voice-pill-20260528" id="voicePlaySaved20260528" type="button">Riascolta salvato</button>'
+      + '    <button class="followme-voice-pill-20260528 red" id="voiceDelete20260528" type="button">Cancella</button>'
+      + '  </div>'
+      + '  <hr style="border:0;border-top:1px solid rgba(15,23,42,.08);margin:14px 0">'
+      + '  <div class="followme-voice-small-20260528" id="voiceStatus20260528">Pronto per registrare.</div>'
+      + '  <div class="followme-voice-meter-20260528"><span id="voiceMeter20260528"></span></div>'
+      + '  <div class="followme-voice-row-20260528">'
+      + '    <button class="followme-voice-pill-20260528 red" id="voiceRecord20260528" type="button">Registra</button>'
+      + '    <button class="followme-voice-pill-20260528" id="voiceStop20260528" type="button" disabled>Ferma</button>'
+      + '    <button class="followme-voice-pill-20260528" id="voicePlay20260528" type="button" disabled>Riascolta</button>'
+      + '    <button class="followme-voice-pill-20260528 blue" id="voicePublish20260528" type="button" disabled>Pubblica</button>'
+      + '  </div>'
+      + '  <div class="followme-voice-small-20260528">Se hai già 3 messaggi, seleziona quale sostituire prima di pubblicarne uno nuovo.</div>'
+      + '</div>';
+
+    document.body.appendChild(modal);
+
+    document.getElementById("voiceClose20260528").onclick = closeModal;
+    document.getElementById("voiceRecord20260528").onclick = startRecording;
+    document.getElementById("voiceStop20260528").onclick = stopRecording;
+    document.getElementById("voicePlay20260528").onclick = playRecorded;
+    document.getElementById("voicePublish20260528").onclick = publishRecorded;
+    document.getElementById("voiceUse20260528").onclick = useSelected;
+    document.getElementById("voicePlaySaved20260528").onclick = playSelected;
+    document.getElementById("voiceDelete20260528").onclick = deleteSelected;
+  }
+
+  function setStatus(txt){ var el = document.getElementById("voiceStatus20260528"); if(el) el.textContent = txt; }
+  function setMeter(pct){ var el = document.getElementById("voiceMeter20260528"); if(el) el.style.width = Math.max(0, Math.min(100, pct)) + "%"; }
+
+  function selectedMessage(){
+    var sel = document.getElementById("voiceSelect20260528");
+    var id = sel ? String(sel.value || "") : "";
+    return messages.find(function(m){ return String(m.id) === id; }) || null;
+  }
+
+  function refreshSelect(){
+    var sel = document.getElementById("voiceSelect20260528");
+    if(!sel) return;
+    sel.innerHTML = "";
+
+    if(!messages.length){
+      var opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "Nessun messaggio salvato";
+      sel.appendChild(opt);
+      return;
+    }
+
+    messages.forEach(function(m){
+      var opt = document.createElement("option");
+      opt.value = m.id;
+      opt.textContent =
+        (m.is_active ? "✓ " : "") +
+        (m.source_label || "messaggio") +
+        " · " +
+        Math.round(Number(m.duration_seconds || 0)) +
+        "s";
+      sel.appendChild(opt);
+    });
+  }
+
+  function styleMainButton(hasActive){
+    var btn = document.getElementById("followmeVoiceAdminBtn20260528");
+    if(!btn) return;
+    btn.classList.remove("is-on","is-off");
+    btn.classList.add(hasActive ? "is-on" : "is-off");
+    btn.textContent = hasActive ? "Registra messaggio ON" : "Registra messaggio OFF";
+  }
+
+  async function loadStatus(){
+    var code = getCode();
+    if(!code) return;
+    var data = await api("/api/followme/" + encodeURIComponent(code) + "/voice-messages/status?v=" + Date.now());
+    messages = Array.isArray(data.messages) ? data.messages : [];
+    refreshSelect();
+    styleMainButton(data.has_active_voice === true);
+  }
+
+  async function openModal(){
+    makeModal();
+    document.getElementById("followmeVoiceModal20260528").classList.add("show");
+    setStatus("Carico messaggi salvati...");
+    try{
+      await loadStatus();
+      setStatus(messages.length ? "Scegli un messaggio salvato oppure registrane uno nuovo." : "Nessun messaggio salvato. Puoi registrarne uno nuovo.");
+    }catch(e){
+      setStatus("Errore caricamento messaggi.");
+    }
+  }
+
+  function closeModal(){
+    try{ if(mediaRecorder && mediaRecorder.state === "recording") mediaRecorder.stop(); }catch(e){}
+    if(recordTimer) clearInterval(recordTimer);
+    var m = document.getElementById("followmeVoiceModal20260528");
+    if(m) m.classList.remove("show");
+  }
+
+  async function startRecording(){
+    try{
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        throw new Error("Microfono non disponibile da questo browser.");
+      }
+
+      chunks = [];
+      recordedBlob = null;
+      if(recordedUrl) URL.revokeObjectURL(recordedUrl);
+      recordedUrl = "";
+
+      var stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+      var mime = "";
+      if(window.MediaRecorder && MediaRecorder.isTypeSupported("audio/webm")) mime = "audio/webm";
+      else if(window.MediaRecorder && MediaRecorder.isTypeSupported("audio/mp4")) mime = "audio/mp4";
+
+      mediaRecorder = mime ? new MediaRecorder(stream, { mimeType:mime }) : new MediaRecorder(stream);
+
+      mediaRecorder.ondataavailable = function(e){ if(e.data && e.data.size) chunks.push(e.data); };
+      mediaRecorder.onstop = function(){
+        try{ stream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
+        recordedBlob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
+        recordedUrl = URL.createObjectURL(recordedBlob);
+        document.getElementById("voicePlay20260528").disabled = false;
+        document.getElementById("voicePublish20260528").disabled = false;
+        document.getElementById("voiceRecord20260528").disabled = false;
+        document.getElementById("voiceStop20260528").disabled = true;
+        setStatus("Registrazione pronta. Puoi riascoltarla o pubblicarla.");
+      };
+
+      mediaRecorder.start();
+      recordStart = Date.now();
+
+      document.getElementById("voiceRecord20260528").disabled = true;
+      document.getElementById("voiceStop20260528").disabled = false;
+      document.getElementById("voicePlay20260528").disabled = true;
+      document.getElementById("voicePublish20260528").disabled = true;
+
+      setStatus("Registrazione in corso...");
+      setMeter(0);
+
+      recordTimer = setInterval(function(){
+        var elapsed = (Date.now() - recordStart) / 1000;
+        setMeter((elapsed / 20) * 100);
+        setStatus("Registrazione in corso... " + Math.min(20, Math.round(elapsed)) + "/20s");
+        if(elapsed >= 20) stopRecording();
+      }, 150);
+
+    }catch(e){
+      setStatus(e.message || "Errore registrazione.");
+      toast(e.message || "Errore registrazione.");
+    }
+  }
+
+  function stopRecording(){
+    try{
+      if(recordTimer) clearInterval(recordTimer);
+      if(mediaRecorder && mediaRecorder.state === "recording"){
+        mediaRecorder.stop();
+      }
+    }catch(e){}
+  }
+
+  function playRecorded(){
+    if(!recordedUrl) return;
+    if(currentAudio) try{ currentAudio.pause(); }catch(e){}
+    currentAudio = new Audio(recordedUrl);
+    currentAudio.play().catch(function(){ toast("Non riesco a riprodurre l'audio."); });
+  }
+
+  function playSelected(){
+    var m = selectedMessage();
+    if(!m || !m.file_url) return toast("Seleziona un messaggio.");
+    if(currentAudio) try{ currentAudio.pause(); }catch(e){}
+    currentAudio = new Audio(m.file_url);
+    currentAudio.play().catch(function(){ toast("Non riesco a riprodurre l'audio."); });
+  }
+
+  async function publishRecorded(){
+    try{
+      if(!recordedBlob) return toast("Registra prima un messaggio.");
+      var code = getCode();
+      var replace = selectedMessage();
+      var duration = Math.min(20, (Date.now() - recordStart) / 1000);
+
+      if(messages.length >= 3 && !replace){
+        return toast("Hai già 3 messaggi. Scegli quale sostituire.");
+      }
+
+      setStatus("Pubblico il messaggio...");
+      var dataUrl = await fileToDataUrl(recordedBlob);
+
+      var body = {
+        audio_data_url:dataUrl,
+        duration_seconds:duration
+      };
+
+      if(messages.length >= 3 && replace) body.replace_id = replace.id;
+
+      var data = await api("/api/followme/" + encodeURIComponent(code) + "/voice-messages/upload?v=" + Date.now(), {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(body)
+      });
+
+      messages = Array.isArray(data.messages) ? data.messages : messages;
+      refreshSelect();
+      styleMainButton(true);
+      setStatus("Messaggio pubblicato e collegato alla destinazione attuale.");
+      toast("Messaggio vocale pubblicato.");
+    }catch(e){
+      setStatus(e.message || "Errore pubblicazione.");
+      toast(e.message || "Errore pubblicazione.");
+    }
+  }
+
+  async function useSelected(){
+    try{
+      var m = selectedMessage();
+      if(!m) return toast("Seleziona un messaggio.");
+      var code = getCode();
+
+      var data = await api("/api/followme/" + encodeURIComponent(code) + "/voice-messages/" + encodeURIComponent(m.id) + "/select?v=" + Date.now(), {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({})
+      });
+
+      await loadStatus();
+      styleMainButton(true);
+      setStatus("Messaggio selezionato e abbinato alla destinazione attuale.");
+      toast("Messaggio abbinato alla pagina in trasmissione.");
+    }catch(e){
+      toast(e.message || "Errore selezione.");
+    }
+  }
+
+  async function deleteSelected(){
+    try{
+      var m = selectedMessage();
+      if(!m) return toast("Seleziona un messaggio.");
+      if(!confirm("Vuoi cancellare questo messaggio vocale?")) return;
+      var code = getCode();
+
+      var data = await api("/api/followme/" + encodeURIComponent(code) + "/voice-messages/" + encodeURIComponent(m.id) + "/delete?v=" + Date.now(), {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({})
+      });
+
+      await loadStatus();
+      setStatus("Messaggio cancellato.");
+      toast("Messaggio cancellato.");
+    }catch(e){
+      toast(e.message || "Errore cancellazione.");
+    }
+  }
+
+  function findInfoToggleOrChatButton(){
+    return document.getElementById("followmeInfoRequestsToggle20260528") || document.getElementById("followmeOtherOpenChat");
+  }
+
+  function ensureAdminButton(){
+    if(document.getElementById("followmeVoiceAdminBtn20260528")) return;
+
+    var anchor = findInfoToggleOrChatButton();
+    if(!anchor || !anchor.parentNode) return;
+
+    var btn = document.createElement("button");
+    btn.id = "followmeVoiceAdminBtn20260528";
+    btn.type = "button";
+    btn.className = "followme-voice-admin-btn-20260528 is-off";
+    btn.textContent = "Registra messaggio OFF";
+    btn.onclick = openModal;
+
+    anchor.parentNode.insertBefore(btn, anchor.nextSibling);
+
+    loadStatus().catch(function(){});
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    makeModal();
+    ensureAdminButton();
+  });
+  setTimeout(ensureAdminButton, 700);
+  setTimeout(ensureAdminButton, 1600);
+  setTimeout(ensureAdminButton, 3200);
+
+  try{
+    var mo = new MutationObserver(function(){
+      clearTimeout(window.__followMeVoiceAdminTimer20260528);
+      window.__followMeVoiceAdminTimer20260528 = setTimeout(ensureAdminButton, 180);
     });
     mo.observe(document.documentElement || document.body, { childList:true, subtree:true });
   }catch(e){}

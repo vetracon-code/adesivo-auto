@@ -15181,6 +15181,25 @@ app.get('/fm/info/:public_id', async function(req, res) {
     const activeUrl = String(project.active_url || '').trim();
     const sourceLabel = followMeShortSourceLabel20260528(activeUrl);
 
+    // FOLLOWME_INFO_CONTAINER_ACTIVE_VOICE_20260528
+    await ensureFollowMeVoiceMessagesRuntime20260528();
+
+    const voiceRes = await pool.query(
+      `SELECT id, source_url, source_label, file_url, mime_type, duration_seconds
+       FROM followme_voice_messages
+       WHERE project_id = $1
+         AND is_active = TRUE
+       ORDER BY updated_at DESC, created_at DESC
+       LIMIT 1`,
+      [project.id]
+    );
+
+    const activeVoice = voiceRes.rows[0] || null;
+
+    const voiceHtml = activeVoice
+      ? '<button class="premium-btn ghost" id="voiceBtn" type="button">▶ Ascolta il messaggio</button>'
+      : '';
+
     if (!activeUrl) {
       return res.redirect(302, '/fm/app/' + encodeURIComponent(project.code || publicId));
     }
@@ -15189,7 +15208,8 @@ app.get('/fm/info/:public_id', async function(req, res) {
       code: project.code,
       public_id: project.public_id,
       active_url: activeUrl,
-      source_label: sourceLabel
+      source_label: sourceLabel,
+      voice_message: activeVoice
     }).replace(/</g, '\\u003c');
 
     return res.send(`<!doctype html>
@@ -15285,7 +15305,7 @@ app.get('/fm/info/:public_id', async function(req, res) {
 <body>
 <div class="topbar">
   <div class="bar-inner">
-    <button class="premium-btn ghost" id="voiceBtn" type="button">▶ Ascolta il messaggio <span style="opacity:.55;font-size:11px">presto</span></button>
+    ${voiceHtml}
     <button class="premium-btn green" id="infoBtn" type="button">Chiedi informazioni</button>
   </div>
 </div>
@@ -15410,9 +15430,41 @@ window.FOLLOWME_INFO_DATA = ${safeJson};
     overlay.classList.remove("show");
     if(pollTimer) clearInterval(pollTimer);
   };
-  document.getElementById("voiceBtn").onclick = function(){
-    alert("Messaggio vocale presto disponibile.");
-  };
+  const voiceBtn = document.getElementById("voiceBtn");
+  if(voiceBtn){
+    voiceBtn.onclick = async function(){
+      try{
+        const v = data.voice_message;
+        if(!v || !v.file_url) return;
+
+        voiceBtn.disabled = true;
+        voiceBtn.textContent = "Riproduco...";
+
+        const audio = new Audio(v.file_url);
+        audio.onended = function(){
+          voiceBtn.disabled = false;
+          voiceBtn.textContent = "▶ Ascolta il messaggio";
+        };
+        audio.onerror = function(){
+          voiceBtn.disabled = false;
+          voiceBtn.textContent = "▶ Ascolta il messaggio";
+          alert("Non riesco a riprodurre il messaggio.");
+        };
+
+        await fetch("/api/followme/" + encodeURIComponent(data.code) + "/voice-messages/" + encodeURIComponent(v.id) + "/listened", {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({})
+        }).catch(()=>null);
+
+        await audio.play();
+      }catch(e){
+        voiceBtn.disabled = false;
+        voiceBtn.textContent = "▶ Ascolta il messaggio";
+        alert("Non riesco a riprodurre il messaggio.");
+      }
+    };
+  }
 
   input.addEventListener("keydown", function(e){
     if(e.key === "Enter" && !e.shiftKey){
@@ -15503,6 +15555,474 @@ app.post('/api/followme/:code/info-request/session', express.json({ limit:'64kb'
   } catch (err) {
     console.error('followme info request session error:', err);
     return res.status(500).json({ success:false, error:'Errore apertura richiesta informazioni.' });
+  }
+});
+
+
+
+// FOLLOWME_VOICE_MESSAGES_BACKEND_20260528
+const FOLLOWME_VOICE_STORAGE_DIR_20260528 = require('path').join(
+  process.env.FOLLOWME_STORAGE_DIR || '/var/data',
+  'followme-voice-messages'
+);
+
+async function ensureFollowMeVoiceMessagesRuntime20260528() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS followme_voice_messages (
+      id BIGSERIAL PRIMARY KEY,
+      project_id BIGINT NOT NULL REFERENCES followme_projects(id) ON DELETE CASCADE,
+      source_url TEXT,
+      source_label TEXT,
+      file_url TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      mime_type TEXT,
+      duration_seconds NUMERIC,
+      is_active BOOLEAN DEFAULT FALSE,
+      listened_count INTEGER DEFAULT 0,
+      last_listened_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`CREATE INDEX IF NOT EXISTS followme_voice_messages_project_idx ON followme_voice_messages(project_id, created_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS followme_voice_messages_active_idx ON followme_voice_messages(project_id, is_active)`);
+}
+
+function followMeVoiceSafeCode20260528(value) {
+  return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 80);
+}
+
+function followMeVoiceMimeExt20260528(mime) {
+  mime = String(mime || '').toLowerCase();
+  if (mime.includes('mp4')) return 'mp4';
+  if (mime.includes('mpeg')) return 'mp3';
+  if (mime.includes('wav')) return 'wav';
+  if (mime.includes('ogg')) return 'ogg';
+  return 'webm';
+}
+
+function followMeVoiceDecodeDataUrl20260528(dataUrl) {
+  const value = String(dataUrl || '');
+  const m = value.match(/^data:([^;]+);base64,(.+)$/);
+  if (!m) throw new Error('Formato audio non valido.');
+  const mime = m[1];
+  const base64 = m[2];
+  const buffer = Buffer.from(base64, 'base64');
+  if (!buffer.length) throw new Error('Audio vuoto.');
+  if (buffer.length > 8 * 1024 * 1024) throw new Error('Audio troppo grande.');
+  return { mime, buffer };
+}
+
+function followMeVoicePublicUrl20260528(code, filename) {
+  return '/followme-voice/' + encodeURIComponent(code) + '/' + encodeURIComponent(filename);
+}
+
+async function sendFollowMeVoiceListenedPush20260528(project, voiceRow) {
+  try {
+    if (!project || !project.id || !project.code || !voiceRow) return { sent:0, failed:0 };
+
+    if (typeof webpush === 'undefined' || !webpush || typeof webpush.sendNotification !== 'function') {
+      return { sent:0, failed:0, skipped:true };
+    }
+
+    const label = String(voiceRow.source_label || 'contenuto').slice(0, 18);
+    const adminUrl = `/fm/app/${encodeURIComponent(project.code)}`;
+
+    const payload = JSON.stringify({
+      title: 'FollowMe',
+      body: label
+        ? "L'utente ha ascoltato il tuo messaggio per: " + label
+        : "L'utente ha ascoltato il tuo messaggio.",
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag: `followme-voice-listened-${project.id}-${voiceRow.id}-${Math.floor(Date.now()/60000)}`,
+      renotify: false,
+      requireInteraction: false,
+      vibrate: [90, 40, 90],
+      url: adminUrl,
+      targetUrl: adminUrl,
+      relativeTargetUrl: adminUrl,
+      data: {
+        type: 'followme_voice_listened',
+        code: project.code,
+        public_id: project.public_id || project.code,
+        voice_id: String(voiceRow.id),
+        source_label: label,
+        url: adminUrl,
+        targetUrl: adminUrl,
+        relativeTargetUrl: adminUrl
+      }
+    });
+
+    const subs = await pool.query(
+      `SELECT endpoint, p256dh, auth
+       FROM followme_push_subscriptions
+       WHERE project_id = $1
+       LIMIT 200`,
+      [project.id]
+    );
+
+    let sent = 0;
+    let failed = 0;
+
+    for (const sub of subs.rows) {
+      try {
+        await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          payload
+        );
+        sent += 1;
+      } catch (err) {
+        failed += 1;
+        if (err && (err.statusCode === 404 || err.statusCode === 410)) {
+          try { await pool.query('DELETE FROM followme_push_subscriptions WHERE endpoint = $1', [sub.endpoint]); } catch(e) {}
+        } else {
+          console.error('followme voice listened push error:', err.statusCode || '', err.body || err.message || err);
+        }
+      }
+    }
+
+    return { sent, failed };
+  } catch (err) {
+    console.error('sendFollowMeVoiceListenedPush error:', err.message || err);
+    return { sent:0, failed:1, error:String(err.message || err) };
+  }
+}
+
+app.get('/followme-voice/:code/:filename', async function(req, res) {
+  try {
+    const path = require('path');
+    const code = followMeVoiceSafeCode20260528(req.params.code);
+    const filename = String(req.params.filename || '').replace(/[^a-zA-Z0-9_.-]/g, '');
+    if (!code || !filename) return res.status(404).send('Audio non trovato.');
+
+    const filePath = path.join(FOLLOWME_VOICE_STORAGE_DIR_20260528, code, filename);
+
+    if (!filePath.startsWith(path.join(FOLLOWME_VOICE_STORAGE_DIR_20260528, code))) {
+      return res.status(403).send('Percorso non consentito.');
+    }
+
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.sendFile(filePath);
+  } catch (err) {
+    return res.status(404).send('Audio non trovato.');
+  }
+});
+
+app.get('/api/followme/:code/voice-messages/status', async function(req, res) {
+  try {
+    await ensureFollowMeVoiceMessagesRuntime20260528();
+
+    const code = String(req.params.code || '').trim();
+    const q = await pool.query(
+      `SELECT id, code, public_id, active_url
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!q.rows.length) return res.status(404).json({ success:false, error:'FollowMe QR non trovato.' });
+
+    const project = q.rows[0];
+
+    const list = await pool.query(
+      `SELECT id, source_url, source_label, file_url, mime_type, duration_seconds, is_active,
+              listened_count, last_listened_at, created_at, updated_at
+       FROM followme_voice_messages
+       WHERE project_id = $1
+       ORDER BY created_at DESC
+       LIMIT 3`,
+      [project.id]
+    );
+
+    const active = list.rows.find(r => r.is_active === true) || null;
+
+    return res.json({
+      success:true,
+      project,
+      has_active_voice:!!active,
+      active_voice:active,
+      messages:list.rows,
+      max_messages:3
+    });
+  } catch (err) {
+    console.error('followme voice status error:', err);
+    return res.status(500).json({ success:false, error:'Errore stato messaggi vocali.' });
+  }
+});
+
+app.post('/api/followme/:code/voice-messages/upload', express.json({ limit:'10mb' }), async function(req, res) {
+  try {
+    await ensureFollowMeVoiceMessagesRuntime20260528();
+
+    const fs = require('fs');
+    const path = require('path');
+
+    const codeParam = String(req.params.code || '').trim();
+    const q = await pool.query(
+      `SELECT id, code, public_id, active_url
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [codeParam]
+    );
+
+    if (!q.rows.length) return res.status(404).json({ success:false, error:'FollowMe QR non trovato.' });
+
+    const project = q.rows[0];
+    const projectCode = followMeVoiceSafeCode20260528(project.code || project.public_id || codeParam);
+
+    const duration = Number(req.body?.duration_seconds || 0);
+    if (!duration || duration > 22) {
+      return res.status(400).json({ success:false, error:'Il messaggio vocale deve durare massimo 20 secondi.' });
+    }
+
+    const replaceId = Number(req.body?.replace_id || 0);
+
+    const currentCount = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM followme_voice_messages WHERE project_id = $1`,
+      [project.id]
+    );
+
+    if (!replaceId && Number(currentCount.rows[0]?.n || 0) >= 3) {
+      return res.status(409).json({
+        success:false,
+        max_reached:true,
+        error:'Hai già 3 messaggi salvati. Scegli quale sostituire.'
+      });
+    }
+
+    const decoded = followMeVoiceDecodeDataUrl20260528(req.body?.audio_data_url);
+    const ext = followMeVoiceMimeExt20260528(decoded.mime);
+    const sourceUrl = String(req.body?.source_url || project.active_url || '').trim();
+    const sourceLabel = followMeShortSourceLabel20260528(req.body?.source_label || sourceUrl);
+
+    const dir = path.join(FOLLOWME_VOICE_STORAGE_DIR_20260528, projectCode);
+    fs.mkdirSync(dir, { recursive:true });
+
+    const filename = 'voice_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '.' + ext;
+    const filePath = path.join(dir, filename);
+    fs.writeFileSync(filePath, decoded.buffer);
+
+    const fileUrl = followMeVoicePublicUrl20260528(projectCode, filename);
+
+    await pool.query(
+      `UPDATE followme_voice_messages
+       SET is_active = FALSE, updated_at = NOW()
+       WHERE project_id = $1`,
+      [project.id]
+    );
+
+    let row;
+
+    if (replaceId) {
+      const old = await pool.query(
+        `SELECT id, file_path
+         FROM followme_voice_messages
+         WHERE id = $1 AND project_id = $2
+         LIMIT 1`,
+        [replaceId, project.id]
+      );
+
+      if (!old.rows.length) {
+        try { fs.unlinkSync(filePath); } catch(e) {}
+        return res.status(404).json({ success:false, error:'Messaggio da sostituire non trovato.' });
+      }
+
+      try { if (old.rows[0].file_path) fs.unlinkSync(old.rows[0].file_path); } catch(e) {}
+
+      const upd = await pool.query(
+        `UPDATE followme_voice_messages
+         SET source_url = $3,
+             source_label = $4,
+             file_url = $5,
+             file_path = $6,
+             mime_type = $7,
+             duration_seconds = $8,
+             is_active = TRUE,
+             updated_at = NOW()
+         WHERE id = $1 AND project_id = $2
+         RETURNING id, source_url, source_label, file_url, mime_type, duration_seconds, is_active, listened_count, last_listened_at, created_at, updated_at`,
+        [replaceId, project.id, sourceUrl, sourceLabel, fileUrl, filePath, decoded.mime, duration]
+      );
+      row = upd.rows[0];
+    } else {
+      const ins = await pool.query(
+        `INSERT INTO followme_voice_messages
+         (project_id, source_url, source_label, file_url, file_path, mime_type, duration_seconds, is_active, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE,NOW(),NOW())
+         RETURNING id, source_url, source_label, file_url, mime_type, duration_seconds, is_active, listened_count, last_listened_at, created_at, updated_at`,
+        [project.id, sourceUrl, sourceLabel, fileUrl, filePath, decoded.mime, duration]
+      );
+      row = ins.rows[0];
+    }
+
+    const list = await pool.query(
+      `SELECT id, source_url, source_label, file_url, mime_type, duration_seconds, is_active,
+              listened_count, last_listened_at, created_at, updated_at
+       FROM followme_voice_messages
+       WHERE project_id = $1
+       ORDER BY created_at DESC
+       LIMIT 3`,
+      [project.id]
+    );
+
+    return res.json({
+      success:true,
+      message:row,
+      messages:list.rows,
+      has_active_voice:true,
+      active_voice:row
+    });
+  } catch (err) {
+    console.error('followme voice upload error:', err);
+    return res.status(500).json({ success:false, error:err.message || 'Errore salvataggio messaggio vocale.' });
+  }
+});
+
+app.post('/api/followme/:code/voice-messages/:id/select', express.json({ limit:'64kb' }), async function(req, res) {
+  try {
+    await ensureFollowMeVoiceMessagesRuntime20260528();
+
+    const code = String(req.params.code || '').trim();
+    const id = Number(req.params.id || 0);
+
+    const q = await pool.query(
+      `SELECT id, code, public_id, active_url
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!q.rows.length || !id) return res.status(404).json({ success:false, error:'Dati non trovati.' });
+
+    const project = q.rows[0];
+    const sourceUrl = String(project.active_url || '').trim();
+    const sourceLabel = followMeShortSourceLabel20260528(sourceUrl);
+
+    await pool.query(`UPDATE followme_voice_messages SET is_active = FALSE, updated_at = NOW() WHERE project_id = $1`, [project.id]);
+
+    const upd = await pool.query(
+      `UPDATE followme_voice_messages
+       SET is_active = TRUE,
+           source_url = $3,
+           source_label = $4,
+           updated_at = NOW()
+       WHERE id = $1 AND project_id = $2
+       RETURNING id, source_url, source_label, file_url, mime_type, duration_seconds, is_active, listened_count, last_listened_at, created_at, updated_at`,
+      [id, project.id, sourceUrl, sourceLabel]
+    );
+
+    if (!upd.rows.length) return res.status(404).json({ success:false, error:'Messaggio vocale non trovato.' });
+
+    return res.json({ success:true, active_voice:upd.rows[0], message:upd.rows[0] });
+  } catch (err) {
+    console.error('followme voice select error:', err);
+    return res.status(500).json({ success:false, error:'Errore selezione messaggio vocale.' });
+  }
+});
+
+app.post('/api/followme/:code/voice-messages/:id/delete', express.json({ limit:'64kb' }), async function(req, res) {
+  try {
+    await ensureFollowMeVoiceMessagesRuntime20260528();
+
+    const fs = require('fs');
+    const code = String(req.params.code || '').trim();
+    const id = Number(req.params.id || 0);
+
+    const q = await pool.query(
+      `SELECT id FROM followme_projects WHERE code = $1 OR public_id = $1 LIMIT 1`,
+      [code]
+    );
+
+    if (!q.rows.length || !id) return res.status(404).json({ success:false, error:'Dati non trovati.' });
+
+    const del = await pool.query(
+      `DELETE FROM followme_voice_messages
+       WHERE id = $1 AND project_id = $2
+       RETURNING file_path`,
+      [id, q.rows[0].id]
+    );
+
+    if (del.rows[0]?.file_path) {
+      try { fs.unlinkSync(del.rows[0].file_path); } catch(e) {}
+    }
+
+    const active = await pool.query(
+      `SELECT id, source_url, source_label, file_url, mime_type, duration_seconds, is_active,
+              listened_count, last_listened_at, created_at, updated_at
+       FROM followme_voice_messages
+       WHERE project_id = $1 AND is_active = TRUE
+       ORDER BY updated_at DESC
+       LIMIT 1`,
+      [q.rows[0].id]
+    );
+
+    return res.json({
+      success:true,
+      deleted:del.rowCount || 0,
+      has_active_voice:!!active.rows.length,
+      active_voice:active.rows[0] || null
+    });
+  } catch (err) {
+    console.error('followme voice delete error:', err);
+    return res.status(500).json({ success:false, error:'Errore cancellazione messaggio vocale.' });
+  }
+});
+
+app.post('/api/followme/:code/voice-messages/:id/listened', express.json({ limit:'32kb' }), async function(req, res) {
+  try {
+    await ensureFollowMeVoiceMessagesRuntime20260528();
+
+    const code = String(req.params.code || '').trim();
+    const id = Number(req.params.id || 0);
+
+    const q = await pool.query(
+      `SELECT id, code, public_id
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!q.rows.length || !id) return res.status(404).json({ success:false, error:'Dati non trovati.' });
+
+    const project = q.rows[0];
+
+    const upd = await pool.query(
+      `UPDATE followme_voice_messages
+       SET listened_count = COALESCE(listened_count,0) + 1,
+           last_listened_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $1 AND project_id = $2
+       RETURNING id, source_label, listened_count, last_listened_at`,
+      [id, project.id]
+    );
+
+    if (!upd.rows.length) return res.status(404).json({ success:false, error:'Messaggio vocale non trovato.' });
+
+    const pushKey = '__followmeVoiceListened_' + project.id + '_' + id;
+    const nowMs = Date.now();
+    const lastMs = Number(global[pushKey] || 0);
+    let push = { skipped:true, reason:'anti_spam' };
+
+    if (nowMs - lastMs > 60000) {
+      global[pushKey] = nowMs;
+      push = await sendFollowMeVoiceListenedPush20260528(project, upd.rows[0]);
+    }
+
+    return res.json({
+      success:true,
+      listened:true,
+      voice:upd.rows[0],
+      push
+    });
+  } catch (err) {
+    console.error('followme voice listened error:', err);
+    return res.status(500).json({ success:false, error:'Errore notifica ascolto messaggio.' });
   }
 });
 
