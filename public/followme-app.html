@@ -39591,6 +39591,492 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="FOLLOWME_VOICE_RAW_ONLY_KILL_OLD_HANDLERS_20260528">
+(function(){
+  "use strict";
+
+  if(window.__followMeVoiceRawOnlyKillOldHandlers20260528) return;
+  window.__followMeVoiceRawOnlyKillOldHandlers20260528 = true;
+
+  let mediaRecorder = null;
+  let streamRef = null;
+  let chunks = [];
+  let voiceBlob = null;
+  let voiceUrl = "";
+  let startedAt = 0;
+  let durationSeconds = 0;
+  let tick = null;
+
+  function $(id){ return document.getElementById(id); }
+
+  function getCode(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim();
+      const p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim();
+    }catch(e){ return ""; }
+  }
+
+  function toast(msg){
+    try{
+      if(typeof window.showToast === "function"){ window.showToast(msg); return; }
+      if(typeof window.toast === "function"){ window.toast(msg); return; }
+    }catch(e){}
+    alert(msg);
+  }
+
+  function statusEl(){
+    return $("voiceStatusClean20260528") ||
+           $("voiceStatus20260528") ||
+           document.querySelector("[id*='voiceStatus']");
+  }
+
+  function setStatus(msg){
+    const el = statusEl();
+    if(el) el.textContent = msg;
+  }
+
+  function meterEl(){
+    return $("voiceMeterClean20260528") ||
+           $("voiceMeter20260528") ||
+           document.querySelector("[id*='voiceMeter']");
+  }
+
+  function setMeter(pct){
+    const el = meterEl();
+    if(el) el.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  }
+
+  function findBtn(kind){
+    const ids = {
+      record:["voiceRecordClean20260528","voiceRecord20260528"],
+      stop:["voiceStopClean20260528","voiceStop20260528"],
+      play:["voicePlayClean20260528","voicePlay20260528"],
+      publish:["voicePublishClean20260528","voicePublish20260528"]
+    }[kind] || [];
+
+    for(const id of ids){
+      const el = $(id);
+      if(el) return el;
+    }
+
+    return document.querySelector("button[id*='voice" + kind.charAt(0).toUpperCase() + kind.slice(1) + "']");
+  }
+
+  function selectEl(){
+    return $("voiceSelectClean20260528") ||
+           $("voiceSelect20260528") ||
+           document.querySelector("select[id*='voiceSelect']");
+  }
+
+  function activeUrl(){
+    try{
+      const direct =
+        window.FOLLOWME_ACTIVE_URL ||
+        window.followMeActiveUrl ||
+        document.querySelector("[data-active-url]")?.getAttribute("data-active-url") ||
+        "";
+
+      if(String(direct || "").trim()) return String(direct).trim();
+
+      const all = Array.from(document.querySelectorAll("a[href]"));
+      for(const a of all){
+        const txt = String(a.textContent || "").toLowerCase();
+        const href = String(a.getAttribute("href") || "").trim();
+        if(href && (txt.includes("apri pagina") || txt.includes("pagina trasmessa"))){
+          return href;
+        }
+      }
+    }catch(e){}
+    return "";
+  }
+
+  function sourceLabel(){
+    try{
+      const u = activeUrl();
+      if(u) return new URL(u, location.origin).hostname.replace(/^www\./,"");
+    }catch(e){}
+    return "messaggio-vocale";
+  }
+
+  function chooseMime(){
+    /*
+      Su iPhone preferiamo MP4/M4A. Se Safari non lo accetta,
+      lasciamo MediaRecorder senza mime forzato.
+    */
+    const types = [
+      "audio/mp4",
+      "audio/aac",
+      "audio/webm;codecs=opus",
+      "audio/webm"
+    ];
+
+    if(!window.MediaRecorder || !MediaRecorder.isTypeSupported) return "";
+
+    for(const t of types){
+      try{
+        if(MediaRecorder.isTypeSupported(t)) return t;
+      }catch(e){}
+    }
+
+    return "";
+  }
+
+  function stopTracks(){
+    try{
+      if(streamRef) streamRef.getTracks().forEach(t => t.stop());
+    }catch(e){}
+    streamRef = null;
+  }
+
+  function clearTick(){
+    if(tick){
+      clearInterval(tick);
+      tick = null;
+    }
+  }
+
+  function setButtons(mode){
+    const record = findBtn("record");
+    const stop = findBtn("stop");
+    const play = findBtn("play");
+    const publish = findBtn("publish");
+
+    if(mode === "recording"){
+      if(record){ record.disabled = false; record.textContent = "Stop"; }
+      if(stop) stop.disabled = false;
+      if(play) play.disabled = true;
+      if(publish) publish.disabled = true;
+      return;
+    }
+
+    if(mode === "ready"){
+      if(record){ record.disabled = false; record.textContent = "Rifai"; }
+      if(stop) stop.disabled = true;
+      if(play) play.disabled = false;
+      if(publish) publish.disabled = false;
+      return;
+    }
+
+    if(mode === "saving"){
+      if(record) record.disabled = true;
+      if(stop) stop.disabled = true;
+      if(play) play.disabled = true;
+      if(publish) publish.disabled = true;
+      return;
+    }
+
+    if(record){ record.disabled = false; record.textContent = "Registra"; }
+    if(stop) stop.disabled = true;
+    if(play) play.disabled = !voiceBlob;
+    if(publish) publish.disabled = !voiceBlob;
+  }
+
+  async function startOrStop(ev){
+    try{
+      if(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      }
+
+      if(mediaRecorder && mediaRecorder.state === "recording"){
+        clearTick();
+        try{ mediaRecorder.stop(); }catch(e){}
+        return false;
+      }
+
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        throw new Error("Microfono non supportato da questo browser.");
+      }
+
+      if(!window.MediaRecorder){
+        throw new Error("Registrazione audio non supportata da questo browser.");
+      }
+
+      chunks = [];
+      voiceBlob = null;
+      durationSeconds = 0;
+
+      if(voiceUrl){
+        try{ URL.revokeObjectURL(voiceUrl); }catch(e){}
+        voiceUrl = "";
+      }
+
+      setMeter(0);
+      setStatus("Richiesta autorizzazione microfono...");
+
+      streamRef = await navigator.mediaDevices.getUserMedia({ audio:true });
+
+      const mime = chooseMime();
+      const options = mime ? { mimeType:mime, audioBitsPerSecond:64000 } : { audioBitsPerSecond:64000 };
+
+      mediaRecorder = new MediaRecorder(streamRef, options);
+
+      mediaRecorder.ondataavailable = function(e){
+        if(e.data && e.data.size) chunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = function(){
+        clearTick();
+        stopTracks();
+
+        const realMime = mediaRecorder.mimeType || mime || "audio/webm";
+        voiceBlob = new Blob(chunks, { type:realMime });
+        voiceUrl = URL.createObjectURL(voiceBlob);
+        durationSeconds = Math.max(1, Math.min(20, Math.round((Date.now() - startedAt) / 1000)));
+
+        setMeter(100);
+        setStatus("Registrazione pronta. Formato: " + realMime + " · " + voiceBlob.size + " byte");
+        setButtons("ready");
+      };
+
+      startedAt = Date.now();
+
+      /*
+        Uguale alla chat admin: chunk ogni 250ms.
+      */
+      mediaRecorder.start(250);
+
+      setButtons("recording");
+      setStatus("Registrazione in corso...");
+
+      tick = setInterval(function(){
+        if(!mediaRecorder || mediaRecorder.state !== "recording"){
+          clearTick();
+          return;
+        }
+
+        const elapsed = Math.min(20, Math.floor((Date.now() - startedAt) / 1000));
+        setMeter((elapsed / 20) * 100);
+        setStatus("Registrazione in corso... " + elapsed + "/20s");
+
+        if(elapsed >= 20){
+          clearTick();
+          try{ mediaRecorder.stop(); }catch(e){}
+        }
+      }, 250);
+
+      return false;
+
+    }catch(err){
+      clearTick();
+      stopTracks();
+      setButtons("idle");
+      setStatus(err.message || "Errore registrazione.");
+      toast(err.message || "Errore registrazione.");
+      return false;
+    }
+  }
+
+  function play(ev){
+    try{
+      if(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      }
+
+      if(!voiceBlob || !voiceBlob.size){
+        toast("Registra prima un messaggio.");
+        return false;
+      }
+
+      const audio = new Audio(voiceUrl || URL.createObjectURL(voiceBlob));
+      audio.play().catch(function(){
+        toast("Non riesco a riprodurre l’audio.");
+      });
+
+      return false;
+    }catch(e){
+      toast("Non riesco a riprodurre l’audio.");
+      return false;
+    }
+  }
+
+  async function publish(ev){
+    try{
+      if(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      }
+
+      if(!voiceBlob || !voiceBlob.size){
+        toast("Registra prima un messaggio.");
+        return false;
+      }
+
+      const code = getCode();
+      if(!code){
+        toast("Codice FollowMe non trovato.");
+        return false;
+      }
+
+      setButtons("saving");
+      setStatus("Caricamento audio RAW...");
+
+      let mime = voiceBlob.type || "audio/webm";
+      if(mime === "video/mp4") mime = "audio/mp4";
+      if(mime === "audio/x-m4a" || mime === "audio/m4a") mime = "audio/mp4";
+
+      const sel = selectEl();
+      const replaceId = sel && sel.value ? String(sel.value || "") : "";
+
+      const qs = new URLSearchParams();
+      qs.set("duration_seconds", String(durationSeconds || 1));
+      qs.set("source_label", sourceLabel());
+
+      const src = activeUrl();
+      if(src) qs.set("source_url", src);
+      if(replaceId) qs.set("replace_id", replaceId);
+
+      const ext = mime.includes("mp4") || mime.includes("aac") ? ".m4a" : ".webm";
+
+      const res = await fetch(
+        "/api/followme/" + encodeURIComponent(code) + "/voice-messages/upload-raw?" + qs.toString() + "&v=" + Date.now(),
+        {
+          method:"POST",
+          headers:{
+            "Content-Type": mime,
+            "X-FollowMe-Kind":"voice",
+            "X-FollowMe-Filename":"messaggio-vocale" + ext,
+            "X-FollowMe-Duration":String(durationSeconds || 1),
+            "X-FollowMe-Source-Label":sourceLabel()
+          },
+          body:voiceBlob
+        }
+      );
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || data.success === false){
+        throw new Error((data && (data.error || data.detail)) || "Audio non salvato.");
+      }
+
+      setStatus("Messaggio vocale salvato correttamente.");
+      toast("Messaggio vocale pubblicato.");
+
+      voiceBlob = null;
+      if(voiceUrl){
+        try{ URL.revokeObjectURL(voiceUrl); }catch(e){}
+        voiceUrl = "";
+      }
+
+      setMeter(0);
+      setButtons("idle");
+
+      const main =
+        $("followmeVoiceAdminBtnClean20260528") ||
+        $("followmeVoiceAdminBtn20260528") ||
+        $("followmeVoiceAdminBtnBridge20260528");
+
+      if(main){
+        main.classList.remove("is-off");
+        main.classList.add("is-on");
+        main.textContent = "Registra messaggio ON";
+      }
+
+      return false;
+
+    }catch(err){
+      setButtons("ready");
+      setStatus(err.message || "Errore salvataggio audio.");
+      toast(err.message || "Errore salvataggio audio.");
+      return false;
+    }
+  }
+
+  function cloneCleanButton(btn, kind){
+    if(!btn) return null;
+
+    if(btn.dataset.rawOnlyClean20260528 === "1") return btn;
+
+    const clone = btn.cloneNode(true);
+    clone.dataset.rawOnlyClean20260528 = "1";
+    clone.removeAttribute("onclick");
+
+    if(kind === "record") clone.textContent = voiceBlob ? "Rifai" : "Registra";
+    if(kind === "stop") clone.textContent = "Ferma";
+    if(kind === "play") clone.textContent = "Riascolta";
+    if(kind === "publish") clone.textContent = "Pubblica";
+
+    btn.parentNode.replaceChild(clone, btn);
+    return clone;
+  }
+
+  function bindRawOnly(){
+    const record = cloneCleanButton(findBtn("record"), "record");
+    const stop = cloneCleanButton(findBtn("stop"), "stop");
+    const playBtn = cloneCleanButton(findBtn("play"), "play");
+    const publishBtn = cloneCleanButton(findBtn("publish"), "publish");
+
+    if(record && record.dataset.boundRawOnly20260528 !== "1"){
+      record.dataset.boundRawOnly20260528 = "1";
+      record.addEventListener("click", startOrStop, true);
+      record.addEventListener("touchend", startOrStop, true);
+    }
+
+    if(stop && stop.dataset.boundRawOnly20260528 !== "1"){
+      stop.dataset.boundRawOnly20260528 = "1";
+      stop.addEventListener("click", startOrStop, true);
+      stop.addEventListener("touchend", startOrStop, true);
+    }
+
+    if(playBtn && playBtn.dataset.boundRawOnly20260528 !== "1"){
+      playBtn.dataset.boundRawOnly20260528 = "1";
+      playBtn.addEventListener("click", play, true);
+      playBtn.addEventListener("touchend", play, true);
+    }
+
+    if(publishBtn && publishBtn.dataset.boundRawOnly20260528 !== "1"){
+      publishBtn.dataset.boundRawOnly20260528 = "1";
+      publishBtn.addEventListener("click", publish, true);
+      publishBtn.addEventListener("touchend", publish, true);
+    }
+
+    setButtons(voiceBlob ? "ready" : "idle");
+  }
+
+  function boot(){
+    bindRawOnly();
+
+    const openers = Array.from(document.querySelectorAll("button,a"));
+    openers.forEach(function(el){
+      if(el.dataset.rawOnlyOpenBound20260528 === "1") return;
+
+      const txt = String(el.textContent || el.innerText || "").toLowerCase();
+      if(txt.includes("registra messaggio") || txt.includes("messaggio vocale")){
+        el.dataset.rawOnlyOpenBound20260528 = "1";
+        el.addEventListener("click", function(){
+          setTimeout(bindRawOnly, 100);
+          setTimeout(bindRawOnly, 400);
+          setTimeout(bindRawOnly, 900);
+        }, true);
+      }
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    boot();
+    setTimeout(boot, 500);
+    setTimeout(boot, 1400);
+  });
+
+  setInterval(boot, 900);
+
+  try{
+    const mo = new MutationObserver(function(){
+      clearTimeout(window.__followMeRawOnlyKillOldTimer20260528);
+      window.__followMeRawOnlyKillOldTimer20260528 = setTimeout(boot, 100);
+    });
+    mo.observe(document.documentElement || document.body, { childList:true, subtree:true });
+  }catch(e){}
+})();
+</script>
+
 </body>
 </html>
 
