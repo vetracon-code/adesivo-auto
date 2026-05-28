@@ -835,6 +835,40 @@ app.get('/owner-app.html', async (req, res) => {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// FOLLOWME_SERVER_BLOCK_LEGACY_CHAT_WAITING_20260528
+app.use(function(req, res, next) {
+  try {
+    const path = String(req.path || '');
+    const q = req.query || {};
+
+    /*
+      La vecchia WebApp non deve più restare in chatWaiting.
+      Se arriva qualsiasi richiesta /fm/app/CODICE?chatWaiting=1&focus=chat-waiting,
+      il server manda direttamente alla nuova admin Chat V2.
+    */
+    const m = path.match(/^\/fm\/app\/([^\/?#]+)/i);
+    if (m && (String(q.chatWaiting || '') === '1' || String(q.focus || '') === 'chat-waiting')) {
+      const code = decodeURIComponent(m[1] || '').trim() || 'FM-DEMO';
+      return res.redirect(302, '/fm/chat-v2/admin/' + encodeURIComponent(code) + '?v=' + Date.now());
+    }
+
+    /*
+      Se qualche vecchio link punta ancora alla vecchia chat pubblica /fm/chat/c/TOKEN,
+      lo portiamo alla nuova pagina utente Chat V2 con lo stesso token.
+    */
+    const oldChat = path.match(/^\/fm\/chat\/c\/([^\/?#]+)/i);
+    if (oldChat) {
+      const token = decodeURIComponent(oldChat[1] || '').trim();
+      if (token) {
+        return res.redirect(302, '/fm/chat-v2/c/' + encodeURIComponent(token) + '?v=' + Date.now());
+      }
+    }
+  } catch (e) {}
+
+  return next();
+});
+
+
 app.post('/api/admin-login', (req, res) => {
   try {
     const { username, password } = req.body || {};

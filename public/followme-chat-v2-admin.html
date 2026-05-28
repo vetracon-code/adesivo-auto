@@ -6,1461 +6,361 @@
   <title>FollowMe Chat V2 Admin</title>
   <style>
     :root{
-      --wa-green:#00a884;
-      --wa-green-dark:#008069;
-      --wa-bg:#efeae2;
-      --wa-panel:#f0f2f5;
-      --wa-line:rgba(0,0,0,.08);
-      --wa-text:#111b21;
-      --wa-muted:#667781;
-      --bubble-admin:#d9fdd3;
-      --bubble-user:#ffffff;
-      --danger:#ff3b30;
-      --shadow:0 14px 40px rgba(0,0,0,.16);
+      --green:#008069;
+      --green2:#00a884;
+      --bg:#efeae2;
+      --panel:#f0f2f5;
+      --text:#111b21;
+      --muted:#667781;
+      --line:rgba(0,0,0,.08);
+      --danger:#d92d20;
+      --owner:#d9fdd3;
+      --user:#fff;
     }
-
     *{box-sizing:border-box}
-    html,body{height:100%;margin:0}
-    body{
-      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
-      background:var(--wa-bg);
-      color:var(--wa-text);
-      overflow:hidden;
-    }
-
-    .app{
-      height:100dvh;
-      display:grid;
-      grid-template-rows:auto auto 1fr auto;
-      background:
-        radial-gradient(circle at 20% 10%,rgba(255,255,255,.35),transparent 28%),
-        linear-gradient(180deg,#e6ddd4,var(--wa-bg));
-    }
-
-    .top{
-      min-height:58px;
-      padding:calc(8px + env(safe-area-inset-top)) 10px 8px;
-      background:var(--wa-green-dark);
-      color:white;
-      display:flex;
-      align-items:center;
-      gap:10px;
-      box-shadow:0 2px 12px rgba(0,0,0,.12);
-      z-index:5;
-    }
-
-    .back{
-      width:38px;
-      height:38px;
-      border-radius:999px;
-      border:0;
-      background:rgba(255,255,255,.12);
-      color:white;
-      font-size:22px;
-      font-weight:800;
-    }
-
-    .title{
-      flex:1;
-      min-width:0;
-      display:grid;
-      gap:1px;
-    }
-
-    .title strong{
-      font-size:16px;
-      line-height:1.15;
-      letter-spacing:-.02em;
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-    }
-
-    .title span{
-      font-size:12px;
-      opacity:.9;
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-    }
-
-    .reset{
-      border:0;
-      border-radius:999px;
-      background:var(--danger);
-      color:white;
-      min-height:34px;
-      padding:0 13px;
-      font-weight:900;
-      box-shadow:0 8px 20px rgba(255,59,48,.24);
-    }
-
-    .sessions{
-      height:54px;
-      display:flex;
-      align-items:center;
-      gap:8px;
-      padding:8px 10px;
-      overflow-x:auto;
-      background:#ffffff;
-      border-bottom:1px solid var(--wa-line);
-      scrollbar-width:none;
-    }
-    .sessions::-webkit-scrollbar{display:none}
-
-    .chip{
-      flex:0 0 auto;
-      min-width:46px;
-      height:36px;
-      border-radius:999px;
-      border:1px solid rgba(0,0,0,.08);
-      background:#f7f8f8;
-      color:#263238;
-      font-size:13px;
-      font-weight:900;
-      padding:0 12px;
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      gap:5px;
-      box-shadow:0 1px 2px rgba(0,0,0,.04);
-    }
-    .chip.active{
-      background:var(--wa-green);
-      color:white;
-      border-color:transparent;
-    }
-    .chip.new::after{
-      content:"";
-      width:8px;
-      height:8px;
-      border-radius:99px;
-      background:#ff3b30;
-      display:block;
-    }
-    .chip.blocked{
-      opacity:.55;
-      text-decoration:line-through;
-    }
-
-    .controls{
-      min-height:42px;
-      height:42px;
-      padding:5px 8px;
-      display:flex;
-      align-items:center;
-      gap:6px;
-      background:rgba(255,255,255,.86);
-      border-bottom:1px solid var(--wa-line);
-      overflow:hidden;
-      scrollbar-width:none;
-      flex-wrap:nowrap;
-    }
-    .controls::-webkit-scrollbar{display:none}
-    .control{
-      flex:0 0 auto;
-      height:30px;
-      min-height:30px;
-      max-height:30px;
-      border-radius:999px;
-      padding:0 10px;
-      border:1px solid rgba(0,0,0,.08);
-      background:#fff;
-      color:#1f2c33;
-      font-weight:850;
-      font-size:11px;
-      line-height:30px;
-      white-space:nowrap;
-    }
-    .control.on{
-      background:#d9fdd3;
-      border-color:rgba(0,168,132,.26);
-      color:#056b55;
-    }
-    .control.danger{
-      background:#fff4f2;
-      color:#b42318;
-      border-color:rgba(255,59,48,.18);
-    }
-
-    .messages{
-      min-height:0;
-      overflow-y:auto;
-      padding:14px 10px 16px;
-      display:flex;
-      flex-direction:column;
-      gap:7px;
-      background:
-        linear-gradient(rgba(239,234,226,.88),rgba(239,234,226,.88)),
-        radial-gradient(circle at 10% 20%,rgba(0,0,0,.04) 0 1px,transparent 1px);
-      background-size:auto,22px 22px;
-    }
-
-    .empty{
-      margin:auto;
-      max-width:320px;
-      text-align:center;
-      background:rgba(255,255,255,.76);
-      border:1px solid rgba(0,0,0,.06);
-      border-radius:22px;
-      padding:18px;
-      color:var(--wa-muted);
-      box-shadow:0 10px 30px rgba(0,0,0,.08);
-    }
-    .empty strong{
-      display:block;
-      color:#263238;
-      margin-bottom:5px;
-      font-size:16px;
-    }
-
-    .bubble{
-      max-width:82%;
-      padding:8px 10px 6px;
-      border-radius:12px;
-      line-height:1.28;
-      font-size:15px;
-      box-shadow:0 1px 1px rgba(0,0,0,.08);
-      word-wrap:break-word;
-      white-space:pre-wrap;
-    }
-    .bubble.visitor{
-      align-self:flex-start;
-      background:var(--bubble-user);
-      border-top-left-radius:4px;
-    }
-    .bubble.owner{
-      align-self:flex-end;
-      background:var(--bubble-admin);
-      border-top-right-radius:4px;
-    }
-    .time{
-      display:block;
-      margin-top:3px;
-      font-size:10px;
-      color:#667781;
-      text-align:right;
-    }
-
-    .composer{
-      padding:8px 8px calc(8px + env(safe-area-inset-bottom));
-      background:var(--wa-panel);
-      display:flex;
-      align-items:flex-end;
-      gap:7px;
-      border-top:1px solid rgba(0,0,0,.06);
-    }
-
-    .plus{
-      width:42px;
-      height:42px;
-      flex:0 0 auto;
-      border-radius:999px;
-      border:0;
-      background:transparent;
-      color:#54656f;
-      font-size:30px;
-      line-height:1;
-    }
-
-    .input-wrap{
-      flex:1;
-      min-height:42px;
-      background:white;
-      border-radius:22px;
-      display:flex;
-      align-items:center;
-      padding:0 12px;
-      box-shadow:0 1px 2px rgba(0,0,0,.06);
-    }
-
-    textarea{
-      width:100%;
-      border:0;
-      outline:0;
-      resize:none;
-      max-height:110px;
-      min-height:22px;
-      line-height:22px;
-      font:500 16px/22px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
-      color:#111b21;
-      background:transparent;
-      padding:10px 0;
-    }
-
-    .send{
-      width:44px;
-      height:44px;
-      flex:0 0 auto;
-      border-radius:999px;
-      border:0;
-      background:var(--wa-green);
-      color:white;
-      display:grid;
-      place-items:center;
-      box-shadow:0 8px 18px rgba(0,168,132,.28);
-    }
-    .send svg{
-      width:22px;
-      height:22px;
-      fill:none;
-      stroke:currentColor;
-      stroke-width:2.4;
-      stroke-linecap:round;
-      stroke-linejoin:round;
-      transform:translateX(1px);
-    }
-
-    .send:disabled,
-    .reset:disabled,
-    .control:disabled{
-      opacity:.55;
-    }
-
-    .toast{
-      position:fixed;
-      left:50%;
-      bottom:calc(74px + env(safe-area-inset-bottom));
-      transform:translateX(-50%) translateY(12px);
-      z-index:50;
-      max-width:88vw;
-      padding:11px 15px;
-      border-radius:999px;
-      background:rgba(17,27,33,.94);
-      color:white;
-      font-size:13px;
-      font-weight:800;
-      opacity:0;
-      pointer-events:none;
-      transition:.18s ease;
-      box-shadow:var(--shadow);
-      text-align:center;
-    }
-    .toast.show{
-      opacity:1;
-      transform:translateX(-50%) translateY(0);
-    }
-
-    /* admin-extra-v2-menu-20260527 */
-    .extra-menu{
-      position:fixed;
-      left:10px;
-      right:10px;
-      bottom:calc(64px + env(safe-area-inset-bottom));
-      z-index:40;
-      display:none;
-      padding:10px;
-      border-radius:24px;
-      background:rgba(255,255,255,.96);
-      -webkit-backdrop-filter:blur(18px);
-      backdrop-filter:blur(18px);
-      box-shadow:0 18px 52px rgba(0,0,0,.24);
-      border:1px solid rgba(0,0,0,.07);
-    }
-    .extra-menu.open{display:block}
-    .extra-menu-grid{
-      display:grid;
-      grid-template-columns:repeat(4, minmax(0, 1fr));
-      gap:8px;
-    }
-    .extra-menu button{
-      min-height:72px;
-      border:0;
-      border-radius:18px;
-      padding:8px 4px;
-      background:#f5f5f7;
-      color:#1f2c33;
-      font-weight:900;
-      font-size:11px;
-      letter-spacing:-.02em;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      justify-content:center;
-      gap:5px;
-      -webkit-tap-highlight-color:transparent;
-    }
-    .extra-menu button:active{
-      transform:scale(.97);
-      background:#e9e9ee;
-    }
-    .extra-icon{
-      width:34px;
-      height:34px;
-      border-radius:12px;
-      display:grid;
-      place-items:center;
-      font-size:19px;
-      color:white;
-      box-shadow:0 7px 14px rgba(0,0,0,.14);
-    }
-    .extra-icon.photo{background:linear-gradient(135deg,#34c759,#30d158)}
-    .extra-icon.file{background:linear-gradient(135deg,#007aff,#5ac8fa)}
-    .extra-icon.voice{background:linear-gradient(135deg,#ff9500,#ffcc00)}
-    .extra-icon.location{background:linear-gradient(135deg,#ff2d55,#ff6482)}
-    .extra-label{
-      display:block;
-      line-height:1.1;
-      white-space:normal;
-      text-align:center;
-    }
-    .extra-hint{
-      display:none;
-    }
-    .attachment-card{
-      display:grid;
-      gap:6px;
-    }
-    .attachment-card img{
-      max-width:240px;
-      width:100%;
-      border-radius:12px;
-      display:block;
-    }
-    .attachment-file{
-      display:flex;
-      align-items:center;
-      gap:8px;
-      padding:9px 10px;
-      border-radius:12px;
-      background:rgba(255,255,255,.55);
-      color:#111b21;
-      text-decoration:none;
-      font-weight:850;
-    }
-    .attachment-file span{
-      overflow:hidden;
-      text-overflow:ellipsis;
-      white-space:nowrap;
-      max-width:220px;
-    }
-    .attachment-countdown{
-      display:block;
-      margin-top:2px;
-      font-size:10px;
-      line-height:1.2;
-      color:#667781;
-      text-align:right;
-      font-weight:800;
-      opacity:.86;
-    }
-    .attachment-countdown.expiring{
-      color:#b42318;
-    }
-    .voice-recorder-sheet{
-      position:fixed;
-      left:12px;
-      right:12px;
-      bottom:calc(64px + env(safe-area-inset-bottom));
-      z-index:45;
-      display:none;
-      padding:14px;
-      border-radius:28px;
-      background:rgba(248,248,248,.94);
-      -webkit-backdrop-filter:blur(22px) saturate(1.35);
-      backdrop-filter:blur(22px) saturate(1.35);
-      box-shadow:0 22px 60px rgba(0,0,0,.28);
-      border:1px solid rgba(255,255,255,.72);
-    }
-    .voice-recorder-sheet.open{display:block}
-    .voice-recorder-title{
-      font-weight:950;
-      font-size:15px;
-      letter-spacing:-.02em;
-      margin-bottom:4px;
-      color:#111b21;
-    }
-    .voice-recorder-sub{
-      font-size:12px;
-      color:#667781;
-      font-weight:750;
-      margin-bottom:12px;
-    }
-    .voice-recorder-time{
-      height:54px;
-      border-radius:20px;
-      background:#fff;
-      display:grid;
-      place-items:center;
-      font-size:26px;
-      font-weight:950;
-      font-variant-numeric:tabular-nums;
-      color:#111b21;
-      margin-bottom:12px;
-      box-shadow:0 8px 20px rgba(0,0,0,.07);
-    }
-    .voice-recorder-actions{
-      display:grid;
-      grid-template-columns:1fr 1fr 1fr;
-      gap:8px;
-    }
-    .voice-recorder-actions button{
-      min-height:42px;
-      border:0;
-      border-radius:999px;
-      font-weight:950;
-      font-size:13px;
-    }
-    .voice-start{background:#ff3b30;color:white}
-    .voice-cancel{background:#f0f2f5;color:#1f2c33}
-    .voice-send{background:#00a884;color:white}
-    .voice-send:disabled{opacity:.45}
-    .voice-card{
-      display:grid;
-      gap:7px;
-      min-width:210px;
-    }
-    .voice-row{
-      display:flex;
-      align-items:center;
-      gap:8px;
-      padding:8px;
-      border-radius:14px;
-      background:rgba(255,255,255,.58);
-    }
-    .voice-row audio{
-      width:190px;
-      max-width:100%;
-      height:34px;
-    }
-    .voice-meta{
-      display:flex;
-      justify-content:space-between;
-      gap:8px;
-      font-size:10px;
-      color:#667781;
-      font-weight:850;
-    }
+    html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:var(--text);background:var(--bg)}
+    .app{height:100dvh;display:grid;grid-template-rows:auto auto 1fr auto;background:var(--bg)}
+    header{background:var(--green);color:#fff;padding:calc(8px + env(safe-area-inset-top)) 10px 8px;display:flex;align-items:center;gap:10px}
+    .back,.reset,.control,.send{border:0;border-radius:999px;font-weight:900;cursor:pointer}
+    .back{width:38px;height:38px;background:rgba(255,255,255,.16);color:#fff;font-size:24px}
+    .title{flex:1;min-width:0;display:grid;gap:2px}
+    .title strong{font-size:16px}
+    .title span{font-size:12px;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .reset{padding:10px 13px;background:#ff3b30;color:#fff}
+    .sessions{display:flex;gap:8px;overflow-x:auto;padding:8px;background:#075e54}
+    .session{border:0;border-radius:999px;padding:9px 12px;background:rgba(255,255,255,.16);color:#fff;font-weight:900;white-space:nowrap}
+    .session.active{background:#fff;color:#075e54}
+    .controls{display:flex;gap:8px;padding:8px;background:var(--panel);border-bottom:1px solid var(--line)}
+    .control{flex:1;padding:11px 10px;background:#fff;color:var(--text);border:1px solid var(--line)}
+    .control.on{background:var(--green2);color:#fff}
+    .control.danger.on{background:var(--danger);color:#fff}
+    .messages{min-height:0;overflow:auto;padding:14px 10px;display:flex;flex-direction:column;gap:8px}
+    .empty{margin:20px auto;max-width:330px;text-align:center;background:rgba(255,255,255,.78);padding:18px;border-radius:22px;color:var(--muted);line-height:1.45}
+    .bubble{max-width:84%;padding:9px 10px 7px;border-radius:12px;box-shadow:0 1px 1px rgba(0,0,0,.08);white-space:pre-wrap;word-break:break-word;font-size:15px;line-height:1.3}
+    .bubble.owner{align-self:flex-end;background:var(--owner);border-top-right-radius:4px}
+    .bubble.visitor{align-self:flex-start;background:var(--user);border-top-left-radius:4px}
+    .time{display:block;margin-top:4px;font-size:10px;color:var(--muted);text-align:right}
+    footer{display:flex;gap:8px;padding:8px 8px calc(8px + env(safe-area-inset-bottom));background:var(--panel);border-top:1px solid var(--line)}
+    textarea{flex:1;min-height:42px;max-height:110px;resize:none;border:0;outline:0;border-radius:22px;padding:10px 13px;font:500 16px/22px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial;background:#fff}
+    .send{width:46px;height:46px;background:var(--green2);color:#fff;font-size:20px}
+    .toast{position:fixed;left:50%;bottom:75px;transform:translateX(-50%) translateY(10px);opacity:0;transition:.18s;background:rgba(17,27,33,.94);color:#fff;border-radius:999px;padding:11px 15px;font-size:13px;font-weight:800;z-index:50;max-width:88vw;text-align:center;pointer-events:none}
+    .toast.show{opacity:1;transform:translateX(-50%)}
+    button:disabled{opacity:.55;cursor:not-allowed}
   </style>
 </head>
 <body>
-  <main class="app">
-    <header class="top">
-      <button class="back" id="backBtn" type="button">‹</button>
-      <div class="title">
-        <strong id="title">FollowMe Chat V2</strong>
-        <span id="subtitle">In attesa di utenti...</span>
-      </div>
-      <button class="reset" id="resetBtn" type="button">Reset</button>
-    </header>
-
-    <nav class="sessions" id="sessions"></nav>
-
-    <section class="controls" id="controls">
-      <button class="control" id="extraBtn" type="button" disabled>Extra OFF</button>
-      <button class="control danger" id="blockBtn" type="button" disabled>Blocca</button>
-    </section>
-
-    <section class="messages" id="messages">
-      <div class="empty">
-        <strong>Chat attiva</strong>
-        Fai entrare un utente dal QR. Quando si collega, comparirà qui.
-      </div>
-    </section>
-
-    <footer class="composer">
-      <button class="plus" id="plusBtn" type="button">+</button>
-      <div class="input-wrap">
-        <textarea id="textInput" rows="1" placeholder="Scrivi un messaggio..."></textarea>
-      </div>
-      <button class="send" id="sendBtn" type="button" aria-label="Invia">
-        <svg viewBox="0 0 24 24"><path d="M4 12h15"></path><path d="M13 6l6 6-6 6"></path></svg>
-      </button>
-    </footer>
-  </main>
-
-    <div class="extra-menu" id="adminExtraMenuV2" aria-hidden="true">
-    <div class="extra-menu-grid">
-      <button type="button" id="adminPickPhotoV2">
-        <span class="extra-icon photo">🖼️</span>
-        <span class="extra-label">Foto</span>
-        <span class="extra-hint">Apple nativo</span>
-      </button>
-
-      <button type="button" id="adminPickFileV2">
-        <span class="extra-icon file">📄</span>
-        <span class="extra-label">Documento</span>
-        <span class="extra-hint">PDF/file</span>
-      </button>
-
-      <button type="button" id="adminVoiceMsgV2">
-        <span class="extra-icon voice">🎙️</span>
-        <span class="extra-label">Vocale</span>
-        <span class="extra-hint">20 sec</span>
-      </button>
-
-      <button type="button" id="adminLocationV2">
-        <span class="extra-icon location">📍</span>
-        <span class="extra-label">Posizione</span>
-        <span class="extra-hint">temporanea</span>
-      </button>
+<main class="app">
+  <header>
+    <button class="back" id="backBtn" type="button" title="Spegni chat e torna alla WebApp">‹</button>
+    <div class="title">
+      <strong>FollowMe Chat V2</strong>
+      <span id="subtitle">Caricamento sessioni...</span>
     </div>
-  </div>
+    <button class="reset" id="resetBtn" type="button">Reset</button>
+  </header>
 
-<input id="adminPhotoInputV2" type="file" accept="image/*,video/*" style="display:none">
-  <input id="adminCameraInputV2" type="file" accept="image/*" capture="environment" style="display:none">
-  <input id="adminFileInputV2" type="file" accept=".pdf,image/*,video/*,application/pdf,text/plain" style="display:none">
+  <nav class="sessions" id="sessions"></nav>
 
-  <div class="voice-recorder-sheet" id="adminVoiceRecorderV2" aria-hidden="true">
-    <div class="voice-recorder-title">Messaggio vocale</div>
-    <div class="voice-recorder-sub">Registra un vocale temporaneo. Durata massima 20 secondi.</div>
-    <div class="voice-recorder-time" id="adminVoiceTimerV2">00:00</div>
-    <div class="voice-recorder-actions">
-      <button class="voice-cancel" id="adminVoiceCancelV2" type="button">Annulla</button>
-      <button class="voice-start" id="adminVoiceStartV2" type="button">Registra</button>
-      <button class="voice-send" id="adminVoiceSendV2" type="button" disabled>Invia</button>
-    </div>
-  </div>
+  <section class="controls">
+    <button class="control" id="extraBtn" type="button" disabled>Extra OFF</button>
+    <button class="control danger" id="blockBtn" type="button" disabled>Blocca</button>
+  </section>
 
-  <div class="toast" id="toast"></div>
+  <section class="messages" id="messages">
+    <div class="empty">In attesa di utenti collegati dal QR.</div>
+  </section>
 
-  <script>
-  (function(){
-    const pathMatch = location.pathname.match(/\/fm\/chat-v2\/admin\/([^\/?#]+)/i);
-    const CODE = pathMatch ? decodeURIComponent(pathMatch[1]).trim().toUpperCase() : "FMDEMO";
+  <footer>
+    <textarea id="textInput" rows="1" placeholder="Scrivi un messaggio..." disabled></textarea>
+    <button class="send" id="sendBtn" type="button" disabled>➤</button>
+  </footer>
+</main>
 
-    let sessions = [];
-    let selectedId = "";
-    let lastMessageId = 0;
-    let messagesById = new Set();
-    let pollMessagesTimer = null;
-    let pollSessionsTimer = null;
-    let sending = false;
+<div class="toast" id="toast"></div>
 
-    const els = {
-      title:document.getElementById("title"),
-      subtitle:document.getElementById("subtitle"),
-      sessions:document.getElementById("sessions"),
-      messages:document.getElementById("messages"),
-      input:document.getElementById("textInput"),
-      send:document.getElementById("sendBtn"),
-      reset:document.getElementById("resetBtn"),
-      back:document.getElementById("backBtn"),
-      extra:document.getElementById("extraBtn"),
-      block:document.getElementById("blockBtn"),
-      plus:document.getElementById("plusBtn"),
-      extraMenu:document.getElementById("adminExtraMenuV2"),
-      pickPhoto:document.getElementById("adminPickPhotoV2"),
-      takePhoto:document.getElementById("adminTakePhotoV2"),
-      pickFile:document.getElementById("adminPickFileV2"),
-      voiceMsg:document.getElementById("adminVoiceMsgV2"),
-      locationBtn:document.getElementById("adminLocationV2"),
-      voiceSheet:document.getElementById("adminVoiceRecorderV2"),
-      voiceTimer:document.getElementById("adminVoiceTimerV2"),
-      voiceCancel:document.getElementById("adminVoiceCancelV2"),
-      voiceStart:document.getElementById("adminVoiceStartV2"),
-      voiceSend:document.getElementById("adminVoiceSendV2"),
-      photoInput:document.getElementById("adminPhotoInputV2"),
-      cameraInput:document.getElementById("adminCameraInputV2"),
-      fileInput:document.getElementById("adminFileInputV2"),
-      toast:document.getElementById("toast")
-    };
+<script>
+(function(){
+  "use strict";
 
-    function toast(msg){
-      els.toast.textContent = msg;
-      els.toast.classList.add("show");
-      clearTimeout(els.toast._t);
-      els.toast._t = setTimeout(()=>els.toast.classList.remove("show"), 2200);
+  const pathMatch = location.pathname.match(/\/fm\/chat-v2\/admin\/([^\/?#]+)/i);
+  const CODE = pathMatch ? decodeURIComponent(pathMatch[1]).trim() : "FM-DEMO";
+
+  let sessions = [];
+  let selectedId = "";
+  let lastMessageId = 0;
+  let knownMessages = new Set();
+  let sending = false;
+
+  const els = {
+    subtitle: document.getElementById("subtitle"),
+    sessions: document.getElementById("sessions"),
+    messages: document.getElementById("messages"),
+    input: document.getElementById("textInput"),
+    send: document.getElementById("sendBtn"),
+    reset: document.getElementById("resetBtn"),
+    back: document.getElementById("backBtn"),
+    extra: document.getElementById("extraBtn"),
+    block: document.getElementById("blockBtn"),
+    toast: document.getElementById("toast")
+  };
+
+  function toast(msg){
+    els.toast.textContent = msg;
+    els.toast.classList.add("show");
+    clearTimeout(els.toast._t);
+    els.toast._t = setTimeout(()=>els.toast.classList.remove("show"), 2300);
+  }
+
+  function esc(s){
+    return String(s || "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+  }
+
+  function timeOf(v){
+    try { return new Date(v).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"}); }
+    catch(e){ return ""; }
+  }
+
+  async function api(url, opts){
+    const res = await fetch(url, Object.assign({cache:"no-store"}, opts || {}));
+    const data = await res.json().catch(()=>null);
+    if(!res.ok || !data || data.success === false){
+      throw new Error((data && (data.error || data.detail)) || ("HTTP " + res.status));
     }
+    return data;
+  }
 
-    function esc(s){
-      return String(s || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    }
+  function post(url, body){
+    return api(url, {
+      method:"POST",
+      headers:{"Content-Type":"application/json","Accept":"application/json"},
+      body:JSON.stringify(body || {})
+    });
+  }
 
-    function timeOf(v){
-      try{
-        return new Date(v).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"});
-      }catch(e){
-        return "";
-      }
-    }
+  function currentSession(){
+    return sessions.find(s => String(s.id) === String(selectedId)) || null;
+  }
 
-    async function api(url, opts){
-      const res = await fetch(url, Object.assign({cache:"no-store"}, opts || {}));
-      const data = await res.json().catch(()=>null);
-      if(!res.ok || !data || data.success === false){
-        throw new Error((data && data.error) || ("HTTP " + res.status));
-      }
-      return data;
-    }
+  function labelFor(s, idx){
+    const n = Number(s.display_index || idx + 1);
+    return "U" + n;
+  }
 
-    async function post(url, body){
-      return api(url, {
-        method:"POST",
-        headers:{"Content-Type":"application/json","Accept":"application/json"},
-        body:JSON.stringify(body || {})
-      });
-    }
+  function renderSessions(){
+    els.sessions.innerHTML = "";
 
-    function preferredSessionFromUrlV2(){
-      try{
-        const p = new URLSearchParams(location.search || "");
-        return String(p.get("session") || p.get("session_id") || "").trim();
-      }catch(e){
-        return "";
-      }
-    }
-
-    function selectedSession(){
-      return sessions.find(s => String(s.id) === String(selectedId)) || null;
-    }
-
-    function labelFor(s, idx){
-      const n = Number(s.display_index || idx + 1);
-      return "U" + n;
-    }
-
-    function renderSessions(){
-      els.sessions.innerHTML = "";
-      sessions.forEach((s, idx)=>{
-        const b = document.createElement("button");
-        b.type = "button";
-        b.className = "chip" +
-          (String(s.id) === String(selectedId) ? " active" : "") +
-          (!s.owner_opened_at ? " new" : "") +
-          (s.is_blocked ? " blocked" : "");
-        b.textContent = s.display_name ? labelFor(s,idx) + " · " + s.display_name : labelFor(s,idx);
-        b.onclick = () => selectSession(s.id);
-        els.sessions.appendChild(b);
-      });
-    }
-
-    function renderControls(){
-      const s = selectedSession();
-      const has = !!s;
-      els.extra.disabled = !has;
-      els.block.disabled = !has;
-      els.input.disabled = !has || (s && s.is_blocked);
-      els.send.disabled = !has || (s && s.is_blocked);
-
-      if(!has){
-        els.subtitle.textContent = "In attesa di utenti...";
-        els.extra.textContent = "Extra OFF";
-        els.extra.className = "control";
-        els.block.textContent = "Blocca";
-        els.block.className = "control danger";
-        return;
-      }
-
-      els.subtitle.textContent = (s.display_name || s.visitor_label || "Utente collegato") +
-        (s.is_blocked ? " · bloccato" : " · online");
-
-      els.extra.textContent = s.uploads_enabled ? "Extra ON" : "Extra OFF";
-      els.extra.className = "control" + (s.uploads_enabled ? " on" : "");
-
-      els.block.textContent = s.is_blocked ? "Sblocca" : "Blocca";
-      els.block.className = "control" + (s.is_blocked ? " on" : " danger");
-    }
-
-    function emptyMessage(text){
-      els.messages.innerHTML =
-        '<div class="empty"><strong>FollowMe Chat</strong>' + esc(text) + '</div>';
-    }
-
-    function clearMessages(){
-      els.messages.innerHTML = "";
-      messagesById = new Set();
-      lastMessageId = 0;
-    }
-
-    function parseAttachmentV2(raw){
-      try{
-        const obj = JSON.parse(String(raw || ""));
-        if(obj && obj.__followme_attachment_v2) return obj;
-      }catch(e){}
-      return null;
-    }
-
-
-    function parseMapCoordsV2(att){
-      const lat = Number(att.latitude || att.lat || 0);
-      const lng = Number(att.longitude || att.lng || att.lon || 0);
-
-      if(Number.isFinite(lat) && Number.isFinite(lng) && lat && lng){
-        return { lat, lng };
-      }
-
-      const raw = String(att.url || att.maps_url || "");
-      const m = raw.match(/q=([^&]+)/i);
-      if(m && m[1]){
-        const q = decodeURIComponent(m[1]).trim();
-        const mm = q.match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
-        if(mm){
-          return { lat:Number(mm[1]), lng:Number(mm[2]) };
-        }
-      }
-
-      const mm2 = raw.match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
-      if(mm2){
-        return { lat:Number(mm2[1]), lng:Number(mm2[2]) };
-      }
-
-      return null;
-    }
-
-    function buildDeviceMapUrlV2(att){
-      const coords = parseMapCoordsV2(att);
-      const fallback = String(att.url || att.maps_url || "");
-      if(!coords) return fallback || "https://maps.google.com";
-
-      const lat = coords.lat;
-      const lng = coords.lng;
-      const ua = navigator.userAgent || "";
-      const isApple = /iPad|iPhone|iPod|Macintosh|Mac OS X/i.test(ua);
-      const isAndroid = /Android/i.test(ua);
-
-      if(isApple){
-        return "https://maps.apple.com/?q=" + encodeURIComponent(lat + "," + lng);
-      }
-
-      if(isAndroid){
-        return "geo:" + encodeURIComponent(lat + "," + lng) + "?q=" + encodeURIComponent(lat + "," + lng);
-      }
-
-      return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(lat + "," + lng);
-    }
-
-    function buildEmbeddedMapUrlV2(att){
-      const coords = parseMapCoordsV2(att);
-      if(!coords) return "";
-      return "https://maps.google.com/maps?q=" + encodeURIComponent(coords.lat + "," + coords.lng) + "&z=16&output=embed";
-    }
-
-    function renderAttachmentV2(att, createdAt){
-      const isImage = String(att.mime || "").startsWith("image/");
-      const isVoice = String(att.kind || "") === "voice" || String(att.mime || "").startsWith("audio/");
-      const label = esc(att.label || att.filename || "Allegato");
-      const url = esc(att.url || "#");
-
-      if(String(att.kind || "") === "location"){
-        const lat = Number(att.latitude || 0);
-        const lng = Number(att.longitude || 0);
-        const acc = att.accuracy_m ? " · ±" + Number(att.accuracy_m) + "m" : "";
-        const maps = esc(att.url || ("https://maps.google.com/?q=" + lat + "," + lng));
-
-        return '<div class="attachment-card">' +
-          '<a class="attachment-file" href="' + maps + '" target="_blank" rel="noopener">📍 <span>Posizione condivisa' + esc(acc) + '</span></a>' +
-          (att.expires_at ? '<span class="attachment-countdown" data-countdown-expires="' + esc(att.expires_at) + '">si cancella tra --</span>' : '') +
-          '<span class="time">' + esc(timeOf(createdAt)) + '</span>' +
-        '</div>';
-      }
-
-      if(isVoice){
-        return '<div class="voice-card">' +
-          '<div class="voice-row">🎙️ <audio controls preload="metadata" src="' + url + '" data-voice-message-id=""></audio></div>' +
-          '<div class="voice-meta"><span>ascolti ' + Number(att.listen_count || 0) + '/' + Number(att.max_listens || 2) + '</span><span>temporaneo</span></div>' +
-          (att.expires_at ? '<span class="attachment-countdown" data-countdown-expires="' + esc(att.expires_at) + '">si cancella tra --</span>' : '') +
-          '<span class="time">' + esc(timeOf(createdAt)) + '</span>' +
-        '</div>';
-      }
-
-      if(isImage){
-        return '<div class="attachment-card">' +
-          '<a href="' + url + '" target="_blank" rel="noopener">' +
-          '<img src="' + url + '" alt="' + label + '">' +
-          '</a>' +
-          '<a class="attachment-file" href="' + url + '" target="_blank" rel="noopener">📎 <span>' + label + '</span></a>' +
-          (att.expires_at ? '<span class="attachment-countdown" data-countdown-expires="' + esc(att.expires_at) + '">si cancella tra --</span>' : '') +
-          '<span class="time">' + esc(timeOf(createdAt)) + '</span>' +
-        '</div>';
-      }
-
-      return '<div class="attachment-card">' +
-        '<a class="attachment-file" href="' + url + '" target="_blank" rel="noopener">📎 <span>' + label + '</span></a>' +
-        (att.expires_at ? '<span class="attachment-countdown" data-countdown-expires="' + esc(att.expires_at) + '">si cancella tra --</span>' : '') +
-        '<span class="time">' + esc(timeOf(createdAt)) + '</span>' +
-      '</div>';
-    }
-
-
-
-    function updateAttachmentCountdownsV2(){
-      const now = Date.now();
-
-      document.querySelectorAll("[data-countdown-expires]").forEach(el=>{
-        const t = Date.parse(el.getAttribute("data-countdown-expires") || "");
-        if(!t){
-          el.textContent = "";
-          return;
-        }
-
-        const diff = Math.max(0, Math.ceil((t - now) / 1000));
-
-        if(diff <= 0){
-          el.textContent = "in cancellazione...";
-          el.classList.add("expiring");
-          return;
-        }
-
-        const min = Math.floor(diff / 60);
-        const sec = diff % 60;
-        const mmss = min + ":" + String(sec).padStart(2, "0");
-
-        el.textContent = "si cancella tra " + mmss;
-
-        if(diff <= 20){
-          el.classList.add("expiring");
-        }else{
-          el.classList.remove("expiring");
-        }
-      });
-    }
-
-    function pruneExpiredAttachmentsV2(){
-      /*
-        Regola corretta 20260528:
-        admin vede sempre gli allegati finché non preme Reset.
-        Nessuna rimozione visiva lato admin per scadenza.
-      */
+    if(!sessions.length){
+      selectedId = "";
+      els.subtitle.textContent = "In attesa di utenti...";
+      els.input.disabled = true;
+      els.send.disabled = true;
+      els.extra.disabled = true;
+      els.block.disabled = true;
+      els.messages.innerHTML = '<div class="empty">In attesa di utenti collegati dal QR.</div>';
       return;
     }
-      });
+
+    sessions.forEach((s, idx)=>{
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "session" + (String(s.id) === String(selectedId) ? " active" : "");
+      b.textContent = labelFor(s, idx) + " · " + (s.display_name || s.visitor_label || "Utente");
+      b.onclick = () => selectSession(s.id);
+      els.sessions.appendChild(b);
+    });
+
+    const s = currentSession();
+    if(s){
+      els.subtitle.textContent = (s.display_name || s.visitor_label || "Utente collegato") + " · " + (s.uploads_enabled ? "Extra ON" : "Extra OFF");
+      els.input.disabled = false;
+      els.send.disabled = false;
+      els.extra.disabled = false;
+      els.block.disabled = false;
+      els.extra.textContent = s.uploads_enabled ? "Extra ON" : "Extra OFF";
+      els.extra.className = "control" + (s.uploads_enabled ? " on" : "");
+      els.block.textContent = s.is_blocked ? "Sblocca" : "Blocca";
+      els.block.className = "control danger" + (s.is_blocked ? " on" : "");
     }
+  }
 
-    function appendMessage(m){
-      if(!m || !m.id) return;
-      const id = String(m.id);
-      if(messagesById.has(id)) return;
-      messagesById.add(id);
+  function clearMessages(text){
+    knownMessages.clear();
+    lastMessageId = 0;
+    els.messages.innerHTML = '<div class="empty">' + esc(text || "Conversazione aperta.") + '</div>';
+  }
 
-      const div = document.createElement("div");
-      div.className = "bubble " + (m.sender === "owner" ? "owner" : "visitor");
-      div.dataset.id = id;
+  function appendMessage(m){
+    if(!m || !m.id) return;
+    const id = String(m.id);
+    if(knownMessages.has(id)) return;
+    knownMessages.add(id);
 
-      const att = parseAttachmentV2(m.message);
-      if(att && att.expires_at){
-        div.setAttribute("data-expires-at", att.expires_at);
+    if(els.messages.querySelector(".empty")) els.messages.innerHTML = "";
+
+    const div = document.createElement("div");
+    div.className = "bubble " + (m.sender === "owner" ? "owner" : "visitor");
+    div.innerHTML = esc(m.message).replace(/\n/g,"<br>") + '<span class="time">' + esc(timeOf(m.created_at)) + '</span>';
+    els.messages.appendChild(div);
+    els.messages.scrollTop = els.messages.scrollHeight;
+    lastMessageId = Math.max(lastMessageId, Number(m.id) || 0);
+  }
+
+  async function loadSessions(){
+    try{
+      const data = await api("/api/followme/" + encodeURIComponent(CODE) + "/chat-v2/sessions?v=" + Date.now());
+      sessions = Array.isArray(data.sessions) ? data.sessions : [];
+
+      if(!selectedId && sessions.length){
+        selectedId = String(sessions[0].id);
+        clearMessages("Conversazione aperta. Scrivi il primo messaggio.");
+        await loadMessages(true);
       }
 
-      div.innerHTML = att
-        ? renderAttachmentV2(att, m.created_at)
-        : esc(m.message).replace(/\n/g,"<br>") + '<span class="time">' + esc(timeOf(m.created_at)) + '</span>';
-
-      els.messages.appendChild(div);
-      els.messages.scrollTop = els.messages.scrollHeight;
-      lastMessageId = Math.max(lastMessageId, Number(m.id) || 0);
-      updateAttachmentCountdownsV2();
-    }
-
-    async function loadSessions(){
-      try{
-        const data = await api("/api/followme/" + encodeURIComponent(CODE) + "/chat-v2/sessions?v=" + Date.now());
-        sessions = Array.isArray(data.sessions) ? data.sessions : [];
-
-        if(!selectedId && sessions.length){
-          const preferred = preferredSessionFromUrlV2();
-          const found = preferred && sessions.some(s => String(s.id) === String(preferred));
-          selectedId = found ? String(preferred) : String(sessions[0].id);
-          clearMessages();
-          await loadMessages(true);
-        }
-
-        if(selectedId && !sessions.some(s => String(s.id) === String(selectedId))){
-          selectedId = sessions[0] ? String(sessions[0].id) : "";
-          clearMessages();
-          if(selectedId) await loadMessages(true);
-        }
-
-        renderSessions();
-        renderControls();
-
-        if(!sessions.length){
-          emptyMessage("Nessun utente collegato. Lascia questa schermata aperta.");
-        }
-      }catch(err){
-        toast("Errore sessioni: " + err.message);
+      if(selectedId && !sessions.some(s => String(s.id) === String(selectedId))){
+        selectedId = sessions[0] ? String(sessions[0].id) : "";
+        clearMessages(selectedId ? "Conversazione aperta." : "In attesa di utenti collegati dal QR.");
+        if(selectedId) await loadMessages(true);
       }
-    }
 
-    async function selectSession(id){
-      selectedId = String(id || "");
-      clearMessages();
       renderSessions();
-      renderControls();
-      await loadMessages(true);
+    }catch(err){
+      els.subtitle.textContent = "Errore sessioni";
+      toast("Errore sessioni: " + err.message);
     }
+  }
 
-    async function loadMessages(initial){
-      if(!selectedId) return;
-      try{
-        const after = initial ? 0 : lastMessageId;
-        const data = await api("/api/followme/chat-v2/session/" + encodeURIComponent(selectedId) + "/messages?after=" + after + "&v=" + Date.now());
-        const rows = Array.isArray(data.messages) ? data.messages : [];
-        if(initial && !rows.length){
-          emptyMessage("Conversazione aperta. Scrivi il primo messaggio.");
-        }else if(initial){
-          els.messages.innerHTML = "";
-        }
-        rows.forEach(appendMessage);
-      }catch(err){
-        toast("Errore messaggi: " + err.message);
-      }
-    }
+  async function selectSession(id){
+    selectedId = String(id || "");
+    clearMessages("Caricamento conversazione...");
+    renderSessions();
+    await loadMessages(true);
+  }
 
-    async function send(){
-      if(sending || !selectedId) return;
-      const text = els.input.value.trim();
-      if(!text) return;
+  async function loadMessages(initial){
+    if(!selectedId) return;
 
-      sending = true;
-      els.input.value = "";
-      autosize();
+    try{
+      const after = initial ? 0 : lastMessageId;
+      const data = await api("/api/followme/chat-v2/session/" + encodeURIComponent(selectedId) + "/messages?after=" + after + "&v=" + Date.now());
+      const rows = Array.isArray(data.messages) ? data.messages : [];
 
-      try{
-        const data = await post("/api/followme/chat-v2/session/" + encodeURIComponent(selectedId) + "/message", {
-          sender:"owner",
-          message:text
-        });
-        if(data.message) appendMessage(data.message);
-      }catch(err){
-        els.input.value = text;
-        autosize();
-        toast("Errore invio: " + err.message);
-      }finally{
-        sending = false;
-        els.input.focus();
-      }
-    }
-
-    async function toggleExtra(){
-      const s = selectedSession();
-      if(!s) return;
-      try{
-        const data = await post("/api/followme/chat-v2/session/" + encodeURIComponent(s.id) + "/settings", {
-          uploads_enabled: !s.uploads_enabled
-        });
-        Object.assign(s, data.session || {});
-        renderSessions();
-        renderControls();
-        toast(s.uploads_enabled ? "Extra attivati" : "Extra disattivati");
-      }catch(err){
-        toast("Errore Extra: " + err.message);
-      }
-    }
-
-    async function toggleBlock(){
-      const s = selectedSession();
-      if(!s) return;
-      try{
-        const data = await post("/api/followme/chat-v2/session/" + encodeURIComponent(s.id) + "/settings", {
-          is_blocked: !s.is_blocked
-        });
-        Object.assign(s, data.session || {});
-        renderSessions();
-        renderControls();
-        toast(s.is_blocked ? "Utente bloccato" : "Utente sbloccato");
-      }catch(err){
-        toast("Errore blocco: " + err.message);
-      }
-    }
-
-    // FOLLOWME_CHAT_V2_BACK_AS_RESET_20260528
-    async function resetAll(source){
-      const isBack = source === "back";
-      const message = isBack
-        ? "Vuoi spegnere la chat e tornare alla WebApp?"
-        : "Vuoi chiudere tutte le chat e spegnere il servizio chat?";
-
-      if(!confirm(message)) return;
-
-      if(els.reset){
-        els.reset.disabled = true;
-        els.reset.textContent = "Reset...";
-      }
-      if(els.back){
-        els.back.disabled = true;
-        els.back.textContent = "...";
+      if(initial){
+        knownMessages.clear();
+        lastMessageId = 0;
+        els.messages.innerHTML = rows.length ? "" : '<div class="empty">Conversazione aperta. Scrivi il primo messaggio.</div>';
       }
 
-      try{
-        await post("/api/followme/" + encodeURIComponent(CODE) + "/chat-v2/reset?v=" + Date.now(), {});
-        location.href = "/fm/app/" + encodeURIComponent(CODE) + "?v=chat-off-" + Date.now();
-      }catch(err){
-        if(els.reset){
-          els.reset.disabled = false;
-          els.reset.textContent = "Reset";
-        }
-        if(els.back){
-          els.back.disabled = false;
-          els.back.textContent = "←";
-        }
-        toast("Reset non riuscito: " + err.message);
-      }
+      rows.forEach(appendMessage);
+    }catch(err){
+      toast("Errore messaggi: " + err.message);
     }
+  }
 
-    function autosize(){
-      els.input.style.height = "auto";
-      els.input.style.height = Math.min(110, els.input.scrollHeight) + "px";
-    }
+  async function send(){
+    if(sending || !selectedId) return;
 
-    function fileToDataUrlV2(file){
-      return new Promise((resolve,reject)=>{
-        const r = new FileReader();
-        r.onload = () => resolve(String(r.result || ""));
-        r.onerror = () => reject(new Error("Lettura file non riuscita."));
-        r.readAsDataURL(file);
-      });
-    }
+    const text = els.input.value.trim();
+    if(!text) return;
 
-    
-    async function uploadRawAttachmentV2(file, kind){
-      const qs = new URLSearchParams({
+    sending = true;
+    els.input.value = "";
+
+    try{
+      const data = await post("/api/followme/chat-v2/session/" + encodeURIComponent(selectedId) + "/message", {
         sender:"owner",
-        kind:kind || "file",
-        filename:file.name || "allegato",
-        label:file.name || "Allegato",
-        mime:file.type || "application/octet-stream"
+        message:text
       });
-
-      const res = await fetch(
-        "/api/followme/chat-v2/session/" + encodeURIComponent(selectedId) + "/attachment-raw?" + qs.toString(),
-        {
-          method:"POST",
-          headers:{
-            "Content-Type": file.type || "application/octet-stream",
-            "X-FollowMe-Sender":"owner",
-            "X-FollowMe-Kind":kind || "file",
-            "X-FollowMe-Filename":file.name || "allegato"
-          },
-          cache:"no-store",
-          body:file
-        }
-      );
-
-      const data = await res.json().catch(()=>null);
-
-      if(!res.ok || !data || !data.success){
-        throw new Error((data && (data.detail || data.error)) || ("HTTP " + res.status));
-      }
-
-      return data;
+      if(data.message) appendMessage(data.message);
+    }catch(err){
+      els.input.value = text;
+      toast("Errore invio: " + err.message);
+    }finally{
+      sending = false;
+      els.input.focus();
     }
+  }
 
-async function sendAdminAttachmentV2(file, kind){
-      if(!selectedId || !file) return;
+  async function toggleExtra(){
+    const s = currentSession();
+    if(!s) return;
 
-      const max = 20 * 1024 * 1024;
-      if(file.size > max){
-        toast("File troppo grande. Limite 20 MB.");
-        return;
-      }
-
-      try{
-        toast("Invio allegato...");
-        const data = await uploadRawAttachmentV2(file, kind || "file");
-
-        if(data.message) appendMessage(data.message);
-        try { await loadMessages(false); } catch(e) {}
-        toast("Allegato inviato");
-      }catch(err){
-        toast("Errore allegato: " + err.message);
-      }
-    }
-
-
-    let voiceMediaRecorderV2 = null;
-    let voiceChunksV2 = [];
-    let voiceBlobV2 = null;
-    let voiceStartedAtV2 = 0;
-    let voiceTickV2 = null;
-    let voiceStopTimerV2 = null;
-
-    function openVoiceRecorderV2(){
-      closeExtraMenuV2();
-      if(!selectedId){
-        toast("Seleziona prima un utente collegato.");
-        return;
-      }
-      if(!els.voiceSheet){
-        toast("Registratore vocale non inizializzato.");
-        return;
-      }
-      voiceBlobV2 = null;
-      voiceChunksV2 = [];
-      if(els.voiceSend) els.voiceSend.disabled = true;
-      if(els.voiceStart) els.voiceStart.textContent = "Registra";
-      if(els.voiceTimer) els.voiceTimer.textContent = "00:00";
-      els.voiceSheet.classList.add("open");
-      els.voiceSheet.setAttribute("aria-hidden","false");
-    }
-
-    function closeVoiceRecorderV2(){
-      try{
-        if(voiceMediaRecorderV2 && voiceMediaRecorderV2.state !== "inactive"){
-          voiceMediaRecorderV2.stop();
-        }
-      }catch(e){}
-
-      clearInterval(voiceTickV2);
-      clearTimeout(voiceStopTimerV2);
-
-      if(els.voiceSheet){
-        els.voiceSheet.classList.remove("open");
-        els.voiceSheet.setAttribute("aria-hidden","true");
-      }
-    }
-
-    function updateVoiceTimerV2(){
-      const elapsed = Math.min(20, Math.floor((Date.now() - voiceStartedAtV2) / 1000));
-      if(els.voiceTimer){
-        els.voiceTimer.textContent = "00:" + String(elapsed).padStart(2,"0");
-      }
-    }
-
-    function preferredVoiceMimeV2(){
-      const options = [
-        "audio/webm;codecs=opus",
-        "audio/webm",
-        "audio/mp4",
-        "audio/aac"
-      ];
-      for(const m of options){
-        try{
-          if(window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) return m;
-        }catch(e){}
-      }
-      return "";
-    }
-
-    async function startVoiceRecordingV2(){
-      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-        toast("Microfono non supportato da questo browser.");
-        return;
-      }
-
-      try{
-        const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
-        const mime = preferredVoiceMimeV2();
-        voiceChunksV2 = [];
-        voiceBlobV2 = null;
-
-        const opts = mime ? { mimeType:mime, audioBitsPerSecond:64000 } : { audioBitsPerSecond:64000 };
-        voiceMediaRecorderV2 = new MediaRecorder(stream, opts);
-
-        voiceMediaRecorderV2.ondataavailable = ev=>{
-          if(ev.data && ev.data.size) voiceChunksV2.push(ev.data);
-        };
-
-        voiceMediaRecorderV2.onstop = ()=>{
-          try{ stream.getTracks().forEach(t=>t.stop()); }catch(e){}
-          const realMime = voiceMediaRecorderV2.mimeType || mime || "audio/webm";
-          voiceBlobV2 = new Blob(voiceChunksV2, { type:realMime });
-          if(els.voiceSend) els.voiceSend.disabled = !voiceBlobV2 || !voiceBlobV2.size;
-          if(els.voiceStart) els.voiceStart.textContent = "Rifai";
-          clearInterval(voiceTickV2);
-          clearTimeout(voiceStopTimerV2);
-        };
-
-        voiceStartedAtV2 = Date.now();
-        voiceMediaRecorderV2.start(250);
-        updateVoiceTimerV2();
-        voiceTickV2 = setInterval(updateVoiceTimerV2, 250);
-
-        if(els.voiceStart) els.voiceStart.textContent = "Stop";
-
-        voiceStopTimerV2 = setTimeout(()=>{
-          try{
-            if(voiceMediaRecorderV2 && voiceMediaRecorderV2.state !== "inactive"){
-              voiceMediaRecorderV2.stop();
-            }
-          }catch(e){}
-        }, 20000);
-
-      }catch(err){
-        toast("Microfono non disponibile: " + (err.message || String(err)));
-      }
-    }
-
-    function stopOrRestartVoiceV2(){
-      if(voiceMediaRecorderV2 && voiceMediaRecorderV2.state === "recording"){
-        try{ voiceMediaRecorderV2.stop(); }catch(e){}
-        return;
-      }
-
-      startVoiceRecordingV2();
-    }
-
-    async function sendAdminLocationV2(){
-      if(!selectedId) return;
-
-      if(!navigator.geolocation){
-        toast("Posizione non supportata da questo dispositivo.");
-        return;
-      }
-
-      closeExtraMenuV2();
-      toast("Rilevo posizione...");
-
-      navigator.geolocation.getCurrentPosition(async function(pos){
-        try{
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
-          const acc = Math.round(pos.coords.accuracy || 0);
-          const mapsUrl = "https://maps.google.com/?q=" + encodeURIComponent(lat + "," + lng);
-
-          const payload = {
-            __followme_attachment_v2:true,
-            temporary:true,
-            ttl_seconds:120,
-            kind:"location",
-            sender:"owner",
-            url:mapsUrl,
-            label:"Posizione condivisa",
-            latitude:lat,
-            longitude:lng,
-            accuracy_m:acc,
-            created_at:new Date().toISOString(),
-            expires_at:new Date(Date.now() + 120000).toISOString()
-          };
-
-          const data = await post("/api/followme/chat-v2/session/" + encodeURIComponent(selectedId) + "/message", {
-            sender:"owner",
-            message:JSON.stringify(payload)
-          });
-
-          if(data.message) appendMessage(data.message);
-          toast("Posizione inviata");
-        }catch(err){
-          toast("Errore posizione: " + (err.message || String(err)));
-        }
-      }, function(err){
-        toast("Posizione non disponibile: " + (err.message || "permesso negato"));
-      }, {
-        enableHighAccuracy:true,
-        timeout:9000,
-        maximumAge:0
+    try{
+      const data = await post("/api/followme/chat-v2/session/" + encodeURIComponent(s.id) + "/settings", {
+        uploads_enabled: !s.uploads_enabled
       });
+      Object.assign(s, data.session || {});
+      renderSessions();
+      toast(s.uploads_enabled ? "Extra attivati" : "Extra disattivati");
+    }catch(err){
+      toast("Errore Extra: " + err.message);
     }
+  }
 
-    async function sendVoiceV2(){
-      if(!voiceBlobV2 || !voiceBlobV2.size){
-        toast("Nessun vocale registrato.");
-        return;
-      }
+  async function toggleBlock(){
+    const s = currentSession();
+    if(!s) return;
 
-      try{
-        const ext = String(voiceBlobV2.type || "").includes("mp4") ? ".m4a" : ".webm";
-        const file = new File([voiceBlobV2], "vocale" + ext, { type:voiceBlobV2.type || "audio/webm" });
-        await sendAdminAttachmentV2(file, "voice");
-        closeVoiceRecorderV2();
-      }catch(err){
-        toast("Errore vocale: " + (err.message || String(err)));
-      }
-    }
-
-    function isIOSDeviceV2(){
-      return /iPad|iPhone|iPod/.test(navigator.userAgent || "") ||
-        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    }
-
-    function toggleExtraMenuV2(){
-      /*
-        Il + apre sempre il menu Extra.
-        Su iPhone il caricamento Apple nativo parte toccando Foto.
-      */
-      if(!els.extraMenu) return;
-      const open = !els.extraMenu.classList.contains("open");
-      els.extraMenu.classList.toggle("open", open);
-      els.extraMenu.setAttribute("aria-hidden", open ? "false" : "true");
-    }
-
-    function closeExtraMenuV2(){
-      if(els.extraMenu){
-        els.extraMenu.classList.remove("open");
-        els.extraMenu.setAttribute("aria-hidden", "true");
-      }
-    }
-
-
-    function bind(){
-      els.send.onclick = send;
-      els.input.addEventListener("input", autosize);
-      els.input.addEventListener("keydown", ev=>{
-        if(ev.key === "Enter" && !ev.shiftKey){
-          ev.preventDefault();
-          send();
-        }
+    try{
+      const data = await post("/api/followme/chat-v2/session/" + encodeURIComponent(s.id) + "/settings", {
+        is_blocked: !s.is_blocked
       });
-      els.extra.onclick = toggleExtra;
-      els.block.onclick = toggleBlock;
-      if(els.reset) els.reset.onclick = () => resetAll("reset");
-      if(els.back) els.back.onclick = () => resetAll("back");
-      if(els.plus) els.plus.onclick = () => toggleExtraMenuV2();
-
-      if(els.pickPhoto) els.pickPhoto.onclick = () => { closeExtraMenuV2(); els.photoInput && els.photoInput.click(); };
-      if(els.takePhoto) els.takePhoto.onclick = () => { closeExtraMenuV2(); els.cameraInput && els.cameraInput.click(); };
-      if(els.pickFile) els.pickFile.onclick = () => { closeExtraMenuV2(); els.fileInput && els.fileInput.click(); };
-
-      if(els.voiceMsg) els.voiceMsg.onclick = () => {
-        if(!selectedId){
-          toast("Seleziona prima un utente collegato.");
-          return;
-        }
-        openVoiceRecorderV2();
-      };
-
-      if(els.voiceStart) els.voiceStart.onclick = stopOrRestartVoiceV2;
-      if(els.voiceCancel) els.voiceCancel.onclick = closeVoiceRecorderV2;
-      if(els.voiceSend) els.voiceSend.onclick = sendVoiceV2;
-
-      if(els.locationBtn) els.locationBtn.onclick = () => {
-        if(!selectedId){
-          toast("Seleziona prima un utente collegato.");
-          return;
-        }
-        sendAdminLocationV2();
-      };
-
-      if(els.photoInput) els.photoInput.onchange = () => {
-        const f = els.photoInput.files && els.photoInput.files[0];
-        els.photoInput.value = "";
-        if(f) sendAdminAttachmentV2(f, "media");
-      };
-
-      if(els.cameraInput) els.cameraInput.onchange = () => {
-        const f = els.cameraInput.files && els.cameraInput.files[0];
-        els.cameraInput.value = "";
-        if(f) sendAdminAttachmentV2(f, "camera");
-      };
-
-      if(els.fileInput) els.fileInput.onchange = () => {
-        const f = els.fileInput.files && els.fileInput.files[0];
-        els.fileInput.value = "";
-        if(f) sendAdminAttachmentV2(f, "file");
-      };
-
-      document.addEventListener("click", ev=>{
-        if(!els.extraMenu || !els.extraMenu.classList.contains("open")) return;
-        if(ev.target === els.plus || els.extraMenu.contains(ev.target)) return;
-        closeExtraMenuV2();
-      });
+      Object.assign(s, data.session || {});
+      renderSessions();
+      toast(s.is_blocked ? "Utente bloccato" : "Utente sbloccato");
+    }catch(err){
+      toast("Errore blocco: " + err.message);
     }
+  }
 
-    // FOLLOWME_CHAT_V2_ADMIN_EXPOSE_LOADSESSIONS_20260528
-    try { window.loadSessions = loadSessions; } catch(e) {}
+  async function resetAll(){
+    if(!confirm("Vuoi spegnere la chat e tornare alla WebApp?")) return;
 
-    function start(){
-      bind();
+    els.reset.disabled = true;
+    els.back.disabled = true;
+    els.reset.textContent = "Reset...";
+
+    try{
+      await post("/api/followme/" + encodeURIComponent(CODE) + "/chat-v2/reset?v=" + Date.now(), {});
+      location.replace("/fm/app/" + encodeURIComponent(CODE) + "?v=chat-off-" + Date.now());
+    }catch(err){
+      els.reset.disabled = false;
+      els.back.disabled = false;
+      els.reset.textContent = "Reset";
+      toast("Reset non riuscito: " + err.message);
+    }
+  }
+
+  function bind(){
+    els.send.onclick = send;
+    els.reset.onclick = resetAll;
+    els.back.onclick = resetAll;
+    els.extra.onclick = toggleExtra;
+    els.block.onclick = toggleBlock;
+
+    els.input.addEventListener("keydown", ev=>{
+      if(ev.key === "Enter" && !ev.shiftKey){
+        ev.preventDefault();
+        send();
+      }
+    });
+  }
+
+  bind();
+  loadSessions();
+
+  setInterval(()=>{
+    if(document.visibilityState === "visible"){
       loadSessions();
-      pollSessionsTimer = setInterval(()=>{
-        if(document.visibilityState === "visible") loadSessions();
-      }, 900);
-      pollMessagesTimer = setInterval(()=>{
-        if(document.visibilityState === "visible" && selectedId) { updateAttachmentCountdownsV2(); pruneExpiredAttachmentsV2(); loadMessages(false); }
-      }, 400);
-      document.addEventListener("visibilitychange", ()=>{
-        if(document.visibilityState === "visible"){
-          loadSessions();
-          updateAttachmentCountdownsV2();
-          loadMessages(false);
-        }
-      });
-
-      setInterval(updateAttachmentCountdownsV2, 1000);
+      if(selectedId) loadMessages(false);
     }
+  }, 900);
 
-    start();
-  })();
-  </script>
+  window.addEventListener("focus", loadSessions);
+  document.addEventListener("visibilitychange", ()=>{
+    if(document.visibilityState === "visible") loadSessions();
+  });
+
+})();
+</script>
 </body>
 </html>
