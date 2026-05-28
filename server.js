@@ -6439,7 +6439,12 @@ app.post('/api/admin/followme/project/:code/block', requireAdmin, express.json()
       return res.status(404).json({ success:false, error:'QR FollowMe non trovato.' });
     }
 
-    return res.json({ success:true, project:q.rows[0] });
+    return res.json({
+      success:true,
+      project:q.rows[0],
+      // FOLLOWME_UPDATE_URL_RETURN_SAFE_BROWSING_RESULT_20260528
+      url_security:req.followmeUrlSecurity20260528 || null
+    });
   } catch (err) {
     console.error('admin followme block error:', err);
     return res.status(500).json({ success:false, error:'Errore blocco QR FollowMe.' });

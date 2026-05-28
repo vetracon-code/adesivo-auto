@@ -35748,6 +35748,82 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="FOLLOWME_SHOW_SAFE_BROWSING_SUCCESS_MESSAGE_20260528">
+(function(){
+  "use strict";
+
+  function notifySafeBrowsingSuccess(message){
+    message = message || "✅ Link verificato con Google Safe Browsing. Nessuna minaccia nota rilevata.";
+
+    try{
+      if(typeof window.showToast === "function"){
+        window.showToast(message);
+        return;
+      }
+    }catch(e){}
+
+    try{
+      if(typeof window.toast === "function"){
+        window.toast(message);
+        return;
+      }
+    }catch(e){}
+
+    try{
+      var el = document.getElementById("toast");
+      if(el){
+        el.textContent = message;
+        el.style.display = "block";
+        setTimeout(function(){ el.style.display = "none"; }, 3500);
+        return;
+      }
+    }catch(e){}
+
+    alert(message);
+  }
+
+  if(typeof window.fetch === "function" && !window.__followMeSafeBrowsingSuccessWrapped20260528){
+    window.__followMeSafeBrowsingSuccessWrapped20260528 = true;
+
+    var originalFetch = window.fetch;
+
+    window.fetch = async function(input, init){
+      var response = await originalFetch.apply(this, arguments);
+
+      try{
+        var requestUrl = typeof input === "string" ? input : String(input && input.url || "");
+
+        if(
+          response &&
+          response.ok &&
+          requestUrl.indexOf("/api/followme/") >= 0 &&
+          (
+            requestUrl.indexOf("/update-url") >= 0 ||
+            requestUrl.indexOf("/update-existing-qr") >= 0
+          )
+        ){
+          var cloned = response.clone();
+          var data = await cloned.json().catch(function(){ return null; });
+
+          if(
+            data &&
+            data.url_security &&
+            data.url_security.provider === "Google Safe Browsing" &&
+            data.url_security.safe === true &&
+            data.url_security.status === "safe"
+          ){
+            notifySafeBrowsingSuccess("✅ Link verificato con Google Safe Browsing. Nessuna minaccia nota rilevata.");
+          }
+        }
+      }catch(e){}
+
+      return response;
+    };
+  }
+})();
+</script>
+
 </body>
 </html>
 
