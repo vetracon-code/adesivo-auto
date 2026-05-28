@@ -6594,6 +6594,114 @@ function followmeSafeClearPdfPreview20260526(preview){
   }
 </style>
 
+
+<style id="FOLLOWME_FORCE_INFO_REQUEST_CHAT_ENTRY_STYLE_20260528">
+  #followmeInfoChatEntryForce20260528{
+    width:100%;
+    margin-top:10px;
+    min-height:50px;
+    border:0;
+    border-radius:18px;
+    padding:12px 14px;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    font-size:14px;
+    font-weight:950;
+    letter-spacing:-.01em;
+    color:#04130a;
+    background:linear-gradient(180deg,#86efac,#22c55e);
+    box-shadow:0 12px 34px rgba(34,197,94,.22), inset 0 1px 0 rgba(255,255,255,.42);
+    cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+  }
+
+  #followmeInfoChatEntryForce20260528.show{
+    display:flex;
+  }
+
+  #followmeInfoChatEntryForce20260528 .force-count-20260528{
+    min-width:24px;
+    height:24px;
+    padding:0 8px;
+    border-radius:999px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    background:#052e16;
+    color:#bbf7d0;
+    font-size:12px;
+    font-weight:950;
+  }
+
+  #followmeInfoChatFloatingForce20260528{
+    position:fixed;
+    top:calc(env(safe-area-inset-top, 0px) + 10px);
+    left:50%;
+    transform:translateX(-50%);
+    z-index:2147483000;
+    display:none;
+    align-items:center;
+    gap:10px;
+    max-width:calc(100vw - 24px);
+    padding:10px 14px;
+    border-radius:999px;
+    border:1px solid rgba(255,255,255,.38);
+    background:linear-gradient(180deg,rgba(5,46,22,.96),rgba(20,83,45,.96));
+    color:#dcfce7;
+    box-shadow:0 18px 55px rgba(0,0,0,.36), inset 0 1px 0 rgba(255,255,255,.18);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    font-size:13px;
+    font-weight:950;
+    letter-spacing:-.01em;
+    cursor:pointer;
+    backdrop-filter:blur(18px);
+    -webkit-tap-highlight-color:transparent;
+  }
+
+  #followmeInfoChatFloatingForce20260528.show{
+    display:flex;
+  }
+
+  #followmeInfoChatFloatingForce20260528 .force-dot-20260528{
+    width:9px;
+    height:9px;
+    border-radius:999px;
+    background:#86efac;
+    animation:followmeForceInfoPulse20260528 1.45s ease-in-out infinite;
+    flex:0 0 auto;
+  }
+
+  #followmeInfoChatFloatingForce20260528 .force-text-20260528{
+    overflow:hidden;
+    white-space:nowrap;
+    text-overflow:ellipsis;
+  }
+
+  #followmeInfoChatFloatingForce20260528 .force-count-20260528{
+    min-width:22px;
+    height:22px;
+    padding:0 7px;
+    border-radius:999px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    background:#bbf7d0;
+    color:#052e16;
+    font-size:12px;
+    font-weight:950;
+    flex:0 0 auto;
+  }
+
+  @keyframes followmeForceInfoPulse20260528{
+    0%{ box-shadow:0 0 0 0 rgba(134,239,172,.45); }
+    70%{ box-shadow:0 0 0 9px rgba(134,239,172,0); }
+    100%{ box-shadow:0 0 0 0 rgba(134,239,172,0); }
+  }
+</style>
+
 </head>
 <body>
   <main class="app">
@@ -37328,6 +37436,263 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
   setTimeout(function(){ ensureBadge(); poll(); }, 700);
   setTimeout(poll, 1800);
   setInterval(poll, 9000);
+})();
+</script>
+
+
+<script id="FOLLOWME_FORCE_INFO_REQUEST_CHAT_ENTRY_20260528">
+(function(){
+  "use strict";
+
+  var latestSessions = [];
+  var infoEnabled = false;
+
+  function getCode(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim();
+      var p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim();
+    }catch(e){ return ""; }
+  }
+
+  function clean(v){
+    return String(v || "").trim();
+  }
+
+  function isOpenSession(s){
+    var status = clean(s.status || "").toLowerCase();
+    return status !== "closed" &&
+           status !== "archived" &&
+           status !== "deleted" &&
+           status !== "ended";
+  }
+
+  function sessionId(s){
+    return clean(s.id || s.session_id || s.sessionId);
+  }
+
+  function sessionLabel(s){
+    var label =
+      clean(s.source_label) ||
+      clean(s.source_url) ||
+      clean(s.display_name) ||
+      clean(s.visitor_label) ||
+      clean(s.name) ||
+      "utente";
+
+    label = label.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
+    label = label.split(/[\/?#]/)[0] || label;
+
+    if(label.length > 18) label = label.slice(0, 18) + "…";
+    return label;
+  }
+
+  async function fetchInfoStatus(){
+    var code = getCode();
+    if(!code) return false;
+
+    try{
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/info-requests/status?v=" + Date.now(), {
+        cache:"no-store"
+      });
+      var data = await res.json().catch(function(){ return null; });
+      return !!(res.ok && data && data.info_requests_enabled === true);
+    }catch(e){
+      return false;
+    }
+  }
+
+  async function fetchSessions(){
+    var code = getCode();
+    if(!code) return [];
+
+    try{
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/chat-v2/sessions?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || data.success === false){
+        return [];
+      }
+
+      var list = Array.isArray(data.sessions) ? data.sessions : [];
+
+      return list.filter(isOpenSession);
+    }catch(e){
+      return [];
+    }
+  }
+
+  function adminUrl(){
+    var code = getCode();
+    if(!code) return "#";
+
+    var first = latestSessions && latestSessions.length ? latestSessions[0] : null;
+    var sid = first ? sessionId(first) : "";
+
+    var url = "/fm/chat-v2/admin/" + encodeURIComponent(code);
+
+    if(sid){
+      url += "?session=" + encodeURIComponent(sid) + "&v=" + Date.now();
+    }else{
+      url += "?v=" + Date.now();
+    }
+
+    return url;
+  }
+
+  function openAdminChat(){
+    var url = adminUrl();
+    if(url && url !== "#"){
+      window.location.href = url;
+    }
+  }
+
+  function ensureInlineButton(){
+    var btn = document.getElementById("followmeInfoChatEntryForce20260528");
+    if(btn) return btn;
+
+    btn = document.createElement("button");
+    btn.id = "followmeInfoChatEntryForce20260528";
+    btn.type = "button";
+    btn.innerHTML =
+      '<span class="force-label-20260528">Apri chat richieste informazioni</span>' +
+      '<span class="force-count-20260528">0</span>';
+
+    btn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      openAdminChat();
+      return false;
+    });
+
+    var anchor =
+      document.getElementById("followmeInfoRequestsToggle20260528") ||
+      document.getElementById("followmeOtherOpenChat") ||
+      document.querySelector("button,a");
+
+    if(anchor && anchor.parentNode){
+      anchor.parentNode.insertBefore(btn, anchor.nextSibling);
+    }else{
+      document.body.appendChild(btn);
+    }
+
+    return btn;
+  }
+
+  function ensureFloatingButton(){
+    var btn = document.getElementById("followmeInfoChatFloatingForce20260528");
+    if(btn) return btn;
+
+    btn = document.createElement("button");
+    btn.id = "followmeInfoChatFloatingForce20260528";
+    btn.type = "button";
+    btn.innerHTML =
+      '<span class="force-dot-20260528"></span>' +
+      '<span class="force-text-20260528">Richiesta informazioni in corso</span>' +
+      '<span class="force-count-20260528">1</span>';
+
+    btn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      openAdminChat();
+      return false;
+    });
+
+    document.body.appendChild(btn);
+    return btn;
+  }
+
+  function render(){
+    var inline = ensureInlineButton();
+    var floating = ensureFloatingButton();
+
+    var count = latestSessions.length;
+    var shouldShowInline = infoEnabled || count > 0;
+    var shouldShowFloating = count > 0;
+
+    var label = inline.querySelector(".force-label-20260528");
+    var inlineCount = inline.querySelector(".force-count-20260528");
+
+    if(count > 0){
+      var first = latestSessions[0];
+      var who = sessionLabel(first);
+
+      if(label){
+        label.textContent = count === 1
+          ? "Apri chat richiesta informazioni · " + who
+          : "Apri chat richieste informazioni";
+      }
+
+      if(inlineCount){
+        inlineCount.textContent = String(count);
+        inlineCount.style.display = "inline-flex";
+      }
+    }else{
+      if(label){
+        label.textContent = infoEnabled
+          ? "Apri chat richieste informazioni"
+          : "Chat richieste informazioni";
+      }
+
+      if(inlineCount){
+        inlineCount.textContent = "0";
+        inlineCount.style.display = "none";
+      }
+    }
+
+    inline.classList.toggle("show", shouldShowInline);
+
+    var fText = floating.querySelector(".force-text-20260528");
+    var fCount = floating.querySelector(".force-count-20260528");
+
+    if(count > 0){
+      if(fText){
+        fText.textContent = count === 1
+          ? "Richiesta informazioni · " + sessionLabel(latestSessions[0])
+          : count + " richieste informazioni";
+      }
+
+      if(fCount){
+        fCount.textContent = String(count);
+        fCount.style.display = count > 1 ? "inline-flex" : "none";
+      }
+    }
+
+    floating.classList.toggle("show", shouldShowFloating);
+  }
+
+  async function refresh(){
+    infoEnabled = await fetchInfoStatus();
+    latestSessions = await fetchSessions();
+    render();
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    ensureInlineButton();
+    ensureFloatingButton();
+    refresh();
+  });
+
+  setTimeout(function(){ ensureInlineButton(); ensureFloatingButton(); refresh(); }, 700);
+  setTimeout(refresh, 1800);
+  setTimeout(refresh, 3500);
+  setInterval(refresh, 7000);
+
+  try{
+    var mo = new MutationObserver(function(){
+      clearTimeout(window.__followMeForceInfoChatEntryTimer20260528);
+      window.__followMeForceInfoChatEntryTimer20260528 = setTimeout(function(){
+        ensureInlineButton();
+        ensureFloatingButton();
+        render();
+      }, 160);
+    });
+    mo.observe(document.documentElement || document.body, { childList:true, subtree:true });
+  }catch(e){}
 })();
 </script>
 
