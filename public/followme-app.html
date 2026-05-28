@@ -35243,6 +35243,211 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="FOLLOWME_BLOCK_LEGACY_CHAT_FORCE_V2_20260528">
+(function(){
+  "use strict";
+
+  function getCode(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m && m[1]) return decodeURIComponent(m[1]).trim();
+
+      var p = new URLSearchParams(location.search || "");
+      var c = p.get("code") || p.get("public_id") || "";
+      if(c) return String(c).trim();
+
+      if(window.FOLLOWME_CODE) return String(window.FOLLOWME_CODE).trim();
+    }catch(e){}
+    return "FM-DEMO";
+  }
+
+  function adminV2Url(){
+    return "/fm/chat-v2/admin/" + encodeURIComponent(getCode()) + "?v=" + Date.now();
+  }
+
+  function isLegacyChatUrl(url){
+    url = String(url || "");
+    return (
+      url.indexOf("/chat/enable") >= 0 ||
+      url.indexOf("/fm/chat/c/") >= 0 ||
+      url.indexOf("/api/followme/") >= 0 && url.indexOf("/chat/enable") >= 0 ||
+      url.indexOf("chatWaiting=1") >= 0 ||
+      url.indexOf("focus=chat-waiting") >= 0
+    );
+  }
+
+  function isLegacyChatButton(el){
+    if(!el) return false;
+
+    var id = String(el.id || "").toLowerCase();
+    var txt = String(el.textContent || el.innerText || "").trim().toLowerCase();
+    var href = String(el.getAttribute && el.getAttribute("href") || "");
+
+    return (
+      id === "followmeotheropenchat" ||
+      id.indexOf("chatwaiting") >= 0 ||
+      txt === "attiva chat" ||
+      txt.indexOf("attiva chat") >= 0 ||
+      txt === "parla con gli utenti" ||
+      txt.indexOf("parla con gli utenti") >= 0 ||
+      isLegacyChatUrl(href)
+    );
+  }
+
+  async function postJson(url, body){
+    var res = await fetch(url, {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "Accept":"application/json"
+      },
+      cache:"no-store",
+      body:JSON.stringify(body || {})
+    });
+
+    var data = null;
+    try{ data = await res.json(); }catch(e){}
+
+    if(!res.ok || !data || data.success === false){
+      throw new Error((data && (data.error || data.detail)) || ("HTTP " + res.status));
+    }
+
+    return data;
+  }
+
+  async function openV2Admin(btn){
+    var code = getCode();
+
+    var old = btn ? String(btn.textContent || "") : "";
+    if(btn){
+      btn.disabled = true;
+      btn.textContent = "Apro Chat V2...";
+    }
+
+    try{
+      var data = await postJson("/api/followme/" + encodeURIComponent(code) + "/chat-v2/enable?v=" + Date.now(), {});
+      var url = data.admin_url || adminV2Url();
+      location.replace(url + (url.indexOf("?") >= 0 ? "&" : "?") + "v=" + Date.now());
+    }catch(err){
+      alert("Errore apertura Chat V2: " + (err.message || String(err)));
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = old || "Parla con gli utenti";
+      }
+    }
+  }
+
+  function killWaitingScreen(){
+    try{
+      document.body.classList.remove("followme-chat-waiting-mode");
+
+      var waiting = document.getElementById("followmeOwnerChatWaitingScreen");
+      if(waiting){
+        waiting.style.display = "none";
+        waiting.setAttribute("aria-hidden", "true");
+      }
+    }catch(e){}
+  }
+
+  function normalizeButtons(){
+    killWaitingScreen();
+
+    try{
+      document.querySelectorAll("button,a").forEach(function(el){
+        if(isLegacyChatButton(el)){
+          if(!/reset|spegni/i.test(String(el.textContent || ""))){
+            el.textContent = "Parla con gli utenti";
+            el.setAttribute("aria-label", "Parla con gli utenti");
+            el.title = "Parla con gli utenti";
+          }
+        }
+      });
+    }catch(e){}
+  }
+
+  /*
+    Se la WebApp viene aperta con il vecchio waiting mode,
+    non deve più mostrare la vecchia sala d'attesa:
+    passa subito alla nuova admin Chat V2.
+  */
+  try{
+    var params = new URLSearchParams(location.search || "");
+    if(params.get("chatWaiting") === "1" || params.get("focus") === "chat-waiting"){
+      params.delete("chatWaiting");
+      params.delete("focus");
+      setTimeout(function(){
+        location.replace(adminV2Url());
+      }, 50);
+    }
+  }catch(e){}
+
+  /*
+    Blocca click verso vecchia chat.
+  */
+  document.addEventListener("click", function(ev){
+    var el = ev.target && ev.target.closest ? ev.target.closest("button,a") : null;
+    if(!el) return;
+
+    var href = String(el.getAttribute && el.getAttribute("href") || "");
+
+    if(isLegacyChatButton(el) || isLegacyChatUrl(href)){
+      ev.preventDefault();
+      ev.stopPropagation();
+      if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      openV2Admin(el);
+      return false;
+    }
+  }, true);
+
+  /*
+    Blocca assegnazioni programmatiche note alla vecchia chat/waiting.
+    Non tocchiamo link normali non-chat.
+  */
+  try{
+    var originalAssign = window.location.assign.bind(window.location);
+    var originalReplace = window.location.replace.bind(window.location);
+
+    window.location.assign = function(url){
+      if(isLegacyChatUrl(url)){
+        return originalReplace(adminV2Url());
+      }
+      return originalAssign(url);
+    };
+
+    window.location.replace = function(url){
+      if(isLegacyChatUrl(url)){
+        return originalReplace(adminV2Url());
+      }
+      return originalReplace(url);
+    };
+  }catch(e){
+    /*
+      Alcuni browser non permettono override di location.
+      Il listener capture sopra resta comunque attivo.
+    */
+  }
+
+  /*
+    Se vecchi script chiamano enterFollowMeChatWaitingMode, lo neutralizziamo.
+  */
+  window.enterFollowMeChatWaitingMode = function(){
+    location.replace(adminV2Url());
+  };
+
+  window.openFollowMeChatWaitingMode = function(){
+    location.replace(adminV2Url());
+  };
+
+  document.addEventListener("DOMContentLoaded", normalizeButtons);
+  window.addEventListener("load", normalizeButtons);
+  setTimeout(normalizeButtons, 100);
+  setTimeout(normalizeButtons, 700);
+  setTimeout(normalizeButtons, 1500);
+
+})();
+</script>
+
 </body>
 </html>
 
