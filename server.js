@@ -15602,17 +15602,88 @@ function followMeVoiceMimeExt20260528(mime) {
   return 'webm';
 }
 
-function followMeVoiceDecodeDataUrl20260528(dataUrl) {
-  const value = String(dataUrl || '');
-  const m = value.match(/^data:([^;]+);base64,(.+)$/);
-  if (!m) throw new Error('Formato audio non valido o non supportato. Su iPhone riprova oppure carica un file M4A/MP3.');
-  const mime = m[1];
-  const base64 = m[2];
-  const buffer = Buffer.from(base64, 'base64');
-  if (!buffer.length) throw new Error('Audio vuoto.');
-  if (buffer.length > 8 * 1024 * 1024) throw new Error('Audio troppo grande.');
-  return { mime, buffer };
+
+// FOLLOWME_VOICE_IPHONE_DATAURL_DECODER_FINAL_20260528
+function followMeVoiceDecodeDataUrl20260528(audioDataUrl) {
+  const raw = String(audioDataUrl || '').trim();
+
+  const m = raw.match(/^data:([^;]+);base64,(.+)$/i);
+  if (!m) {
+    throw new Error('Formato audio non valido. Il file non contiene un audio leggibile.');
+  }
+
+  let mime = String(m[1] || '').toLowerCase().trim();
+  const b64 = String(m[2] || '').trim();
+
+  if (!b64 || b64.length < 64) {
+    throw new Error('Audio vuoto o incompleto.');
+  }
+
+  /*
+    iPhone/Safari può produrre audio dentro contenitore MP4
+    dichiarandolo anche come video/mp4. Lo accettiamo e lo trattiamo
+    come audio/mp4.
+  */
+  if (mime === 'video/mp4' || mime === 'application/mp4') {
+    mime = 'audio/mp4';
+  }
+
+  if (mime === 'audio/x-m4a' || mime === 'audio/m4a') {
+    mime = 'audio/mp4';
+  }
+
+  const allowed = new Set([
+    'audio/wav',
+    'audio/x-wav',
+    'audio/webm',
+    'audio/ogg',
+    'audio/mpeg',
+    'audio/mp3',
+    'audio/mp4',
+    'audio/aac',
+    'audio/x-aac',
+    'audio/x-caf',
+    'audio/caf'
+  ]);
+
+  if (!allowed.has(mime) && !mime.startsWith('audio/')) {
+    throw new Error('Formato audio non supportato. Usa M4A, MP4, MP3, WAV, WEBM o OGG.');
+  }
+
+  let buffer;
+  try {
+    buffer = Buffer.from(b64, 'base64');
+  } catch (e) {
+    throw new Error('Audio non decodificabile.');
+  }
+
+  if (!buffer || buffer.length < 512) {
+    throw new Error('Audio troppo breve o danneggiato.');
+  }
+
+  const maxBytes = 8 * 1024 * 1024;
+  if (buffer.length > maxBytes) {
+    throw new Error('File audio troppo grande. Limite massimo 8 MB.');
+  }
+
+  let ext = 'webm';
+
+  if (mime.includes('wav')) ext = 'wav';
+  else if (mime.includes('mpeg') || mime.includes('mp3')) ext = 'mp3';
+  else if (mime.includes('mp4') || mime.includes('aac') || mime.includes('m4a')) ext = 'm4a';
+  else if (mime.includes('caf')) ext = 'caf';
+  else if (mime.includes('ogg')) ext = 'ogg';
+  else if (mime.includes('webm')) ext = 'webm';
+
+  return {
+    buffer,
+    mime_type: mime,
+    mime,
+    ext,
+    size_bytes: buffer.length
+  };
 }
+
 
 function followMeVoicePublicUrl20260528(code, filename) {
   return '/followme-voice/' + encodeURIComponent(code) + '/' + encodeURIComponent(filename);
@@ -15802,6 +15873,47 @@ function normalizeFollowMeVoiceDataUrl20260528(audioDataUrl) {
 }
 
 
+
+// FOLLOWME_VOICE_SMART_FILENAME_FINAL_20260528
+function followMeVoiceSlug20260528(value) {
+  let v = String(value || '').trim().toLowerCase();
+
+  v = v.replace(/^https?:\/\//i, '');
+  v = v.replace(/^www\./i, '');
+  v = v.split(/[\/?#]/)[0] || v;
+
+  v = v
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 42);
+
+  return v || 'messaggio-vocale';
+}
+
+async function followMeVoiceNextFilename20260528(projectId, sourceLabel, sourceUrl, ext) {
+  const base = followMeVoiceSlug20260528(sourceLabel || sourceUrl || 'messaggio-vocale');
+  const safeExt = String(ext || 'm4a').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'm4a';
+
+  const q = await pool.query(
+    `SELECT file_url
+     FROM followme_voice_messages
+     WHERE project_id = $1
+       AND (
+         source_label = $2
+         OR source_url = $3
+         OR file_url ILIKE $4
+       )
+     ORDER BY created_at ASC`,
+    [projectId, String(sourceLabel || ''), String(sourceUrl || ''), '%/' + base + '-%']
+  );
+
+  const n = (q.rows.length || 0) + 1;
+  return base + '-' + n + '.' + safeExt;
+}
+
+
 app.post('/api/followme/:code/voice-messages/upload', express.json({ limit:'10mb' }), async function(req, res) {
   try {
     await ensureFollowMeVoiceMessagesRuntime20260528();
@@ -15851,7 +15963,7 @@ app.post('/api/followme/:code/voice-messages/upload', express.json({ limit:'10mb
     const dir = path.join(FOLLOWME_VOICE_STORAGE_DIR_20260528, projectCode);
     fs.mkdirSync(dir, { recursive:true });
 
-    const filename = 'voice_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '.' + ext;
+    const filename = await followMeVoiceNextFilename20260528(project.id, sourceLabel, sourceUrl, decoded.ext);
     const filePath = path.join(dir, filename);
     fs.writeFileSync(filePath, decoded.buffer);
 

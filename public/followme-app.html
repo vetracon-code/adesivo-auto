@@ -6929,6 +6929,51 @@ function followmeSafeClearPdfPreview20260526(preview){
   }
 </style>
 
+
+<style id="FOLLOWME_VOICE_UPLOAD_PROGRESS_FINAL_STYLE_20260528">
+  #followmeVoiceUploadProgressBox20260528{
+    display:none;
+    margin:12px 0 8px;
+    padding:12px;
+    border-radius:18px;
+    background:rgba(15,23,42,.06);
+    border:1px solid rgba(15,23,42,.08);
+  }
+
+  #followmeVoiceUploadProgressBox20260528.show{
+    display:block;
+  }
+
+  #followmeVoiceUploadProgressLabel20260528{
+    font-size:12px;
+    font-weight:850;
+    color:#0f172a;
+    margin-bottom:8px;
+  }
+
+  #followmeVoiceUploadProgressTrack20260528{
+    height:9px;
+    border-radius:999px;
+    overflow:hidden;
+    background:rgba(15,23,42,.12);
+  }
+
+  #followmeVoiceUploadProgressBar20260528{
+    width:0%;
+    height:100%;
+    border-radius:999px;
+    background:linear-gradient(90deg,#22c55e,#0ea5e9);
+    transition:width .22s ease;
+  }
+
+  #followmeVoiceUploadProgressDetail20260528{
+    margin-top:7px;
+    font-size:11px;
+    color:#64748b;
+    font-weight:700;
+  }
+</style>
+
 </head>
 <body>
   <main class="app">
@@ -39000,6 +39045,145 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     });
     mo.observe(document.documentElement || document.body, { childList:true, subtree:true });
   }catch(e){}
+})();
+</script>
+
+
+<script id="FOLLOWME_VOICE_UPLOAD_PROGRESS_FINAL_20260528">
+(function(){
+  "use strict";
+
+  if(window.__followMeVoiceUploadProgressFinal20260528) return;
+  window.__followMeVoiceUploadProgressFinal20260528 = true;
+
+  let fakeTimer = null;
+  let currentPct = 0;
+
+  function ensureBox(){
+    let box = document.getElementById("followmeVoiceUploadProgressBox20260528");
+    if(box) return box;
+
+    box = document.createElement("div");
+    box.id = "followmeVoiceUploadProgressBox20260528";
+    box.innerHTML =
+      '<div id="followmeVoiceUploadProgressLabel20260528">Preparazione audio...</div>' +
+      '<div id="followmeVoiceUploadProgressTrack20260528">' +
+      '  <div id="followmeVoiceUploadProgressBar20260528"></div>' +
+      '</div>' +
+      '<div id="followmeVoiceUploadProgressDetail20260528">0%</div>';
+
+    const status =
+      document.getElementById("voiceStatusClean20260528") ||
+      document.getElementById("voiceStatus20260528") ||
+      document.querySelector("[id*='voiceStatus']");
+
+    if(status && status.parentNode){
+      status.parentNode.insertBefore(box, status.nextSibling);
+    }else{
+      document.body.appendChild(box);
+    }
+
+    return box;
+  }
+
+  function setProgress(pct, label, detail){
+    const box = ensureBox();
+    const bar = document.getElementById("followmeVoiceUploadProgressBar20260528");
+    const lab = document.getElementById("followmeVoiceUploadProgressLabel20260528");
+    const det = document.getElementById("followmeVoiceUploadProgressDetail20260528");
+
+    currentPct = Math.max(0, Math.min(100, Number(pct || 0)));
+
+    box.classList.add("show");
+    if(bar) bar.style.width = currentPct + "%";
+    if(lab) lab.textContent = label || "Caricamento audio...";
+    if(det) det.textContent = detail || (Math.round(currentPct) + "%");
+  }
+
+  function hideProgressSoon(){
+    clearInterval(fakeTimer);
+    fakeTimer = null;
+    setTimeout(function(){
+      const box = document.getElementById("followmeVoiceUploadProgressBox20260528");
+      if(box) box.classList.remove("show");
+    }, 1400);
+  }
+
+  function startFakeProgress(){
+    clearInterval(fakeTimer);
+    currentPct = 5;
+    setProgress(5, "Preparazione audio...", "Controllo formato");
+
+    fakeTimer = setInterval(function(){
+      if(currentPct < 45){
+        currentPct += 4;
+        setProgress(currentPct, "Caricamento audio...", Math.round(currentPct) + "%");
+      }else if(currentPct < 78){
+        currentPct += 2;
+        setProgress(currentPct, "Elaborazione formato...", Math.round(currentPct) + "%");
+      }else if(currentPct < 92){
+        currentPct += 1;
+        setProgress(currentPct, "Ottimizzazione finale...", Math.round(currentPct) + "%");
+      }
+    }, 260);
+  }
+
+  function finishOk(){
+    clearInterval(fakeTimer);
+    fakeTimer = null;
+    setProgress(100, "Messaggio vocale salvato correttamente.", "Completato");
+    hideProgressSoon();
+  }
+
+  function finishError(msg){
+    clearInterval(fakeTimer);
+    fakeTimer = null;
+    setProgress(100, "Caricamento interrotto.", msg || "Errore sconosciuto");
+    hideProgressSoon();
+  }
+
+  const originalFetch = window.fetch;
+
+  window.fetch = function(input, init){
+    const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+
+    const isVoiceUpload =
+      url.indexOf("/api/followme/") >= 0 &&
+      url.indexOf("/voice-messages/upload") >= 0;
+
+    if(isVoiceUpload){
+      startFakeProgress();
+
+      return originalFetch.call(this, input, init)
+        .then(async function(res){
+          if(res.ok){
+            finishOk();
+          }else{
+            let detail = "Errore caricamento.";
+            try{
+              const clone = res.clone();
+              const data = await clone.json();
+              if(data && (data.error || data.detail)) detail = data.error || data.detail;
+            }catch(e){}
+            finishError(detail);
+          }
+          return res;
+        })
+        .catch(function(err){
+          finishError(err && err.message ? err.message : "Upload annullato.");
+          throw err;
+        });
+    }
+
+    return originalFetch.call(this, input, init);
+  };
+
+  document.addEventListener("DOMContentLoaded", function(){
+    ensureBox();
+  });
+
+  setTimeout(ensureBox, 700);
+  setTimeout(ensureBox, 1600);
 })();
 </script>
 
