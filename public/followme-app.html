@@ -35677,6 +35677,77 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="FOLLOWME_SAFE_BROWSING_MESSAGES_ONLY_20260528">
+(function(){
+  "use strict";
+
+  /*
+    Nessuna nuova pagina, nessun pannello tecnico.
+    Intercettiamo solo le risposte JSON bloccate dal backend e mostriamo il messaggio.
+  */
+
+  function showFollowMeSafeBrowsingMessage(msg){
+    msg = String(msg || "").trim() || "URL non pubblicabile.";
+
+    try{
+      if(typeof window.showToast === "function"){
+        window.showToast(msg);
+        return;
+      }
+    }catch(e){}
+
+    try{
+      if(typeof window.toast === "function"){
+        window.toast(msg);
+        return;
+      }
+    }catch(e){}
+
+    alert(msg);
+  }
+
+  const originalFetch = window.fetch;
+
+  if(typeof originalFetch === "function" && !window.__followMeSafeBrowsingFetchWrapped20260528){
+    window.__followMeSafeBrowsingFetchWrapped20260528 = true;
+
+    window.fetch = async function(input, init){
+      const response = await originalFetch.apply(this, arguments);
+
+      try{
+        const url = typeof input === "string" ? input : String(input && input.url || "");
+
+        if(
+          response &&
+          !response.ok &&
+          (
+            url.indexOf("/api/followme/") >= 0 &&
+            (
+              url.indexOf("/update-url") >= 0 ||
+              url.indexOf("/update-existing-qr") >= 0
+            )
+          )
+        ){
+          const cloned = response.clone();
+          const data = await cloned.json().catch(function(){ return null; });
+
+          if(data && data.provider === "Google Safe Browsing"){
+            showFollowMeSafeBrowsingMessage(
+              data.label ||
+              data.error ||
+              "URL bloccato. Google Safe Browsing non consente di considerare affidabile questo link."
+            );
+          }
+        }
+      }catch(e){}
+
+      return response;
+    };
+  }
+})();
+</script>
+
 </body>
 </html>
 

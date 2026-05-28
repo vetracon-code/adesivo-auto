@@ -15368,6 +15368,136 @@ app.get('/api/followme/:code/status', async (req, res) => {
 });
 
 
+
+// FOLLOWME_ENFORCE_GOOGLE_SAFE_BROWSING_ON_URL_SAVE_20260528
+async function followMeRequireSafeUrlBeforeSave20260528(req, res, next) {
+  try {
+    /*
+      Controllo invisibile lato server:
+      prima di salvare un nuovo URL FollowMe, lo verifichiamo con Google Safe Browsing.
+      La UI non mostra pannelli tecnici: riceve solo messaggi chiari.
+    */
+
+    const body = req.body || {};
+
+    const candidate =
+      body.url ||
+      body.active_url ||
+      body.target_url ||
+      body.targetUrl ||
+      body.redirect_url ||
+      body.redirectUrl ||
+      body.new_url ||
+      body.newUrl ||
+      body.link ||
+      '';
+
+    const rawUrl = String(candidate || '').trim();
+
+    /*
+      Se questa chiamata non contiene un URL, lasciamo proseguire.
+      Serve per non bloccare endpoint che usano lo stesso percorso per altri dati.
+    */
+    if (!rawUrl) {
+      return next();
+    }
+
+    if (typeof normalizeFollowMeSecurityUrl20260528 !== 'function' ||
+        typeof googleSafeBrowsingCheck20260528 !== 'function') {
+      return res.status(503).json({
+        success:false,
+        status:'unknown',
+        safe:false,
+        blocked:true,
+        provider:'Google Safe Browsing',
+        error:'Controllo Google Safe Browsing non disponibile.',
+        label:'Impossibile verificare la sicurezza del link. Per proteggere gli utenti, FollowMe non consente la pubblicazione automatica di questo URL.'
+      });
+    }
+
+    const normalized = normalizeFollowMeSecurityUrl20260528(rawUrl);
+
+    if (!normalized.ok) {
+      return res.status(400).json({
+        success:false,
+        status:normalized.status || 'invalid',
+        safe:false,
+        blocked:true,
+        provider:'Google Safe Browsing',
+        url:rawUrl,
+        error:normalized.error || 'URL non valido.',
+        label:normalized.error || 'URL non valido. FollowMe non può pubblicare questo link.'
+      });
+    }
+
+    const result = await googleSafeBrowsingCheck20260528(normalized.url);
+
+    /*
+      Regola severa:
+      se non è esplicitamente safe:true/status:safe, blocchiamo.
+      Quindi dangerous, unknown, errori API e verifiche incomplete vengono rifiutati.
+    */
+    if (!(result && result.success === true && result.safe === true && result.status === 'safe')) {
+      return res.status(422).json({
+        success:false,
+        status:(result && result.status) || 'unknown',
+        safe:false,
+        blocked:true,
+        provider:'Google Safe Browsing',
+        url:normalized.url,
+        hostname:normalized.hostname,
+        error:(result && result.error) || 'URL non verificabile.',
+        label:
+          (result && result.status === 'dangerous')
+            ? 'URL bloccato. Google Safe Browsing segnala questo link come potenzialmente pericoloso. FollowMe non lo pubblicherà.'
+            : 'Impossibile verificare la sicurezza del link con Google Safe Browsing. Per proteggere gli utenti, FollowMe non consente la pubblicazione automatica di questo URL.',
+        matches:(result && result.matches) || [],
+        checked_at:new Date().toISOString()
+      });
+    }
+
+    /*
+      Esito positivo: salviamo l'esito nella request.
+      La route originale potrà continuare senza cambiare UI.
+    */
+    req.followmeUrlSecurity20260528 = {
+      success:true,
+      status:'safe',
+      safe:true,
+      provider:'Google Safe Browsing',
+      url:normalized.url,
+      hostname:normalized.hostname,
+      label:'Nessuna minaccia nota rilevata da Google Safe Browsing al momento della verifica.',
+      checked_at:result.checked_at || new Date().toISOString()
+    };
+
+    return next();
+  } catch (err) {
+    console.error('followme safe browsing enforcement error:', err);
+    return res.status(500).json({
+      success:false,
+      status:'unknown',
+      safe:false,
+      blocked:true,
+      provider:'Google Safe Browsing',
+      error:'Errore durante il controllo sicurezza URL.',
+      label:'Impossibile verificare la sicurezza del link. Per proteggere gli utenti, FollowMe non consente la pubblicazione automatica di questo URL.',
+      detail:String(err && err.message ? err.message : err)
+    });
+  }
+}
+
+/*
+  Endpoint FollowMe protetti:
+  - aggiornamento URL attivo
+  - sostituzione URL collegato a QR esistente
+
+  Il controllo resta nascosto: l'admin vede solo il messaggio di esito.
+*/
+app.post('/api/followme/:code/update-existing-qr', express.json({ limit:'128kb' }), followMeRequireSafeUrlBeforeSave20260528);
+app.post('/api/followme/:code/update-url', express.json({ limit:'128kb' }), followMeRequireSafeUrlBeforeSave20260528);
+
+
 app.post('/api/followme/:code/update-existing-qr', express.json(), async (req, res) => {
   try {
     const code = normalizeFollowMeCode(req.params.code);
