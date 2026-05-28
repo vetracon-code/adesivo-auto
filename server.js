@@ -15925,6 +15925,60 @@ app.post('/api/followme/:code/voice-messages/:id/select', express.json({ limit:'
   }
 });
 
+
+// FOLLOWME_VOICE_MESSAGES_DISABLE_ACTIVE_FINAL_20260528
+app.post('/api/followme/:code/voice-messages/disable', express.json({ limit:'32kb' }), async function(req, res) {
+  try {
+    await ensureFollowMeVoiceMessagesRuntime20260528();
+
+    const code = String(req.params.code || '').trim();
+
+    const q = await pool.query(
+      `SELECT id, code, public_id
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).json({ success:false, error:'FollowMe QR non trovato.' });
+    }
+
+    const project = q.rows[0];
+
+    await pool.query(
+      `UPDATE followme_voice_messages
+       SET is_active = FALSE,
+           updated_at = NOW()
+       WHERE project_id = $1`,
+      [project.id]
+    );
+
+    const list = await pool.query(
+      `SELECT id, source_url, source_label, file_url, mime_type, duration_seconds, is_active,
+              listened_count, last_listened_at, created_at, updated_at
+       FROM followme_voice_messages
+       WHERE project_id = $1
+       ORDER BY created_at DESC
+       LIMIT 3`,
+      [project.id]
+    );
+
+    return res.json({
+      success:true,
+      has_active_voice:false,
+      active_voice:null,
+      messages:list.rows,
+      message:'Messaggio vocale spento. I messaggi salvati restano disponibili.'
+    });
+  } catch (err) {
+    console.error('followme voice disable error:', err);
+    return res.status(500).json({ success:false, error:'Errore spegnimento messaggio vocale.' });
+  }
+});
+
+
 app.post('/api/followme/:code/voice-messages/:id/delete', express.json({ limit:'64kb' }), async function(req, res) {
   try {
     await ensureFollowMeVoiceMessagesRuntime20260528();
