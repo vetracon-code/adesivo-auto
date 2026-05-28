@@ -37582,6 +37582,414 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="FOLLOWME_VOICE_RECORDER_CONTROLS_FINAL_FIX_20260528">
+(function(){
+  "use strict";
+
+  var recorder = null;
+  var stream = null;
+  var chunks = [];
+  var blob = null;
+  var blobUrl = "";
+  var startedAt = 0;
+  var timer = null;
+  var selectedMime = "";
+
+  function el(id){ return document.getElementById(id); }
+
+  function getCode(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim();
+      var p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim();
+    }catch(e){ return ""; }
+  }
+
+  function toast(msg){
+    try{
+      if(typeof window.showToast === "function"){ window.showToast(msg); return; }
+      if(typeof window.toast === "function"){ window.toast(msg); return; }
+    }catch(e){}
+    alert(msg);
+  }
+
+  function setStatus(msg){
+    var x = el("voiceStatus20260528");
+    if(x) x.textContent = msg;
+  }
+
+  function ensureDiag(){
+    var status = el("voiceStatus20260528");
+    if(!status || el("voiceDiagnostics20260528")) return;
+
+    var d = document.createElement("div");
+    d.id = "voiceDiagnostics20260528";
+    d.className = "followme-voice-small-20260528";
+    d.style.marginTop = "8px";
+    d.style.padding = "10px 12px";
+    d.style.borderRadius = "16px";
+    d.style.background = "#f8fafc";
+    d.style.border = "1px solid rgba(15,23,42,.08)";
+    d.style.color = "#334155";
+    d.textContent = "Controller registrazione pronto.";
+
+    status.parentNode.insertBefore(d, status.nextSibling);
+  }
+
+  function setDiag(lines){
+    ensureDiag();
+    var d = el("voiceDiagnostics20260528");
+    if(!d) return;
+
+    if(!Array.isArray(lines)) lines = [String(lines || "")];
+
+    d.innerHTML = lines.map(function(x){
+      return String(x || "").replace(/[<>&]/g, function(c){
+        return c === "<" ? "&lt;" : c === ">" ? "&gt;" : "&amp;";
+      });
+    }).join("<br>");
+  }
+
+  function setMeter(pct){
+    var m = el("voiceMeter20260528");
+    if(m) m.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  }
+
+  async function api(url, options){
+    var res = await fetch(url, options || {});
+    var data = await res.json().catch(function(){ return null; });
+    if(!res.ok || !data || data.success === false){
+      var err = new Error((data && data.error) || "Errore richiesta.");
+      err.data = data;
+      throw err;
+    }
+    return data;
+  }
+
+  function fileToDataUrl(file){
+    return new Promise(function(resolve,reject){
+      var r = new FileReader();
+      r.onload = function(){ resolve(String(r.result || "")); };
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+  }
+
+  function bestMime(){
+    var list = [
+      "audio/mp4",
+      "audio/aac",
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/ogg;codecs=opus",
+      "audio/ogg"
+    ];
+
+    if(!window.MediaRecorder || !MediaRecorder.isTypeSupported) return "";
+
+    for(var i=0;i<list.length;i++){
+      try{
+        if(MediaRecorder.isTypeSupported(list[i])) return list[i];
+      }catch(e){}
+    }
+
+    return "";
+  }
+
+  function stopStream(){
+    try{
+      if(stream){
+        stream.getTracks().forEach(function(t){ t.stop(); });
+      }
+    }catch(e){}
+    stream = null;
+  }
+
+  function setButtons(mode){
+    var rec = el("voiceRecord20260528");
+    var stop = el("voiceStop20260528");
+    var play = el("voicePlay20260528");
+    var pub = el("voicePublish20260528");
+
+    if(rec) rec.disabled = mode === "recording";
+    if(stop) stop.disabled = mode !== "recording";
+    if(play) play.disabled = !blob || mode === "recording";
+    if(pub) pub.disabled = !blob || mode === "recording";
+  }
+
+  async function startRec(){
+    try{
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        throw new Error("Microfono non disponibile da questo browser.");
+      }
+
+      if(!window.MediaRecorder){
+        throw new Error("MediaRecorder non supportato da questo browser.");
+      }
+
+      chunks = [];
+      blob = null;
+
+      if(blobUrl){
+        try{ URL.revokeObjectURL(blobUrl); }catch(e){}
+      }
+      blobUrl = "";
+
+      selectedMime = bestMime();
+
+      setStatus("Richiedo accesso al microfono...");
+      setDiag([
+        "Avvio registrazione.",
+        "Formato scelto: " + (selectedMime || "default browser"),
+        "Autorizza il microfono se il browser lo richiede."
+      ]);
+
+      setMeter(0);
+
+      stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+
+      recorder = selectedMime
+        ? new MediaRecorder(stream, { mimeType:selectedMime })
+        : new MediaRecorder(stream);
+
+      recorder.ondataavailable = function(ev){
+        if(ev.data && ev.data.size) chunks.push(ev.data);
+      };
+
+      recorder.onerror = function(ev){
+        setStatus("Errore registrazione.");
+        setDiag("Errore MediaRecorder: " + (ev && ev.error ? ev.error.message || ev.error.name : "non specificato"));
+      };
+
+      recorder.onstop = function(){
+        if(timer) clearInterval(timer);
+        stopStream();
+
+        var mime = recorder && recorder.mimeType ? recorder.mimeType : selectedMime || "audio/webm";
+        blob = new Blob(chunks, { type:mime });
+
+        if(!blob.size){
+          blob = null;
+          setStatus("Registrazione non valida: file vuoto.");
+          setDiag([
+            "File audio vuoto.",
+            "Formato: " + mime,
+            "Riprova autorizzando il microfono."
+          ]);
+          setButtons("idle");
+          return;
+        }
+
+        blobUrl = URL.createObjectURL(blob);
+
+        var seconds = Math.max(1, Math.min(20, Math.round((Date.now() - startedAt) / 1000)));
+
+        setStatus("Registrazione pronta. Puoi riascoltare o pubblicare.");
+        setDiag([
+          "Registrazione completata.",
+          "Formato: " + mime,
+          "Durata stimata: " + seconds + "s",
+          "Dimensione: " + Math.round(blob.size / 1024) + " KB"
+        ]);
+        setMeter(100);
+        setButtons("ready");
+      };
+
+      recorder.start();
+      startedAt = Date.now();
+
+      setButtons("recording");
+      setStatus("Registrazione in corso...");
+
+      timer = setInterval(function(){
+        var elapsed = (Date.now() - startedAt) / 1000;
+        setMeter((elapsed / 20) * 100);
+        setStatus("Registrazione in corso... " + Math.min(20, Math.round(elapsed)) + "/20s");
+        if(elapsed >= 20) stopRec();
+      }, 150);
+
+    }catch(e){
+      if(timer) clearInterval(timer);
+      stopStream();
+
+      var msg = e && e.message ? e.message : "Errore avvio registrazione.";
+      setStatus(msg);
+      setDiag([
+        "Errore avvio registrazione.",
+        "Dettaglio: " + msg
+      ]);
+      toast(msg);
+      setButtons("idle");
+    }
+  }
+
+  function stopRec(){
+    try{
+      if(timer) clearInterval(timer);
+      if(recorder && recorder.state === "recording"){
+        recorder.stop();
+      }else{
+        stopStream();
+        setButtons(blob ? "ready" : "idle");
+      }
+    }catch(e){
+      stopStream();
+      setStatus("Errore stop registrazione.");
+      setDiag("Errore stop: " + (e.message || e));
+    }
+  }
+
+  function playRec(){
+    try{
+      if(!blobUrl){
+        toast("Nessuna registrazione da riascoltare.");
+        return;
+      }
+
+      var a = new Audio(blobUrl);
+      a.play().catch(function(err){
+        toast("Non riesco a riprodurre: " + (err.message || err));
+      });
+    }catch(e){
+      toast("Errore riascolto: " + (e.message || e));
+    }
+  }
+
+  async function publishRec(){
+    try{
+      if(!blob || !blob.size){
+        toast("Registra prima un messaggio valido.");
+        return;
+      }
+
+      var code = getCode();
+      var duration = Math.max(1, Math.min(20, (Date.now() - startedAt) / 1000));
+
+      setStatus("Preparo pubblicazione...");
+      setDiag([
+        "Pubblicazione in corso.",
+        "Formato: " + (blob.type || "non dichiarato"),
+        "Dimensione: " + Math.round(blob.size / 1024) + " KB"
+      ]);
+
+      var state = await api("/api/followme/" + encodeURIComponent(code) + "/voice-messages/status?v=" + Date.now());
+      var messages = Array.isArray(state.messages) ? state.messages : [];
+      var replaceId = "";
+
+      if(messages.length >= 3){
+        var select = el("voiceSelect20260528");
+        replaceId = select ? String(select.value || "") : "";
+
+        if(!replaceId){
+          toast("Hai già 3 messaggi. Seleziona quale sostituire.");
+          setStatus("Seleziona quale messaggio sostituire.");
+          return;
+        }
+      }
+
+      var dataUrl = await fileToDataUrl(blob);
+
+      var body = {
+        audio_data_url:dataUrl,
+        duration_seconds:duration
+      };
+
+      if(replaceId) body.replace_id = replaceId;
+
+      setStatus("Pubblico il messaggio...");
+
+      var out = await api("/api/followme/" + encodeURIComponent(code) + "/voice-messages/upload?v=" + Date.now(), {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(body)
+      });
+
+      var main = el("followmeVoiceAdminBtn20260528");
+      if(main){
+        main.classList.remove("is-off");
+        main.classList.add("is-on");
+        main.textContent = "Registra messaggio ON";
+      }
+
+      setStatus("Messaggio registrato e pubblicato.");
+      setDiag("Upload completato. Messaggio attivo.");
+      toast("Messaggio vocale pubblicato.");
+
+    }catch(e){
+      var msg = e && e.message ? e.message : "Errore pubblicazione.";
+      setStatus(msg);
+      setDiag([
+        "Errore pubblicazione.",
+        "Dettaglio: " + msg,
+        e && e.data ? "Server: " + JSON.stringify(e.data).slice(0, 260) : ""
+      ]);
+      toast(msg);
+    }
+  }
+
+  function replaceButton(id, handler){
+    var old = el(id);
+    if(!old) return null;
+
+    if(old.dataset.finalCloned20260528 === "1") return old;
+
+    var clone = old.cloneNode(true);
+    clone.dataset.finalCloned20260528 = "1";
+    clone.onclick = null;
+
+    clone.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      handler();
+      return false;
+    }, true);
+
+    old.parentNode.replaceChild(clone, old);
+    return clone;
+  }
+
+  function bind(){
+    var modal = el("followmeVoiceModal20260528");
+    if(!modal) return;
+
+    ensureDiag();
+
+    var rec = replaceButton("voiceRecord20260528", startRec);
+    var stop = replaceButton("voiceStop20260528", stopRec);
+    var play = replaceButton("voicePlay20260528", playRec);
+    var pub = replaceButton("voicePublish20260528", publishRec);
+
+    if(!rec || !stop || !play || !pub) return;
+
+    setStatus("Pronto per registrare.");
+    setDiag("Controller registrazione pronto.");
+    setButtons(blob ? "ready" : "idle");
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    setTimeout(bind, 600);
+    setTimeout(bind, 1600);
+    setTimeout(bind, 3200);
+  });
+
+  document.addEventListener("click", function(){
+    setTimeout(bind, 120);
+    setTimeout(bind, 500);
+  }, true);
+
+  try{
+    var mo = new MutationObserver(function(){
+      clearTimeout(window.__followMeVoiceRecorderFinalCloneTimer20260528);
+      window.__followMeVoiceRecorderFinalCloneTimer20260528 = setTimeout(bind, 120);
+    });
+    mo.observe(document.documentElement || document.body, { childList:true, subtree:true });
+  }catch(e){}
+})();
+</script>
+
 </body>
 </html>
 
