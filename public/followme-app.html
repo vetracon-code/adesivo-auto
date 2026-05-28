@@ -6363,6 +6363,36 @@ function followmeSafeClearPdfPreview20260526(preview){
   }
 </style>
 
+
+<style id="FOLLOWME_INFO_REQUESTS_ADMIN_TOGGLE_STYLE_20260528">
+  .followme-info-requests-toggle-20260528{
+    appearance:none;
+    -webkit-appearance:none;
+    border:0;
+    border-radius:999px;
+    min-height:38px;
+    padding:9px 15px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    font-size:13px;
+    font-weight:900;
+    letter-spacing:-.01em;
+    color:#fff;
+    box-shadow:0 12px 30px rgba(15,23,42,.14);
+    cursor:pointer;
+    margin:6px 4px;
+  }
+  .followme-info-requests-toggle-20260528.is-on{
+    background:linear-gradient(180deg,#22c55e,#16a34a);
+  }
+  .followme-info-requests-toggle-20260528.is-off{
+    background:linear-gradient(180deg,#ef4444,#dc2626);
+  }
+</style>
+
 </head>
 <body>
   <main class="app">
@@ -36181,6 +36211,114 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     var mo = new MutationObserver(function(){
       clearTimeout(window.__followMeVoicePlaceholderTimer20260528);
       window.__followMeVoicePlaceholderTimer20260528 = setTimeout(ensureVoiceAboveInfo, 120);
+    });
+    mo.observe(document.documentElement || document.body, { childList:true, subtree:true });
+  }catch(e){}
+})();
+</script>
+
+
+<script id="FOLLOWME_INFO_REQUESTS_ADMIN_TOGGLE_20260528">
+(function(){
+  "use strict";
+
+  function getCode(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim();
+      var p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim();
+    }catch(e){ return ""; }
+  }
+
+  function toast(msg){
+    try{
+      if(typeof window.showToast === "function"){ window.showToast(msg); return; }
+      if(typeof window.toast === "function"){ window.toast(msg); return; }
+    }catch(e){}
+    alert(msg);
+  }
+
+  async function jsonFetch(url, options){
+    var res = await fetch(url, options || {});
+    var data = await res.json().catch(function(){ return null; });
+    if(!res.ok || !data || data.success === false){
+      throw new Error((data && data.error) || "Errore richiesta.");
+    }
+    return data;
+  }
+
+  function findChatButton(){
+    var all = Array.prototype.slice.call(document.querySelectorAll("button,a"));
+    for(var i=0;i<all.length;i++){
+      var t = String(all[i].textContent || all[i].innerText || "").trim().toLowerCase();
+      if(t.indexOf("parla con gli utenti") >= 0 || t.indexOf("attiva chat") >= 0){
+        return all[i];
+      }
+    }
+    return document.getElementById("followmeOtherOpenChat");
+  }
+
+  function styleBtn(btn, enabled){
+    btn.classList.remove("is-on","is-off");
+    btn.classList.add(enabled ? "is-on" : "is-off");
+    btn.textContent = enabled ? "Richieste informazioni ON" : "Richieste informazioni OFF";
+    btn.setAttribute("aria-pressed", enabled ? "true" : "false");
+  }
+
+  async function ensureToggle(){
+    if(document.getElementById("followmeInfoRequestsToggle20260528")) return;
+
+    var anchor = findChatButton();
+    if(!anchor || !anchor.parentNode) return;
+
+    var btn = document.createElement("button");
+    btn.id = "followmeInfoRequestsToggle20260528";
+    btn.type = "button";
+    btn.className = "followme-info-requests-toggle-20260528 is-off";
+    btn.textContent = "Richieste informazioni OFF";
+
+    anchor.parentNode.insertBefore(btn, anchor.nextSibling);
+
+    var code = getCode();
+    if(!code) return;
+
+    try{
+      var st = await jsonFetch("/api/followme/" + encodeURIComponent(code) + "/info-requests/status?v=" + Date.now());
+      styleBtn(btn, st.info_requests_enabled === true);
+    }catch(e){}
+
+    btn.addEventListener("click", async function(){
+      var currentlyOn = btn.classList.contains("is-on");
+      var next = !currentlyOn;
+
+      btn.disabled = true;
+      try{
+        var data = await jsonFetch("/api/followme/" + encodeURIComponent(code) + "/info-requests/toggle?v=" + Date.now(), {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({ enabled:next })
+        });
+
+        styleBtn(btn, data.info_requests_enabled === true);
+        toast(data.info_requests_enabled ? "Richieste informazioni attive." : "Richieste informazioni disattivate.");
+      }catch(err){
+        toast("Errore richieste informazioni: " + (err.message || err));
+      }finally{
+        btn.disabled = false;
+      }
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", ensureToggle);
+  setTimeout(ensureToggle, 500);
+  setTimeout(ensureToggle, 1500);
+  setTimeout(ensureToggle, 3000);
+
+  try{
+    var mo = new MutationObserver(function(){
+      clearTimeout(window.__followMeInfoToggleTimer20260528);
+      window.__followMeInfoToggleTimer20260528 = setTimeout(ensureToggle, 180);
     });
     mo.observe(document.documentElement || document.body, { childList:true, subtree:true });
   }catch(e){}

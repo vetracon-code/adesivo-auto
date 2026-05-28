@@ -14996,6 +14996,517 @@ app.get('/api/followme/:code/chat/session/:session_id', async (req, res) => {
 
 
 
+
+// FOLLOWME_INFO_REQUESTS_BACKEND_20260528
+async function ensureFollowMeInfoRequestsRuntime20260528() {
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS info_requests_enabled BOOLEAN DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS source_type TEXT`);
+  await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS source_url TEXT`);
+  await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS source_label TEXT`);
+  await pool.query(`ALTER TABLE followme_chat_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`);
+}
+
+function followMeShortSourceLabel20260528(rawUrl) {
+  try {
+    const value = String(rawUrl || '').trim();
+    if (!value) return 'contenuto';
+
+    if (value.startsWith('/fm/document/')) return 'documento';
+    if (value.startsWith('/fm/image/')) return 'immagine';
+
+    const u = new URL(value, 'https://adesivo-auto.onrender.com');
+    let label = String(u.hostname || '').replace(/^www\./, '');
+
+    if (!label || label === 'adesivo-auto.onrender.com') {
+      label = String(u.pathname || '').split('/').filter(Boolean)[0] || 'contenuto';
+    }
+
+    label = label.replace(/[^a-zA-Z0-9.\-_]/g, '');
+    if (label.length > 14) label = label.slice(0, 14) + '…';
+    return label || 'contenuto';
+  } catch(e) {
+    const cleaned = String(rawUrl || 'contenuto').replace(/^https?:\/\//i, '').replace(/^www\./i, '');
+    return cleaned.slice(0, 14) + (cleaned.length > 14 ? '…' : '');
+  }
+}
+
+async function sendFollowMeInfoRequestPush20260528(project, sessionId, sourceLabel) {
+  try {
+    if (!project || !project.id || !project.code || !sessionId) return { sent:0, failed:0 };
+
+    if (typeof webpush === 'undefined' || !webpush || typeof webpush.sendNotification !== 'function') {
+      return { sent:0, failed:0, skipped:true };
+    }
+
+    const adminUrl = `/fm/chat-v2/admin/${encodeURIComponent(project.code)}?session=${encodeURIComponent(sessionId)}`;
+    const label = String(sourceLabel || 'contenuto').slice(0, 18);
+
+    const payload = JSON.stringify({
+      title: 'Richiesta informazioni',
+      body: 'Richiesta informazioni da utente per sito: ' + label,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag: `followme-info-request-${project.id}-${sessionId}`,
+      renotify: true,
+      requireInteraction: false,
+      vibrate: [120, 60, 120],
+      url: adminUrl,
+      targetUrl: adminUrl,
+      relativeTargetUrl: adminUrl,
+      data: {
+        type: 'followme_info_request',
+        code: project.code,
+        public_id: project.public_id || project.code,
+        session_id: String(sessionId),
+        source_label: label,
+        url: adminUrl,
+        targetUrl: adminUrl,
+        relativeTargetUrl: adminUrl
+      }
+    });
+
+    const subs = await pool.query(
+      `SELECT endpoint, p256dh, auth
+       FROM followme_push_subscriptions
+       WHERE project_id = $1
+       LIMIT 200`,
+      [project.id]
+    );
+
+    let sent = 0;
+    let failed = 0;
+
+    for (const sub of subs.rows) {
+      try {
+        await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          payload
+        );
+        sent += 1;
+      } catch (err) {
+        failed += 1;
+        if (err && (err.statusCode === 404 || err.statusCode === 410)) {
+          try { await pool.query('DELETE FROM followme_push_subscriptions WHERE endpoint = $1', [sub.endpoint]); } catch(e) {}
+        } else {
+          console.error('followme info request push error:', err.statusCode || '', err.body || err.message || err);
+        }
+      }
+    }
+
+    return { sent, failed };
+  } catch (err) {
+    console.error('sendFollowMeInfoRequestPush error:', err.message || err);
+    return { sent:0, failed:1, error:String(err.message || err) };
+  }
+}
+
+app.post('/api/followme/:code/info-requests/toggle', express.json(), async function(req, res) {
+  try {
+    await ensureFollowMeInfoRequestsRuntime20260528();
+
+    const code = String(req.params.code || '').trim();
+    const enabled = req.body && typeof req.body.enabled === 'boolean'
+      ? req.body.enabled
+      : !!(req.body && req.body.info_requests_enabled);
+
+    const q = await pool.query(
+      `UPDATE followme_projects
+       SET info_requests_enabled = $2,
+           updated_at = NOW()
+       WHERE code = $1 OR public_id = $1
+       RETURNING id, code, public_id, info_requests_enabled`,
+      [code, enabled]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).json({ success:false, error:'FollowMe QR non trovato.' });
+    }
+
+    return res.json({
+      success:true,
+      project:q.rows[0],
+      info_requests_enabled:q.rows[0].info_requests_enabled === true
+    });
+  } catch (err) {
+    console.error('followme info requests toggle error:', err);
+    return res.status(500).json({ success:false, error:'Errore aggiornamento richieste informazioni.' });
+  }
+});
+
+app.get('/api/followme/:code/info-requests/status', async function(req, res) {
+  try {
+    await ensureFollowMeInfoRequestsRuntime20260528();
+
+    const code = String(req.params.code || '').trim();
+    const q = await pool.query(
+      `SELECT id, code, public_id, info_requests_enabled
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).json({ success:false, error:'FollowMe QR non trovato.' });
+    }
+
+    return res.json({
+      success:true,
+      project:q.rows[0],
+      info_requests_enabled:q.rows[0].info_requests_enabled === true
+    });
+  } catch (err) {
+    console.error('followme info requests status error:', err);
+    return res.status(500).json({ success:false, error:'Errore stato richieste informazioni.' });
+  }
+});
+
+app.get('/fm/info/:public_id', async function(req, res) {
+  try {
+    await ensureFollowMeInfoRequestsRuntime20260528();
+
+    const publicId = String(req.params.public_id || '').trim();
+
+    const q = await pool.query(
+      `SELECT id, code, public_id, label, active_url, info_requests_enabled
+       FROM followme_projects
+       WHERE public_id = $1 OR code = $1
+       LIMIT 1`,
+      [publicId]
+    );
+
+    if (!q.rows.length) return res.status(404).send('FollowMe QR non trovato.');
+
+    const project = q.rows[0];
+    const activeUrl = String(project.active_url || '').trim();
+    const sourceLabel = followMeShortSourceLabel20260528(activeUrl);
+
+    if (!activeUrl) {
+      return res.redirect(302, '/fm/app/' + encodeURIComponent(project.code || publicId));
+    }
+
+    const safeJson = JSON.stringify({
+      code: project.code,
+      public_id: project.public_id,
+      active_url: activeUrl,
+      source_label: sourceLabel
+    }).replace(/</g, '\\u003c');
+
+    return res.send(`<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>FollowMe - Informazioni</title>
+<style>
+  :root{
+    --bg:#07070b;
+    --glass:rgba(255,255,255,.78);
+    --line:rgba(255,255,255,.22);
+    --text:#111827;
+    --muted:#64748b;
+    --green:#16a34a;
+    --shadow:0 24px 80px rgba(0,0,0,.28);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--text)}
+  .topbar{
+    position:fixed;z-index:20;top:0;left:0;right:0;
+    padding:calc(10px + env(safe-area-inset-top)) 12px 10px;
+    background:linear-gradient(180deg,rgba(255,255,255,.92),rgba(255,255,255,.76));
+    backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    border-bottom:1px solid rgba(15,23,42,.08);
+    box-shadow:0 10px 30px rgba(15,23,42,.10);
+  }
+  .bar-inner{max-width:980px;margin:0 auto;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}
+  .premium-btn{
+    appearance:none;border:1px solid rgba(15,23,42,.10);
+    border-radius:999px;background:#fff;color:#111827;
+    min-height:34px;padding:8px 13px;
+    display:inline-flex;align-items:center;gap:7px;justify-content:center;
+    font-weight:850;font-size:12.5px;letter-spacing:-.01em;
+    box-shadow:0 8px 22px rgba(15,23,42,.10), inset 0 1px 0 rgba(255,255,255,.9);
+    cursor:pointer;
+  }
+  .premium-btn.green{background:linear-gradient(180deg,#22c55e,#16a34a);color:#fff;border-color:rgba(22,163,74,.35)}
+  .premium-btn.ghost{background:rgba(255,255,255,.82)}
+  .content{
+    position:fixed;inset:0;padding-top:76px;background:#fff;
+  }
+  iframe{width:100%;height:100%;border:0;background:#fff}
+  .fallback{
+    display:none;min-height:100%;place-items:center;text-align:center;padding:24px;
+    background:radial-gradient(circle at top,#ffffff,#eef2ff);
+  }
+  .fallback-card{
+    width:min(520px,100%);border-radius:28px;background:rgba(255,255,255,.82);
+    border:1px solid rgba(15,23,42,.08);box-shadow:var(--shadow);padding:24px;
+  }
+  .fallback-card h1{font-size:22px;margin:0 0 8px}
+  .fallback-card p{color:var(--muted);line-height:1.45;margin:0 0 18px}
+  .bottom-open{
+    position:fixed;z-index:15;left:0;right:0;bottom:0;
+    padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+    background:linear-gradient(0deg,rgba(255,255,255,.94),rgba(255,255,255,.62));
+    backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    border-top:1px solid rgba(15,23,42,.08);
+    text-align:center;
+  }
+  .chat-overlay{
+    position:fixed;z-index:40;inset:0;display:none;
+    background:rgba(2,6,23,.34);
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    align-items:flex-end;justify-content:center;
+  }
+  .chat-overlay.show{display:flex}
+  .chat-sheet{
+    width:min(560px,100%);max-height:76vh;background:#fff;
+    border-radius:28px 28px 0 0;box-shadow:0 -24px 90px rgba(0,0,0,.32);
+    overflow:hidden;border:1px solid rgba(255,255,255,.22);
+  }
+  .chat-head{padding:14px 16px;border-bottom:1px solid rgba(15,23,42,.08);display:flex;justify-content:space-between;gap:12px;align-items:center}
+  .chat-title{font-weight:900;font-size:15px}
+  .chat-sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .xbtn{border:0;background:#f1f5f9;border-radius:999px;width:32px;height:32px;font-size:18px}
+  .messages{height:calc(76vh - 132px);min-height:280px;overflow:auto;background:#f8fafc;padding:14px;display:flex;flex-direction:column;gap:8px}
+  .bubble{max-width:86%;padding:10px 12px;border-radius:16px;font-size:14px;line-height:1.35}
+  .bubble.owner{align-self:flex-start;background:#fff;border:1px solid rgba(15,23,42,.08)}
+  .bubble.visitor{align-self:flex-end;background:#dcfce7;color:#052e16}
+  .composer{display:flex;gap:8px;padding:10px;border-top:1px solid rgba(15,23,42,.08);background:#fff}
+  .composer textarea{flex:1;border:1px solid rgba(15,23,42,.12);border-radius:18px;padding:10px 12px;resize:none;min-height:42px;font:inherit}
+  .send{border:0;border-radius:18px;background:#16a34a;color:#fff;font-weight:900;padding:0 16px}
+  @media(min-width:760px){
+    .chat-overlay{align-items:center}
+    .chat-sheet{border-radius:28px;max-height:720px}
+    .messages{height:420px}
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="bar-inner">
+    <button class="premium-btn ghost" id="voiceBtn" type="button">▶ Ascolta il messaggio <span style="opacity:.55;font-size:11px">presto</span></button>
+    <button class="premium-btn green" id="infoBtn" type="button">Chiedi informazioni</button>
+  </div>
+</div>
+
+<div class="content" id="contentBox">
+  <iframe id="contentFrame" src="${activeUrl.replace(/"/g, '&quot;')}" loading="eager"></iframe>
+  <div class="fallback" id="fallback">
+    <div class="fallback-card">
+      <h1>Contenuto disponibile</h1>
+      <p>Se la pagina non viene visualizzata qui, puoi aprirla in una nuova scheda. Puoi comunque chiedere informazioni al proprietario.</p>
+      <button class="premium-btn green" id="fallbackInfo" type="button">Chiedi informazioni</button>
+    </div>
+  </div>
+</div>
+
+<div class="bottom-open">
+  <a class="premium-btn ghost" href="${activeUrl.replace(/"/g, '&quot;')}" target="_blank" rel="noopener">Apri in nuova pagina</a>
+</div>
+
+<div class="chat-overlay" id="chatOverlay">
+  <div class="chat-sheet">
+    <div class="chat-head">
+      <div>
+        <div class="chat-title">Richiesta informazioni</div>
+        <div class="chat-sub">Su: ${sourceLabel}</div>
+      </div>
+      <button class="xbtn" id="closeChat" type="button">×</button>
+    </div>
+    <div class="messages" id="messages"></div>
+    <div class="composer">
+      <textarea id="textInput" rows="1" placeholder="Scrivi un messaggio..."></textarea>
+      <button class="send" id="sendBtn" type="button">Invia</button>
+    </div>
+  </div>
+</div>
+
+<script>
+window.FOLLOWME_INFO_DATA = ${safeJson};
+
+(function(){
+  const data = window.FOLLOWME_INFO_DATA || {};
+  let sessionId = "";
+  let lastMessageId = 0;
+  let pollTimer = null;
+
+  const overlay = document.getElementById("chatOverlay");
+  const messages = document.getElementById("messages");
+  const input = document.getElementById("textInput");
+
+  function addBubble(m){
+    const div = document.createElement("div");
+    div.className = "bubble " + (m.sender === "owner" ? "owner" : "visitor");
+    div.textContent = m.message || "";
+    messages.appendChild(div);
+    messages.scrollTop = messages.scrollHeight;
+    lastMessageId = Math.max(lastMessageId, Number(m.id || 0));
+  }
+
+  async function postJson(url, body){
+    const res = await fetch(url, {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(body || {})
+    });
+    const json = await res.json().catch(()=>null);
+    if(!res.ok || !json || json.success === false){
+      throw new Error((json && (json.error || json.label)) || "Errore richiesta.");
+    }
+    return json;
+  }
+
+  async function api(url){
+    const res = await fetch(url, { cache:"no-store" });
+    const json = await res.json().catch(()=>null);
+    if(!res.ok || !json || json.success === false){
+      throw new Error((json && json.error) || "Errore rete.");
+    }
+    return json;
+  }
+
+  async function openInfoChat(){
+    overlay.classList.add("show");
+
+    if(!sessionId){
+      const created = await postJson("/api/followme/" + encodeURIComponent(data.code) + "/info-request/session", {
+        source_url:data.active_url,
+        source_label:data.source_label
+      });
+      sessionId = String(created.session_id || "");
+      messages.innerHTML = "";
+      lastMessageId = 0;
+      if(created.initial_message) addBubble(created.initial_message);
+    }
+
+    await loadMessages();
+    if(pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(loadMessages, 2200);
+    setTimeout(()=>input.focus(), 250);
+  }
+
+  async function loadMessages(){
+    if(!sessionId) return;
+    const d = await api("/api/followme/chat-v2/session/" + encodeURIComponent(sessionId) + "/messages?after=" + lastMessageId + "&v=" + Date.now());
+    (d.messages || []).forEach(addBubble);
+  }
+
+  async function send(){
+    const text = String(input.value || "").trim();
+    if(!text || !sessionId) return;
+    input.value = "";
+    const d = await postJson("/api/followme/chat-v2/session/" + encodeURIComponent(sessionId) + "/message", {
+      sender:"visitor",
+      message:text
+    });
+    if(d.message) addBubble(d.message);
+  }
+
+  document.getElementById("infoBtn").onclick = openInfoChat;
+  document.getElementById("fallbackInfo").onclick = openInfoChat;
+  document.getElementById("sendBtn").onclick = send;
+  document.getElementById("closeChat").onclick = function(){
+    overlay.classList.remove("show");
+    if(pollTimer) clearInterval(pollTimer);
+  };
+  document.getElementById("voiceBtn").onclick = function(){
+    alert("Messaggio vocale presto disponibile.");
+  };
+
+  input.addEventListener("keydown", function(e){
+    if(e.key === "Enter" && !e.shiftKey){
+      e.preventDefault();
+      send();
+    }
+  });
+
+  setTimeout(function(){
+    document.getElementById("fallback").style.display = "grid";
+  }, 2200);
+
+  const frame = document.getElementById("contentFrame");
+  frame.onload = function(){
+    document.getElementById("fallback").style.display = "none";
+  };
+})();
+</script>
+</body>
+</html>`);
+  } catch (err) {
+    console.error('followme info container error:', err);
+    return res.status(500).send('Errore apertura contenuto FollowMe.');
+  }
+});
+
+app.post('/api/followme/:code/info-request/session', express.json({ limit:'64kb' }), async function(req, res) {
+  try {
+    await ensureFollowMeInfoRequestsRuntime20260528();
+
+    const code = String(req.params.code || '').trim();
+    const q = await pool.query(
+      `SELECT id, code, public_id, active_url, info_requests_enabled
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!q.rows.length) return res.status(404).json({ success:false, error:'FollowMe QR non trovato.' });
+
+    const project = q.rows[0];
+
+    if (project.info_requests_enabled !== true) {
+      return res.status(403).json({ success:false, error:'Richieste informazioni non attive.' });
+    }
+
+    const sourceUrl = String(req.body?.source_url || project.active_url || '').trim();
+    const sourceLabel = followMeShortSourceLabel20260528(req.body?.source_label || sourceUrl);
+
+    const inserted = await pool.query(
+      `INSERT INTO followme_chat_sessions
+       (project_id, chat_public_token, visitor_label, display_name, status, created_at, last_seen_at, uploads_enabled, is_blocked, source_type, source_url, source_label, updated_at)
+       VALUES ($1,$2,$3,NULL,'open',NOW(),NOW(),FALSE,FALSE,'info_request',$4,$5,NOW())
+       RETURNING id, project_id, visitor_label, status, created_at, source_type, source_url, source_label`,
+      [
+        project.id,
+        'INFO-' + Math.random().toString(36).slice(2, 12).toUpperCase(),
+        'Info ' + Math.random().toString(36).slice(2, 6).toUpperCase(),
+        sourceUrl,
+        sourceLabel
+      ]
+    );
+
+    const session = inserted.rows[0];
+
+    const initial = await pool.query(
+      `INSERT INTO followme_chat_messages
+       (session_id, project_id, sender, message, created_at)
+       VALUES ($1,$2,'visitor',$3,NOW())
+       RETURNING id, sender, message, created_at`,
+      [
+        session.id,
+        project.id,
+        'Richiesta informazioni per: ' + sourceLabel
+      ]
+    );
+
+    const push = await sendFollowMeInfoRequestPush20260528(project, session.id, sourceLabel);
+
+    return res.json({
+      success:true,
+      session_id:session.id,
+      session,
+      initial_message:initial.rows[0],
+      push
+    });
+  } catch (err) {
+    console.error('followme info request session error:', err);
+    return res.status(500).json({ success:false, error:'Errore apertura richiesta informazioni.' });
+  }
+});
+
+
 // FOLLOWME_FAST_PUBLIC_QR_CHAT_V2_20260528
 app.get('/fm/u/:public_id', async function(req, res, next) {
   try {
@@ -15007,7 +15518,7 @@ app.get('/fm/u/:public_id', async function(req, res, next) {
     if (!raw) return next();
 
     const q = await pool.query(
-      `SELECT id, code, public_id, active_url, chat_mode_enabled, chat_public_token
+      `SELECT id, code, public_id, active_url, chat_mode_enabled, chat_public_token, COALESCE(info_requests_enabled, FALSE) AS info_requests_enabled
        FROM followme_projects
        WHERE public_id = $1 OR code = $1
        LIMIT 1`,
@@ -15084,6 +15595,10 @@ app.get('/fm/u/:public_id', async function(req, res, next) {
     }
 
     if (activeUrl) {
+      // FOLLOWME_FAST_FMU_INFO_REQUESTS_REDIRECT_20260528
+      if (row.info_requests_enabled === true) {
+        return res.redirect(302, '/fm/info/' + encodeURIComponent(row.public_id || row.code || raw));
+      }
       return res.redirect(302, activeUrl);
     }
 
