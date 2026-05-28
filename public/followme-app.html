@@ -38229,6 +38229,460 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="FOLLOWME_VOICE_RECORDER_FROM_CHAT_V2_FINAL_20260528">
+(function(){
+  "use strict";
+
+  if(window.__followMeVoiceRecorderFromChatV2Final20260528) return;
+  window.__followMeVoiceRecorderFromChatV2Final20260528 = true;
+
+  let mediaRecorder = null;
+  let streamRef = null;
+  let chunks = [];
+  let recordedBlob = null;
+  let recordedUrl = "";
+  let startedAt = 0;
+  let timer = null;
+  let elapsedSeconds = 0;
+
+  function getCode(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim();
+      var p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim();
+    }catch(e){ return ""; }
+  }
+
+  function $(id){ return document.getElementById(id); }
+
+  function toast(msg){
+    try{
+      if(typeof window.showToast === "function"){ window.showToast(msg); return; }
+      if(typeof window.toast === "function"){ window.toast(msg); return; }
+    }catch(e){}
+    alert(msg);
+  }
+
+  function statusEl(){
+    return $("voiceStatusClean20260528") ||
+           $("voiceStatus20260528") ||
+           document.querySelector("[id*='voiceStatus']");
+  }
+
+  function meterEl(){
+    return $("voiceMeterClean20260528") ||
+           $("voiceMeter20260528") ||
+           document.querySelector("[id*='voiceMeter']");
+  }
+
+  function recordBtn(){
+    return $("voiceRecordClean20260528") ||
+           $("voiceRecord20260528") ||
+           document.querySelector("button[id*='voiceRecord']");
+  }
+
+  function stopBtn(){
+    return $("voiceStopClean20260528") ||
+           $("voiceStop20260528") ||
+           document.querySelector("button[id*='voiceStop']");
+  }
+
+  function playBtn(){
+    return $("voicePlayClean20260528") ||
+           $("voicePlay20260528") ||
+           document.querySelector("button[id*='voicePlay']");
+  }
+
+  function publishBtn(){
+    return $("voicePublishClean20260528") ||
+           $("voicePublish20260528") ||
+           document.querySelector("button[id*='voicePublish']");
+  }
+
+  function selectEl(){
+    return $("voiceSelectClean20260528") ||
+           $("voiceSelect20260528") ||
+           document.querySelector("select[id*='voiceSelect']");
+  }
+
+  function setStatus(msg){
+    var el = statusEl();
+    if(el) el.textContent = msg;
+  }
+
+  function setMeter(pct){
+    var el = meterEl();
+    if(el) el.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  }
+
+  function setButtons(mode){
+    var r = recordBtn();
+    var st = stopBtn();
+    var pl = playBtn();
+    var pub = publishBtn();
+
+    if(mode === "idle"){
+      if(r) r.disabled = false;
+      if(st) st.disabled = true;
+      if(pl) pl.disabled = !recordedBlob;
+      if(pub) pub.disabled = !recordedBlob;
+    }
+
+    if(mode === "recording"){
+      if(r) r.disabled = true;
+      if(st) st.disabled = false;
+      if(pl) pl.disabled = true;
+      if(pub) pub.disabled = true;
+    }
+
+    if(mode === "ready"){
+      if(r) r.disabled = false;
+      if(st) st.disabled = true;
+      if(pl) pl.disabled = false;
+      if(pub) pub.disabled = false;
+    }
+
+    if(mode === "saving"){
+      if(r) r.disabled = true;
+      if(st) st.disabled = true;
+      if(pl) pl.disabled = true;
+      if(pub) pub.disabled = true;
+    }
+  }
+
+  function chooseMime(){
+    const preferred = [
+      "audio/mp4",
+      "audio/aac",
+      "audio/webm;codecs=opus",
+      "audio/webm"
+    ];
+
+    if(typeof MediaRecorder === "undefined") return "";
+
+    for(const type of preferred){
+      try{
+        if(MediaRecorder.isTypeSupported(type)) return type;
+      }catch(e){}
+    }
+
+    return "";
+  }
+
+  function stopTracks(){
+    try{
+      if(streamRef){
+        streamRef.getTracks().forEach(function(t){ t.stop(); });
+      }
+    }catch(e){}
+    streamRef = null;
+  }
+
+  function clearTimer(){
+    if(timer){
+      clearInterval(timer);
+      timer = null;
+    }
+  }
+
+  function blobToDataUrl(blob){
+    return new Promise(function(resolve, reject){
+      const r = new FileReader();
+      r.onload = function(){ resolve(String(r.result || "")); };
+      r.onerror = reject;
+      r.readAsDataURL(blob);
+    });
+  }
+
+  async function startRecording(ev){
+    try{
+      if(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      }
+
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        throw new Error("Microfono non disponibile da questo browser.");
+      }
+
+      if(typeof MediaRecorder === "undefined"){
+        throw new Error("Registrazione audio non supportata da questo browser.");
+      }
+
+      clearTimer();
+      stopTracks();
+
+      chunks = [];
+      recordedBlob = null;
+      elapsedSeconds = 0;
+
+      if(recordedUrl){
+        try{ URL.revokeObjectURL(recordedUrl); }catch(e){}
+        recordedUrl = "";
+      }
+
+      setStatus("Richiesta autorizzazione microfono...");
+      setMeter(0);
+      setButtons("recording");
+
+      /*
+        Metodo già usato nella Chat V2:
+        chiamata diretta dentro click utente, fondamentale su iPhone.
+      */
+      streamRef = await navigator.mediaDevices.getUserMedia({
+        audio:{
+          echoCancellation:true,
+          noiseSuppression:true,
+          autoGainControl:true
+        }
+      });
+
+      const mime = chooseMime();
+      const opts = mime ? { mimeType:mime, audioBitsPerSecond:64000 } : { audioBitsPerSecond:64000 };
+
+      mediaRecorder = new MediaRecorder(streamRef, opts);
+
+      mediaRecorder.ondataavailable = function(e){
+        if(e.data && e.data.size > 0){
+          chunks.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = function(){
+        clearTimer();
+        stopTracks();
+
+        const realMime = mediaRecorder && mediaRecorder.mimeType
+          ? mediaRecorder.mimeType
+          : (mime || "audio/webm");
+
+        recordedBlob = new Blob(chunks, { type:realMime });
+        recordedUrl = URL.createObjectURL(recordedBlob);
+
+        setMeter(100);
+        setStatus("Registrazione pronta. Puoi riascoltarla o pubblicarla.");
+        setButtons("ready");
+      };
+
+      mediaRecorder.start();
+      startedAt = Date.now();
+
+      setStatus("Registrazione in corso... 0/20s");
+
+      timer = setInterval(function(){
+        elapsedSeconds = Math.round((Date.now() - startedAt) / 1000);
+        if(elapsedSeconds > 20) elapsedSeconds = 20;
+
+        setStatus("Registrazione in corso... " + elapsedSeconds + "/20s");
+        setMeter((elapsedSeconds / 20) * 100);
+
+        if(elapsedSeconds >= 20){
+          stopRecording();
+        }
+      }, 250);
+
+      return false;
+
+    }catch(err){
+      clearTimer();
+      stopTracks();
+      setButtons("idle");
+      setStatus(err && err.message ? err.message : "Errore registrazione.");
+      toast(err && err.message ? err.message : "Errore registrazione.");
+      return false;
+    }
+  }
+
+  function stopRecording(ev){
+    try{
+      if(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      }
+
+      clearTimer();
+
+      if(mediaRecorder && mediaRecorder.state !== "inactive"){
+        mediaRecorder.stop();
+      }else{
+        stopTracks();
+        setButtons("idle");
+      }
+
+      return false;
+    }catch(e){
+      stopTracks();
+      setButtons("idle");
+      return false;
+    }
+  }
+
+  function playRecorded(ev){
+    try{
+      if(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      }
+
+      if(!recordedUrl){
+        toast("Registra prima un messaggio.");
+        return false;
+      }
+
+      const audio = new Audio(recordedUrl);
+      audio.play().catch(function(){
+        toast("Non riesco a riprodurre l’audio.");
+      });
+
+      return false;
+    }catch(e){
+      toast("Non riesco a riprodurre l’audio.");
+      return false;
+    }
+  }
+
+  function selectedReplaceId(){
+    const sel = selectEl();
+    if(!sel) return "";
+    return String(sel.value || "").trim();
+  }
+
+  async function publishRecorded(ev){
+    try{
+      if(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      }
+
+      if(!recordedBlob){
+        toast("Registra prima un messaggio.");
+        return false;
+      }
+
+      const code = getCode();
+      if(!code){
+        toast("Codice FollowMe non trovato.");
+        return false;
+      }
+
+      setButtons("saving");
+      setStatus("Pubblico il messaggio vocale...");
+
+      const dataUrl = await blobToDataUrl(recordedBlob);
+      const duration = Math.max(1, Math.min(20, Math.round((Date.now() - startedAt) / 1000) || elapsedSeconds || 1));
+
+      const body = {
+        audio_data_url:dataUrl,
+        duration_seconds:duration
+      };
+
+      const replaceId = selectedReplaceId();
+      if(replaceId) body.replace_id = replaceId;
+
+      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/voice-messages/upload?v=" + Date.now(), {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(body)
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || data.success === false){
+        throw new Error((data && data.error) || "Caricamento audio non riuscito.");
+      }
+
+      setStatus("Messaggio vocale pubblicato e attivo.");
+      toast("Messaggio vocale pubblicato.");
+
+      recordedBlob = null;
+      if(recordedUrl){
+        try{ URL.revokeObjectURL(recordedUrl); }catch(e){}
+      }
+      recordedUrl = "";
+
+      setMeter(0);
+      setButtons("idle");
+
+      /*
+        Aggiorna UI già esistente senza ricaricare l’intera WebApp.
+      */
+      try{
+        const main =
+          $("followmeVoiceAdminBtnClean20260528") ||
+          $("followmeVoiceAdminBtn20260528") ||
+          $("followmeVoiceAdminBtnBridge20260528");
+
+        if(main){
+          main.classList.remove("is-off");
+          main.classList.add("is-on");
+          main.textContent = "Registra messaggio ON";
+        }
+      }catch(e){}
+
+      return false;
+
+    }catch(err){
+      setButtons("ready");
+      setStatus(err && err.message ? err.message : "Errore pubblicazione.");
+      toast(err && err.message ? err.message : "Errore pubblicazione.");
+      return false;
+    }
+  }
+
+  function bindButton(btn, fn){
+    if(!btn) return;
+    if(btn.dataset.voiceRecorderFromChatV2Final20260528 === "1") return;
+
+    btn.dataset.voiceRecorderFromChatV2Final20260528 = "1";
+
+    /*
+      Capture + stopImmediatePropagation:
+      evita che i vecchi controller audio interferiscano.
+    */
+    btn.addEventListener("click", fn, true);
+    btn.addEventListener("touchend", fn, true);
+  }
+
+  function bindAll(){
+    bindButton(recordBtn(), startRecording);
+    bindButton(stopBtn(), stopRecording);
+    bindButton(playBtn(), playRecorded);
+    bindButton(publishBtn(), publishRecorded);
+
+    const st = stopBtn();
+    const pl = playBtn();
+    const pub = publishBtn();
+
+    if(st && !recordedBlob) st.disabled = true;
+    if(pl && !recordedBlob) pl.disabled = true;
+    if(pub && !recordedBlob) pub.disabled = true;
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    bindAll();
+    setTimeout(bindAll, 500);
+    setTimeout(bindAll, 1200);
+    setTimeout(bindAll, 2500);
+  });
+
+  setInterval(bindAll, 1200);
+
+  try{
+    const mo = new MutationObserver(function(){
+      clearTimeout(window.__followMeVoiceRecorderFromChatV2BindTimer20260528);
+      window.__followMeVoiceRecorderFromChatV2BindTimer20260528 = setTimeout(bindAll, 120);
+    });
+    mo.observe(document.documentElement || document.body, { childList:true, subtree:true });
+  }catch(e){}
+})();
+</script>
+
 </body>
 </html>
 
