@@ -17528,14 +17528,6 @@ app.post('/api/followme/chat-v2/session/:session_id/message', express.json(), as
       return res.status(403).json({ success:false, blocked:true, error:'Sei stato bloccato dal sistema.' });
     }
 
-    if (sender === 'visitor' && session.uploads_enabled !== true) {
-      return res.status(403).json({
-        success:false,
-        uploads_enabled:false,
-        error:'Caricamento extra non abilitato per questo utente.'
-      });
-    }
-
     if (sender === 'visitor' && session.is_blocked === true) {
       return res.status(403).json({ success:false, blocked:true, error:'Sei stato bloccato dal sistema.' });
     }
