@@ -14990,6 +14990,47 @@ app.get('/api/followme/:code/chat/session/:session_id', async (req, res) => {
 });
 
 
+
+// FOLLOWME_FAST_PUBLIC_QR_CHAT_V2_20260528
+app.get('/fm/u/:public_id', async function(req, res, next) {
+  try {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
+    const raw = String(req.params.public_id || '').trim();
+    if (!raw) return next();
+
+    const q = await pool.query(
+      `SELECT id, code, public_id, active_url, chat_mode_enabled, chat_public_token
+       FROM followme_projects
+       WHERE public_id = $1 OR code = $1
+       LIMIT 1`,
+      [raw]
+    );
+
+    if (!q.rows.length) return next();
+
+    const row = q.rows[0];
+    const token = String(row.chat_public_token || '').trim();
+
+    if (row.chat_mode_enabled === true && token) {
+      return res.redirect(302, '/fm/chat-v2/c/' + encodeURIComponent(token));
+    }
+
+    const activeUrl = String(row.active_url || '').trim();
+    if (activeUrl) {
+      return res.redirect(302, activeUrl);
+    }
+
+    return res.redirect(302, '/fm/app/' + encodeURIComponent(row.code || raw));
+  } catch (err) {
+    console.error('followme fast public qr route error:', err && err.message ? err.message : err);
+    return next();
+  }
+});
+
+
 app.get('/fm/u/:public_id', async (req, res) => {
 
     /* followme-fmu-chat-v2-first-line-fix-20260527
@@ -17053,6 +17094,46 @@ async function ensureFollowMeChatV2Token(projectId) {
 
   throw new Error('Impossibile generare token chat V2.');
 }
+
+
+/* FOLLOWME_CHAT_V2_RUNTIME_ONCE_CACHE_20260528
+   Cache runtime Chat V2: evita di rifare inizializzazioni/schema su ogni richiesta.
+*/
+try {
+  if (typeof ensureFollowMeChatV2Runtime === 'function' && !global.__followmeChatV2RuntimeOnceWrapped20260528) {
+    global.__followmeChatV2RuntimeOnceWrapped20260528 = true;
+
+    const __originalEnsureFollowMeChatV2Runtime20260528 = ensureFollowMeChatV2Runtime;
+
+    ensureFollowMeChatV2Runtime = async function ensureFollowMeChatV2RuntimeCached20260528() {
+      if (global.__followmeChatV2RuntimeReady20260528) return;
+
+      if (!global.__followmeChatV2RuntimePromise20260528) {
+        global.__followmeChatV2RuntimePromise20260528 = Promise.resolve()
+          .then(() => __originalEnsureFollowMeChatV2Runtime20260528())
+          .then((result) => {
+            global.__followmeChatV2RuntimeReady20260528 = true;
+            return result;
+          })
+          .catch((err) => {
+            global.__followmeChatV2RuntimePromise20260528 = null;
+            throw err;
+          });
+      }
+
+      return global.__followmeChatV2RuntimePromise20260528;
+    };
+
+    setTimeout(() => {
+      ensureFollowMeChatV2Runtime().catch((err) => {
+        console.error('followme chat v2 runtime warmup error:', err && err.message ? err.message : err);
+      });
+    }, 500);
+  }
+} catch (err) {
+  console.error('followme chat v2 runtime cache wrapper install error:', err && err.message ? err.message : err);
+}
+
 
 app.get('/fm/chat-v2/admin/:code', async (req, res) => {
   return res.sendFile(require('path').join(__dirname, 'public', 'followme-chat-v2-admin.html'));
