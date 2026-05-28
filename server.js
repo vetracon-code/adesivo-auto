@@ -15914,6 +15914,203 @@ async function followMeVoiceNextFilename20260528(projectId, sourceLabel, sourceU
 }
 
 
+
+// FOLLOWME_VOICE_MESSAGES_RAW_UPLOAD_LIKE_CHAT_ADMIN_20260528
+app.post('/api/followme/:code/voice-messages/upload-raw', express.raw({
+  type: '*/*',
+  limit: '80mb'
+}), async function(req, res) {
+  try {
+    await ensureFollowMeVoiceMessagesRuntime20260528();
+
+    const codeParam = String(req.params.code || '').trim();
+
+    const projectRes = await pool.query(
+      `SELECT id, code, public_id, active_url
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [codeParam]
+    );
+
+    if (!projectRes.rows.length) {
+      return res.status(404).json({ success:false, error:'Progetto FollowMe non trovato.' });
+    }
+
+    const project = projectRes.rows[0];
+    const projectCode = followMeVoiceSafeCode20260528(project.code || project.public_id || codeParam);
+
+    const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || '');
+
+    if (!buffer.length) {
+      return res.status(400).json({ success:false, error:'Audio vuoto o mancante.' });
+    }
+
+    const maxBytes = 8 * 1024 * 1024;
+    if (buffer.length > maxBytes) {
+      return res.status(413).json({ success:false, error:'File audio troppo grande. Limite massimo 8 MB.' });
+    }
+
+    let mime = String(req.headers['content-type'] || req.query.mime || 'application/octet-stream')
+      .split(';')[0]
+      .trim()
+      .toLowerCase();
+
+    if (mime === 'video/mp4' || mime === 'application/mp4') mime = 'audio/mp4';
+    if (mime === 'audio/x-m4a' || mime === 'audio/m4a') mime = 'audio/mp4';
+
+    const allowed = new Set([
+      'audio/wav',
+      'audio/x-wav',
+      'audio/webm',
+      'audio/ogg',
+      'audio/mpeg',
+      'audio/mp3',
+      'audio/mp4',
+      'audio/aac',
+      'audio/x-aac',
+      'audio/caf',
+      'audio/x-caf'
+    ]);
+
+    if (!allowed.has(mime) && !mime.startsWith('audio/')) {
+      return res.status(400).json({
+        success:false,
+        error:'Formato audio non supportato. Usa M4A, MP4, MP3, WAV, WEBM o OGG.'
+      });
+    }
+
+    let ext = 'webm';
+    if (mime.includes('wav')) ext = 'wav';
+    else if (mime.includes('mpeg') || mime.includes('mp3')) ext = 'mp3';
+    else if (mime.includes('mp4') || mime.includes('aac') || mime.includes('m4a')) ext = 'm4a';
+    else if (mime.includes('caf')) ext = 'caf';
+    else if (mime.includes('ogg')) ext = 'ogg';
+    else if (mime.includes('webm')) ext = 'webm';
+
+    const duration = Number(req.query.duration_seconds || req.headers['x-followme-duration'] || 0);
+    if (duration > 24) {
+      return res.status(400).json({ success:false, error:'Audio troppo lungo. Durata massima 20 secondi.' });
+    }
+
+    const sourceUrl = String(req.query.source_url || req.headers['x-followme-source-url'] || project.active_url || '').trim();
+    const sourceLabel = followMeShortSourceLabel20260528(req.query.source_label || req.headers['x-followme-source-label'] || sourceUrl);
+
+    const replaceId = Number(req.query.replace_id || req.headers['x-followme-replace-id'] || 0);
+
+    const countRes = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM followme_voice_messages WHERE project_id = $1`,
+      [project.id]
+    );
+
+    const count = Number(countRes.rows[0]?.n || 0);
+
+    if (count >= 3 && !replaceId) {
+      return res.status(409).json({
+        success:false,
+        error:'Hai già 3 messaggi salvati. Seleziona quale sostituire prima di pubblicarne uno nuovo.'
+      });
+    }
+
+    const path = require('path');
+    const fs = require('fs');
+
+    const dir = path.join(FOLLOWME_VOICE_STORAGE_DIR_20260528, projectCode);
+    fs.mkdirSync(dir, { recursive:true });
+
+    const filename = await followMeVoiceNextFilename20260528(project.id, sourceLabel, sourceUrl, ext);
+    const fullPath = path.join(dir, filename);
+    const fileUrl = followMeVoicePublicUrl20260528(projectCode, filename);
+
+    fs.writeFileSync(fullPath, buffer);
+
+    await pool.query(
+      `UPDATE followme_voice_messages
+       SET is_active = FALSE,
+           updated_at = NOW()
+       WHERE project_id = $1`,
+      [project.id]
+    );
+
+    let row;
+
+    if (replaceId) {
+      const old = await pool.query(
+        `SELECT id, file_path
+         FROM followme_voice_messages
+         WHERE id = $1 AND project_id = $2
+         LIMIT 1`,
+        [replaceId, project.id]
+      );
+
+      if (!old.rows.length) {
+        try { fs.unlinkSync(fullPath); } catch(e) {}
+        return res.status(404).json({ success:false, error:'Messaggio da sostituire non trovato.' });
+      }
+
+      try {
+        if (old.rows[0].file_path) fs.unlinkSync(old.rows[0].file_path);
+      } catch(e) {}
+
+      const upd = await pool.query(
+        `UPDATE followme_voice_messages
+         SET source_url = $3,
+             source_label = $4,
+             file_url = $5,
+             file_path = $6,
+             mime_type = $7,
+             duration_seconds = $8,
+             is_active = TRUE,
+             updated_at = NOW()
+         WHERE id = $1 AND project_id = $2
+         RETURNING id, source_url, source_label, file_url, mime_type, duration_seconds,
+                   is_active, listened_count, last_listened_at, created_at, updated_at`,
+        [replaceId, project.id, sourceUrl, sourceLabel, fileUrl, fullPath, mime, duration || null]
+      );
+
+      row = upd.rows[0];
+    } else {
+      const ins = await pool.query(
+        `INSERT INTO followme_voice_messages
+         (project_id, source_url, source_label, file_url, file_path, mime_type, duration_seconds, is_active, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE,NOW(),NOW())
+         RETURNING id, source_url, source_label, file_url, mime_type, duration_seconds,
+                   is_active, listened_count, last_listened_at, created_at, updated_at`,
+        [project.id, sourceUrl, sourceLabel, fileUrl, fullPath, mime, duration || null]
+      );
+
+      row = ins.rows[0];
+    }
+
+    const list = await pool.query(
+      `SELECT id, source_url, source_label, file_url, mime_type, duration_seconds,
+              is_active, listened_count, last_listened_at, created_at, updated_at
+       FROM followme_voice_messages
+       WHERE project_id = $1
+       ORDER BY created_at DESC
+       LIMIT 3`,
+      [project.id]
+    );
+
+    return res.json({
+      success:true,
+      message:row,
+      messages:list.rows,
+      has_active_voice:true,
+      active_voice:row
+    });
+
+  } catch (err) {
+    console.error('followme voice raw upload error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore salvataggio audio.',
+      detail:String(err && err.message ? err.message : err)
+    });
+  }
+});
+
+
 app.post('/api/followme/:code/voice-messages/upload', express.json({ limit:'10mb' }), async function(req, res) {
   try {
     await ensureFollowMeVoiceMessagesRuntime20260528();
