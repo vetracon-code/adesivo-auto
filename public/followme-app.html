@@ -6908,6 +6908,27 @@ function followmeSafeClearPdfPreview20260526(preview){
   }
 </style>
 
+
+<style id="FOLLOWME_INFO_REQUESTS_CHAT_V2_ONLY_FINAL_STYLE_20260528">
+  /*
+    Forza l’esperienza commerciale verso una sola chat ufficiale:
+    Chat V2 admin esterna.
+    Evita che il cliente veda la vecchia chat embedded.
+  */
+  #followmeInfoChatEntryForce20260528,
+  #followmeInfoChatFloatingForce20260528{
+    cursor:pointer !important;
+  }
+
+  #followmeInfoChatEntryForce20260528 .force-label-20260528::after{
+    content:"";
+  }
+
+  .followme-chat-v2-only-hidden-20260528{
+    display:none !important;
+  }
+</style>
+
 </head>
 <body>
   <main class="app">
@@ -37974,6 +37995,234 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     var mo = new MutationObserver(function(){
       clearTimeout(window.__followMeTopBadgesRestyleTimer20260528);
       window.__followMeTopBadgesRestyleTimer20260528 = setTimeout(run, 120);
+    });
+    mo.observe(document.documentElement || document.body, { childList:true, subtree:true });
+  }catch(e){}
+})();
+</script>
+
+
+<script id="FOLLOWME_INFO_REQUESTS_CHAT_V2_ONLY_FINAL_20260528">
+(function(){
+  "use strict";
+
+  var latestV2Sessions20260528 = [];
+
+  function getCode(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim();
+      var p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim();
+    }catch(e){ return ""; }
+  }
+
+  function clean(v){
+    return String(v || "").trim();
+  }
+
+  function isOpenSession(s){
+    var st = clean(s.status || "").toLowerCase();
+    return st !== "closed" &&
+           st !== "archived" &&
+           st !== "deleted" &&
+           st !== "ended";
+  }
+
+  function getSessionId(s){
+    return clean(s && (s.id || s.session_id || s.sessionId));
+  }
+
+  function labelForSession(s){
+    var label =
+      clean(s && s.source_label) ||
+      clean(s && s.source_url) ||
+      clean(s && s.display_name) ||
+      clean(s && s.visitor_label) ||
+      "utente";
+
+    label = label.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
+    label = label.split(/[\/?#]/)[0] || label;
+
+    if(label.length > 18) label = label.slice(0, 18) + "…";
+    return label;
+  }
+
+  async function fetchV2Sessions(){
+    var code = getCode();
+    if(!code) return [];
+
+    try{
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/chat-v2/sessions?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || data.success === false){
+        return [];
+      }
+
+      var list = Array.isArray(data.sessions) ? data.sessions : [];
+
+      /*
+        Non filtriamo più in modo aggressivo per source_type.
+        Se c’è una sessione aperta nella Chat V2, deve essere raggiungibile.
+        Questo evita di perdere l’utente che ha chiesto informazioni.
+      */
+      return list.filter(isOpenSession);
+    }catch(e){
+      return [];
+    }
+  }
+
+  function chatV2AdminUrl(){
+    var code = getCode();
+    if(!code) return "#";
+
+    var first = latestV2Sessions20260528.length ? latestV2Sessions20260528[0] : null;
+    var sid = first ? getSessionId(first) : "";
+
+    var url = "/fm/chat-v2/admin/" + encodeURIComponent(code);
+
+    if(sid){
+      url += "?session=" + encodeURIComponent(sid) + "&v=" + Date.now();
+    }else{
+      url += "?v=" + Date.now();
+    }
+
+    return url;
+  }
+
+  function openChatV2Admin(ev){
+    try{
+      if(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      }
+    }catch(e){}
+
+    var url = chatV2AdminUrl();
+
+    if(url && url !== "#"){
+      window.location.href = url;
+    }
+
+    return false;
+  }
+
+  function patchButton(btn){
+    if(!btn || btn.dataset.chatV2OnlyFinal20260528 === "1") return;
+
+    btn.dataset.chatV2OnlyFinal20260528 = "1";
+
+    /*
+      Clono per rimuovere eventuali vecchi handler che aprivano la chat embedded.
+    */
+    var clone = btn.cloneNode(true);
+    clone.dataset.chatV2OnlyFinal20260528 = "1";
+
+    clone.addEventListener("click", openChatV2Admin, true);
+    clone.addEventListener("touchend", openChatV2Admin, true);
+
+    if(btn.parentNode){
+      btn.parentNode.replaceChild(clone, btn);
+    }
+  }
+
+  function updateLabels(){
+    var inline = document.getElementById("followmeInfoChatEntryForce20260528");
+    var floating = document.getElementById("followmeInfoChatFloatingForce20260528");
+
+    var count = latestV2Sessions20260528.length;
+    var first = count ? latestV2Sessions20260528[0] : null;
+    var label = first ? labelForSession(first) : "";
+
+    if(inline){
+      var l = inline.querySelector(".force-label-20260528");
+      var c = inline.querySelector(".force-count-20260528");
+
+      if(l){
+        l.textContent = count
+          ? (count === 1 ? "Apri Chat V2 richiesta · " + label : "Apri Chat V2 richieste")
+          : "Apri Chat V2 richieste informazioni";
+      }
+
+      if(c){
+        c.textContent = String(count || 0);
+        c.style.display = count > 0 ? "inline-flex" : "none";
+      }
+    }
+
+    if(floating){
+      var ft = floating.querySelector(".force-text-20260528");
+      var fc = floating.querySelector(".force-count-20260528");
+
+      if(ft){
+        ft.textContent = count
+          ? (count === 1 ? "Chat V2 richiesta · " + label : count + " richieste in Chat V2")
+          : "Chat V2 richieste";
+      }
+
+      if(fc){
+        fc.textContent = String(count || 0);
+        fc.style.display = count > 1 ? "inline-flex" : "none";
+      }
+    }
+  }
+
+  function hideLegacyEmbeddedChatEntrypoints(){
+    /*
+      Non cancelliamo la vecchia UI perché potrebbe ancora essere usata da codice storico.
+      La nascondiamo solo dove rischia di diventare un ingresso commerciale sbagliato.
+    */
+    var candidates = Array.prototype.slice.call(document.querySelectorAll("button,a"));
+
+    candidates.forEach(function(el){
+      var txt = clean(el.textContent || el.innerText).toLowerCase();
+      var href = clean(el.getAttribute && el.getAttribute("href"));
+
+      var looksLegacy =
+        href.indexOf("/chat/session") >= 0 ||
+        href.indexOf("/chat/sessions") >= 0 ||
+        (
+          txt.indexOf("apri chat") >= 0 &&
+          txt.indexOf("v2") < 0 &&
+          txt.indexOf("richieste") < 0 &&
+          txt.indexOf("informazioni") < 0
+        );
+
+      if(looksLegacy && !el.id.match(/followmeInfoChat|followmeInfoRequests|followmeVoice/i)){
+        el.classList.add("followme-chat-v2-only-hidden-20260528");
+      }
+    });
+  }
+
+  async function refresh(){
+    latestV2Sessions20260528 = await fetchV2Sessions();
+
+    patchButton(document.getElementById("followmeInfoChatEntryForce20260528"));
+    patchButton(document.getElementById("followmeInfoChatFloatingForce20260528"));
+    patchButton(document.getElementById("followmeInfoRequestAdminBadge20260528"));
+
+    updateLabels();
+    hideLegacyEmbeddedChatEntrypoints();
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    refresh();
+  });
+
+  setTimeout(refresh, 600);
+  setTimeout(refresh, 1600);
+  setTimeout(refresh, 3200);
+  setInterval(refresh, 6000);
+
+  try{
+    var mo = new MutationObserver(function(){
+      clearTimeout(window.__followMeInfoChatV2OnlyFinalTimer20260528);
+      window.__followMeInfoChatV2OnlyFinalTimer20260528 = setTimeout(refresh, 160);
     });
     mo.observe(document.documentElement || document.body, { childList:true, subtree:true });
   }catch(e){}
