@@ -6500,6 +6500,100 @@ function followmeSafeClearPdfPreview20260526(preview){
   }
 </style>
 
+
+<style id="FOLLOWME_INFO_REQUEST_ADMIN_TOP_BADGE_STYLE_20260528">
+  #followmeInfoRequestAdminBadge20260528{
+    position:fixed;
+    top:calc(env(safe-area-inset-top, 0px) + 10px);
+    left:50%;
+    transform:translateX(-50%);
+    z-index:2147482500;
+    display:none;
+    align-items:center;
+    gap:10px;
+    max-width:calc(100vw - 26px);
+    padding:10px 14px;
+    border-radius:999px;
+    border:1px solid rgba(255,255,255,.42);
+    background:
+      linear-gradient(180deg, rgba(17,24,39,.94), rgba(2,6,23,.94));
+    color:#fff;
+    box-shadow:0 18px 55px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.18);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    font-size:13px;
+    font-weight:850;
+    letter-spacing:-.01em;
+    cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+    backdrop-filter:blur(18px);
+  }
+
+  #followmeInfoRequestAdminBadge20260528.show{
+    display:flex;
+  }
+
+  #followmeInfoRequestAdminBadge20260528 .info-dot-20260528{
+    width:9px;
+    height:9px;
+    border-radius:999px;
+    background:#22c55e;
+    box-shadow:0 0 0 0 rgba(34,197,94,.45);
+    animation:followmeInfoPulse20260528 1.5s ease-in-out infinite;
+    flex:0 0 auto;
+  }
+
+  #followmeInfoRequestAdminBadge20260528 .info-text-20260528{
+    overflow:hidden;
+    white-space:nowrap;
+    text-overflow:ellipsis;
+  }
+
+  #followmeInfoRequestAdminBadge20260528 .info-count-20260528{
+    min-width:22px;
+    height:22px;
+    padding:0 7px;
+    border-radius:999px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    background:#22c55e;
+    color:#04130a;
+    font-size:12px;
+    font-weight:950;
+    flex:0 0 auto;
+  }
+
+  #followmeInfoRequestAdminBadge20260528 .info-close-20260528{
+    width:22px;
+    height:22px;
+    border-radius:999px;
+    border:0;
+    background:rgba(255,255,255,.14);
+    color:#fff;
+    font-size:14px;
+    line-height:1;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    flex:0 0 auto;
+  }
+
+  @keyframes followmeInfoPulse20260528{
+    0%{ box-shadow:0 0 0 0 rgba(34,197,94,.45); }
+    70%{ box-shadow:0 0 0 9px rgba(34,197,94,0); }
+    100%{ box-shadow:0 0 0 0 rgba(34,197,94,0); }
+  }
+
+  @media(max-width:520px){
+    #followmeInfoRequestAdminBadge20260528{
+      top:calc(env(safe-area-inset-top, 0px) + 8px);
+      font-size:12px;
+      padding:9px 12px;
+    }
+  }
+</style>
+
 </head>
 <body>
   <main class="app">
@@ -37068,6 +37162,172 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     });
     mo.observe(document.documentElement || document.body, { childList:true, subtree:true });
   }catch(e){}
+})();
+</script>
+
+
+<script id="FOLLOWME_INFO_REQUEST_ADMIN_TOP_BADGE_20260528">
+(function(){
+  "use strict";
+
+  var lastSessionId = "";
+  var lastCount = 0;
+  var hiddenUntilChangeKey = "";
+
+  function getCode(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim();
+      var p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim();
+    }catch(e){ return ""; }
+  }
+
+  function clean(v){
+    return String(v || "").trim();
+  }
+
+  function shortLabel(session){
+    var label =
+      clean(session.source_label) ||
+      clean(session.source_url) ||
+      clean(session.display_name) ||
+      clean(session.visitor_label) ||
+      "utente";
+
+    label = label.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
+    label = label.split(/[\/?#]/)[0] || label;
+
+    if(label.length > 18) label = label.slice(0, 18) + "…";
+    return label;
+  }
+
+  async function fetchSessions(){
+    var code = getCode();
+    if(!code) return [];
+
+    var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/chat-v2/sessions?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    var data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || data.success === false){
+      return [];
+    }
+
+    var list = Array.isArray(data.sessions) ? data.sessions : [];
+
+    return list.filter(function(s){
+      var status = clean(s.status || "").toLowerCase();
+      var isClosed = status === "closed" || status === "archived" || status === "deleted";
+
+      var sourceType = clean(s.source_type || "").toLowerCase();
+      var hasInfoSource =
+        sourceType.indexOf("info") >= 0 ||
+        clean(s.source_url) ||
+        clean(s.source_label);
+
+      return !isClosed && hasInfoSource;
+    });
+  }
+
+  function ensureBadge(){
+    var badge = document.getElementById("followmeInfoRequestAdminBadge20260528");
+    if(badge) return badge;
+
+    badge = document.createElement("button");
+    badge.id = "followmeInfoRequestAdminBadge20260528";
+    badge.type = "button";
+    badge.innerHTML =
+      '<span class="info-dot-20260528"></span>' +
+      '<span class="info-text-20260528">Richiesta informazioni in corso</span>' +
+      '<span class="info-count-20260528">1</span>' +
+      '<span class="info-close-20260528" aria-label="Nascondi">×</span>';
+
+    document.body.appendChild(badge);
+
+    badge.addEventListener("click", function(ev){
+      var close = ev.target && ev.target.closest && ev.target.closest(".info-close-20260528");
+
+      if(close){
+        ev.preventDefault();
+        ev.stopPropagation();
+        hiddenUntilChangeKey = String(lastSessionId || "") + ":" + String(lastCount || 0);
+        badge.classList.remove("show");
+        return;
+      }
+
+      var code = getCode();
+      if(!code || !lastSessionId) return;
+
+      window.location.href =
+        "/fm/chat-v2/admin/" + encodeURIComponent(code) +
+        "?session=" + encodeURIComponent(lastSessionId) +
+        "&v=" + Date.now();
+    });
+
+    return badge;
+  }
+
+  function renderBadge(sessions){
+    var badge = ensureBadge();
+    var text = badge.querySelector(".info-text-20260528");
+    var count = badge.querySelector(".info-count-20260528");
+
+    if(!sessions.length){
+      lastSessionId = "";
+      lastCount = 0;
+      badge.classList.remove("show");
+      return;
+    }
+
+    var first = sessions[0] || {};
+    var sid = clean(first.id || first.session_id);
+    var label = shortLabel(first);
+    var key = sid + ":" + String(sessions.length);
+
+    lastSessionId = sid;
+    lastCount = sessions.length;
+
+    if(hiddenUntilChangeKey && hiddenUntilChangeKey === key){
+      badge.classList.remove("show");
+      return;
+    }
+
+    if(text){
+      if(sessions.length === 1){
+        text.textContent = "Richiesta informazioni in corso · " + label;
+      }else{
+        text.textContent = sessions.length + " richieste informazioni in corso";
+      }
+    }
+
+    if(count){
+      count.textContent = String(sessions.length);
+      count.style.display = sessions.length > 1 ? "inline-flex" : "none";
+    }
+
+    badge.classList.add("show");
+  }
+
+  async function poll(){
+    try{
+      var sessions = await fetchSessions();
+      renderBadge(sessions);
+    }catch(e){
+      // non mostro errori all'utente admin, evito rumore
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    ensureBadge();
+    poll();
+  });
+
+  setTimeout(function(){ ensureBadge(); poll(); }, 700);
+  setTimeout(poll, 1800);
+  setInterval(poll, 9000);
 })();
 </script>
 
