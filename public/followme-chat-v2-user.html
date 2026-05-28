@@ -397,10 +397,10 @@
     }
 
     function setBlocked(){
-      els.status.textContent = "Bloccato";
+      els.status.textContent = "Servizio momentaneamente non disponibile";
       els.input.disabled = true;
       els.send.disabled = true;
-      toast("Sei stato bloccato dal sistema.");
+      toast("Servizio momentaneamente non disponibile. Riprova più tardi.");
     }
 
     function parseAttachmentV2(raw){
@@ -685,7 +685,7 @@
         autosize();
 
         const msg = String(err.message || "");
-        if(msg.toLowerCase().includes("bloccato")){
+        if(msg.toLowerCase().includes("bloccato") || msg.toLowerCase().includes("momentaneamente non disponibile")){
           setBlocked();
         }else if(msg.toLowerCase().includes("chiusa")){
           setClosed("La conversazione è stata chiusa.\nGrazie per aver parlato con me.");
@@ -1116,6 +1116,155 @@
     }
   })();
   </script>
+
+
+<script id="FOLLOWME_CHAT_V2_USER_STATE_LIVE_EXTRA_BLOCK_20260528">
+(function(){
+  "use strict";
+
+  if(window.__followMeChatV2UserStateLiveExtraBlock20260528) return;
+  window.__followMeChatV2UserStateLiveExtraBlock20260528 = true;
+
+  const SERVICE_OFF = "Servizio momentaneamente non disponibile. Riprova più tardi.";
+  const SERVICE_ON = "Servizio nuovamente funzionante.";
+  let lastBlocked = null;
+  let lastUploads = null;
+  let lastNoticeText = "";
+
+  function token(){
+    try{
+      const m = location.pathname.match(/\/fm\/chat-v2\/c\/([^\/?#]+)/i);
+      return m ? decodeURIComponent(m[1] || "") : "";
+    }catch(e){ return ""; }
+  }
+
+  function sessionId(){
+    const t = token();
+    if(!t) return "";
+    return localStorage.getItem("fm_chat_v2_session_" + t) || "";
+  }
+
+  function $(id){ return document.getElementById(id); }
+
+  function toast(msg){
+    try{
+      if(typeof window.toast === "function"){ window.toast(msg); return; }
+    }catch(e){}
+    const t = $("toast");
+    if(t){
+      t.textContent = msg;
+      t.classList.add("show");
+      setTimeout(function(){ t.classList.remove("show"); }, 2200);
+      return;
+    }
+    console.log("[FollowMe]", msg);
+  }
+
+  function addSystemNotice(text){
+    if(!text || text === lastNoticeText) return;
+    lastNoticeText = text;
+
+    const box = $("messages");
+    if(!box) return;
+
+    const div = document.createElement("div");
+    div.className = "notice followme-live-state-notice-20260528";
+    div.innerHTML = "<strong>Avviso</strong>" +
+      String(text).replace(/[<>&]/g, function(c){
+        return c === "<" ? "&lt;" : c === ">" ? "&gt;" : "&amp;";
+      });
+
+    box.appendChild(div);
+    try{ box.scrollTop = box.scrollHeight; }catch(e){}
+  }
+
+  function applyBlocked(isBlocked){
+    document.body.classList.toggle("followme-service-temporarily-off-20260528", !!isBlocked);
+
+    const status = $("status");
+    const input = $("input");
+    const send = $("sendBtn") || $("send");
+
+    if(isBlocked){
+      if(status) status.textContent = "Servizio momentaneamente non disponibile";
+      if(input){
+        input.disabled = true;
+        input.placeholder = "Servizio momentaneamente non disponibile";
+      }
+      if(send) send.disabled = true;
+      addSystemNotice(SERVICE_OFF);
+      toast(SERVICE_OFF);
+    }else{
+      if(status) status.textContent = "Online";
+      if(input){
+        input.disabled = false;
+        input.placeholder = "Scrivi un messaggio...";
+      }
+      if(send) send.disabled = false;
+
+      if(lastBlocked === true){
+        addSystemNotice(SERVICE_ON);
+        toast(SERVICE_ON);
+      }
+    }
+  }
+
+  function applyUploads(enabled){
+    document.body.classList.toggle("extra-on", !!enabled);
+
+    const plus = $("plusBtn");
+    if(plus){
+      plus.style.display = enabled ? "block" : "";
+      plus.disabled = false;
+      plus.title = enabled
+        ? "Invia foto, file, audio o posizione"
+        : "Extra non abilitato dal proprietario";
+    }
+
+    if(lastUploads !== null && lastUploads !== enabled){
+      toast(enabled ? "Funzioni extra attivate." : "Funzioni extra disattivate.");
+    }
+  }
+
+  async function refreshState(){
+    const sid = sessionId();
+    if(!sid) return;
+
+    try{
+      const res = await fetch("/api/followme/chat-v2/session/" + encodeURIComponent(sid) + "/state?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data = await res.json().catch(function(){ return null; });
+      if(!res.ok || !data || data.success === false || !data.session) return;
+
+      const s = data.session;
+      const blocked = !!s.is_blocked;
+      const uploads = !!s.uploads_enabled;
+
+      applyUploads(uploads);
+      applyBlocked(blocked);
+
+      lastBlocked = blocked;
+      lastUploads = uploads;
+    }catch(e){
+      // silenzioso: non disturbiamo l'utente durante il polling
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    refreshState();
+    setTimeout(refreshState, 700);
+    setTimeout(refreshState, 1600);
+  });
+
+  setInterval(refreshState, 1800);
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible") refreshState();
+  });
+})();
+</script>
 
 </body>
 </html>

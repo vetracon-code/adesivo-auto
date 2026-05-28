@@ -13994,7 +13994,7 @@ app.post('/api/followme/chat/session/:session_id/attachment-raw', express.raw({
       return res.status(403).json({
         success:false,
         blocked:true,
-        error:'Sei stato bloccato dal sistema.'
+        error:'Servizio momentaneamente non disponibile. Riprova più tardi.'
       });
     }
 
@@ -14115,7 +14115,7 @@ app.post('/api/followme/chat/session/:session_id/attachment', express.json({ lim
       return res.status(403).json({
         success:false,
         blocked:true,
-        error:'Sei stato bloccato dal sistema.'
+        error:'Servizio momentaneamente non disponibile. Riprova più tardi.'
       });
     }
 
@@ -14237,7 +14237,7 @@ app.post('/api/followme/chat/session/:session_id/message', express.json(), async
       return res.status(403).json({
         success:false,
         blocked:true,
-        error:'Sei stato bloccato dal sistema.'
+        error:'Servizio momentaneamente non disponibile. Riprova più tardi.'
       });
     }
 
@@ -19235,11 +19235,11 @@ app.post('/api/followme/chat-v2/session/:session_id/message', express.json(), as
       Visitor può inviare allegati solo quando admin ha attivato Extra sulla sua sessione.
     */
     if (sender === 'visitor' && session.is_blocked === true) {
-      return res.status(403).json({ success:false, blocked:true, error:'Sei stato bloccato dal sistema.' });
+      return res.status(403).json({ success:false, blocked:true, error:'Servizio momentaneamente non disponibile. Riprova più tardi.' });
     }
 
     if (sender === 'visitor' && session.is_blocked === true) {
-      return res.status(403).json({ success:false, blocked:true, error:'Sei stato bloccato dal sistema.' });
+      return res.status(403).json({ success:false, blocked:true, error:'Servizio momentaneamente non disponibile. Riprova più tardi.' });
     }
 
     /* followme-chat-v2-visitor-json-attachment-extra-guard-20260528
@@ -19557,7 +19557,7 @@ const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || ''
       return res.status(403).json({
         success:false,
         blocked:true,
-        error:'Sei stato bloccato dal sistema.'
+        error:'Servizio momentaneamente non disponibile. Riprova più tardi.'
       });
     }
 
@@ -19575,7 +19575,7 @@ const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || ''
       Visitor può inviare allegati solo quando admin ha attivato Extra sulla sua sessione.
     */
     if (sender === 'visitor' && session.is_blocked === true) {
-      return res.status(403).json({ success:false, blocked:true, error:'Sei stato bloccato dal sistema.' });
+      return res.status(403).json({ success:false, blocked:true, error:'Servizio momentaneamente non disponibile. Riprova più tardi.' });
     }
 
     if (sender === 'visitor' && session.uploads_enabled !== true) {
@@ -19869,3 +19869,5 @@ app.post('/api/followme/chat-v2/session/:session_id/settings', express.json(), a
   }
 });
 
+
+// FOLLOWME_CHAT_V2_NEUTRAL_BLOCK_TEXT_20260528
