@@ -15715,7 +15715,7 @@ window.FOLLOWME_INFO_DATA = ${safeJson};
 
     await loadMessages();
     if(pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(loadMessages, 2200);
+    pollTimer = setInterval(loadMessages, 650);
     setTimeout(()=>input.focus(), 250);
   }
 
