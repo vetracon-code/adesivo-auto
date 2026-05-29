@@ -14289,7 +14289,9 @@ app.post('/api/followme/chat/session/:session_id/attachment', express.json({ lim
       fs.writeFileSync(fullPath, buffer);
 
     // FOLLOWME_VOICE_PERSISTENT_DISK_VERIFY_FINAL_20260529
-    followMeVoiceAssertWrittenPersistentFinal20260529(fullPath, Math.min(buffer.length, 1));
+    if (typeof followMeVoiceAssertWrittenPersistentFinal20260529 === 'function') {
+      followMeVoiceAssertWrittenPersistentFinal20260529(fullPath, Math.min(buffer.length, 1));
+    }
 
       attachmentUrl = `/uploads/followme-chat/${storedName}`;
       safeFilename = filenameRaw || storedName;
@@ -16754,7 +16756,9 @@ app.post('/api/followme/:code/voice-messages/upload-raw', express.raw({
     fs.writeFileSync(fullPath, buffer);
 
     // FOLLOWME_VOICE_PERSISTENT_DISK_VERIFY_FINAL_20260529
-    followMeVoiceAssertWrittenPersistentFinal20260529(fullPath, Math.min(buffer.length, 1));
+    if (typeof followMeVoiceAssertWrittenPersistentFinal20260529 === 'function') {
+      followMeVoiceAssertWrittenPersistentFinal20260529(fullPath, Math.min(buffer.length, 1));
+    }
 
     // FOLLOWME_VOICE_RAW_WRITE_VERIFY_FINAL_20260529
     if (!fs.existsSync(fullPath)) {
@@ -20765,7 +20769,9 @@ const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || ''
     fs.writeFileSync(fullPath, buffer);
 
     // FOLLOWME_VOICE_PERSISTENT_DISK_VERIFY_FINAL_20260529
-    followMeVoiceAssertWrittenPersistentFinal20260529(fullPath, Math.min(buffer.length, 1));
+    if (typeof followMeVoiceAssertWrittenPersistentFinal20260529 === 'function') {
+      followMeVoiceAssertWrittenPersistentFinal20260529(fullPath, Math.min(buffer.length, 1));
+    }
 
     const publicUrl = `/uploads/followme-chat-v2/${storedName}`;
 
@@ -20915,7 +20921,9 @@ app.post('/api/followme/chat-v2/session/:session_id/attachment', express.json({ 
     fs.writeFileSync(fullPath, buffer);
 
     // FOLLOWME_VOICE_PERSISTENT_DISK_VERIFY_FINAL_20260529
-    followMeVoiceAssertWrittenPersistentFinal20260529(fullPath, Math.min(buffer.length, 1));
+    if (typeof followMeVoiceAssertWrittenPersistentFinal20260529 === 'function') {
+      followMeVoiceAssertWrittenPersistentFinal20260529(fullPath, Math.min(buffer.length, 1));
+    }
 
     const publicUrl = `/uploads/followme-chat-v2/${storedName}`;
 
