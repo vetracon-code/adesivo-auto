@@ -43178,6 +43178,218 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 </script>
 <!-- FOLLOWME_VOICE_DEBUG_PANEL_TEMP_END_20260529 -->
 
+
+<script id="FOLLOWME_VOICE_PLAY_SAVED_USER_GESTURE_FIX_20260529">
+(function(){
+  "use strict";
+
+  if(window.__followMeVoicePlaySavedUserGestureFix20260529) return;
+  window.__followMeVoicePlaySavedUserGestureFix20260529 = true;
+
+  let cache = [];
+  let active = null;
+  let currentAudio = null;
+  let lastRefreshAt = 0;
+
+  function $(id){ return document.getElementById(id); }
+
+  function getCode(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim();
+      const p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim();
+    }catch(e){ return ""; }
+  }
+
+  function toast(msg){
+    try{
+      if(typeof window.toast === "function") return window.toast(msg);
+      if(typeof window.showToast === "function") return window.showToast(msg);
+    }catch(e){}
+    alert(msg);
+  }
+
+  function abs(url){
+    try{ return new URL(String(url || ""), location.origin).toString(); }
+    catch(e){ return String(url || ""); }
+  }
+
+  function selectEl(){
+    return $("voiceSelectClean20260528");
+  }
+
+  function playBtn(){
+    return $("voicePlaySavedClean20260528");
+  }
+
+  function enrichSelect(){
+    const sel = selectEl();
+    if(!sel) return;
+
+    const list = Array.isArray(cache) ? cache : [];
+
+    Array.from(sel.options || []).forEach(opt => {
+      const id = String(opt.value || "");
+      const m = list.find(x => String(x.id) === id);
+
+      if(m && m.file_url){
+        opt.dataset.fileUrl = m.file_url;
+        opt.dataset.mimeType = m.mime_type || "";
+        opt.dataset.active = m.is_active ? "1" : "0";
+      }
+    });
+
+    if((!sel.value || sel.value === "") && active && active.id){
+      const opt = Array.from(sel.options || []).find(o => String(o.value) === String(active.id));
+      if(opt) sel.value = String(active.id);
+    }
+  }
+
+  async function refreshVoiceCache(reason){
+    const code = getCode();
+    if(!code) return;
+
+    try{
+      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/voice-messages/status?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if(!res.ok || !data || data.success === false) return;
+
+      cache = Array.isArray(data.messages) ? data.messages : [];
+      active = data.active_voice || null;
+      lastRefreshAt = Date.now();
+
+      enrichSelect();
+
+      const btn = playBtn();
+      if(btn){
+        const hasAudio = !!((active && active.file_url) || cache.some(x => x && x.file_url));
+        btn.disabled = !hasAudio;
+        btn.style.opacity = hasAudio ? "1" : ".45";
+        btn.title = hasAudio ? "Riascolta il messaggio salvato" : "Nessun messaggio salvato da riascoltare";
+      }
+
+      try{
+        if(window.__followMeVoiceDebugPanelTemp20260529 && typeof window.__followMeVoiceDebugLogTemp20260529 === "function"){
+          window.__followMeVoiceDebugLogTemp20260529("cache riascolta salvato aggiornata: " + cache.length);
+        }
+      }catch(e){}
+
+    }catch(e){}
+  }
+
+  function getUrlToPlay(){
+    const sel = selectEl();
+
+    if(sel){
+      const opt = sel.options && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
+
+      if(opt && opt.dataset && opt.dataset.fileUrl){
+        return opt.dataset.fileUrl;
+      }
+
+      const selectedId = String(sel.value || "");
+      if(selectedId){
+        const m = cache.find(x => String(x.id) === selectedId);
+        if(m && m.file_url) return m.file_url;
+      }
+    }
+
+    if(active && active.file_url) return active.file_url;
+
+    const first = cache.find(x => x && x.file_url);
+    return first ? first.file_url : "";
+  }
+
+  function playSavedImmediate(ev){
+    const target = ev.target && ev.target.closest ? ev.target.closest("#voicePlaySavedClean20260528") : null;
+    if(!target) return;
+
+    ev.preventDefault();
+    ev.stopPropagation();
+    if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+
+    enrichSelect();
+
+    const url = getUrlToPlay();
+
+    if(!url){
+      toast("Audio salvato non ancora disponibile. Riapri il pannello o attendi un secondo.");
+      refreshVoiceCache("missing-on-click");
+      return false;
+    }
+
+    try{
+      if(currentAudio){
+        try{ currentAudio.pause(); }catch(e){}
+        currentAudio = null;
+      }
+
+      /*
+        Questo play parte direttamente dentro il click utente.
+        Non facciamo fetch prima del play, così Safari/iPhone non lo blocca.
+      */
+      currentAudio = new Audio(abs(url) + (String(url).includes("?") ? "&" : "?") + "v=" + Date.now());
+      currentAudio.preload = "auto";
+
+      const p = currentAudio.play();
+
+      if(p && typeof p.catch === "function"){
+        p.catch(function(err){
+          toast("Non riesco a riprodurre l’audio: " + (err && err.message ? err.message : err));
+        });
+      }
+
+    }catch(e){
+      toast("Non riesco a riprodurre l’audio: " + (e && e.message ? e.message : e));
+    }
+
+    return false;
+  }
+
+  function isVoiceModalOpen(){
+    const modal = $("followmeVoiceModalClean20260528");
+    if(!modal) return false;
+    return modal.classList.contains("show") || getComputedStyle(modal).display !== "none";
+  }
+
+  document.addEventListener("click", function(ev){
+    const btn = ev.target && ev.target.closest ? ev.target.closest("button,[role='button']") : null;
+    if(!btn) return;
+
+    const txt = String(btn.textContent || "").toLowerCase();
+
+    if(txt.includes("registra messaggio") || txt.includes("messaggio vocale")){
+      setTimeout(function(){ refreshVoiceCache("open"); }, 250);
+      setTimeout(function(){ refreshVoiceCache("open-late"); }, 1000);
+    }
+  }, true);
+
+  document.addEventListener("click", playSavedImmediate, true);
+  document.addEventListener("touchend", playSavedImmediate, true);
+
+  document.addEventListener("change", function(ev){
+    if(ev.target && ev.target.id === "voiceSelectClean20260528"){
+      enrichSelect();
+    }
+  }, true);
+
+  setInterval(function(){
+    if(isVoiceModalOpen() && Date.now() - lastRefreshAt > 5000){
+      refreshVoiceCache("interval-open");
+    }
+  }, 2000);
+
+  setTimeout(function(){ refreshVoiceCache("boot"); }, 800);
+  setTimeout(function(){ refreshVoiceCache("boot-late"); }, 2200);
+
+})();
+</script>
+
 </body>
 </html>
 
