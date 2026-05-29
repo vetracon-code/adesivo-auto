@@ -15627,7 +15627,7 @@ window.FOLLOWME_INFO_DATA = ${safeJson};
   };
 })();
 </script>
-<script id="FOLLOWME_QR_VERIFIED_SCANNER_REAL_INFO_ROUTE_20260529" src="/followme-qr-verified-scanner.js?v=20260529"></script>
+<script id="FOLLOWME_QR_VERIFIED_SCANNER_REAL_INFO_ROUTE_20260529" src="/followme-qr-verified-scanner.js?v=official-inline-trust-20260529"></script>
 </body>
 </html>`);
   } catch (err) {
