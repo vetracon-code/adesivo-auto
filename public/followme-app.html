@@ -41086,6 +41086,283 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="FOLLOWME_SCANNER_AUTO_UPDATE_AFTER_NEWURL_20260529">
+(function(){
+  "use strict";
+
+  if(window.__followMeScannerAutoUpdateAfterNewUrl20260529) return;
+  window.__followMeScannerAutoUpdateAfterNewUrl20260529 = true;
+
+  var lastAutoUrl = "";
+  var lastAutoAt = 0;
+  var pendingTimer = null;
+  var isUpdating = false;
+
+  function toast(msg){
+    try{
+      if(typeof window.toast === "function") return window.toast(msg);
+      if(typeof window.showToast === "function") return window.showToast(msg);
+    }catch(e){}
+
+    try{
+      var t = document.createElement("div");
+      t.textContent = msg;
+      t.style.cssText = "position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:999999;background:rgba(15,23,42,.94);color:#fff;padding:11px 14px;border-radius:999px;font:800 13px -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial;box-shadow:0 14px 40px rgba(0,0,0,.22);max-width:88vw;text-align:center;";
+      document.body.appendChild(t);
+      setTimeout(function(){ try{ t.remove(); }catch(e){} }, 2200);
+    }catch(e){}
+  }
+
+  function normalizeUrl(raw){
+    var u = String(raw || "").trim();
+    if(!u) return "";
+    if(/^mailto:/i.test(u) || /^tel:/i.test(u) || /^sms:/i.test(u) || /^whatsapp:/i.test(u)) return u;
+    if(!/^https?:\/\//i.test(u)) u = "https://" + u;
+    return u;
+  }
+
+  function cleanUrl(raw){
+    return String(raw || "")
+      .trim()
+      .replace(/\/+$/,"")
+      .toLowerCase();
+  }
+
+  function looksLikeUrl(raw){
+    var s = String(raw || "").trim();
+    if(!s) return false;
+    if(/^https?:\/\//i.test(s)) return true;
+    if(/^www\./i.test(s)) return true;
+    if(/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(s)) return true;
+    return false;
+  }
+
+  function scannerLikelyOpenOrRecent(){
+    /*
+      Non deve scattare mentre scrivi manualmente un URL.
+      Scatta solo se nella pagina/popup sono presenti testi tipici dello scanner
+      oppure se una variabile scanner ha appena memorizzato un URL.
+    */
+    try{
+      var txt = String(document.body && document.body.textContent || "").toLowerCase();
+
+      if(
+        txt.includes("conferma e attiva") ||
+        txt.includes("attiva subito") ||
+        txt.includes("qr letto") ||
+        txt.includes("indirizzo letto") ||
+        txt.includes("url letto") ||
+        txt.includes("scanner")
+      ){
+        return true;
+      }
+    }catch(e){}
+
+    try{
+      if(window.__followmeLastScannedUrl20260529) return true;
+      if(window.followmeLastScannedUrl) return true;
+      if(window.followMeLastScannedUrl) return true;
+      if(window.lastScannedUrl) return true;
+      if(window.scannerLastUrl) return true;
+      if(window.qrScannerLastUrl) return true;
+    }catch(e){}
+
+    return false;
+  }
+
+  function closeScannerOnly(){
+    document.querySelectorAll(".scanner,.qr-scanner,.scan-modal,.modal,.overlay,[data-scanner]").forEach(function(el){
+      try{
+        var txt = String(el.textContent || "").toLowerCase();
+
+        if(
+          txt.includes("conferma e attiva") ||
+          txt.includes("attiva subito") ||
+          txt.includes("qr letto") ||
+          txt.includes("indirizzo") ||
+          txt.includes("scanner")
+        ){
+          el.style.display = "none";
+          el.setAttribute("aria-hidden", "true");
+        }
+      }catch(e){}
+    });
+  }
+
+  function forcePreview(url){
+    try{ window.__followMeActiveUrl = url; }catch(e){}
+    try{ window.followMeCurrentActiveUrl = url; }catch(e){}
+    try{ window.currentFollowMeActiveUrl = url; }catch(e){}
+    try{ window.__followMePreviewWantedUrl = url; }catch(e){}
+
+    try{
+      if(typeof window.updateSimpleDestinationPreview === "function"){
+        window.updateSimpleDestinationPreview(url);
+      }
+    }catch(e){}
+
+    try{
+      if(typeof window.forceFollowMePreview === "function"){
+        window.forceFollowMePreview(url);
+      }
+    }catch(e){}
+
+    try{
+      var frame =
+        document.querySelector("#previewFrame") ||
+        document.querySelector("#followmePreviewFrame") ||
+        document.querySelector("iframe");
+
+      if(frame && frame.tagName && frame.tagName.toLowerCase() === "iframe"){
+        frame.src = url;
+      }
+
+      var target =
+        frame ||
+        document.querySelector(".preview") ||
+        document.querySelector(".premium-frame") ||
+        document.querySelector(".web-frame") ||
+        document.getElementById("activeUrl") ||
+        document.getElementById("newUrl");
+
+      if(target){
+        target.scrollIntoView({ behavior:"smooth", block:"center" });
+      }
+    }catch(e){}
+  }
+
+  async function autoUpdateFromNewUrl(url){
+    url = normalizeUrl(url);
+
+    if(!url || !looksLikeUrl(url)) return;
+
+    var now = Date.now();
+
+    /*
+      Evita doppio update sullo stesso URL.
+    */
+    if(cleanUrl(lastAutoUrl) === cleanUrl(url) && now - lastAutoAt < 8000){
+      return;
+    }
+
+    /*
+      Non deve aggiornare mentre scrivi manualmente.
+      Deve scattare solo nel contesto scanner.
+    */
+    if(!scannerLikelyOpenOrRecent()){
+      return;
+    }
+
+    var current = "";
+    try{
+      current = normalizeUrl(window.__followMeActiveUrl || window.followMeCurrentActiveUrl || window.currentFollowMeActiveUrl || "");
+    }catch(e){}
+
+    lastAutoUrl = url;
+    lastAutoAt = now;
+
+    if(current && cleanUrl(current) === cleanUrl(url)){
+      toast("URL già attivo.");
+      closeScannerOnly();
+      forcePreview(url);
+      return;
+    }
+
+    if(isUpdating) return;
+    isUpdating = true;
+
+    try{
+      var input = document.getElementById("newUrl");
+      if(input){
+        input.value = url;
+        input.dispatchEvent(new Event("input", { bubbles:true }));
+        input.dispatchEvent(new Event("change", { bubbles:true }));
+      }
+
+      if(typeof window.updateUrl !== "function"){
+        throw new Error("Funzione updateUrl non disponibile.");
+      }
+
+      toast("Attivo QR...");
+
+      await window.updateUrl();
+
+      toast("QR aggiornato.");
+      closeScannerOnly();
+
+      setTimeout(function(){ forcePreview(url); }, 250);
+      setTimeout(function(){ forcePreview(url); }, 900);
+      setTimeout(function(){ forcePreview(url); }, 1800);
+
+    }catch(err){
+      console.error("[FM scanner auto update after newUrl] errore:", err);
+      toast("Errore aggiornamento QR: " + (err && err.message ? err.message : String(err)));
+    }finally{
+      setTimeout(function(){ isUpdating = false; }, 1200);
+    }
+  }
+
+  function scheduleAutoUpdate(url){
+    clearTimeout(pendingTimer);
+    pendingTimer = setTimeout(function(){
+      autoUpdateFromNewUrl(url);
+    }, 350);
+  }
+
+  function bindNewUrl(){
+    var input = document.getElementById("newUrl");
+    if(!input || input.dataset.fmScannerAutoUpdateBound20260529 === "1") return;
+
+    input.dataset.fmScannerAutoUpdateBound20260529 = "1";
+
+    input.addEventListener("input", function(){
+      var url = normalizeUrl(input.value);
+      if(looksLikeUrl(url)){
+        try{ window.__followmeLastScannedUrl20260529 = url; }catch(e){}
+        scheduleAutoUpdate(url);
+      }
+    }, true);
+
+    input.addEventListener("change", function(){
+      var url = normalizeUrl(input.value);
+      if(looksLikeUrl(url)){
+        try{ window.__followmeLastScannedUrl20260529 = url; }catch(e){}
+        scheduleAutoUpdate(url);
+      }
+    }, true);
+
+    /*
+      Osserva anche modifiche programmatiche al valore.
+    */
+    var last = input.value || "";
+    setInterval(function(){
+      var nowVal = input.value || "";
+      if(nowVal !== last){
+        last = nowVal;
+        var url = normalizeUrl(nowVal);
+        if(looksLikeUrl(url)){
+          try{ window.__followmeLastScannedUrl20260529 = url; }catch(e){}
+          scheduleAutoUpdate(url);
+        }
+      }
+    }, 400);
+  }
+
+  function boot(){
+    bindNewUrl();
+    setInterval(bindNewUrl, 1200);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+})();
+</script>
+
 </body>
 </html>
 
