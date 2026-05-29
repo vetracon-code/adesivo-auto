@@ -15723,7 +15723,7 @@ window.FOLLOWME_INFO_DATA = ${safeJson};
       }catch(e){
         window.location.href = "/";
       }
-    }, 5000);
+    }, 8000);
   }
 
   async function openInfoChat(){
@@ -15752,14 +15752,46 @@ window.FOLLOWME_INFO_DATA = ${safeJson};
     setTimeout(()=>input.focus(), 250);
   }
 
+  let closedFlowStarted = false;
+
+  async function forceFinalClosedMessages(){
+    // FOLLOWME_CHAT_V2_FINAL_CLOSED_FETCH_20260529
+    try{
+      const d = await api("/api/followme/chat-v2/session/" + encodeURIComponent(sessionId) + "/messages?after=0&v=" + Date.now());
+      let hasThanks = false;
+
+      (d.messages || []).forEach(function(m){
+        if(String(m.message || "").indexOf("Grazie per averci contattato") >= 0){
+          hasThanks = true;
+        }
+        addBubble(m);
+      });
+
+      if(!hasThanks){
+        addSystemBubble("Grazie per averci contattato.");
+      }
+    }catch(e){
+      addSystemBubble("Grazie per averci contattato.");
+    }
+  }
+
   async function loadMessages(){
     if(!sessionId) return;
     const d = await api("/api/followme/chat-v2/session/" + encodeURIComponent(sessionId) + "/messages?after=" + lastMessageId + "&v=" + Date.now());
     (d.messages || []).forEach(addBubble);
 
-    if(d.session_status === "closed"){
+    if(d.session_status === "closed" && !closedFlowStarted){
+      closedFlowStarted = true;
+
       try{ input.disabled = true; }catch(e){}
       try{ sendBtn.disabled = true; }catch(e){}
+
+      await forceFinalClosedMessages();
+
+      setTimeout(function(){
+        try{ forceFinalClosedMessages(); }catch(e){}
+      }, 900);
+
       closeChatAndReturn();
     }
   }
