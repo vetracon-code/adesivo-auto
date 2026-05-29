@@ -820,6 +820,7 @@
   function forceQrVerifiedOutsideButtonsFinal(){
     injectQrVerifiedOutsideButtonsFinal();
     injectVariant2CompactOfficial20260529();
+    injectInlineTrustApprovedFrameFix20260529();
 
     /*
       Rimuovo fisicamente il vecchio badge flottante se già creato.
@@ -1298,6 +1299,305 @@
     applyVariant2CompactActionLayout20260529();
   }
 
+
+
+  // FOLLOWME_INLINE_TRUST_APPROVED_FRAME_FIX_20260529
+  function injectInlineTrustApprovedFrameFix20260529(){
+    if(document.getElementById("followmeInlineTrustApprovedFrameFixCss20260529")) return;
+
+    var style = document.createElement("style");
+    style.id = "followmeInlineTrustApprovedFrameFixCss20260529";
+    style.textContent = `
+      /*
+        Versione approvata come base:
+        Variante 2 — Inline Trust
+        colori tenui, badge discreto, pulsanti compatti.
+      */
+
+      #followmeQrVerifiedBadge20260529,
+      #followmeQrVerifiedDetail20260529,
+      #followmeQrVerifiedStaticBanner20260529,
+      #followmeQrVerifiedStaticDetail20260529{
+        display:none !important;
+        opacity:0 !important;
+        visibility:hidden !important;
+        pointer-events:none !important;
+      }
+
+      /*
+        Trasformo il banner QR in riga inline discreta.
+      */
+      #followmeQrVerifiedRealBanner20260529{
+        position:relative !important;
+        z-index:2 !important;
+        width:calc(100% - 20px) !important;
+        max-width:410px !important;
+        margin:5px auto 8px !important;
+        padding:0 2px !important;
+        border:0 !important;
+        border-radius:0 !important;
+        background:transparent !important;
+        box-shadow:none !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:space-between !important;
+        gap:10px !important;
+        font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif !important;
+        color:#667085 !important;
+        text-align:left !important;
+        box-sizing:border-box !important;
+      }
+
+      #followmeQrVerifiedRealBanner20260529 .fm-real-shield{
+        width:auto !important;
+        height:auto !important;
+        min-width:0 !important;
+        border-radius:0 !important;
+        background:transparent !important;
+        box-shadow:none !important;
+        display:inline !important;
+        font-size:12.2px !important;
+        line-height:1 !important;
+      }
+
+      #followmeQrVerifiedRealBanner20260529 .fm-real-copy{
+        width:100% !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:space-between !important;
+        gap:10px !important;
+        min-width:0 !important;
+      }
+
+      #followmeQrVerifiedRealBanner20260529 strong{
+        display:flex !important;
+        align-items:center !important;
+        gap:5px !important;
+        color:#118943 !important;
+        font-size:12.2px !important;
+        line-height:1.1 !important;
+        font-weight:700 !important;
+        letter-spacing:-.08px !important;
+        white-space:nowrap !important;
+      }
+
+      #followmeQrVerifiedRealBanner20260529 small{
+        display:block !important;
+        color:#667085 !important;
+        font-size:11.5px !important;
+        line-height:1.15 !important;
+        font-weight:470 !important;
+        text-align:right !important;
+        white-space:normal !important;
+      }
+
+      /*
+        Area pulsanti come Variante 2:
+        due colonne se ci sono due azioni;
+        una colonna se resta un solo pulsante.
+      */
+      body .premium-actions,
+      body .actions,
+      body .cta-row{
+        width:calc(100% - 20px) !important;
+        max-width:410px !important;
+        margin:0 auto 8px !important;
+        padding:0 !important;
+        display:grid !important;
+        grid-template-columns:1fr !important;
+        gap:7px !important;
+        box-sizing:border-box !important;
+      }
+
+      body .premium-actions.fm-inline-two-actions-20260529,
+      body .actions.fm-inline-two-actions-20260529,
+      body .cta-row.fm-inline-two-actions-20260529{
+        grid-template-columns:1fr 1fr !important;
+      }
+
+      body .premium-btn,
+      body button.premium-btn,
+      body a.premium-btn{
+        min-height:38px !important;
+        width:100% !important;
+        border-radius:13px !important;
+        border:1px solid rgba(16,24,40,.08) !important;
+        background:#fff !important;
+        color:#101828 !important;
+        padding:8px 10px !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        gap:6px !important;
+        box-shadow:0 5px 14px rgba(16,24,40,.045) !important;
+        font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif !important;
+        font-size:12.7px !important;
+        font-weight:610 !important;
+        letter-spacing:-.08px !important;
+        line-height:1.1 !important;
+        text-decoration:none !important;
+        white-space:nowrap !important;
+        box-sizing:border-box !important;
+      }
+
+      /*
+        Ascolta: neutro, elegante, non nero pieno.
+      */
+      body #voiceBtn,
+      body button#voiceBtn.premium-btn{
+        background:#fff !important;
+        color:#101828 !important;
+        border:1px solid rgba(16,24,40,.08) !important;
+        box-shadow:0 5px 14px rgba(16,24,40,.045) !important;
+      }
+
+      /*
+        Chiedi info: verde soft, non pulsante gigante saturo.
+      */
+      body #infoBtn,
+      body #fallbackInfo,
+      body button#infoBtn.premium-btn,
+      body button#fallbackInfo.premium-btn{
+        color:#0f7a37 !important;
+        background:rgba(17,137,67,.08) !important;
+        border-color:rgba(17,137,67,.14) !important;
+        box-shadow:none !important;
+      }
+
+      /*
+        Apri in nuova pagina: sotto, secondario.
+      */
+      body a.premium-btn[target="_blank"],
+      body a.premium-btn[href^="http"]{
+        display:flex !important;
+        margin:10px auto 0 !important;
+        min-height:34px !important;
+        max-width:410px !important;
+        border-radius:12px !important;
+        background:#fff !important;
+        color:#667085 !important;
+        border:1px solid rgba(16,24,40,.08) !important;
+        box-shadow:none !important;
+        font-size:12px !important;
+        font-weight:520 !important;
+        letter-spacing:-.05px !important;
+      }
+
+      body a.premium-btn[target="_blank"]:before,
+      body a.premium-btn[href^="http"]:before{
+        content:"↗";
+        font-size:12px;
+        opacity:.72;
+      }
+
+      /*
+        FIX FRAME:
+        non tagliare la parte alta del sito/card dentro l'iframe.
+        Il contenuto deve partire dall'inizio, non essere spinto o croppato.
+      */
+      body .premium-frame,
+      body .preview,
+      body .frame,
+      body .web-frame,
+      body .content-frame{
+        margin-top:8px !important;
+        padding-top:0 !important;
+        overflow:visible !important;
+        clip-path:none !important;
+        transform:none !important;
+      }
+
+      body iframe{
+        display:block !important;
+        width:100% !important;
+        min-height:68vh !important;
+        height:68vh !important;
+        max-height:none !important;
+        margin-top:0 !important;
+        padding-top:0 !important;
+        transform:none !important;
+        clip-path:none !important;
+        object-fit:contain !important;
+        object-position:top center !important;
+        background:#fff !important;
+      }
+
+      /*
+        Se il contenitore usa border-radius, non deve tagliare la parte alta interna.
+        Meglio leggermente meno arrotondato ma contenuto integro.
+      */
+      body .premium-frame,
+      body .preview,
+      body .frame{
+        border-radius:16px !important;
+      }
+
+      @media(max-width:390px){
+        #followmeQrVerifiedRealBanner20260529{
+          align-items:flex-start !important;
+        }
+
+        #followmeQrVerifiedRealBanner20260529 .fm-real-copy{
+          flex-direction:column !important;
+          align-items:flex-start !important;
+          gap:3px !important;
+        }
+
+        #followmeQrVerifiedRealBanner20260529 small{
+          text-align:left !important;
+          font-size:11.2px !important;
+        }
+
+        body .premium-actions.fm-inline-two-actions-20260529,
+        body .actions.fm-inline-two-actions-20260529,
+        body .cta-row.fm-inline-two-actions-20260529{
+          grid-template-columns:1fr !important;
+        }
+
+        body iframe{
+          min-height:66vh !important;
+          height:66vh !important;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function applyInlineTrustApprovedFrameFix20260529(){
+    injectInlineTrustApprovedFrameFix20260529();
+
+    var banner = document.getElementById("followmeQrVerifiedRealBanner20260529");
+    if(banner){
+      banner.innerHTML =
+        '<span class="fm-real-copy">' +
+          '<strong><span>🛡️</span> QR verificato</strong>' +
+          '<small>Destinazione controllata prima della pubblicazione.</small>' +
+        '</span>';
+    }
+
+    var containers = Array.prototype.slice.call(document.querySelectorAll(".premium-actions,.actions,.cta-row"));
+
+    containers.forEach(function(container){
+      var visibleActionButtons = Array.prototype.slice.call(container.querySelectorAll("button.premium-btn, .premium-btn"))
+        .filter(function(el){
+          if(!el) return false;
+          if(el.tagName && el.tagName.toLowerCase() === "a") return false;
+
+          var st = window.getComputedStyle(el);
+          if(st.display === "none" || st.visibility === "hidden" || Number(st.opacity) === 0) return false;
+
+          return true;
+        });
+
+      if(visibleActionButtons.length >= 2){
+        container.classList.add("fm-inline-two-actions-20260529");
+      }else{
+        container.classList.remove("fm-inline-two-actions-20260529");
+      }
+    });
+  }
+
   function boot(){
     injectStyle();
     injectPremiumPublicActionsUx();
@@ -1305,6 +1605,9 @@
     prepareChatDirectFlow20260529();
     fixPublicFrameNotBlank20260529();
     makeOverlay();
+    setTimeout(applyInlineTrustApprovedFrameFix20260529, 300);
+    setTimeout(applyInlineTrustApprovedFrameFix20260529, 1200);
+    setTimeout(applyInlineTrustApprovedFrameFix20260529, 2600);
 
     setTimeout(fixPublicFrameNotBlank20260529, 250);
     setTimeout(function(){ forceQrVerifiedOutsideButtonsFinal(); forceVariant2CompactOfficial20260529(); }, 400);
@@ -1313,6 +1616,7 @@
     setTimeout(function(){
       forceQrVerifiedOutsideButtonsFinal();
       forceVariant2CompactOfficial20260529();
+      applyInlineTrustApprovedFrameFix20260529();
       showChatDirectNotice20260529();
       forceVariant2CompactOfficial20260529();
     }, 2400);
