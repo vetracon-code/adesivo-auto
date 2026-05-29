@@ -652,6 +652,88 @@ app.get('/owner-install/:plate/:code', async (req, res) => {
       <a class="btn btn-primary" href="${ownerUrl}">Apri la tua App</a>
     </div>
   </div>
+
+<script id="FOLLOWME_INFO_PUBLIC_AUDIO_PLAYER_LIKE_CHAT_V2_20260528">
+(function(){
+  "use strict";
+
+  const data = window.FOLLOWME_INFO_DATA || {};
+  const v = data.voice_message || null;
+
+  if(!v || !v.file_url) return;
+
+  function esc(x){
+    return String(x || "").replace(/[<>&"]/g,function(c){
+      return c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === "&" ? "&amp;" : "&quot;";
+    });
+  }
+
+  function ensurePlayer(){
+    const oldBtn = document.getElementById("voiceBtn");
+    if(!oldBtn || oldBtn.dataset.audioPlayerPatched === "1") return;
+
+    oldBtn.dataset.audioPlayerPatched = "1";
+
+    const wrap = document.createElement("div");
+    wrap.id = "followmePublicVoicePlayer20260528";
+    wrap.style.margin = "10px 0 0";
+    wrap.style.padding = "10px";
+    wrap.style.borderRadius = "18px";
+    wrap.style.background = "rgba(255,255,255,.72)";
+    wrap.style.border = "1px solid rgba(15,23,42,.10)";
+    wrap.style.boxShadow = "0 10px 28px rgba(15,23,42,.08)";
+
+    wrap.innerHTML =
+      '<audio id="followmePublicVoiceAudio20260528" controls preload="metadata" playsinline style="width:100%;height:38px">' +
+      '  <source src="' + esc(v.file_url) + '" type="' + esc(v.mime_type || "audio/mp4") + '">' +
+      '</audio>' +
+      '<div id="followmePublicVoiceError20260528" style="display:none;margin-top:7px;font-size:12px;font-weight:800;color:#b91c1c">Formato audio non riproducibile da questo dispositivo.</div>';
+
+    oldBtn.insertAdjacentElement("afterend", wrap);
+
+    const audio = document.getElementById("followmePublicVoiceAudio20260528");
+    const err = document.getElementById("followmePublicVoiceError20260528");
+
+    oldBtn.onclick = async function(ev){
+      try{
+        ev.preventDefault();
+        oldBtn.disabled = true;
+        oldBtn.textContent = "Riproduco...";
+
+        await fetch("/api/followme/" + encodeURIComponent(data.code) + "/voice-messages/" + encodeURIComponent(v.id) + "/listened", {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({})
+        }).catch(function(){});
+
+        await audio.play();
+      }catch(e){
+        if(err) err.style.display = "block";
+      }finally{
+        oldBtn.disabled = false;
+        oldBtn.textContent = "▶ Ascolta il messaggio";
+      }
+    };
+
+    audio.addEventListener("play", function(){
+      fetch("/api/followme/" + encodeURIComponent(data.code) + "/voice-messages/" + encodeURIComponent(v.id) + "/listened", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({})
+      }).catch(function(){});
+    }, { once:true });
+
+    audio.addEventListener("error", function(){
+      if(err) err.style.display = "block";
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", ensurePlayer);
+  setTimeout(ensurePlayer, 300);
+  setTimeout(ensurePlayer, 900);
+})();
+</script>
+
 </body>
 </html>`;
 
@@ -15775,7 +15857,26 @@ app.get('/followme-voice/:code/:filename', async function(req, res) {
     }
 
     res.setHeader('Cache-Control', 'public, max-age=86400');
+    
+    // FOLLOWME_VOICE_PUBLIC_AUDIO_CONTENT_TYPE_FIX_20260528
+    const lowerName = String(filename || '').toLowerCase();
+
+    let contentType = 'application/octet-stream';
+
+    if (lowerName.endsWith('.m4a') || lowerName.endsWith('.mp4')) contentType = 'audio/mp4';
+    else if (lowerName.endsWith('.mp3')) contentType = 'audio/mpeg';
+    else if (lowerName.endsWith('.wav')) contentType = 'audio/wav';
+    else if (lowerName.endsWith('.webm')) contentType = 'audio/webm';
+    else if (lowerName.endsWith('.ogg')) contentType = 'audio/ogg';
+    else if (lowerName.endsWith('.aac')) contentType = 'audio/aac';
+    else if (lowerName.endsWith('.caf')) contentType = 'audio/x-caf';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+
     return res.sendFile(filePath);
+
   } catch (err) {
     return res.status(404).send('Audio non trovato.');
   }
@@ -15980,13 +16081,21 @@ app.post('/api/followme/:code/voice-messages/upload-raw', express.raw({
       });
     }
 
+    // FOLLOWME_VOICE_RAW_EXTENSION_LIKE_CHAT_V2_20260528
     let ext = 'webm';
-    if (mime.includes('wav')) ext = 'wav';
-    else if (mime.includes('mpeg') || mime.includes('mp3')) ext = 'mp3';
-    else if (mime.includes('mp4') || mime.includes('aac') || mime.includes('m4a')) ext = 'm4a';
-    else if (mime.includes('caf')) ext = 'caf';
-    else if (mime.includes('ogg')) ext = 'ogg';
+
+    /*
+      Stessa logica pratica della Chat V2:
+      - se il browser produce mp4/aac/m4a, salviamo .m4a
+      - se produce webm, salviamo .webm
+      - gli altri formati mantengono estensione coerente.
+    */
+    if (mime.includes('mp4') || mime.includes('aac') || mime.includes('m4a')) ext = 'm4a';
     else if (mime.includes('webm')) ext = 'webm';
+    else if (mime.includes('wav')) ext = 'wav';
+    else if (mime.includes('mpeg') || mime.includes('mp3')) ext = 'mp3';
+    else if (mime.includes('ogg')) ext = 'ogg';
+    else if (mime.includes('caf')) ext = 'caf';
 
     const duration = Number(req.query.duration_seconds || req.headers['x-followme-duration'] || 0);
     if (duration > 24) {
