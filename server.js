@@ -15767,11 +15767,13 @@ window.FOLLOWME_INFO_DATA = ${safeJson};
         addBubble(m);
       });
 
-      if(!hasThanks){
+      if(!hasThanks && String(messages.textContent || "").indexOf("Grazie per averci contattato") < 0){
         addSystemBubble("Grazie per averci contattato.");
       }
     }catch(e){
-      addSystemBubble("Grazie per averci contattato.");
+      if(String(messages.textContent || "").indexOf("Grazie per averci contattato") < 0){
+        addSystemBubble("Grazie per averci contattato.");
+      }
     }
   }
 
@@ -15787,10 +15789,6 @@ window.FOLLOWME_INFO_DATA = ${safeJson};
       try{ sendBtn.disabled = true; }catch(e){}
 
       await forceFinalClosedMessages();
-
-      setTimeout(function(){
-        try{ forceFinalClosedMessages(); }catch(e){}
-      }, 900);
 
       closeChatAndReturn();
     }
