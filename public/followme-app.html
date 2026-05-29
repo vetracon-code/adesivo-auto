@@ -19535,6 +19535,125 @@ document.addEventListener("visibilitychange", function(){
 
 
 
+
+
+<style id="FOLLOWME_CHAT_V2_PREMIUM_CLEAN_ONLY_20260529">
+  body.followme-chat-only-mode #chatOverlay,
+  body.followme-chat-only-mode .chat-overlay,
+  body.followme-chat-only-mode .chat-sheet,
+  body.followme-chat-only-mode [id="chatOverlay"]{
+    display:none !important;
+    visibility:hidden !important;
+    pointer-events:none !important;
+  }
+
+  body.followme-chat-only-mode #followmeOwnerChatScreen{
+    display:grid !important;
+    visibility:visible !important;
+  }
+
+  body.followme-chat-only-mode #followmeOwnerChatMessages{
+    display:block !important;
+    visibility:visible !important;
+  }
+</style>
+
+<script id="FOLLOWME_CHAT_V2_PREMIUM_CLEAN_ONLY_20260529">
+(function(){
+  "use strict";
+
+  if(window.__followMeChatV2PremiumCleanOnly20260529) return;
+  window.__followMeChatV2PremiumCleanOnly20260529 = true;
+
+  function isChatV2Admin(){
+    return /\/fm\/chat-v2\/admin\//i.test(location.pathname) ||
+           /[?&](chatSession|session)=/i.test(location.search);
+  }
+
+  function hideLegacyChat(){
+    if(!isChatV2Admin()) return;
+
+    document.body.classList.add("followme-chat-only-mode");
+
+    [
+      "chatOverlay",
+      "followmeInfoRequestAdminBadge20260528",
+      "followmeInfoChatFloatingForce20260528"
+    ].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el){
+        el.style.display = "none";
+        el.style.visibility = "hidden";
+        el.style.pointerEvents = "none";
+      }
+    });
+
+    document.querySelectorAll(".chat-overlay,.chat-sheet").forEach(function(el){
+      el.style.display = "none";
+      el.style.visibility = "hidden";
+      el.style.pointerEvents = "none";
+    });
+
+    var screen = document.getElementById("followmeOwnerChatScreen");
+    if(screen){
+      screen.style.display = "grid";
+      screen.style.visibility = "visible";
+    }
+  }
+
+  function dedupeVisibleMessages(){
+    var box = document.getElementById("followmeOwnerChatMessages");
+    if(!box) return;
+
+    var seen = new Set();
+
+    box.querySelectorAll("[data-message-id]").forEach(function(el){
+      var id = String(el.getAttribute("data-message-id") || "").trim();
+      if(!id) return;
+
+      if(seen.has(id)){
+        el.remove();
+      }else{
+        seen.add(id);
+      }
+    });
+  }
+
+  function disableLegacyFetchRenderers(){
+    // Questi vecchi script appendevano messaggi/allegati più volte dopo ogni fetch.
+    window.__fmAdminAudioServerTruthFetch20260519 = true;
+    window.__fmKeepAllAdminFetchPatch20260519 = true;
+  }
+
+  function boot(){
+    if(!isChatV2Admin()) return;
+
+    disableLegacyFetchRenderers();
+    hideLegacyChat();
+    dedupeVisibleMessages();
+
+    setTimeout(hideLegacyChat, 250);
+    setTimeout(dedupeVisibleMessages, 350);
+    setTimeout(hideLegacyChat, 900);
+    setTimeout(dedupeVisibleMessages, 1200);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", boot);
+  setInterval(function(){
+    if(isChatV2Admin()){
+      hideLegacyChat();
+      dedupeVisibleMessages();
+    }
+  }, 800);
+})();
+</script>
+
 <script id="followme-admin-audio-server-truth-render-20260519">
 (function(){
   if(window.__FollowMeAdminAudioServerTruthRender20260519) return;

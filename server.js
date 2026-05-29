@@ -15655,9 +15655,21 @@ window.FOLLOWME_INFO_DATA = ${safeJson};
   const messages = document.getElementById("messages");
   const input = document.getElementById("textInput");
 
+  const renderedMessageIds = new Set();
+
   function addBubble(m){
+    if(!m) return;
+
+    const id = String(m.id || "").trim();
+    if(id){
+      if(renderedMessageIds.has(id)) return;
+      renderedMessageIds.add(id);
+      if(messages.querySelector('[data-message-id="' + CSS.escape(id) + '"]')) return;
+    }
+
     const div = document.createElement("div");
     div.className = "bubble " + (m.sender === "owner" ? "owner" : "visitor");
+    if(id) div.setAttribute("data-message-id", id);
     div.textContent = m.message || "";
     messages.appendChild(div);
     messages.scrollTop = messages.scrollHeight;
@@ -15696,6 +15708,7 @@ window.FOLLOWME_INFO_DATA = ${safeJson};
       });
       sessionId = String(created.session_id || "");
       messages.innerHTML = "";
+      renderedMessageIds.clear();
       lastMessageId = 0;
       if(created.initial_message) addBubble(created.initial_message);
     }
