@@ -37254,13 +37254,27 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
   async function loadStatus(){
     const code = getCode();
-    if(!code) return null;
+    if(!code){
+      savedMessages = [];
+      renderSelect();
+      updateMainButton(false);
+      return { success:false, messages:[], has_active_voice:false };
+    }
 
-    const data = await api("/api/followme/" + encodeURIComponent(code) + "/voice-messages/status?v=" + Date.now());
-    savedMessages = Array.isArray(data.messages) ? data.messages : [];
-    renderSelect();
-    updateMainButton(data.has_active_voice === true);
-    return data;
+    try{
+      const data = await api("/api/followme/" + encodeURIComponent(code) + "/voice-messages/status?v=" + Date.now());
+      savedMessages = Array.isArray(data.messages) ? data.messages : [];
+      renderSelect();
+      updateMainButton(data.has_active_voice === true);
+      return data;
+    }catch(e){
+      savedMessages = [];
+      renderSelect();
+      updateMainButton(false);
+      setStatus("Nessun messaggio vocale attivo. Puoi registrarne uno nuovo.");
+      setDiag("Status audio non caricato, pannello comunque disponibile.");
+      return { success:false, messages:[], has_active_voice:false };
+    }
   }
 
   function selectedMessage(){
@@ -38080,7 +38094,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     var floating = ensureFloatingButton();
 
     var count = latestSessions.length;
-    var shouldShowInline = infoEnabled || count > 0;
+    var shouldShowInline = infoEnabled === true;
     var shouldShowFloating = count > 0;
 
     var label = inline.querySelector(".force-label-20260528");
