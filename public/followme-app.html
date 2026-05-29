@@ -40078,7 +40078,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 </script>
 
 
-<script id="FOLLOWME_ADMIN_SCANNER_CONFIRM_ACTIVATE_DIRECT_20260529">
+<script id="FOLLOWME_ADMIN_SCANNER_CONFIRM_ACTIVATE_DIRECT_20260529_DISABLED" type="text/plain">
 (function(){
   "use strict";
 
@@ -40463,6 +40463,269 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     try{
       var el = ev.target;
       if(el && (el.matches("input,textarea")) && looksLikeUrl(el.value)){
+        window.__followmeLastScannedUrl20260529 = normalizeUrl(el.value);
+      }
+    }catch(e){}
+  }, true);
+
+})();
+</script>
+
+
+<script id="FOLLOWME_ADMIN_SCANNER_DIRECT_UPDATEURL_FINAL_20260529">
+(function(){
+  "use strict";
+
+  if(window.__followMeAdminScannerDirectUpdateUrlFinal20260529) return;
+  window.__followMeAdminScannerDirectUpdateUrlFinal20260529 = true;
+
+  function toast(msg){
+    try{
+      if(typeof window.toast === "function") return window.toast(msg);
+      if(typeof window.showToast === "function") return window.showToast(msg);
+    }catch(e){}
+
+    try{
+      var t = document.createElement("div");
+      t.textContent = msg;
+      t.style.cssText = "position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:999999;background:rgba(15,23,42,.94);color:#fff;padding:11px 14px;border-radius:999px;font:800 13px -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial;box-shadow:0 14px 40px rgba(0,0,0,.22);max-width:88vw;text-align:center;";
+      document.body.appendChild(t);
+      setTimeout(function(){ try{ t.remove(); }catch(e){} }, 2200);
+    }catch(e){}
+  }
+
+  function normalizeUrl(raw){
+    var u = String(raw || "").trim();
+    if(!u) return "";
+    if(/^mailto:/i.test(u) || /^tel:/i.test(u) || /^sms:/i.test(u) || /^whatsapp:/i.test(u)) return u;
+    if(!/^https?:\/\//i.test(u)) u = "https://" + u;
+    return u;
+  }
+
+  function cleanUrl(raw){
+    return String(raw || "")
+      .trim()
+      .replace(/\/+$/,"")
+      .toLowerCase();
+  }
+
+  function looksLikeUrl(v){
+    var s = String(v || "").trim();
+    if(!s) return false;
+    if(/^https?:\/\//i.test(s)) return true;
+    if(/^www\./i.test(s)) return true;
+    if(/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(s)) return true;
+    return false;
+  }
+
+  function getScannedUrl(){
+    var candidates = [];
+
+    try{
+      [
+        "__followmeLastScannedUrl20260529",
+        "followmeLastScannedUrl",
+        "followMeLastScannedUrl",
+        "lastScannedUrl",
+        "scannerLastUrl",
+        "qrScannerLastUrl"
+      ].forEach(function(k){
+        if(window[k]) candidates.push(window[k]);
+      });
+    }catch(e){}
+
+    /*
+      Campo reale della WebApp FollowMe.
+    */
+    var newUrl = document.getElementById("newUrl");
+    if(newUrl && newUrl.value) candidates.push(newUrl.value);
+
+    /*
+      Altri campi eventuali dello scanner.
+    */
+    document.querySelectorAll("input,textarea,[data-url],[data-scanned-url],.scanner-url,.scan-url,.qr-url,.result-url").forEach(function(el){
+      try{
+        if(el.dataset && el.dataset.url) candidates.push(el.dataset.url);
+        if(el.dataset && el.dataset.scannedUrl) candidates.push(el.dataset.scannedUrl);
+        if(el.value) candidates.push(el.value);
+        if(el.textContent) candidates.push(el.textContent);
+      }catch(e){}
+    });
+
+    for(var i=0;i<candidates.length;i++){
+      var raw = String(candidates[i] || "").trim();
+
+      var m = raw.match(/https?:\/\/[^\s"'<>]+/i);
+      if(m && m[0]) return normalizeUrl(m[0]);
+
+      if(looksLikeUrl(raw)) return normalizeUrl(raw);
+    }
+
+    return "";
+  }
+
+  function setOfficialNewUrl(url){
+    var input = document.getElementById("newUrl");
+
+    if(input){
+      input.focus();
+      input.value = url;
+      input.dispatchEvent(new Event("input", { bubbles:true }));
+      input.dispatchEvent(new Event("change", { bubbles:true }));
+      input.blur();
+    }
+
+    try{ window.__followmeLastScannedUrl20260529 = url; }catch(e){}
+    try{ window.__followMePreviewWantedUrl = url; }catch(e){}
+  }
+
+  function closeScannerUi(){
+    document.querySelectorAll(".scanner,.qr-scanner,.scan-modal,.modal,.overlay,[data-scanner]").forEach(function(el){
+      try{
+        var txt = String(el.textContent || "").toLowerCase();
+        if(txt.includes("conferma") && txt.includes("attiva")){
+          el.style.display = "none";
+          el.setAttribute("aria-hidden", "true");
+        }
+      }catch(e){}
+    });
+
+    document.querySelectorAll("button,[role='button']").forEach(function(btn){
+      var t = String(btn.textContent || btn.ariaLabel || btn.title || "").trim().toLowerCase();
+      if(t === "×" || t === "x" || t.includes("chiudi") || t.includes("annulla") || t.includes("close")){
+        try{ btn.click(); }catch(e){}
+      }
+    });
+  }
+
+  function forcePreview(url){
+    try{ window.__followMeActiveUrl = url; }catch(e){}
+    try{ window.followMeCurrentActiveUrl = url; }catch(e){}
+    try{ window.currentFollowMeActiveUrl = url; }catch(e){}
+
+    try{
+      if(typeof window.updateSimpleDestinationPreview === "function"){
+        window.updateSimpleDestinationPreview(url);
+      }
+    }catch(e){}
+
+    try{
+      if(typeof window.forceFollowMePreview === "function"){
+        window.forceFollowMePreview(url);
+      }
+    }catch(e){}
+
+    try{
+      var frame =
+        document.querySelector("#previewFrame") ||
+        document.querySelector("#followmePreviewFrame") ||
+        document.querySelector("iframe");
+
+      if(frame && frame.tagName && frame.tagName.toLowerCase() === "iframe"){
+        frame.src = url;
+      }
+
+      var target =
+        frame ||
+        document.querySelector(".preview") ||
+        document.querySelector(".premium-frame") ||
+        document.querySelector(".web-frame") ||
+        document.getElementById("activeUrl");
+
+      if(target){
+        target.scrollIntoView({ behavior:"smooth", block:"center" });
+      }
+    }catch(e){}
+  }
+
+  function isConfirmActivateButton(el){
+    if(!el) return false;
+    var txt = String(el.textContent || el.value || el.ariaLabel || el.title || "").trim().toLowerCase();
+    return txt.includes("conferma") && txt.includes("attiva");
+  }
+
+  async function handleConfirmActivate(ev){
+    var btn = ev && ev.target ? ev.target.closest("button,[role='button'],a,input") : null;
+    if(!isConfirmActivateButton(btn)) return;
+
+    ev.preventDefault();
+    ev.stopPropagation();
+    if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+
+    var url = getScannedUrl();
+
+    if(!url){
+      toast("Nessun URL letto dallo scanner.");
+      return;
+    }
+
+    url = normalizeUrl(url);
+    setOfficialNewUrl(url);
+
+    var current = "";
+    try{
+      current = normalizeUrl(window.__followMeActiveUrl || "");
+    }catch(e){}
+
+    /*
+      Se URL è già attivo, non faccio update inutile.
+      Chiudo e porto direttamente in preview.
+    */
+    if(current && cleanUrl(current) === cleanUrl(url)){
+      toast("URL già attivo.");
+      closeScannerUi();
+      forcePreview(url);
+      return;
+    }
+
+    btn.disabled = true;
+    var oldText = btn.textContent;
+    btn.textContent = "Attivo QR...";
+
+    try{
+      if(typeof window.updateUrl !== "function"){
+        throw new Error("Funzione updateUrl non disponibile.");
+      }
+
+      /*
+        Funzione ufficiale già presente nel progetto.
+        È la stessa logica del pulsante Aggiorna QR.
+      */
+      await window.updateUrl();
+
+      toast("QR aggiornato.");
+      closeScannerUi();
+
+      setTimeout(function(){ forcePreview(url); }, 250);
+      setTimeout(function(){ forcePreview(url); }, 900);
+      setTimeout(function(){ forcePreview(url); }, 1800);
+
+    }catch(err){
+      console.error("[FM scanner direct updateUrl] errore:", err);
+      toast("Errore aggiornamento QR: " + (err && err.message ? err.message : String(err)));
+      btn.disabled = false;
+      btn.textContent = oldText || "Conferma e attiva subito";
+    }
+  }
+
+  document.addEventListener("click", handleConfirmActivate, true);
+
+  /*
+    Se lo scanner scrive nel campo, memorizziamo subito l'URL.
+  */
+  document.addEventListener("input", function(ev){
+    try{
+      var el = ev.target;
+      if(el && el.matches && el.matches("input,textarea") && looksLikeUrl(el.value)){
+        window.__followmeLastScannedUrl20260529 = normalizeUrl(el.value);
+      }
+    }catch(e){}
+  }, true);
+
+  document.addEventListener("change", function(ev){
+    try{
+      var el = ev.target;
+      if(el && el.matches && el.matches("input,textarea") && looksLikeUrl(el.value)){
         window.__followmeLastScannedUrl20260529 = normalizeUrl(el.value);
       }
     }catch(e){}
