@@ -17200,12 +17200,18 @@ app.get('/fm/u/:public_id', async function(req, res, next) {
     if (!q.rows.length) return next();
 
     const row = q.rows[0];
-    const token = String(row.chat_public_token || '').trim();
 
-    if (row.chat_mode_enabled === true && token) {
-      return res.redirect(302, '/fm/chat-v2/c/' + encodeURIComponent(token));
-    }
+    /*
+      FOLLOWME_PUBLIC_QR_NO_AUTO_CHAT_20260529
+      Il QR pubblico NON deve aprire automaticamente la chat solo perché
+      chat_mode_enabled è true.
 
+      Flusso corretto:
+      - registra scansione;
+      - se Richieste informazioni è ON, apre /fm/info/CODICE con contenuto + Chiedi info;
+      - altrimenti apre active_url.
+      La chat parte solo dal pulsante Chiedi info.
+    */
     const activeUrl = String(row.active_url || '').trim();
 
     // FOLLOWME_FAST_FMU_SCAN_LOG_AND_PUSH_20260528
@@ -17282,45 +17288,13 @@ app.get('/fm/u/:public_id', async function(req, res, next) {
 });
 
 
-app.get('/fm/u/:public_id', async (req, res) => {
+app.get('/__disabled_duplicate_fm_u_no_auto_chat_20260529/:public_id', async (req, res) => {
 
-    /* followme-fmu-chat-v2-first-line-fix-20260527
-       Prima di qualunque logica storica:
-       se Chat V2 è attiva, il QR pubblico apre subito la chat V2 utente.
+    /*
+      FOLLOWME_DISABLE_DUPLICATE_FM_U_ROUTE_20260529
+      Questa seconda route /fm/u era duplicata e conteneva ancora il redirect
+      diretto alla Chat V2. La route pubblica valida resta quella precedente.
     */
-    try {
-      await ensureFollowMeChatV2Runtime();
-
-      const __code = String(
-        req.params.code ||
-        req.params.public_id ||
-        ''
-      )
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-Z0-9_-]/g, '');
-
-      if (__code) {
-        const __r = await pool.query(
-          `SELECT code, public_id, chat_mode_enabled, chat_public_token
-           FROM followme_projects
-           WHERE code = $1 OR public_id = $1
-           LIMIT 1`,
-          [__code]
-        );
-
-        if (
-          __r.rows.length &&
-          __r.rows[0].chat_mode_enabled === true &&
-          __r.rows[0].chat_public_token
-        ) {
-          return res.redirect(302, '/fm/chat-v2/c/' + encodeURIComponent(__r.rows[0].chat_public_token));
-        }
-      }
-    } catch(__e) {
-      console.error('followme /fm/u chat-v2 first-line redirect error:', __e);
-    }
-
 
   try {
     const publicId = normalizeFollowMePublicId(req.params.public_id);
