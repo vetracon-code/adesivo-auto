@@ -254,7 +254,13 @@
         "font-weight:650;" +
       "}" +
 
-      "@media(max-width:480px){" +
+            "/* FOLLOWME_QR_VERIFIED_PUBLIC_BUTTON_HIERARCHY_20260529 */" +
+      "@media(max-width:640px){" +
+        "body .premium-actions,body .actions,body .cta-row{padding-top:46px!important;gap:10px!important;display:flex!important;flex-direction:column!important;align-items:stretch!important;}" +
+        "body .premium-btn{min-height:48px!important;padding:13px 16px!important;font-size:14px!important;border-radius:17px!important;width:100%!important;}" +
+        "body .premium-btn[href],body a.premium-btn[target=_blank]{margin-top:8px!important;min-height:40px!important;padding:10px 14px!important;font-size:13px!important;border-radius:14px!important;background:rgba(255,255,255,.72)!important;color:#475569!important;border:1px solid rgba(15,23,42,.10)!important;box-shadow:none!important;}" +
+      "}" +
+"@media(max-width:480px){" +
         ".fm-qr-verified-card-20260529{border-radius:30px;padding:28px 20px 22px;}" +
         ".fm-qr-verified-title-20260529{font-size:25px;}" +
         ".fm-qr-verified-sub-20260529{font-size:14px;}" +
