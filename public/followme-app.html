@@ -41913,6 +41913,669 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="FOLLOWME_VOICE_SINGLE_OWNER_FINAL_20260529">
+(function(){
+  "use strict";
+
+  if(window.__followMeVoiceSingleOwnerFinal20260529) return;
+  window.__followMeVoiceSingleOwnerFinal20260529 = true;
+
+  const MAX_SECONDS = 30;
+
+  let recorder = null;
+  let streamRef = null;
+  let chunks = [];
+  let blob = null;
+  let blobUrl = "";
+  let startedAt = 0;
+  let durationSeconds = 0;
+  let tick = null;
+  let currentAudio = null;
+  let messages = [];
+  let publishing = false;
+
+  function $(id){ return document.getElementById(id); }
+
+  function getCode(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim();
+      const p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim();
+    }catch(e){ return ""; }
+  }
+
+  function toast(msg){
+    try{
+      if(typeof window.toast === "function") return window.toast(msg);
+      if(typeof window.showToast === "function") return window.showToast(msg);
+    }catch(e){}
+    alert(msg);
+  }
+
+  async function api(url, options){
+    const res = await fetch(url, Object.assign({ cache:"no-store" }, options || {}));
+    const data = await res.json().catch(() => null);
+    if(!res.ok || !data || data.success === false){
+      throw new Error((data && (data.error || data.detail)) || ("HTTP " + res.status));
+    }
+    return data;
+  }
+
+  function absoluteUrl(url){
+    try{ return new URL(String(url || ""), location.origin).toString(); }
+    catch(e){ return String(url || ""); }
+  }
+
+  function activeUrl(){
+    try{
+      return String(
+        window.__followMeActiveUrl ||
+        window.followMeCurrentActiveUrl ||
+        window.currentFollowMeActiveUrl ||
+        document.getElementById("activeUrl")?.textContent ||
+        ""
+      ).trim();
+    }catch(e){ return ""; }
+  }
+
+  function sourceLabel(){
+    try{
+      const u = activeUrl();
+      if(u) return new URL(u, location.origin).hostname.replace(/^www\./, "");
+    }catch(e){}
+    return "messaggio-vocale";
+  }
+
+  function setStatus(msg){
+    const el = $("voiceStatusClean20260528") || document.querySelector("[id*='voiceStatus']");
+    if(el) el.textContent = msg;
+  }
+
+  function setDiag(msg){
+    const el = $("voiceDiagClean20260528");
+    if(el) el.textContent = String(msg || "");
+  }
+
+  function setMeter(pct){
+    const el = $("voiceMeterClean20260528") || document.querySelector("[id*='voiceMeter']");
+    if(el) el.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  }
+
+  function btn(id){
+    return $(id);
+  }
+
+  function recordBtn(){ return btn("voiceRecordClean20260528"); }
+  function stopBtn(){ return btn("voiceStopClean20260528"); }
+  function playBtn(){ return btn("voicePlayClean20260528"); }
+  function publishBtn(){ return btn("voicePublishClean20260528"); }
+  function savedPlayBtn(){ return btn("voicePlaySavedClean20260528"); }
+  function useBtn(){ return btn("voiceUseClean20260528"); }
+  function deleteBtn(){ return btn("voiceDeleteClean20260528"); }
+  function disableBtn(){ return btn("voiceDisableClean20260528"); }
+  function selectEl(){ return btn("voiceSelectClean20260528"); }
+
+  function selectedMessage(){
+    const sel = selectEl();
+    const id = sel ? String(sel.value || "") : "";
+    return messages.find(m => String(m.id) === id) || null;
+  }
+
+  function hardMarkButton(b){
+    if(!b) return;
+    b.dataset.rawVoiceLikeChatAdmin20260528 = "1";
+    b.dataset.voiceRecorderFromChatV2Final20260528 = "1";
+    b.dataset.followMeVoiceSingleOwnerFinal20260529 = "1";
+    b.dataset.bound = "1";
+  }
+
+  function replaceButton(id){
+    const old = $(id);
+    if(!old || old.dataset.followMeVoiceSingleOwnerCloned20260529 === "1") return old;
+
+    const clone = old.cloneNode(true);
+    clone.dataset.followMeVoiceSingleOwnerCloned20260529 = "1";
+    hardMarkButton(clone);
+    old.parentNode.replaceChild(clone, old);
+    return clone;
+  }
+
+  function setButtons(mode){
+    const r = recordBtn();
+    const st = stopBtn();
+    const pl = playBtn();
+    const pub = publishBtn();
+
+    if(mode === "recording"){
+      if(r){ r.disabled = true; r.textContent = "Registra"; }
+      if(st){ st.disabled = false; st.textContent = "Ferma"; }
+      if(pl) pl.disabled = true;
+      if(pub) pub.disabled = true;
+      return;
+    }
+
+    if(mode === "ready"){
+      if(r){ r.disabled = false; r.textContent = "Rifai"; }
+      if(st) st.disabled = true;
+      if(pl) pl.disabled = !blob;
+      if(pub) pub.disabled = !blob;
+      return;
+    }
+
+    if(mode === "saving"){
+      if(r) r.disabled = true;
+      if(st) st.disabled = true;
+      if(pl) pl.disabled = true;
+      if(pub){ pub.disabled = true; pub.textContent = "Pubblico..."; }
+      return;
+    }
+
+    if(r){ r.disabled = false; r.textContent = "Registra"; }
+    if(st) st.disabled = true;
+    if(pl) pl.disabled = !blob;
+    if(pub){ pub.disabled = !blob; pub.textContent = "Pubblica"; }
+  }
+
+  function stopTracks(){
+    try{
+      if(streamRef) streamRef.getTracks().forEach(t => t.stop());
+    }catch(e){}
+    streamRef = null;
+  }
+
+  function chooseMime(){
+    if(!window.MediaRecorder || !MediaRecorder.isTypeSupported) return "";
+
+    const list = [
+      "audio/mp4",
+      "audio/aac",
+      "audio/webm;codecs=opus",
+      "audio/webm"
+    ];
+
+    for(const t of list){
+      try{ if(MediaRecorder.isTypeSupported(t)) return t; }catch(e){}
+    }
+
+    return "";
+  }
+
+  function refreshSelect(){
+    const sel = selectEl();
+    if(!sel) return;
+
+    sel.innerHTML = "";
+
+    if(!messages.length){
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "Nessun messaggio salvato";
+      sel.appendChild(opt);
+      return;
+    }
+
+    messages.forEach(m => {
+      const opt = document.createElement("option");
+      opt.value = m.id;
+      opt.textContent =
+        (m.is_active ? "✓ " : "") +
+        (m.source_label || "messaggio") +
+        " · " +
+        Math.round(Number(m.duration_seconds || 0)) +
+        "s";
+      sel.appendChild(opt);
+    });
+  }
+
+  async function loadVoiceStatus(){
+    const code = getCode();
+    if(!code) return null;
+
+    const data = await api("/api/followme/" + encodeURIComponent(code) + "/voice-messages/status?v=" + Date.now());
+    messages = Array.isArray(data.messages) ? data.messages : [];
+    refreshSelect();
+
+    const main =
+      $("followmeVoiceAdminBtnClean20260528") ||
+      $("followmeVoiceAdminBtn20260528") ||
+      $("followmeVoiceAdminBtnBridge20260528");
+
+    if(main){
+      main.classList.remove("is-on","is-off");
+      main.classList.add(data.has_active_voice ? "is-on" : "is-off");
+      main.textContent = data.has_active_voice ? "Registra messaggio ON" : "Registra messaggio OFF";
+    }
+
+    return data;
+  }
+
+  function playUrl(url){
+    if(!url) return toast("Audio non disponibile.");
+
+    try{
+      if(currentAudio){
+        try{ currentAudio.pause(); }catch(e){}
+        currentAudio = null;
+      }
+
+      currentAudio = new Audio(absoluteUrl(url) + (String(url).includes("?") ? "&" : "?") + "v=" + Date.now());
+      currentAudio.preload = "auto";
+      currentAudio.play().catch(err => {
+        toast("Non riesco a riprodurre l’audio: " + (err && err.message ? err.message : err));
+      });
+    }catch(e){
+      toast("Non riesco a riprodurre l’audio.");
+    }
+  }
+
+  async function playSaved(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+    }
+
+    let m = selectedMessage();
+
+    if(!m){
+      try{
+        const st = await loadVoiceStatus();
+        m = st && st.active_voice ? st.active_voice : null;
+      }catch(e){}
+    }
+
+    if(!m || !m.file_url){
+      toast("Seleziona un messaggio salvato.");
+      return false;
+    }
+
+    playUrl(m.file_url);
+    return false;
+  }
+
+  async function startRecording(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+    }
+
+    try{
+      if(recorder && recorder.state === "recording") return false;
+
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        throw new Error("Microfono non supportato.");
+      }
+
+      if(!window.MediaRecorder){
+        throw new Error("Registrazione non supportata da questo browser.");
+      }
+
+      if(currentAudio){
+        try{ currentAudio.pause(); }catch(e){}
+        currentAudio = null;
+      }
+
+      chunks = [];
+      blob = null;
+      durationSeconds = 0;
+
+      if(blobUrl){
+        try{ URL.revokeObjectURL(blobUrl); }catch(e){}
+        blobUrl = "";
+      }
+
+      setButtons("recording");
+      setMeter(0);
+      setStatus("Richiesta autorizzazione microfono...");
+      setDiag("Durata massima reale: " + MAX_SECONDS + " secondi.");
+
+      streamRef = await navigator.mediaDevices.getUserMedia({ audio:true });
+
+      const mime = chooseMime();
+      const options = mime ? { mimeType:mime, audioBitsPerSecond:64000 } : { audioBitsPerSecond:64000 };
+
+      recorder = new MediaRecorder(streamRef, options);
+
+      recorder.ondataavailable = function(e){
+        if(e.data && e.data.size) chunks.push(e.data);
+      };
+
+      recorder.onerror = function(e){
+        console.error("[voice final] recorder error", e);
+        setStatus("Errore durante la registrazione.");
+      };
+
+      recorder.onstop = async function(){
+        if(tick) clearInterval(tick);
+        tick = null;
+
+        /*
+          Piccola attesa: evita file tronchi sull'ultimo chunk, specialmente Safari/iPhone.
+        */
+        await new Promise(resolve => setTimeout(resolve, 350));
+
+        stopTracks();
+
+        const realMime = recorder && recorder.mimeType ? recorder.mimeType : (mime || "audio/webm");
+        blob = new Blob(chunks, { type:realMime });
+
+        durationSeconds = Math.max(1, Math.min(MAX_SECONDS, Math.round((Date.now() - startedAt) / 1000)));
+
+        if(!blob.size){
+          blob = null;
+          setButtons("idle");
+          setStatus("Registrazione non valida: file vuoto.");
+          return;
+        }
+
+        blobUrl = URL.createObjectURL(blob);
+
+        setMeter(100);
+        setButtons("ready");
+        setStatus("Registrazione pronta. Puoi riascoltarla o pubblicarla.");
+        setDiag("Formato: " + realMime + " · Durata stimata: " + durationSeconds + "s · Peso: " + Math.round(blob.size / 1024) + " KB");
+      };
+
+      recorder.start(250);
+      startedAt = Date.now();
+
+      setStatus("Registrazione in corso... 0/" + MAX_SECONDS + "s");
+
+      tick = setInterval(function(){
+        if(!recorder || recorder.state !== "recording"){
+          clearInterval(tick);
+          tick = null;
+          return;
+        }
+
+        const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+        const shown = Math.min(MAX_SECONDS, elapsed);
+
+        setMeter((shown / MAX_SECONDS) * 100);
+        setStatus("Registrazione in corso... " + shown + "/" + MAX_SECONDS + "s");
+
+        if(elapsed >= MAX_SECONDS){
+          clearInterval(tick);
+          tick = null;
+
+          /*
+            Fermiamo a MAX_SECONDS + un piccolo margine tecnico.
+          */
+          setTimeout(function(){
+            try{
+              if(recorder && recorder.state === "recording") recorder.stop();
+            }catch(e){}
+          }, 250);
+        }
+      }, 200);
+
+    }catch(err){
+      stopTracks();
+      if(tick) clearInterval(tick);
+      tick = null;
+      setButtons("idle");
+      setStatus(err.message || "Errore registrazione.");
+      toast(err.message || "Errore registrazione.");
+    }
+
+    return false;
+  }
+
+  function stopRecording(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+    }
+
+    try{
+      if(tick) clearInterval(tick);
+      tick = null;
+
+      if(recorder && recorder.state === "recording"){
+        recorder.stop();
+      }else{
+        setButtons(blob ? "ready" : "idle");
+      }
+    }catch(e){
+      setStatus("Errore chiusura registrazione.");
+    }
+
+    return false;
+  }
+
+  function playRecorded(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+    }
+
+    if(!blobUrl) return toast("Registra prima un messaggio.");
+    playUrl(blobUrl);
+    return false;
+  }
+
+  async function publishRecorded(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+    }
+
+    if(publishing) return false;
+    if(!blob || !blob.size) return toast("Registra prima un messaggio.");
+
+    publishing = true;
+    setButtons("saving");
+    setStatus("Pubblicazione audio...");
+
+    try{
+      const code = getCode();
+      if(!code) throw new Error("Codice FollowMe non trovato.");
+
+      let mime = blob.type || "audio/webm";
+      if(mime === "video/mp4" || mime === "application/mp4") mime = "audio/mp4";
+      if(mime === "audio/x-m4a" || mime === "audio/m4a") mime = "audio/mp4";
+
+      const sel = selectEl();
+      const replaceId = sel && sel.value ? String(sel.value) : "";
+
+      const qs = new URLSearchParams();
+      qs.set("duration_seconds", String(durationSeconds || 1));
+      qs.set("source_label", sourceLabel());
+
+      const src = activeUrl();
+      if(src) qs.set("source_url", src);
+      if(replaceId) qs.set("replace_id", replaceId);
+
+      const res = await fetch(
+        "/api/followme/" + encodeURIComponent(code) + "/voice-messages/upload-raw?" + qs.toString() + "&v=" + Date.now(),
+        {
+          method:"POST",
+          headers:{
+            "Content-Type": mime,
+            "X-FollowMe-Kind":"voice",
+            "X-FollowMe-Filename":"messaggio-vocale" + (mime.includes("mp4") ? ".m4a" : ".webm"),
+            "X-FollowMe-Duration":String(durationSeconds || 1),
+            "X-FollowMe-Source-Label":sourceLabel()
+          },
+          body:blob
+        }
+      );
+
+      const data = await res.json().catch(() => null);
+
+      if(!res.ok || !data || data.success === false){
+        throw new Error((data && (data.error || data.detail)) || "Audio non salvato.");
+      }
+
+      setStatus("Messaggio vocale pubblicato e attivo.");
+      toast("Messaggio vocale pubblicato.");
+
+      blob = null;
+      if(blobUrl){
+        try{ URL.revokeObjectURL(blobUrl); }catch(e){}
+        blobUrl = "";
+      }
+
+      setMeter(0);
+      setButtons("idle");
+
+      await loadVoiceStatus();
+
+    }catch(err){
+      setButtons("ready");
+      setStatus(err.message || "Errore pubblicazione.");
+      toast(err.message || "Errore pubblicazione.");
+    }finally{
+      publishing = false;
+    }
+
+    return false;
+  }
+
+  async function useSelected(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+    }
+
+    const m = selectedMessage();
+    if(!m) return toast("Seleziona un messaggio.");
+
+    try{
+      const code = getCode();
+      await api("/api/followme/" + encodeURIComponent(code) + "/voice-messages/" + encodeURIComponent(m.id) + "/select?v=" + Date.now(), {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({})
+      });
+      toast("Messaggio selezionato.");
+      await loadVoiceStatus();
+    }catch(e){
+      toast(e.message || "Errore selezione messaggio.");
+    }
+
+    return false;
+  }
+
+  async function deleteSelected(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+    }
+
+    const m = selectedMessage();
+    if(!m) return toast("Seleziona un messaggio.");
+    if(!confirm("Vuoi cancellare questo messaggio vocale?")) return false;
+
+    try{
+      const code = getCode();
+      await api("/api/followme/" + encodeURIComponent(code) + "/voice-messages/" + encodeURIComponent(m.id) + "/delete?v=" + Date.now(), {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({})
+      });
+      toast("Messaggio cancellato.");
+      await loadVoiceStatus();
+    }catch(e){
+      toast(e.message || "Errore cancellazione.");
+    }
+
+    return false;
+  }
+
+  async function disableVoice(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+    }
+
+    if(!confirm("Vuoi spegnere il messaggio pubblico senza cancellare le registrazioni salvate?")) return false;
+
+    try{
+      const code = getCode();
+      await api("/api/followme/" + encodeURIComponent(code) + "/voice-messages/disable?v=" + Date.now(), {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({})
+      });
+      toast("Messaggio pubblico spento.");
+      await loadVoiceStatus();
+    }catch(e){
+      toast(e.message || "Errore spegnimento.");
+    }
+
+    return false;
+  }
+
+  function bindOwnedButton(id, fn){
+    let b = replaceButton(id);
+    if(!b) return;
+
+    hardMarkButton(b);
+    b.addEventListener("click", fn, true);
+    b.addEventListener("touchend", fn, true);
+  }
+
+  function bindAll(){
+    /*
+      Clono i pulsanti: elimina tutti i vecchi listener e ferma lo sfarfallio.
+    */
+    bindOwnedButton("voiceRecordClean20260528", startRecording);
+    bindOwnedButton("voiceStopClean20260528", stopRecording);
+    bindOwnedButton("voicePlayClean20260528", playRecorded);
+    bindOwnedButton("voicePublishClean20260528", publishRecorded);
+    bindOwnedButton("voicePlaySavedClean20260528", playSaved);
+    bindOwnedButton("voiceUseClean20260528", useSelected);
+    bindOwnedButton("voiceDeleteClean20260528", deleteSelected);
+    bindOwnedButton("voiceDisableClean20260528", disableVoice);
+
+    const sub = document.querySelector(".followme-voice-sub-20260528");
+    if(sub){
+      sub.textContent = "Messaggio vocale massimo " + MAX_SECONDS + " secondi, collegato alla destinazione ora in trasmissione.";
+    }
+
+    const info = document.querySelector("#voiceSheetClean20260528 .followme-voice-small-20260528[style*='margin-bottom']");
+    if(info && info.textContent && info.textContent.includes("Durata massima")){
+      info.textContent = "Carica un file già pronto. Durata massima " + MAX_SECONDS + " secondi. Peso consigliato 5 MB, limite tecnico 8 MB. Formati accettati: MP3, M4A, MP4, WAV, WEBM, OGG.";
+    }
+
+    setButtons(blob ? "ready" : "idle");
+  }
+
+  function boot(){
+    bindAll();
+
+    setTimeout(bindAll, 300);
+    setTimeout(bindAll, 900);
+    setTimeout(bindAll, 1800);
+
+    try{
+      const mo = new MutationObserver(function(){
+        clearTimeout(window.__followMeVoiceSingleOwnerFinalTimer20260529);
+        window.__followMeVoiceSingleOwnerFinalTimer20260529 = setTimeout(bindAll, 80);
+      });
+      mo.observe(document.documentElement || document.body, { childList:true, subtree:true });
+    }catch(e){}
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+})();
+</script>
+
 </body>
 </html>
 
