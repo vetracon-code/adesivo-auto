@@ -37059,11 +37059,16 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       styleBtn(btn, st.info_requests_enabled === true);
     }catch(e){}
 
-    btn.addEventListener("click", async function(){
+    btn.addEventListener("click", async function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+
       var currentlyOn = btn.classList.contains("is-on");
       var next = !currentlyOn;
 
-      btn.disabled = true;
+      // Effetto immediato
+      styleBtn(btn, next);
+
       try{
         var data = await jsonFetch("/api/followme/" + encodeURIComponent(code) + "/info-requests/toggle?v=" + Date.now(), {
           method:"POST",
@@ -37072,12 +37077,14 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
         });
 
         styleBtn(btn, data.info_requests_enabled === true);
-        toast(data.info_requests_enabled ? "Richieste informazioni attive." : "Richieste informazioni disattivate.");
+        toast(data.info_requests_enabled ? "Richieste informazioni ON." : "Richieste informazioni OFF.");
       }catch(err){
+        // Se fallisce, torna allo stato precedente
+        styleBtn(btn, currentlyOn);
         toast("Errore richieste informazioni: " + (err.message || err));
-      }finally{
-        btn.disabled = false;
       }
+
+      return false;
     });
   }
 
