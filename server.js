@@ -15220,9 +15220,34 @@ app.post('/api/followme/:code/info-requests/toggle', express.json(), async funct
 
 
 
+
 // FOLLOWME_ACTIVITY_COUNTERS_20260529
 async function ensureFollowMeActivityCounters20260529() {
   await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS activity_reset_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS activity_reset_total_scans INTEGER DEFAULT 0`);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS activity_reset_chat_requests INTEGER DEFAULT 0`);
+}
+
+async function getFollowMeActivitySnapshot20260529(projectId) {
+  const scans = await pool.query(
+    `SELECT COUNT(*)::int AS n
+     FROM followme_scan_logs
+     WHERE project_id = $1`,
+    [projectId]
+  );
+
+  const chats = await pool.query(
+    `SELECT COUNT(*)::int AS n
+     FROM followme_chat_sessions
+     WHERE project_id = $1
+       AND source_type = 'info_request'`,
+    [projectId]
+  );
+
+  return {
+    total_scans:Number(scans.rows[0]?.n || 0),
+    total_chat_requests:Number(chats.rows[0]?.n || 0)
+  };
 }
 
 app.get('/api/followme/:code/activity-counters', async function(req, res) {
@@ -15232,7 +15257,9 @@ app.get('/api/followme/:code/activity-counters', async function(req, res) {
     const code = String(req.params.code || '').trim();
 
     const q = await pool.query(
-      `SELECT id, code, public_id, activity_reset_at
+      `SELECT id, code, public_id, activity_reset_at,
+              COALESCE(activity_reset_total_scans,0)::int AS activity_reset_total_scans,
+              COALESCE(activity_reset_chat_requests,0)::int AS activity_reset_chat_requests
        FROM followme_projects
        WHERE code = $1 OR public_id = $1
        LIMIT 1`,
@@ -15244,30 +15271,16 @@ app.get('/api/followme/:code/activity-counters', async function(req, res) {
     }
 
     const project = q.rows[0];
-
-    const scans = await pool.query(
-      `SELECT COUNT(*)::int AS n
-       FROM followme_scan_logs
-       WHERE project_id = $1
-         AND created_at > COALESCE($2::timestamptz, '1970-01-01'::timestamptz)`,
-      [project.id, project.activity_reset_at]
-    );
-
-    const chats = await pool.query(
-      `SELECT COUNT(*)::int AS n
-       FROM followme_chat_sessions
-       WHERE project_id = $1
-         AND source_type = 'info_request'
-         AND created_at > COALESCE($2::timestamptz, '1970-01-01'::timestamptz)`,
-      [project.id, project.activity_reset_at]
-    );
+    const snap = await getFollowMeActivitySnapshot20260529(project.id);
 
     return res.json({
       success:true,
       activity_reset_at:project.activity_reset_at || null,
       counters:{
-        new_views:Number(scans.rows[0]?.n || 0),
-        new_chat_requests:Number(chats.rows[0]?.n || 0)
+        new_views:Math.max(0, snap.total_scans - Number(project.activity_reset_total_scans || 0)),
+        new_chat_requests:Math.max(0, snap.total_chat_requests - Number(project.activity_reset_chat_requests || 0)),
+        total_scans:snap.total_scans,
+        total_chat_requests:snap.total_chat_requests
       }
     });
   } catch (err) {
@@ -15282,25 +15295,37 @@ app.post('/api/followme/:code/activity-counters/reset', express.json({ limit:'16
 
     const code = String(req.params.code || '').trim();
 
-    const q = await pool.query(
-      `UPDATE followme_projects
-       SET activity_reset_at = NOW(),
-           updated_at = NOW()
+    const q0 = await pool.query(
+      `SELECT id, code, public_id
+       FROM followme_projects
        WHERE code = $1 OR public_id = $1
-       RETURNING id, code, public_id, activity_reset_at`,
+       LIMIT 1`,
       [code]
     );
 
-    if (!q.rows.length) {
+    if (!q0.rows.length) {
       return res.status(404).json({ success:false, error:'FollowMe QR non trovato.' });
     }
 
+    const snap = await getFollowMeActivitySnapshot20260529(q0.rows[0].id);
+
+    await pool.query(
+      `UPDATE followme_projects
+       SET activity_reset_at = NOW(),
+           activity_reset_total_scans = $2,
+           activity_reset_chat_requests = $3,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [q0.rows[0].id, snap.total_scans, snap.total_chat_requests]
+    );
+
     return res.json({
       success:true,
-      activity_reset_at:q.rows[0].activity_reset_at,
       counters:{
         new_views:0,
-        new_chat_requests:0
+        new_chat_requests:0,
+        total_scans:snap.total_scans,
+        total_chat_requests:snap.total_chat_requests
       }
     });
   } catch (err) {
