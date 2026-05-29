@@ -292,6 +292,7 @@
 
     document.body.appendChild(overlay);
 
+    setTimeout(fixPublicFrameNotBlank20260529, 1800);
     setTimeout(function(){
       overlay.classList.add("hide");
       showBadge();
@@ -944,14 +945,97 @@
     }, 1900);
   }
 
+
+
+  // FOLLOWME_FIX_PUBLIC_FRAME_NOT_BLANK_20260529
+  function fixPublicFrameNotBlank20260529(){
+    if(document.getElementById("followmeFixPublicFrameNotBlankCss20260529")) return;
+
+    var style = document.createElement("style");
+    style.id = "followmeFixPublicFrameNotBlankCss20260529";
+    style.textContent = `
+      /*
+        FIX URGENTE:
+        La pagina pubblica URL/documento/immagine non deve mai diventare bianca.
+        Il contenuto sotto i pulsanti deve restare visibile.
+      */
+      body:not(.followme-real-chat-mode-20260529) iframe,
+      body:not(.followme-real-chat-mode-20260529) .preview,
+      body:not(.followme-real-chat-mode-20260529) .premium-frame,
+      body:not(.followme-real-chat-mode-20260529) .frame,
+      body:not(.followme-real-chat-mode-20260529) .web-frame,
+      body:not(.followme-real-chat-mode-20260529) .content-frame{
+        display:block !important;
+        visibility:visible !important;
+        opacity:1 !important;
+      }
+
+      body:not(.followme-real-chat-mode-20260529) iframe{
+        width:100% !important;
+        min-height:58vh !important;
+        background:#fff !important;
+      }
+
+      /*
+        Disattivo gli effetti della precedente classe chat-direct
+        quando non siamo in vera modalità chat.
+      */
+      body.followme-chat-direct-flow-20260529:not(.followme-real-chat-mode-20260529) .premium-actions,
+      body.followme-chat-direct-flow-20260529:not(.followme-real-chat-mode-20260529) .actions,
+      body.followme-chat-direct-flow-20260529:not(.followme-real-chat-mode-20260529) .cta-row,
+      body.followme-chat-direct-flow-20260529:not(.followme-real-chat-mode-20260529) iframe,
+      body.followme-chat-direct-flow-20260529:not(.followme-real-chat-mode-20260529) .preview,
+      body.followme-chat-direct-flow-20260529:not(.followme-real-chat-mode-20260529) .premium-frame{
+        display:block !important;
+        visibility:visible !important;
+        opacity:1 !important;
+      }
+
+      /*
+        Se il contenuto esterno blocca iframe, almeno il fallback "Apri in nuova pagina"
+        deve restare visibile in basso.
+      */
+      body a.premium-btn[target="_blank"],
+      body a.premium-btn[href^="http"]{
+        display:flex !important;
+        visibility:visible !important;
+        opacity:1 !important;
+      }
+    `;
+
+    document.head.appendChild(style);
+
+    /*
+      Se la classe chat-direct è stata applicata per errore, la rimuoviamo
+      quando FOLLOWME_INFO_DATA non dichiara davvero chat attiva.
+    */
+    try{
+      var data = window.FOLLOWME_INFO_DATA || {};
+      var realChat = data.chat_mode_enabled === true && typeof data.chat_url === "string" && data.chat_url.length > 0;
+
+      if(realChat){
+        document.body.classList.add("followme-real-chat-mode-20260529");
+      }else{
+        document.body.classList.remove("followme-chat-direct-flow-20260529");
+        document.body.classList.remove("followme-real-chat-mode-20260529");
+      }
+    }catch(e){
+      document.body.classList.remove("followme-chat-direct-flow-20260529");
+      document.body.classList.remove("followme-real-chat-mode-20260529");
+    }
+  }
+
   function boot(){
     injectStyle();
     injectPremiumPublicActionsUx();
     injectQrVerifiedOutsideButtonsFinal();
     prepareChatDirectFlow20260529();
+    fixPublicFrameNotBlank20260529();
     makeOverlay();
 
+    setTimeout(fixPublicFrameNotBlank20260529, 250);
     setTimeout(forceQrVerifiedOutsideButtonsFinal, 400);
+    setTimeout(fixPublicFrameNotBlank20260529, 900);
     setTimeout(forceQrVerifiedOutsideButtonsFinal, 1200);
     setTimeout(function(){
       forceQrVerifiedOutsideButtonsFinal();
