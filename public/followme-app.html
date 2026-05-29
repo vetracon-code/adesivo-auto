@@ -40077,6 +40077,400 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="FOLLOWME_ADMIN_SCANNER_CONFIRM_ACTIVATE_DIRECT_20260529">
+(function(){
+  "use strict";
+
+  if(window.__followMeAdminScannerConfirmActivateDirect20260529) return;
+  window.__followMeAdminScannerConfirmActivateDirect20260529 = true;
+
+  function log(){
+    try { console.log.apply(console, ["[FM scanner activate]"].concat([].slice.call(arguments))); } catch(e){}
+  }
+
+  function toast(msg){
+    try{
+      if(typeof window.toast === "function") return window.toast(msg);
+      if(typeof window.showToast === "function") return window.showToast(msg);
+    }catch(e){}
+
+    try{
+      var t = document.createElement("div");
+      t.textContent = msg;
+      t.style.cssText = "position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:999999;background:rgba(15,23,42,.94);color:#fff;padding:11px 14px;border-radius:999px;font:800 13px -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial;box-shadow:0 14px 40px rgba(0,0,0,.22);max-width:88vw;text-align:center;";
+      document.body.appendChild(t);
+      setTimeout(function(){ try{ t.remove(); }catch(e){} }, 2200);
+    }catch(e){}
+  }
+
+  function getCode(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m && m[1]) return decodeURIComponent(m[1]).trim();
+    }catch(e){}
+
+    try{
+      if(window.FOLLOWME_PROJECT && window.FOLLOWME_PROJECT.code) return String(window.FOLLOWME_PROJECT.code).trim();
+      if(window.followMeProject && window.followMeProject.code) return String(window.followMeProject.code).trim();
+      if(window.projectCode) return String(window.projectCode).trim();
+    }catch(e){}
+
+    return "FM-DEMO";
+  }
+
+  function normalizeUrl(raw){
+    var u = String(raw || "").trim();
+    if(!u) return "";
+    if(/^mailto:/i.test(u) || /^tel:/i.test(u) || /^sms:/i.test(u) || /^whatsapp:/i.test(u)) return u;
+    if(!/^https?:\/\//i.test(u)) u = "https://" + u;
+    return u;
+  }
+
+  function looksLikeUrl(v){
+    var s = String(v || "").trim();
+    if(!s) return false;
+    if(/^https?:\/\//i.test(s)) return true;
+    if(/^www\./i.test(s)) return true;
+    if(/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(s)) return true;
+    return false;
+  }
+
+  function findUrlInputs(){
+    var selectors = [
+      "#activeUrl",
+      "#followmeActiveUrl",
+      "#qrUrlInput",
+      "#urlInput",
+      "#targetUrl",
+      "input[name='active_url']",
+      "input[name='url']",
+      "input[type='url']"
+    ];
+
+    var out = [];
+    selectors.forEach(function(sel){
+      document.querySelectorAll(sel).forEach(function(el){
+        if(out.indexOf(el) < 0) out.push(el);
+      });
+    });
+
+    document.querySelectorAll("input,textarea").forEach(function(el){
+      var id = String(el.id || "").toLowerCase();
+      var name = String(el.name || "").toLowerCase();
+      var ph = String(el.placeholder || "").toLowerCase();
+      var val = String(el.value || "").trim();
+
+      if(
+        id.includes("url") ||
+        id.includes("link") ||
+        name.includes("url") ||
+        name.includes("link") ||
+        ph.includes("url") ||
+        ph.includes("link") ||
+        ph.includes("indirizzo") ||
+        looksLikeUrl(val)
+      ){
+        if(out.indexOf(el) < 0) out.push(el);
+      }
+    });
+
+    return out;
+  }
+
+  function getScannedUrl(){
+    /*
+      Prima provo variabili comuni create dallo scanner.
+    */
+    var candidates = [];
+
+    try{
+      [
+        "followmeLastScannedUrl",
+        "followMeLastScannedUrl",
+        "lastScannedUrl",
+        "scannerLastUrl",
+        "qrScannerLastUrl",
+        "__followmeLastScannedUrl20260529"
+      ].forEach(function(k){
+        if(window[k]) candidates.push(window[k]);
+      });
+    }catch(e){}
+
+    /*
+      Poi provo campi già compilati dallo scanner.
+    */
+    findUrlInputs().forEach(function(el){
+      if(el && el.value) candidates.push(el.value);
+    });
+
+    /*
+      Poi scandisco elementi testuali del popup scanner.
+    */
+    document.querySelectorAll("input,textarea,[data-url],[data-scanned-url],.scanner-url,.scan-url,.qr-url,.result-url").forEach(function(el){
+      try{
+        if(el.dataset && el.dataset.url) candidates.push(el.dataset.url);
+        if(el.dataset && el.dataset.scannedUrl) candidates.push(el.dataset.scannedUrl);
+        if(el.value) candidates.push(el.value);
+        if(el.textContent) candidates.push(el.textContent);
+      }catch(e){}
+    });
+
+    for(var i=0;i<candidates.length;i++){
+      var raw = String(candidates[i] || "").trim();
+      var m = raw.match(/https?:\/\/[^\s"'<>]+/i);
+      if(m && m[0]) return normalizeUrl(m[0]);
+
+      if(looksLikeUrl(raw)) return normalizeUrl(raw);
+    }
+
+    return "";
+  }
+
+  function setUrlEverywhere(url){
+    findUrlInputs().forEach(function(el){
+      try{
+        el.value = url;
+        el.dispatchEvent(new Event("input", { bubbles:true }));
+        el.dispatchEvent(new Event("change", { bubbles:true }));
+      }catch(e){}
+    });
+
+    try{ window.__followmeLastScannedUrl20260529 = url; }catch(e){}
+  }
+
+  async function postJson(url, body){
+    var res = await fetch(url, {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "Accept":"application/json"
+      },
+      body:JSON.stringify(body || {})
+    });
+
+    var data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || data.success === false){
+      throw new Error((data && (data.error || data.detail)) || ("HTTP " + res.status));
+    }
+
+    return data;
+  }
+
+  async function updateActiveUrlDirect(url){
+    var code = getCode();
+
+    /*
+      Provo prima gli endpoint più probabili già presenti nel progetto.
+      Lascio fallback multipli per non dipendere dal nome esatto della funzione UI.
+    */
+    var endpoints = [
+      "/api/followme/" + encodeURIComponent(code) + "/active-url",
+      "/api/followme/" + encodeURIComponent(code) + "/url",
+      "/api/followme/" + encodeURIComponent(code) + "/update-url",
+      "/api/followme/" + encodeURIComponent(code) + "/settings",
+      "/api/followme/project/" + encodeURIComponent(code) + "/url"
+    ];
+
+    var bodies = [
+      { active_url:url, url:url },
+      { url:url },
+      { active_url:url }
+    ];
+
+    var lastErr = null;
+
+    for(var i=0;i<endpoints.length;i++){
+      for(var j=0;j<bodies.length;j++){
+        try{
+          log("provo endpoint", endpoints[i], bodies[j]);
+          return await postJson(endpoints[i] + "?v=" + Date.now(), bodies[j]);
+        }catch(e){
+          lastErr = e;
+        }
+      }
+    }
+
+    /*
+      Se esiste una funzione nativa già caricata dalla pagina, provo quella.
+    */
+    var fnNames = [
+      "followMeUpdateQr",
+      "updateFollowMeQr",
+      "saveFollowMeUrl",
+      "updateActiveUrl",
+      "saveActiveUrl",
+      "followmeSaveActiveUrl",
+      "refreshFollowMeUrl"
+    ];
+
+    for(var k=0;k<fnNames.length;k++){
+      try{
+        if(typeof window[fnNames[k]] === "function"){
+          var r = await window[fnNames[k]](url);
+          return r || { success:true };
+        }
+      }catch(e){
+        lastErr = e;
+      }
+    }
+
+    throw lastErr || new Error("Endpoint aggiornamento QR non trovato.");
+  }
+
+  function forcePreview(url){
+    /*
+      Porta la UI nella zona preview e forza eventuali iframe/input già presenti.
+    */
+    try{
+      var preview =
+        document.querySelector("#previewFrame") ||
+        document.querySelector("#followmePreviewFrame") ||
+        document.querySelector("iframe") ||
+        document.querySelector(".preview") ||
+        document.querySelector(".premium-frame") ||
+        document.querySelector(".web-frame");
+
+      if(preview){
+        if(preview.tagName && preview.tagName.toLowerCase() === "iframe"){
+          preview.src = url;
+        }
+        preview.scrollIntoView({ behavior:"smooth", block:"center" });
+      }
+    }catch(e){}
+
+    /*
+      Richiamo eventuali refresh ufficiali senza rompere se non esistono.
+    */
+    [
+      "refreshPreview",
+      "updatePreview",
+      "renderPreview",
+      "reloadPreview",
+      "refreshTabs",
+      "loadProject",
+      "loadFollowMeProject",
+      "refreshFollowMeData"
+    ].forEach(function(fn){
+      try{
+        if(typeof window[fn] === "function") window[fn]();
+      }catch(e){}
+    });
+  }
+
+  function closeScannerUi(){
+    /*
+      Chiude overlay/modal scanner senza sapere il nome esatto.
+    */
+    var closeCandidates = [];
+
+    document.querySelectorAll("button,[role='button']").forEach(function(btn){
+      var t = String(btn.textContent || btn.ariaLabel || btn.title || "").trim().toLowerCase();
+      if(
+        t === "×" ||
+        t === "x" ||
+        t.includes("chiudi") ||
+        t.includes("annulla") ||
+        t.includes("close")
+      ){
+        closeCandidates.push(btn);
+      }
+    });
+
+    closeCandidates.slice(0,3).forEach(function(btn){
+      try{ btn.click(); }catch(e){}
+    });
+
+    document.querySelectorAll(".scanner,.qr-scanner,.scan-modal,.modal,.overlay,[data-scanner]").forEach(function(el){
+      try{
+        if(el.textContent && el.textContent.toLowerCase().includes("conferma e attiva")){
+          el.style.display = "none";
+          el.setAttribute("aria-hidden", "true");
+        }
+      }catch(e){}
+    });
+  }
+
+  async function confirmAndActivateDirect(ev){
+    var btn = ev && ev.target ? ev.target.closest("button,[role='button'],a") : null;
+    if(!btn) return false;
+
+    var text = String(btn.textContent || btn.value || btn.ariaLabel || btn.title || "").trim().toLowerCase();
+    if(!text.includes("conferma") || !text.includes("attiva")) return false;
+
+    ev.preventDefault();
+    ev.stopPropagation();
+    if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+
+    var url = getScannedUrl();
+
+    if(!url){
+      toast("Nessun URL letto dallo scanner.");
+      return true;
+    }
+
+    url = normalizeUrl(url);
+    setUrlEverywhere(url);
+
+    btn.disabled = true;
+    var oldText = btn.textContent;
+    btn.textContent = "Attivo QR...";
+
+    try{
+      await updateActiveUrlDirect(url);
+
+      toast("QR aggiornato e attivato.");
+      closeScannerUi();
+
+      setTimeout(function(){
+        setUrlEverywhere(url);
+        forcePreview(url);
+      }, 250);
+
+      setTimeout(function(){
+        forcePreview(url);
+      }, 1000);
+
+    }catch(err){
+      console.error("[FM scanner activate] errore:", err);
+      toast("Errore aggiornamento QR: " + (err && err.message ? err.message : String(err)));
+      btn.disabled = false;
+      btn.textContent = oldText || "Conferma e attiva subito";
+    }
+
+    return true;
+  }
+
+  document.addEventListener("click", function(ev){
+    confirmAndActivateDirect(ev);
+  }, true);
+
+  /*
+    Quando lo scanner scrive un URL in un campo, lo memorizzo subito
+    così non va perso se la UI si ridisegna.
+  */
+  document.addEventListener("input", function(ev){
+    try{
+      var el = ev.target;
+      if(el && (el.matches("input,textarea")) && looksLikeUrl(el.value)){
+        window.__followmeLastScannedUrl20260529 = normalizeUrl(el.value);
+      }
+    }catch(e){}
+  }, true);
+
+  document.addEventListener("change", function(ev){
+    try{
+      var el = ev.target;
+      if(el && (el.matches("input,textarea")) && looksLikeUrl(el.value)){
+        window.__followmeLastScannedUrl20260529 = normalizeUrl(el.value);
+      }
+    }catch(e){}
+  }, true);
+
+})();
+</script>
+
 </body>
 </html>
 
