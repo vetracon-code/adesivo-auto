@@ -46351,3 +46351,133 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
   window.followMeClearExternalBadgeNow20260529 = clearBadgeEverywhere;
 })();
 </script>
+
+
+<script id="FOLLOWME_CHAT_V2_CLOSE_WITH_THANKS_20260529">
+(function(){
+  "use strict";
+
+  if(window.__followMeChatV2CloseWithThanks20260529) return;
+  window.__followMeChatV2CloseWithThanks20260529 = true;
+
+  function isChatV2Admin(){
+    return /\/fm\/chat-v2\/admin\//i.test(location.pathname) ||
+           /[?&](chatSession|session)=/i.test(location.search);
+  }
+
+  function code(){
+    try{
+      var m = location.pathname.match(/\/fm\/chat-v2\/admin\/([^\/?#]+)/i);
+      if(m && m[1]) return decodeURIComponent(m[1]);
+    }catch(e){}
+
+    try{
+      var m2 = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m2 && m2[1]) return decodeURIComponent(m2[1]);
+    }catch(e){}
+
+    return "";
+  }
+
+  function sessionId(){
+    try{
+      var qs = new URLSearchParams(location.search || "");
+      var s = qs.get("session") || qs.get("chatSession");
+      if(s) return s;
+    }catch(e){}
+
+    try{
+      var active = document.querySelector("#followmeOwnerChatSessionStrip .followme-chat-session-chip.active");
+      if(active){
+        return active.getAttribute("data-session-id") ||
+               active.getAttribute("data-id") ||
+               active.dataset.sessionId ||
+               active.dataset.id ||
+               "";
+      }
+    }catch(e){}
+
+    return "";
+  }
+
+  function toastSafe(msg){
+    try{
+      if(typeof toast === "function"){ toast(msg); return; }
+      if(typeof showToast === "function"){ showToast(msg); return; }
+    }catch(e){}
+    alert(msg);
+  }
+
+  async function closeWithThanks(ev){
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+    }
+
+    var sid = sessionId();
+    var c = code();
+
+    if(!sid){
+      toastSafe("Sessione chat non trovata.");
+      return false;
+    }
+
+    try{
+      var res = await fetch("/api/followme/chat-v2/session/" + encodeURIComponent(sid) + "/close-thanks?v=" + Date.now(), {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          message:"Grazie per averci contattato."
+        })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || data.success === false){
+        throw new Error((data && data.error) || "Errore chiusura chat.");
+      }
+
+      toastSafe("Chat chiusa. Messaggio inviato all’utente.");
+
+      setTimeout(function(){
+        if(c){
+          window.location.href = "/fm/app/" + encodeURIComponent(c);
+        }
+      }, 350);
+
+    }catch(err){
+      toastSafe(err.message || "Errore chiusura chat.");
+    }
+
+    return false;
+  }
+
+  function bind(){
+    if(!isChatV2Admin()) return;
+
+    var btn = document.getElementById("followmeOwnerChatClose");
+    if(!btn || btn.dataset.closeWithThanks20260529 === "1") return;
+
+    var clone = btn.cloneNode(true);
+    clone.id = "followmeOwnerChatClose";
+    clone.textContent = "Chiudi chat";
+    clone.dataset.closeWithThanks20260529 = "1";
+
+    btn.parentNode.replaceChild(clone, btn);
+    clone.addEventListener("click", closeWithThanks, true);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bind);
+  }else{
+    bind();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(bind, 150);
+  });
+
+  setInterval(bind, 1000);
+})();
+</script>

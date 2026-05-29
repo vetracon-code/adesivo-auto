@@ -15698,10 +15698,40 @@ window.FOLLOWME_INFO_DATA = ${safeJson};
     return json;
   }
 
+  function addSystemBubble(text){
+    const div = document.createElement("div");
+    div.className = "bubble system";
+    div.textContent = text || "";
+    messages.appendChild(div);
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  let closeRedirectTimer = null;
+
+  function closeChatAndReturn(){
+    try{ if(pollTimer) clearInterval(pollTimer); }catch(e){}
+    try{ input.disabled = true; }catch(e){}
+    try{ sendBtn.disabled = true; }catch(e){}
+
+    if(closeRedirectTimer) return;
+
+    closeRedirectTimer = setTimeout(function(){
+      const target = data.active_url || "/";
+      try{
+        overlay.classList.remove("show");
+        window.location.href = target;
+      }catch(e){
+        window.location.href = "/";
+      }
+    }, 5000);
+  }
+
   async function openInfoChat(){
     overlay.classList.add("show");
 
     if(!sessionId){
+      addSystemBubble("Abbiamo informato che è in attesa, prego attendere...");
+
       const created = await postJson("/api/followme/" + encodeURIComponent(data.code) + "/info-request/session", {
         source_url:data.active_url,
         source_label:data.source_label
@@ -15710,6 +15740,9 @@ window.FOLLOWME_INFO_DATA = ${safeJson};
       messages.innerHTML = "";
       renderedMessageIds.clear();
       lastMessageId = 0;
+
+      addSystemBubble("Abbiamo informato che è in attesa, prego attendere...");
+
       if(created.initial_message) addBubble(created.initial_message);
     }
 
@@ -15723,9 +15756,16 @@ window.FOLLOWME_INFO_DATA = ${safeJson};
     if(!sessionId) return;
     const d = await api("/api/followme/chat-v2/session/" + encodeURIComponent(sessionId) + "/messages?after=" + lastMessageId + "&v=" + Date.now());
     (d.messages || []).forEach(addBubble);
+
+    if(d.session_status === "closed"){
+      try{ input.disabled = true; }catch(e){}
+      try{ sendBtn.disabled = true; }catch(e){}
+      closeChatAndReturn();
+    }
   }
 
   async function send(){
+    if(input.disabled) return;
     const text = String(input.value || "").trim();
     if(!text || !sessionId) return;
     input.value = "";
@@ -20201,7 +20241,7 @@ app.post('/api/followme/chat-v2/session/:session_id/close-thanks', express.json(
 
     const thanksMessage =
       String(req.body?.message || '').trim() ||
-      'Grazie per averci contattato. La conversazione è stata chiusa. Puoi tornare a consultare la pagina.';
+      'Grazie per averci contattato.';
 
     const returnUrl =
       String(row.source_url || '').trim() ||
