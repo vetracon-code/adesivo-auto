@@ -1598,6 +1598,315 @@
     });
   }
 
+
+
+  // FOLLOWME_FINAL_INLINE_TRUST_SOFT_BUTTONS_20260529
+  function injectFinalInlineTrustSoftButtons20260529(){
+    if(document.getElementById("followmeFinalInlineTrustSoftButtonsCss20260529")) return;
+
+    var style = document.createElement("style");
+    style.id = "followmeFinalInlineTrustSoftButtonsCss20260529";
+    style.textContent = `
+      /*
+        FOLLOWME FINAL INLINE TRUST
+        Obiettivo:
+        - QR verificato discreto, su riga inline.
+        - Pulsanti piccoli, eleganti, affiancati quando sono due.
+        - Nessun verde pieno aggressivo.
+        - Frame sotto protagonista.
+      */
+
+      #followmeQrVerifiedBadge20260529,
+      #followmeQrVerifiedDetail20260529,
+      #followmeQrVerifiedStaticBanner20260529,
+      #followmeQrVerifiedStaticDetail20260529{
+        display:none !important;
+        opacity:0 !important;
+        visibility:hidden !important;
+        pointer-events:none !important;
+      }
+
+      #followmeQrVerifiedRealBanner20260529{
+        position:relative !important;
+        z-index:2 !important;
+        width:calc(100% - 20px) !important;
+        max-width:410px !important;
+        margin:5px auto 8px !important;
+        padding:0 2px !important;
+        border:0 !important;
+        border-radius:0 !important;
+        background:transparent !important;
+        box-shadow:none !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:space-between !important;
+        gap:10px !important;
+        color:#667085 !important;
+        font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif !important;
+        box-sizing:border-box !important;
+      }
+
+      #followmeQrVerifiedRealBanner20260529 .fm-real-copy{
+        width:100% !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:space-between !important;
+        gap:10px !important;
+        min-width:0 !important;
+      }
+
+      #followmeQrVerifiedRealBanner20260529 .fm-real-shield{
+        display:none !important;
+      }
+
+      #followmeQrVerifiedRealBanner20260529 strong{
+        display:flex !important;
+        align-items:center !important;
+        gap:5px !important;
+        color:#118943 !important;
+        font-size:12.2px !important;
+        line-height:1.1 !important;
+        font-weight:700 !important;
+        letter-spacing:-.08px !important;
+        white-space:nowrap !important;
+        margin:0 !important;
+      }
+
+      #followmeQrVerifiedRealBanner20260529 small{
+        display:block !important;
+        color:#667085 !important;
+        font-size:11.5px !important;
+        line-height:1.15 !important;
+        font-weight:470 !important;
+        text-align:right !important;
+        margin:0 !important;
+      }
+
+      /*
+        Contenitore pulsanti: una colonna di default.
+        Se JS rileva 2 pulsanti reali, diventa 2 colonne.
+      */
+      body .premium-actions,
+      body .actions,
+      body .cta-row{
+        width:calc(100% - 20px) !important;
+        max-width:410px !important;
+        margin:0 auto 8px !important;
+        padding:0 !important;
+        display:grid !important;
+        grid-template-columns:1fr !important;
+        gap:7px !important;
+        box-sizing:border-box !important;
+        align-items:stretch !important;
+      }
+
+      body .premium-actions.fm-final-two-actions-20260529,
+      body .actions.fm-final-two-actions-20260529,
+      body .cta-row.fm-final-two-actions-20260529{
+        grid-template-columns:1fr 1fr !important;
+      }
+
+      /*
+        RESET FORTE:
+        neutralizza vecchie patch che mettevano verde pieno o nero pieno.
+      */
+      body .premium-btn,
+      body button.premium-btn,
+      body a.premium-btn{
+        min-height:38px !important;
+        height:auto !important;
+        width:100% !important;
+        border-radius:13px !important;
+        padding:8px 10px !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        gap:6px !important;
+        border:1px solid rgba(16,24,40,.08) !important;
+        background:#ffffff !important;
+        color:#101828 !important;
+        box-shadow:0 5px 14px rgba(16,24,40,.045) !important;
+        font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif !important;
+        font-size:12.7px !important;
+        font-weight:610 !important;
+        letter-spacing:-.08px !important;
+        line-height:1.1 !important;
+        text-decoration:none !important;
+        white-space:nowrap !important;
+        box-sizing:border-box !important;
+        transform:none !important;
+        -webkit-tap-highlight-color:transparent !important;
+      }
+
+      body .premium-btn:active,
+      body button.premium-btn:active,
+      body a.premium-btn:active{
+        transform:scale(.985) !important;
+      }
+
+      /*
+        Ascolta: bianco, testo scuro, bordo tenue.
+        NON nero pieno.
+      */
+      body #voiceBtn,
+      body button#voiceBtn,
+      body button#voiceBtn.premium-btn{
+        background:#ffffff !important;
+        color:#101828 !important;
+        border:1px solid rgba(16,24,40,.08) !important;
+        box-shadow:0 5px 14px rgba(16,24,40,.045) !important;
+      }
+
+      /*
+        Chiedi info: verde soft.
+        NON verde pieno, NON testo bianco.
+      */
+      body #infoBtn,
+      body #fallbackInfo,
+      body button#infoBtn,
+      body button#fallbackInfo,
+      body button#infoBtn.premium-btn,
+      body button#fallbackInfo.premium-btn{
+        background:rgba(17,137,67,.08) !important;
+        color:#0f7a37 !important;
+        border:1px solid rgba(17,137,67,.14) !important;
+        box-shadow:none !important;
+      }
+
+      /*
+        Apri in nuova pagina: resta secondario e separato.
+      */
+      body a.premium-btn[target="_blank"],
+      body a.premium-btn[href^="http"]{
+        display:flex !important;
+        margin:10px auto 0 !important;
+        min-height:34px !important;
+        max-width:410px !important;
+        border-radius:12px !important;
+        padding:8px 10px !important;
+        background:#ffffff !important;
+        color:#667085 !important;
+        border:1px solid rgba(16,24,40,.08) !important;
+        box-shadow:none !important;
+        font-size:12px !important;
+        font-weight:520 !important;
+        letter-spacing:-.05px !important;
+      }
+
+      body a.premium-btn[target="_blank"]:before,
+      body a.premium-btn[href^="http"]:before{
+        content:"↗";
+        font-size:12px;
+        opacity:.72;
+      }
+
+      /*
+        Frame: non deve essere tagliato in alto.
+        Nota: se il sito esterno impone il proprio layout, noi possiamo solo evitare crop del contenitore.
+      */
+      body .premium-frame,
+      body .preview,
+      body .frame,
+      body .web-frame,
+      body .content-frame{
+        margin-top:8px !important;
+        padding-top:0 !important;
+        overflow:visible !important;
+        clip-path:none !important;
+        transform:none !important;
+        border-radius:16px !important;
+      }
+
+      body iframe{
+        display:block !important;
+        width:100% !important;
+        min-height:68vh !important;
+        height:68vh !important;
+        max-height:none !important;
+        margin-top:0 !important;
+        padding-top:0 !important;
+        transform:none !important;
+        clip-path:none !important;
+        object-position:top center !important;
+        background:#fff !important;
+      }
+
+      @media(max-width:390px){
+        #followmeQrVerifiedRealBanner20260529 .fm-real-copy{
+          flex-direction:column !important;
+          align-items:flex-start !important;
+          justify-content:flex-start !important;
+          gap:3px !important;
+        }
+
+        #followmeQrVerifiedRealBanner20260529 small{
+          text-align:left !important;
+          font-size:11.2px !important;
+        }
+
+        /*
+          Su schermi molto stretti li impiliamo per evitare testi schiacciati.
+          Su iPhone 14 Pro Max resteranno affiancati.
+        */
+        body .premium-actions.fm-final-two-actions-20260529,
+        body .actions.fm-final-two-actions-20260529,
+        body .cta-row.fm-final-two-actions-20260529{
+          grid-template-columns:1fr !important;
+        }
+
+        body iframe{
+          min-height:66vh !important;
+          height:66vh !important;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function applyFinalInlineTrustSoftButtons20260529(){
+    injectFinalInlineTrustSoftButtons20260529();
+
+    /*
+      Ricostruisco il banner come Variante 2 Inline Trust.
+    */
+    var banner = document.getElementById("followmeQrVerifiedRealBanner20260529");
+    if(banner){
+      banner.innerHTML =
+        '<span class="fm-real-copy">' +
+          '<strong><span>🛡️</span> QR verificato</strong>' +
+          '<small>Destinazione controllata prima della pubblicazione.</small>' +
+        '</span>';
+    }
+
+    /*
+      Affiancamento: solo se i due pulsanti principali sono visibili.
+      Se ne resta uno solo, torna automaticamente a tutta larghezza.
+    */
+    var containers = Array.prototype.slice.call(document.querySelectorAll(".premium-actions,.actions,.cta-row"));
+
+    containers.forEach(function(container){
+      var voice = container.querySelector("#voiceBtn");
+      var info = container.querySelector("#infoBtn,#fallbackInfo");
+
+      function isVisible(el){
+        if(!el) return false;
+        var st = window.getComputedStyle(el);
+        if(st.display === "none") return false;
+        if(st.visibility === "hidden") return false;
+        if(Number(st.opacity) === 0) return false;
+        if(el.disabled === true) return false;
+        return true;
+      }
+
+      if(isVisible(voice) && isVisible(info)){
+        container.classList.add("fm-final-two-actions-20260529");
+      }else{
+        container.classList.remove("fm-final-two-actions-20260529");
+      }
+    });
+  }
+
   function boot(){
     injectStyle();
     injectPremiumPublicActionsUx();
@@ -1605,6 +1914,10 @@
     prepareChatDirectFlow20260529();
     fixPublicFrameNotBlank20260529();
     makeOverlay();
+    setTimeout(applyFinalInlineTrustSoftButtons20260529, 350);
+    setTimeout(applyFinalInlineTrustSoftButtons20260529, 1200);
+    setTimeout(applyFinalInlineTrustSoftButtons20260529, 2600);
+    setTimeout(applyFinalInlineTrustSoftButtons20260529, 4200);
     setTimeout(applyInlineTrustApprovedFrameFix20260529, 300);
     setTimeout(applyInlineTrustApprovedFrameFix20260529, 1200);
     setTimeout(applyInlineTrustApprovedFrameFix20260529, 2600);
@@ -1618,6 +1931,7 @@
       forceVariant2CompactOfficial20260529();
       applyInlineTrustApprovedFrameFix20260529();
       showChatDirectNotice20260529();
+      applyFinalInlineTrustSoftButtons20260529();
       forceVariant2CompactOfficial20260529();
     }, 2400);
   }
