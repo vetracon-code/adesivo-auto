@@ -41363,6 +41363,366 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="FOLLOWME_UX_SPEED_QR_UPDATE_DELETE_20260529">
+(function(){
+  "use strict";
+
+  if(window.__followMeUxSpeedQrUpdateDelete20260529) return;
+  window.__followMeUxSpeedQrUpdateDelete20260529 = true;
+
+  function toast(msg){
+    try{
+      if(typeof window.toast === "function") return window.toast(msg);
+      if(typeof window.showToast === "function") return window.showToast(msg);
+    }catch(e){}
+
+    try{
+      var t = document.createElement("div");
+      t.textContent = msg;
+      t.style.cssText = "position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:999999;background:rgba(15,23,42,.94);color:#fff;padding:11px 14px;border-radius:999px;font:800 13px -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial;box-shadow:0 14px 40px rgba(0,0,0,.22);max-width:88vw;text-align:center;";
+      document.body.appendChild(t);
+      setTimeout(function(){ try{ t.remove(); }catch(e){} }, 1800);
+    }catch(e){}
+  }
+
+  function normalizeUrl(raw){
+    var u = String(raw || "").trim();
+    if(!u) return "";
+    if(/^mailto:/i.test(u) || /^tel:/i.test(u) || /^sms:/i.test(u) || /^whatsapp:/i.test(u)) return u;
+    if(!/^https?:\/\//i.test(u)) u = "https://" + u;
+    return u;
+  }
+
+  function isValidUrl(raw){
+    try{
+      var u = normalizeUrl(raw);
+      if(!u) return false;
+      new URL(u);
+      return true;
+    }catch(e){
+      return false;
+    }
+  }
+
+  function immediatePreview(url, reason){
+    url = normalizeUrl(url);
+    if(!url || !isValidUrl(url)) return;
+
+    try{ window.__followMeActiveUrl = url; }catch(e){}
+    try{ window.followMeCurrentActiveUrl = url; }catch(e){}
+    try{ window.currentFollowMeActiveUrl = url; }catch(e){}
+    try{ window.__followMePreviewWantedUrl = url; }catch(e){}
+
+    try{
+      var activeUrlEl = document.getElementById("activeUrl");
+      if(activeUrlEl) activeUrlEl.textContent = url;
+    }catch(e){}
+
+    try{
+      if(typeof window.updateSimpleDestinationPreview === "function"){
+        window.updateSimpleDestinationPreview(url);
+      }
+    }catch(e){}
+
+    try{
+      if(typeof window.forceFollowMePreview === "function"){
+        window.forceFollowMePreview(url);
+      }
+    }catch(e){}
+
+    try{
+      var frame =
+        document.getElementById("simpleDestinationPreviewFrame") ||
+        document.getElementById("previewFrame") ||
+        document.getElementById("followmePreviewFrame") ||
+        document.querySelector("iframe");
+
+      if(frame && frame.tagName && frame.tagName.toLowerCase() === "iframe"){
+        frame.src = url;
+      }
+
+      var open =
+        document.getElementById("simpleDestinationPreviewOpen") ||
+        document.querySelector("a[href][target='_blank']");
+
+      if(open){
+        open.href = url;
+        open.style.opacity = "1";
+        open.style.pointerEvents = "auto";
+      }
+
+      var block =
+        document.getElementById("simpleDestinationPreviewBlock") ||
+        frame ||
+        document.querySelector(".simple-preview-card") ||
+        document.querySelector(".preview") ||
+        document.querySelector(".premium-frame");
+
+      if(block){
+        setTimeout(function(){
+          try{ block.scrollIntoView({ behavior:"smooth", block:"center" }); }catch(e){}
+        }, reason === "click" ? 80 : 180);
+      }
+    }catch(e){}
+  }
+
+  /*
+    1) ACCELERA UPDATE QR:
+    prima della funzione originale mostriamo subito preview e scroll.
+    Non sostituiamo updateUrl: lo avvolgiamo.
+  */
+  function wrapUpdateUrl(){
+    if(typeof window.updateUrl !== "function") return false;
+    if(window.updateUrl.__followMeUxSpeedWrapped20260529) return true;
+
+    var original = window.updateUrl;
+
+    async function fastUpdateUrl(){
+      var input = document.getElementById("newUrl");
+      var btn = document.getElementById("updateDestinationBtn");
+      var raw = input ? input.value : "";
+      var url = normalizeUrl(raw);
+
+      if(input && raw && url !== raw){
+        input.value = url;
+        input.dispatchEvent(new Event("input", { bubbles:true }));
+        input.dispatchEvent(new Event("change", { bubbles:true }));
+      }
+
+      if(url && isValidUrl(url)){
+        immediatePreview(url, "click");
+
+        if(btn){
+          btn.disabled = true;
+          btn.textContent = "Salvo...";
+          btn.classList.add("refresh-running");
+        }
+
+        /*
+          Toast più breve e meno ansiogeno.
+        */
+        toast("Preview aggiornata. Salvataggio in corso...");
+      }
+
+      try{
+        var result = await original.apply(this, arguments);
+
+        if(url && isValidUrl(url)){
+          immediatePreview(url, "server-ok");
+          toast("QR aggiornato.");
+        }
+
+        /*
+          Storico ricaricato dopo, non deve bloccare la percezione.
+        */
+        setTimeout(function(){
+          try{
+            if(typeof window.renderFollowMeEmergencyHistory === "function"){
+              window.renderFollowMeEmergencyHistory();
+            }
+          }catch(e){}
+        }, 500);
+
+        return result;
+
+      }finally{
+        if(btn){
+          btn.disabled = false;
+          btn.textContent = "Aggiorna QR";
+          btn.classList.remove("refresh-running");
+        }
+      }
+    }
+
+    fastUpdateUrl.__followMeUxSpeedWrapped20260529 = true;
+    window.updateUrl = fastUpdateUrl;
+
+    return true;
+  }
+
+  /*
+    Se updateUrl viene definita dopo questo script, la intercettiamo appena appare.
+  */
+  function waitWrapUpdateUrl(){
+    if(wrapUpdateUrl()) return;
+
+    var tries = 0;
+    var timer = setInterval(function(){
+      tries++;
+      if(wrapUpdateUrl() || tries > 40){
+        clearInterval(timer);
+      }
+    }, 250);
+  }
+
+  /*
+    2) CLICK SU AGGIORNA QR:
+    anche se qualche vecchio handler parte prima/dopo, la preview appare subito.
+  */
+  document.addEventListener("click", function(ev){
+    var btn = ev.target && ev.target.closest ? ev.target.closest("#updateDestinationBtn") : null;
+    if(!btn) return;
+
+    var input = document.getElementById("newUrl");
+    var url = input ? normalizeUrl(input.value) : "";
+
+    if(url && isValidUrl(url)){
+      immediatePreview(url, "click");
+    }
+  }, true);
+
+  /*
+    3) DELETE CARD OTTIMISTICA:
+    quando confermi eliminazione, nascondiamo subito la card collegata all'URL.
+    Se il server fallisce, lo storico verrà ricaricato.
+  */
+  function findHistoryCardsByUrl(url){
+    var clean = String(url || "").trim().replace(/\/+$/,"").toLowerCase();
+    var out = [];
+
+    if(!clean) return out;
+
+    document.querySelectorAll(".history-item,.premium-history-card,[data-url],[data-history-url]").forEach(function(el){
+      try{
+        var txt = String(el.textContent || "").toLowerCase();
+        var du = String(el.dataset && (el.dataset.url || el.dataset.historyUrl) || "").toLowerCase();
+
+        if(
+          txt.includes(clean) ||
+          du.replace(/\/+$/,"") === clean
+        ){
+          out.push(el);
+        }
+      }catch(e){}
+    });
+
+    return out;
+  }
+
+  function optimisticRemoveHistoryCard(){
+    var url = "";
+    try{
+      url = String(window.__followMeDeleteHistoryUrl || "").trim();
+    }catch(e){}
+
+    if(!url){
+      var el = document.getElementById("deleteHistoryConfirmUrl");
+      if(el) url = String(el.textContent || "").trim();
+    }
+
+    var cards = findHistoryCardsByUrl(url);
+
+    cards.forEach(function(card){
+      try{
+        card.dataset.fmDeletedOptimistic20260529 = "1";
+        card.style.transition = "opacity .16s ease, transform .16s ease, max-height .18s ease, margin .18s ease";
+        card.style.opacity = "0";
+        card.style.transform = "scale(.985)";
+        card.style.pointerEvents = "none";
+
+        setTimeout(function(){
+          try{
+            card.style.maxHeight = "0px";
+            card.style.margin = "0px";
+            card.style.overflow = "hidden";
+          }catch(e){}
+        }, 120);
+      }catch(e){}
+    });
+
+    return { url:url, count:cards.length };
+  }
+
+  function wrapConfirmDelete(){
+    if(typeof window.confirmDeleteHistoryLink !== "function") return false;
+    if(window.confirmDeleteHistoryLink.__followMeUxDeleteWrapped20260529) return true;
+
+    var original = window.confirmDeleteHistoryLink;
+
+    async function fastConfirmDeleteHistoryLink(){
+      var removed = optimisticRemoveHistoryCard();
+
+      if(removed.count > 0){
+        toast("Link rimosso.");
+      }
+
+      try{
+        var result = await original.apply(this, arguments);
+
+        setTimeout(function(){
+          try{
+            if(typeof window.renderFollowMeEmergencyHistory === "function"){
+              window.renderFollowMeEmergencyHistory();
+            }
+          }catch(e){}
+        }, 450);
+
+        return result;
+
+      }catch(err){
+        toast("Errore eliminazione. Ricarico lo storico...");
+
+        setTimeout(function(){
+          try{
+            if(typeof window.renderFollowMeEmergencyHistory === "function"){
+              window.renderFollowMeEmergencyHistory();
+            }
+          }catch(e){}
+        }, 250);
+
+        throw err;
+      }
+    }
+
+    fastConfirmDeleteHistoryLink.__followMeUxDeleteWrapped20260529 = true;
+    window.confirmDeleteHistoryLink = fastConfirmDeleteHistoryLink;
+    return true;
+  }
+
+  function waitWrapDelete(){
+    if(wrapConfirmDelete()) return;
+
+    var tries = 0;
+    var timer = setInterval(function(){
+      tries++;
+      if(wrapConfirmDelete() || tries > 40){
+        clearInterval(timer);
+      }
+    }, 250);
+  }
+
+  /*
+    Anche sul click del bottone conferma elimino visivamente subito,
+    così non aspettiamo neppure il wrapper se il binding originale è diretto.
+  */
+  document.addEventListener("click", function(ev){
+    var btn = ev.target && ev.target.closest ? ev.target.closest("#confirmDeleteHistoryBtn") : null;
+    if(!btn) return;
+    optimisticRemoveHistoryCard();
+  }, true);
+
+  function boot(){
+    waitWrapUpdateUrl();
+    waitWrapDelete();
+
+    /*
+      Se updateUrl/confirmDelete vengono ridefinite da script successivi,
+      riprovo periodicamente.
+    */
+    setInterval(wrapUpdateUrl, 1500);
+    setInterval(wrapConfirmDelete, 1500);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+})();
+</script>
+
 </body>
 </html>
 
