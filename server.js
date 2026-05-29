@@ -734,6 +734,7 @@ app.get('/owner-install/:plate/:code', async (req, res) => {
 })();
 </script>
 
+<script id="FOLLOWME_QR_VERIFIED_SCANNER_SAFE_SCRIPT_20260529" src="/followme-qr-verified-scanner.js?v=20260529"></script>
 </body>
 </html>`;
 
