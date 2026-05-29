@@ -638,10 +638,208 @@
     document.head.appendChild(style);
   }
 
+
+
+  // FOLLOWME_QR_VERIFIED_OUTSIDE_BUTTONS_FINAL_20260529
+  function injectQrVerifiedOutsideButtonsFinal(){
+    if(document.getElementById("followmeQrVerifiedOutsideButtonsCss20260529")) return;
+
+    var style = document.createElement("style");
+    style.id = "followmeQrVerifiedOutsideButtonsCss20260529";
+    style.textContent = `
+      /*
+        Disattivo definitivamente il badge flottante che si sovrapponeva ai pulsanti.
+      */
+      #followmeQrVerifiedBadge20260529,
+      #followmeQrVerifiedDetail20260529{
+        display:none !important;
+        opacity:0 !important;
+        visibility:hidden !important;
+        pointer-events:none !important;
+      }
+
+      /*
+        Banner reale sopra i pulsanti.
+        Non è fixed, non è absolute, non può sovrapporsi.
+      */
+      #followmeQrVerifiedRealBanner20260529{
+        position:relative !important;
+        z-index:2 !important;
+        width:calc(100% - 40px) !important;
+        max-width:430px !important;
+        margin:14px auto 14px !important;
+        padding:13px 15px !important;
+        box-sizing:border-box !important;
+        border-radius:22px !important;
+        display:flex !important;
+        align-items:center !important;
+        gap:12px !important;
+        background:
+          linear-gradient(145deg, rgba(255,255,255,.97), rgba(248,250,252,.90)) !important;
+        border:1px solid rgba(22,163,74,.20) !important;
+        box-shadow:
+          0 14px 34px rgba(15,23,42,.09),
+          inset 0 1px 0 rgba(255,255,255,.92) !important;
+        font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif !important;
+        color:#0f172a !important;
+        text-align:left !important;
+      }
+
+      #followmeQrVerifiedRealBanner20260529 .fm-real-shield{
+        width:40px !important;
+        height:40px !important;
+        min-width:40px !important;
+        border-radius:16px !important;
+        display:grid !important;
+        place-items:center !important;
+        background:
+          radial-gradient(circle at 35% 20%, rgba(255,255,255,.95), transparent 38%),
+          linear-gradient(145deg, rgba(22,163,74,.20), rgba(22,163,74,.08)) !important;
+        box-shadow:
+          0 9px 20px rgba(22,163,74,.14),
+          inset 0 0 0 1px rgba(22,163,74,.16) !important;
+        font-size:20px !important;
+      }
+
+      #followmeQrVerifiedRealBanner20260529 .fm-real-copy{
+        display:grid !important;
+        gap:3px !important;
+        min-width:0 !important;
+      }
+
+      #followmeQrVerifiedRealBanner20260529 strong{
+        display:block !important;
+        font-size:15px !important;
+        line-height:1.08 !important;
+        font-weight:800 !important;
+        letter-spacing:-.22px !important;
+        color:#0f7a37 !important;
+      }
+
+      #followmeQrVerifiedRealBanner20260529 small{
+        display:block !important;
+        font-size:12.3px !important;
+        line-height:1.28 !important;
+        font-weight:520 !important;
+        color:#526174 !important;
+      }
+
+      /*
+        L'area pulsanti deve partire DOPO il banner.
+      */
+      body .premium-actions,
+      body .actions,
+      body .cta-row{
+        position:relative !important;
+        z-index:1 !important;
+        margin-top:0 !important;
+        padding-top:0 !important;
+      }
+
+      @media(max-width:640px){
+        #followmeQrVerifiedRealBanner20260529{
+          width:calc(100% - 40px) !important;
+          margin:12px auto 13px !important;
+          padding:12px 13px !important;
+          border-radius:20px !important;
+        }
+
+        #followmeQrVerifiedRealBanner20260529 .fm-real-shield{
+          width:38px !important;
+          height:38px !important;
+          min-width:38px !important;
+          border-radius:15px !important;
+          font-size:19px !important;
+        }
+
+        #followmeQrVerifiedRealBanner20260529 strong{
+          font-size:14.5px !important;
+        }
+
+        #followmeQrVerifiedRealBanner20260529 small{
+          font-size:11.7px !important;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function insertQrVerifiedOutsideButtonsFinal(){
+    if(document.getElementById("followmeQrVerifiedRealBanner20260529")) return;
+
+    var banner = document.createElement("div");
+    banner.id = "followmeQrVerifiedRealBanner20260529";
+    banner.innerHTML =
+      '<span class="fm-real-shield">🛡️</span>' +
+      '<span class="fm-real-copy">' +
+        '<strong>QR verificato</strong>' +
+        '<small>La destinazione è stata controllata prima della pubblicazione.</small>' +
+      '</span>';
+
+    /*
+      Cerchiamo il vero contenitore dei pulsanti.
+      L'obiettivo è inserirlo PRIMA del primo pulsante azione, non sopra in fixed.
+    */
+    var firstButton =
+      document.getElementById("voiceBtn") ||
+      document.getElementById("infoBtn") ||
+      document.getElementById("fallbackInfo");
+
+    if(firstButton){
+      var container =
+        firstButton.closest(".premium-actions") ||
+        firstButton.closest(".actions") ||
+        firstButton.closest(".cta-row") ||
+        firstButton.parentElement;
+
+      if(container && container.parentNode){
+        container.parentNode.insertBefore(banner, container);
+        return;
+      }
+    }
+
+    /*
+      Fallback: se i pulsanti sono spenti/non presenti,
+      il banner deve comunque vedersi.
+      Lo inseriamo prima del contenuto principale utile.
+    */
+    var fallback =
+      document.querySelector(".premium-card") ||
+      document.querySelector("main") ||
+      document.body;
+
+    if(fallback === document.body){
+      document.body.insertBefore(banner, document.body.firstChild);
+    }else{
+      fallback.insertBefore(banner, fallback.firstChild);
+    }
+  }
+
+  function forceQrVerifiedOutsideButtonsFinal(){
+    injectQrVerifiedOutsideButtonsFinal();
+
+    /*
+      Rimuovo fisicamente il vecchio badge flottante se già creato.
+    */
+    var oldBadge = document.getElementById("followmeQrVerifiedBadge20260529");
+    if(oldBadge) oldBadge.remove();
+
+    var oldDetail = document.getElementById("followmeQrVerifiedDetail20260529");
+    if(oldDetail) oldDetail.remove();
+
+    insertQrVerifiedOutsideButtonsFinal();
+  }
+
   function boot(){
     injectStyle();
     injectPremiumPublicActionsUx();
+    injectQrVerifiedOutsideButtonsFinal();
     makeOverlay();
+
+    setTimeout(forceQrVerifiedOutsideButtonsFinal, 400);
+    setTimeout(forceQrVerifiedOutsideButtonsFinal, 1200);
+    setTimeout(forceQrVerifiedOutsideButtonsFinal, 2400);
   }
 
   if(document.readyState === "loading"){
