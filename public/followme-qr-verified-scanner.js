@@ -344,8 +344,303 @@
     }
   }
 
+
+
+  // FOLLOWME_PREMIUM_PUBLIC_ACTIONS_UX_20260529
+  function injectPremiumPublicActionsUx(){
+    if(document.getElementById("followmePremiumPublicActionsUx20260529")) return;
+
+    var style = document.createElement("style");
+    style.id = "followmePremiumPublicActionsUx20260529";
+    style.textContent = `
+      :root{
+        --fm-premium-ink:#0f172a;
+        --fm-premium-muted:#64748b;
+        --fm-premium-line:rgba(15,23,42,.09);
+        --fm-premium-green:#16a34a;
+        --fm-premium-green-dark:#0f7a37;
+        --fm-premium-blue:#0a84ff;
+        --fm-premium-surface:rgba(255,255,255,.88);
+      }
+
+      body{
+        -webkit-font-smoothing:antialiased !important;
+        text-rendering:geometricPrecision !important;
+      }
+
+      /*
+        Banner QR verificato:
+        non flottante, non sovrapposto, premium e stabile.
+      */
+      #followmeQrVerifiedStaticBanner20260529{
+        width:100% !important;
+        max-width:430px !important;
+        margin:16px auto 16px !important;
+        padding:13px 15px !important;
+        border-radius:22px !important;
+        display:flex !important;
+        align-items:center !important;
+        gap:12px !important;
+        text-align:left !important;
+        background:
+          linear-gradient(145deg, rgba(255,255,255,.96), rgba(248,250,252,.88)) !important;
+        border:1px solid rgba(22,163,74,.18) !important;
+        box-shadow:
+          0 18px 44px rgba(15,23,42,.10),
+          inset 0 1px 0 rgba(255,255,255,.92) !important;
+        color:var(--fm-premium-ink) !important;
+        font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif !important;
+        cursor:pointer !important;
+        box-sizing:border-box !important;
+      }
+
+      #followmeQrVerifiedStaticBanner20260529 .fm-static-shield{
+        width:42px !important;
+        height:42px !important;
+        border-radius:16px !important;
+        display:grid !important;
+        place-items:center !important;
+        flex:0 0 auto !important;
+        background:
+          radial-gradient(circle at 30% 20%, rgba(255,255,255,.85), transparent 38%),
+          linear-gradient(145deg, rgba(22,163,74,.20), rgba(22,163,74,.08)) !important;
+        box-shadow:
+          0 10px 22px rgba(22,163,74,.13),
+          inset 0 0 0 1px rgba(22,163,74,.16) !important;
+        font-size:21px !important;
+      }
+
+      #followmeQrVerifiedStaticBanner20260529 .fm-static-copy{
+        display:grid !important;
+        gap:3px !important;
+        min-width:0 !important;
+      }
+
+      #followmeQrVerifiedStaticBanner20260529 strong{
+        font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,Arial,sans-serif !important;
+        font-size:15px !important;
+        font-weight:800 !important;
+        letter-spacing:-.25px !important;
+        color:var(--fm-premium-green-dark) !important;
+        line-height:1.12 !important;
+      }
+
+      #followmeQrVerifiedStaticBanner20260529 small{
+        font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif !important;
+        font-size:12.5px !important;
+        font-weight:520 !important;
+        line-height:1.32 !important;
+        color:#526174 !important;
+      }
+
+      #followmeQrVerifiedStaticDetail20260529{
+        max-width:430px !important;
+        border-radius:18px !important;
+        background:rgba(255,255,255,.94) !important;
+        border:1px solid rgba(15,23,42,.08) !important;
+        box-shadow:0 14px 34px rgba(15,23,42,.10) !important;
+      }
+
+      /*
+        Area pulsanti pubblici:
+        più aria, gerarchia chiara, stile premium.
+      */
+      body .premium-actions,
+      body .actions,
+      body .cta-row{
+        width:100% !important;
+        max-width:430px !important;
+        margin:0 auto 14px !important;
+        padding:0 !important;
+        display:flex !important;
+        flex-direction:column !important;
+        align-items:stretch !important;
+        gap:10px !important;
+        box-sizing:border-box !important;
+      }
+
+      body .premium-btn,
+      body button.premium-btn,
+      body a.premium-btn{
+        min-height:52px !important;
+        width:100% !important;
+        border-radius:19px !important;
+        padding:14px 17px !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        gap:8px !important;
+        border:1px solid rgba(15,23,42,.08) !important;
+        box-shadow:
+          0 14px 34px rgba(15,23,42,.10),
+          inset 0 1px 0 rgba(255,255,255,.75) !important;
+        font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif !important;
+        font-size:15px !important;
+        font-weight:720 !important;
+        letter-spacing:-.22px !important;
+        line-height:1.15 !important;
+        text-decoration:none !important;
+        transform:none !important;
+        transition:
+          transform .16s ease,
+          box-shadow .16s ease,
+          background .16s ease,
+          border-color .16s ease !important;
+        box-sizing:border-box !important;
+        -webkit-tap-highlight-color:transparent !important;
+      }
+
+      body .premium-btn:active,
+      body button.premium-btn:active,
+      body a.premium-btn:active{
+        transform:scale(.985) !important;
+        box-shadow:
+          0 8px 20px rgba(15,23,42,.10),
+          inset 0 1px 0 rgba(255,255,255,.65) !important;
+      }
+
+      /*
+        Pulsante ascolto messaggio: primario emozionale, ma elegante.
+      */
+      body #voiceBtn,
+      body button#voiceBtn.premium-btn{
+        background:
+          linear-gradient(145deg, #111827, #1f2937) !important;
+        color:#ffffff !important;
+        border-color:rgba(255,255,255,.10) !important;
+        box-shadow:
+          0 18px 42px rgba(15,23,42,.22),
+          inset 0 1px 0 rgba(255,255,255,.14) !important;
+      }
+
+      /*
+        Chiedi informazioni: verde premium, azione principale.
+      */
+      body #infoBtn,
+      body #fallbackInfo,
+      body button#infoBtn.premium-btn,
+      body button#fallbackInfo.premium-btn{
+        background:
+          linear-gradient(145deg, #18b957, #0f8f43) !important;
+        color:#ffffff !important;
+        border-color:rgba(255,255,255,.10) !important;
+        box-shadow:
+          0 18px 42px rgba(22,163,74,.22),
+          inset 0 1px 0 rgba(255,255,255,.20) !important;
+      }
+
+      /*
+        Apri in nuova pagina:
+        sempre sotto, secondario, più piccolo, non confuso con le azioni FollowMe.
+      */
+      body a.premium-btn[target="_blank"],
+      body a.premium-btn[href^="http"]{
+        margin-top:7px !important;
+        min-height:42px !important;
+        padding:11px 14px !important;
+        border-radius:15px !important;
+        background:rgba(255,255,255,.62) !important;
+        color:#64748b !important;
+        border:1px solid rgba(15,23,42,.08) !important;
+        box-shadow:none !important;
+        font-size:13px !important;
+        font-weight:620 !important;
+        letter-spacing:-.12px !important;
+      }
+
+      body a.premium-btn[target="_blank"]:before,
+      body a.premium-btn[href^="http"]:before{
+        content:"↗";
+        font-size:13px;
+        opacity:.72;
+      }
+
+      /*
+        Se il browser dispone i pulsanti in righe strane, forziamo ordine pulito.
+      */
+      body #voiceBtn{ order:1 !important; }
+      body #infoBtn,
+      body #fallbackInfo{ order:2 !important; }
+      body a.premium-btn[target="_blank"],
+      body a.premium-btn[href^="http"]{ order:9 !important; }
+
+      /*
+        Desktop/tablet: resta elegante ma non gigantesco.
+      */
+      @media(min-width:760px){
+        body .premium-actions,
+        body .actions,
+        body .cta-row{
+          gap:11px !important;
+        }
+
+        body .premium-btn,
+        body button.premium-btn,
+        body a.premium-btn{
+          max-width:430px !important;
+          margin-left:auto !important;
+          margin-right:auto !important;
+        }
+      }
+
+      /*
+        iPhone: più aria e touch target comodi.
+      */
+      @media(max-width:640px){
+        #followmeQrVerifiedStaticBanner20260529{
+          margin:12px auto 13px !important;
+          padding:12px 13px !important;
+          border-radius:20px !important;
+        }
+
+        #followmeQrVerifiedStaticBanner20260529 .fm-static-shield{
+          width:39px !important;
+          height:39px !important;
+          border-radius:15px !important;
+          font-size:20px !important;
+        }
+
+        #followmeQrVerifiedStaticBanner20260529 strong{
+          font-size:14.5px !important;
+        }
+
+        #followmeQrVerifiedStaticBanner20260529 small{
+          font-size:11.8px !important;
+          line-height:1.28 !important;
+        }
+
+        body .premium-actions,
+        body .actions,
+        body .cta-row{
+          padding-left:0 !important;
+          padding-right:0 !important;
+          gap:10px !important;
+        }
+
+        body .premium-btn,
+        body button.premium-btn,
+        body a.premium-btn{
+          min-height:52px !important;
+          border-radius:18px !important;
+          font-size:14.5px !important;
+        }
+
+        body a.premium-btn[target="_blank"],
+        body a.premium-btn[href^="http"]{
+          min-height:40px !important;
+          font-size:12.8px !important;
+          border-radius:14px !important;
+          margin-top:8px !important;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
   function boot(){
     injectStyle();
+    injectPremiumPublicActionsUx();
     makeOverlay();
   }
 
