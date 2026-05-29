@@ -15535,6 +15535,74 @@ app.get('/fm/info/:public_id', async function(req, res) {
   .composer{display:flex;gap:8px;padding:10px;border-top:1px solid rgba(15,23,42,.08);background:#fff}
   .composer textarea{flex:1;border:1px solid rgba(15,23,42,.12);border-radius:18px;padding:10px 12px;resize:none;min-height:42px;font:inherit}
   .send{border:0;border-radius:18px;background:#16a34a;color:#fff;font-weight:900;padding:0 16px}
+  .attachment-card{display:grid;gap:6px}
+  .attachment-card img{max-width:240px;width:100%;border-radius:12px;display:block}
+  .attachment-file{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:9px 10px;
+    border-radius:12px;
+    background:rgba(255,255,255,.72);
+    color:#111827;
+    text-decoration:none;
+    font-weight:850;
+    border:1px solid rgba(15,23,42,.08);
+  }
+  .attachment-file span{
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    max-width:220px;
+  }
+  .voice-card{display:grid;gap:7px;min-width:210px}
+  .voice-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:8px;
+    border-radius:14px;
+    background:rgba(255,255,255,.72);
+    border:1px solid rgba(15,23,42,.08);
+  }
+  .voice-row audio{width:190px;max-width:100%;height:34px}
+  .map-preview-card{min-width:240px;max-width:280px}
+  .map-preview-link{
+    position:relative;
+    display:block;
+    width:100%;
+    height:150px;
+    overflow:hidden;
+    border-radius:14px;
+    background:#dfe5e7;
+    box-shadow:0 1px 2px rgba(0,0,0,.10);
+  }
+  .map-preview-frame{
+    width:100%;
+    height:100%;
+    border:0;
+    display:block;
+    pointer-events:none;
+  }
+  .map-preview-overlay{
+    position:absolute;
+    right:8px;
+    bottom:8px;
+    padding:6px 9px;
+    border-radius:999px;
+    background:rgba(17,27,33,.82);
+    color:#fff;
+    font-size:11px;
+    font-weight:900;
+    box-shadow:0 6px 18px rgba(0,0,0,.24);
+  }
+  .time{
+    display:block;
+    margin-top:3px;
+    font-size:10px;
+    color:#64748b;
+    text-align:right;
+  }
   @media(min-width:760px){
     .chat-overlay{align-items:center}
     .chat-sheet{border-radius:28px;max-height:720px}
@@ -15659,6 +15727,111 @@ window.FOLLOWME_INFO_DATA = ${safeJson};
 
   const renderedMessageIds = new Set();
 
+  function escHtml(value){
+    return String(value || "").replace(/[&<>"']/g, function(c){
+      if(c === "&") return "&amp;";
+      if(c === "<") return "&lt;";
+      if(c === ">") return "&gt;";
+      if(c === '"') return "&quot;";
+      if(c === "'") return "&#39;";
+      return c;
+    });
+  }
+
+  function timeOf(value){
+    try{
+      return new Date(value).toLocaleTimeString("it-IT", { hour:"2-digit", minute:"2-digit" });
+    }catch(e){
+      return "";
+    }
+  }
+
+  function parseAttachmentV2(raw){
+    try{
+      const obj = JSON.parse(String(raw || ""));
+      if(obj && obj.__followme_attachment_v2 === true) return obj;
+    }catch(e){}
+    return null;
+  }
+
+  function mapCoords(att){
+    const lat = Number(att.latitude || att.lat || 0);
+    const lng = Number(att.longitude || att.lng || att.lon || 0);
+    if(Number.isFinite(lat) && Number.isFinite(lng) && lat && lng){
+      return { lat, lng };
+    }
+
+    const raw = String(att.url || att.maps_url || "");
+    const m = raw.match(/q=([^&]+)/i);
+    if(m && m[1]){
+      const q = decodeURIComponent(m[1]).trim();
+      const mm = q.match(/(-?\\d+(?:\\.\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?)/);
+      if(mm) return { lat:Number(mm[1]), lng:Number(mm[2]) };
+    }
+
+    return null;
+  }
+
+  function mapOpenUrl(att){
+    const coords = mapCoords(att);
+    if(!coords) return String(att.url || att.maps_url || "https://maps.google.com");
+    return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(coords.lat + "," + coords.lng);
+  }
+
+  function mapEmbedUrl(att){
+    const coords = mapCoords(att);
+    if(!coords) return "";
+    return "https://maps.google.com/maps?q=" + encodeURIComponent(coords.lat + "," + coords.lng) + "&z=16&output=embed";
+  }
+
+  function renderAttachmentV2(att, createdAt){
+    const kind = String(att.kind || "");
+    const mime = String(att.mime || "");
+    const url = escHtml(att.url || "#");
+    const label = escHtml(att.label || att.filename || "Allegato");
+    const when = escHtml(timeOf(createdAt));
+
+    if(kind === "location"){
+      const open = escHtml(mapOpenUrl(att));
+      const embed = escHtml(mapEmbedUrl(att));
+      const acc = att.accuracy_m ? " · precisione " + Math.round(Number(att.accuracy_m)) + " m" : "";
+
+      return '' +
+        '<div class="attachment-card map-preview-card">' +
+          (embed ? '<a class="map-preview-link" href="' + open + '" target="_blank" rel="noopener">' +
+            '<iframe class="map-preview-frame" src="' + embed + '" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>' +
+            '<span class="map-preview-overlay">Apri in Maps</span>' +
+          '</a>' : '') +
+          '<a class="attachment-file" href="' + open + '" target="_blank" rel="noopener">📍 <span>Posizione condivisa' + escHtml(acc) + '</span></a>' +
+          '<span class="time">' + when + '</span>' +
+        '</div>';
+    }
+
+    if(kind === "voice" || mime.startsWith("audio/")){
+      return '' +
+        '<div class="voice-card">' +
+          '<div class="voice-row">🎙️ <audio controls preload="metadata" src="' + url + '"></audio></div>' +
+          '<a class="attachment-file" href="' + url + '" target="_blank" rel="noopener">Apri audio</a>' +
+          '<span class="time">' + when + '</span>' +
+        '</div>';
+    }
+
+    if(mime.startsWith("image/")){
+      return '' +
+        '<div class="attachment-card">' +
+          '<a href="' + url + '" target="_blank" rel="noopener"><img src="' + url + '" alt="' + label + '"></a>' +
+          '<a class="attachment-file" href="' + url + '" target="_blank" rel="noopener">📎 <span>' + label + '</span></a>' +
+          '<span class="time">' + when + '</span>' +
+        '</div>';
+    }
+
+    return '' +
+      '<div class="attachment-card">' +
+        '<a class="attachment-file" href="' + url + '" target="_blank" rel="noopener">📎 <span>' + label + '</span></a>' +
+        '<span class="time">' + when + '</span>' +
+      '</div>';
+  }
+
   function addBubble(m){
     if(!m) return;
 
@@ -15672,7 +15845,14 @@ window.FOLLOWME_INFO_DATA = ${safeJson};
     const div = document.createElement("div");
     div.className = "bubble " + (m.sender === "owner" ? "owner" : "visitor");
     if(id) div.setAttribute("data-message-id", id);
-    div.textContent = m.message || "";
+
+    const att = parseAttachmentV2(m.message);
+    if(att){
+      div.innerHTML = renderAttachmentV2(att, m.created_at);
+    }else{
+      div.textContent = m.message || "";
+    }
+
     messages.appendChild(div);
     messages.scrollTop = messages.scrollHeight;
     lastMessageId = Math.max(lastMessageId, Number(m.id || 0));
