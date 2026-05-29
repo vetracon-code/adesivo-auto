@@ -15843,44 +15843,131 @@ async function sendFollowMeVoiceListenedPush20260528(project, voiceRow) {
   }
 }
 
+
+// FOLLOWME_VOICE_SERVE_FROM_DB_FILEPATH_FINAL_20260529
 app.get('/followme-voice/:code/:filename', async function(req, res) {
   try {
+    await ensureFollowMeVoiceMessagesRuntime20260528();
+
     const path = require('path');
-    const code = followMeVoiceSafeCode20260528(req.params.code);
-    const filename = String(req.params.filename || '').replace(/[^a-zA-Z0-9_.-]/g, '');
-    if (!code || !filename) return res.status(404).send('Audio non trovato.');
+    const fs = require('fs');
 
-    const filePath = path.join(FOLLOWME_VOICE_STORAGE_DIR_20260528, code, filename);
+    const code = String(req.params.code || '').trim();
+    const filename = String(req.params.filename || '').trim();
 
-    if (!filePath.startsWith(path.join(FOLLOWME_VOICE_STORAGE_DIR_20260528, code))) {
-      return res.status(403).send('Percorso non consentito.');
+    if (!code || !filename) {
+      return res.status(404).send('Audio non trovato.');
     }
 
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    
-    // FOLLOWME_VOICE_PUBLIC_AUDIO_CONTENT_TYPE_FIX_20260528
-    const lowerName = String(filename || '').toLowerCase();
+    const decodedFileUrl = '/followme-voice/' + code + '/' + filename;
+    const encodedFileUrl = '/followme-voice/' + encodeURIComponent(code) + '/' + encodeURIComponent(filename);
 
-    let contentType = 'application/octet-stream';
+    const q = await pool.query(
+      `SELECT
+         vm.id,
+         vm.file_url,
+         vm.file_path,
+         vm.mime_type,
+         p.code,
+         p.public_id
+       FROM followme_voice_messages vm
+       JOIN followme_projects p ON p.id = vm.project_id
+       WHERE (p.code = $1 OR p.public_id = $1)
+         AND (
+           vm.file_url = $2
+           OR vm.file_url = $3
+           OR vm.file_url LIKE $4
+           OR vm.file_path LIKE $4
+         )
+       ORDER BY vm.updated_at DESC NULLS LAST, vm.created_at DESC
+       LIMIT 1`,
+      [
+        code,
+        decodedFileUrl,
+        encodedFileUrl,
+        '%' + filename
+      ]
+    );
 
-    if (lowerName.endsWith('.m4a') || lowerName.endsWith('.mp4')) contentType = 'audio/mp4';
-    else if (lowerName.endsWith('.mp3')) contentType = 'audio/mpeg';
-    else if (lowerName.endsWith('.wav')) contentType = 'audio/wav';
-    else if (lowerName.endsWith('.webm')) contentType = 'audio/webm';
-    else if (lowerName.endsWith('.ogg')) contentType = 'audio/ogg';
-    else if (lowerName.endsWith('.aac')) contentType = 'audio/aac';
-    else if (lowerName.endsWith('.caf')) contentType = 'audio/x-caf';
+    let filePath = '';
+
+    if (q.rows.length && q.rows[0].file_path) {
+      filePath = String(q.rows[0].file_path);
+    } else {
+      const safeCode = followMeVoiceSafeCode20260528(code);
+      filePath = path.join(FOLLOWME_VOICE_STORAGE_DIR_20260528, safeCode, filename);
+    }
+
+    const candidates = [];
+
+    if (filePath) candidates.push(filePath);
+
+    if (filePath.startsWith('/data/')) {
+      candidates.push(filePath.replace(/^\/data\//, '/var/data/'));
+    }
+
+    if (filePath.startsWith('/var/data/')) {
+      candidates.push(filePath.replace(/^\/var\/data\//, '/data/'));
+    }
+
+    const roots = [
+      process.env.FOLLOWME_STORAGE_DIR || '/var/data',
+      '/data',
+      '/var/data'
+    ].map(x => path.resolve(x));
+
+    let found = '';
+
+    for (const candidate of candidates) {
+      const resolved = path.resolve(candidate);
+      const safe = roots.some(root => resolved === root || resolved.startsWith(root + path.sep));
+
+      if (!safe) continue;
+
+      if (fs.existsSync(resolved)) {
+        found = resolved;
+        break;
+      }
+    }
+
+    if (!found) {
+      console.error('[followme voice missing file]', {
+        code,
+        filename,
+        db_file_path: q.rows[0] ? q.rows[0].file_path : null,
+        db_file_url: q.rows[0] ? q.rows[0].file_url : null,
+        candidates
+      });
+
+      return res.status(404).send('Audio non trovato.');
+    }
+
+    const lower = String(found || filename).toLowerCase();
+
+    let contentType = q.rows[0]?.mime_type || 'application/octet-stream';
+
+    if (lower.endsWith('.m4a') || lower.endsWith('.mp4')) contentType = 'audio/mp4';
+    else if (lower.endsWith('.mp3')) contentType = 'audio/mpeg';
+    else if (lower.endsWith('.wav')) contentType = 'audio/wav';
+    else if (lower.endsWith('.webm')) contentType = 'audio/webm';
+    else if (lower.endsWith('.ogg')) contentType = 'audio/ogg';
+    else if (lower.endsWith('.aac')) contentType = 'audio/aac';
+    else if (lower.endsWith('.caf')) contentType = 'audio/x-caf';
 
     res.setHeader('Content-Type', contentType);
     res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader('Cache-Control', 'public, max-age=300');
 
-    return res.sendFile(filePath);
+    return res.sendFile(found);
 
   } catch (err) {
-    return res.status(404).send('Audio non trovato.');
+    console.error('followme voice serve error:', err);
+    return res.status(500).send('Errore lettura audio.');
   }
 });
+
+
+
 
 app.get('/api/followme/:code/voice-messages/status', async function(req, res) {
   try {
@@ -16132,6 +16219,14 @@ app.post('/api/followme/:code/voice-messages/upload-raw', express.raw({
     const fileUrl = followMeVoicePublicUrl20260528(projectCode, filename);
 
     fs.writeFileSync(fullPath, buffer);
+
+    // FOLLOWME_VOICE_RAW_WRITE_VERIFY_FINAL_20260529
+    if (!fs.existsSync(fullPath)) {
+      return res.status(500).json({
+        success:false,
+        error:'Audio non salvato sul disco. Riprova tra poco.'
+      });
+    }
 
     await pool.query(
       `UPDATE followme_voice_messages
