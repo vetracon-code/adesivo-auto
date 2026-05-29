@@ -14255,6 +14255,9 @@ app.post('/api/followme/chat/session/:session_id/attachment', express.json({ lim
       const fullPath = path.join(uploadDir, storedName);
       fs.writeFileSync(fullPath, buffer);
 
+    // FOLLOWME_VOICE_PERSISTENT_DISK_VERIFY_FINAL_20260529
+    followMeVoiceAssertWrittenPersistentFinal20260529(fullPath, Math.min(buffer.length, 1));
+
       attachmentUrl = `/uploads/followme-chat/${storedName}`;
       safeFilename = filenameRaw || storedName;
     }
@@ -16157,6 +16160,81 @@ app.get('/api/followme/:code/voice-messages/storage-diagnostic', async function(
   }
 });
 
+
+
+// FOLLOWME_VOICE_PERSISTENT_DISK_VERIFY_FINAL_20260529
+function followMeVoiceFileExistsPersistentFinal20260529(row) {
+  try {
+    if (!row) return false;
+
+    const fs = require('fs');
+    const path = require('path');
+
+    const candidates = [];
+
+    if (row.file_path) {
+      candidates.push(String(row.file_path));
+    }
+
+    if (row.file_url) {
+      const m = String(row.file_url).match(/\/followme-voice\/([^\/?#]+)\/([^\/?#]+)/);
+      if (m) {
+        const code = decodeURIComponent(m[1]);
+        const filename = decodeURIComponent(m[2]);
+
+        candidates.push(path.join(FOLLOWME_VOICE_STORAGE_DIR_20260528, code, filename));
+        candidates.push(path.join('/data', 'followme-voice-messages', code, filename));
+        candidates.push(path.join('/var/data', 'followme-voice-messages', code, filename));
+      }
+    }
+
+    return candidates.some(candidate => {
+      try {
+        return candidate && fs.existsSync(candidate) && fs.statSync(candidate).size > 0;
+      } catch(e) {
+        return false;
+      }
+    });
+  } catch (err) {
+    console.error('followMeVoiceFileExistsPersistentFinal20260529 error:', err.message || err);
+    return false;
+  }
+}
+
+function followMeVoiceAssertWrittenPersistentFinal20260529(filePath, expectedMinBytes) {
+  const fs = require('fs');
+  const path = require('path');
+
+  const resolved = path.resolve(String(filePath || ''));
+  const allowedRoots = [
+    path.resolve(process.env.FOLLOWME_STORAGE_DIR || '/var/data'),
+    path.resolve('/data'),
+    path.resolve('/var/data')
+  ];
+
+  const safe = allowedRoots.some(root => resolved === root || resolved.startsWith(root + path.sep));
+
+  if (!safe) {
+    throw new Error('Percorso audio non sicuro: ' + resolved);
+  }
+
+  if (!fs.existsSync(resolved)) {
+    throw new Error('Audio non scritto sul disco persistente.');
+  }
+
+  const st = fs.statSync(resolved);
+  const min = Number(expectedMinBytes || 1);
+
+  if (!st.size || st.size < min) {
+    throw new Error('Audio scritto ma vuoto o incompleto.');
+  }
+
+  return {
+    path: resolved,
+    size_bytes: st.size
+  };
+}
+
 app.get('/api/followme/:code/voice-messages/status', async function(req, res) {
   try {
     await ensureFollowMeVoiceMessagesRuntime20260528();
@@ -16175,7 +16253,7 @@ app.get('/api/followme/:code/voice-messages/status', async function(req, res) {
     const project = q.rows[0];
 
     const list = await pool.query(
-      `SELECT id, source_url, source_label, file_url, mime_type, duration_seconds, is_active,
+      `SELECT id, source_url, source_label, file_url, file_path, mime_type, duration_seconds, is_active,
               listened_count, last_listened_at, created_at, updated_at
        FROM followme_voice_messages
        WHERE project_id = $1
@@ -16407,6 +16485,9 @@ app.post('/api/followme/:code/voice-messages/upload-raw', express.raw({
     const fileUrl = followMeVoicePublicUrl20260528(projectCode, filename);
 
     fs.writeFileSync(fullPath, buffer);
+
+    // FOLLOWME_VOICE_PERSISTENT_DISK_VERIFY_FINAL_20260529
+    followMeVoiceAssertWrittenPersistentFinal20260529(fullPath, Math.min(buffer.length, 1));
 
     // FOLLOWME_VOICE_RAW_WRITE_VERIFY_FINAL_20260529
     if (!fs.existsSync(fullPath)) {
@@ -20442,6 +20523,9 @@ const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || ''
     const fullPath = path.join(uploadDir, storedName);
     fs.writeFileSync(fullPath, buffer);
 
+    // FOLLOWME_VOICE_PERSISTENT_DISK_VERIFY_FINAL_20260529
+    followMeVoiceAssertWrittenPersistentFinal20260529(fullPath, Math.min(buffer.length, 1));
+
     const publicUrl = `/uploads/followme-chat-v2/${storedName}`;
 
     const isVoice = kind === 'voice';
@@ -20588,6 +20672,9 @@ app.post('/api/followme/chat-v2/session/:session_id/attachment', express.json({ 
 
     const fullPath = path.join(uploadDir, storedName);
     fs.writeFileSync(fullPath, buffer);
+
+    // FOLLOWME_VOICE_PERSISTENT_DISK_VERIFY_FINAL_20260529
+    followMeVoiceAssertWrittenPersistentFinal20260529(fullPath, Math.min(buffer.length, 1));
 
     const publicUrl = `/uploads/followme-chat-v2/${storedName}`;
 
