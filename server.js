@@ -16482,8 +16482,8 @@ app.post('/api/followme/:code/voice-messages/upload-raw', express.raw({
     else if (mime.includes('caf')) ext = 'caf';
 
     const duration = Number(req.query.duration_seconds || req.headers['x-followme-duration'] || 0);
-    if (duration > 24) {
-      return res.status(400).json({ success:false, error:'Audio troppo lungo. Durata massima 20 secondi.' });
+    if (duration > 34) {
+      return res.status(400).json({ success:false, error:'Audio troppo lungo. Durata massima 30 secondi.' });
     }
 
     const sourceUrl = String(req.query.source_url || req.headers['x-followme-source-url'] || project.active_url || '').trim();
@@ -16637,8 +16637,8 @@ app.post('/api/followme/:code/voice-messages/upload', express.json({ limit:'10mb
     const projectCode = followMeVoiceSafeCode20260528(project.code || project.public_id || codeParam);
 
     const duration = Number(req.body?.duration_seconds || 0);
-    if (!duration || duration > 22) {
-      return res.status(400).json({ success:false, error:'Il messaggio vocale deve durare massimo 20 secondi.' });
+    if (!duration || duration > 32) {
+      return res.status(400).json({ success:false, error:'Il messaggio vocale deve durare massimo 30 secondi.' });
     }
 
     const replaceId = Number(req.body?.replace_id || 0);
