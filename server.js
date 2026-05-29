@@ -15218,6 +15218,98 @@ app.post('/api/followme/:code/info-requests/toggle', express.json(), async funct
   }
 });
 
+
+
+// FOLLOWME_ACTIVITY_COUNTERS_20260529
+async function ensureFollowMeActivityCounters20260529() {
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS activity_reset_at TIMESTAMPTZ`);
+}
+
+app.get('/api/followme/:code/activity-counters', async function(req, res) {
+  try {
+    await ensureFollowMeActivityCounters20260529();
+
+    const code = String(req.params.code || '').trim();
+
+    const q = await pool.query(
+      `SELECT id, code, public_id, activity_reset_at
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).json({ success:false, error:'FollowMe QR non trovato.' });
+    }
+
+    const project = q.rows[0];
+
+    const scans = await pool.query(
+      `SELECT COUNT(*)::int AS n
+       FROM followme_scan_logs
+       WHERE project_id = $1
+         AND created_at > COALESCE($2::timestamptz, '1970-01-01'::timestamptz)`,
+      [project.id, project.activity_reset_at]
+    );
+
+    const chats = await pool.query(
+      `SELECT COUNT(*)::int AS n
+       FROM followme_chat_sessions
+       WHERE project_id = $1
+         AND source_type = 'info_request'
+         AND created_at > COALESCE($2::timestamptz, '1970-01-01'::timestamptz)`,
+      [project.id, project.activity_reset_at]
+    );
+
+    return res.json({
+      success:true,
+      activity_reset_at:project.activity_reset_at || null,
+      counters:{
+        new_views:Number(scans.rows[0]?.n || 0),
+        new_chat_requests:Number(chats.rows[0]?.n || 0)
+      }
+    });
+  } catch (err) {
+    console.error('followme activity counters error:', err);
+    return res.status(500).json({ success:false, error:'Errore contatori attività.' });
+  }
+});
+
+app.post('/api/followme/:code/activity-counters/reset', express.json({ limit:'16kb' }), async function(req, res) {
+  try {
+    await ensureFollowMeActivityCounters20260529();
+
+    const code = String(req.params.code || '').trim();
+
+    const q = await pool.query(
+      `UPDATE followme_projects
+       SET activity_reset_at = NOW(),
+           updated_at = NOW()
+       WHERE code = $1 OR public_id = $1
+       RETURNING id, code, public_id, activity_reset_at`,
+      [code]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).json({ success:false, error:'FollowMe QR non trovato.' });
+    }
+
+    return res.json({
+      success:true,
+      activity_reset_at:q.rows[0].activity_reset_at,
+      counters:{
+        new_views:0,
+        new_chat_requests:0
+      }
+    });
+  } catch (err) {
+    console.error('followme activity counters reset error:', err);
+    return res.status(500).json({ success:false, error:'Errore reset contatori attività.' });
+  }
+});
+
+
 app.get('/api/followme/:code/info-requests/status', async function(req, res) {
   try {
     await ensureFollowMeInfoRequestsRuntime20260528();

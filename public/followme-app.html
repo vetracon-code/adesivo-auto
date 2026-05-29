@@ -7069,6 +7069,19 @@ function followmeSafeClearPdfPreview20260526(preview){
       </div>
     </section>
 
+    <section class="card followme-activity-mini-20260529" id="followmeActivityCountersPanel20260529">
+      <div class="followme-activity-title-20260529">Attività recenti</div>
+      <div class="followme-activity-row-20260529">
+        <span>👁 Visualizzazioni nuove</span>
+        <strong id="followmeActivityViews20260529">0</strong>
+      </div>
+      <div class="followme-activity-row-20260529">
+        <span>💬 Richieste chat nuove</span>
+        <strong id="followmeActivityChats20260529">0</strong>
+      </div>
+      <button class="followme-activity-reset-20260529" id="followmeActivityReset20260529" type="button">Reset contatori</button>
+    </section>
+
     <section class="card premium-history-section" id="premiumHistorySection">
       <div class="premium-history-head">
         <div class="label">Destinazioni recenti</div>
@@ -46172,5 +46185,93 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
     fixButton();
     setInterval(fixButton, 800);
   });
+})();
+</script>
+
+
+<script id="FOLLOWME_ACTIVITY_COUNTERS_PANEL_20260529">
+(function(){
+  "use strict";
+
+  function $(id){ return document.getElementById(id); }
+
+  function getCodeSafe(){
+    try{
+      if(typeof getCode === "function") return getCode();
+    }catch(e){}
+    try{
+      var qs = new URLSearchParams(location.search);
+      return qs.get("code") || qs.get("qr") || qs.get("c") || "";
+    }catch(e){}
+    return "";
+  }
+
+  function toastSafe(msg){
+    try{
+      if(typeof toast === "function"){ toast(msg); return; }
+      if(typeof showToast === "function"){ showToast(msg); return; }
+    }catch(e){}
+    alert(msg);
+  }
+
+  async function loadCounters(){
+    var code = getCodeSafe();
+    if(!code) return;
+
+    var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/activity-counters?v=" + Date.now(), {
+      cache:"no-store"
+    });
+    var data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || data.success === false) return;
+
+    var c = data.counters || {};
+    var views = $("followmeActivityViews20260529");
+    var chats = $("followmeActivityChats20260529");
+
+    if(views) views.textContent = String(c.new_views || 0);
+    if(chats) chats.textContent = String(c.new_chat_requests || 0);
+  }
+
+  async function resetCounters(){
+    var code = getCodeSafe();
+    if(!code) return toastSafe("Codice FollowMe mancante.");
+
+    var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/activity-counters/reset?v=" + Date.now(), {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({})
+    });
+    var data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || data.success === false){
+      return toastSafe((data && data.error) || "Errore reset contatori.");
+    }
+
+    var views = $("followmeActivityViews20260529");
+    var chats = $("followmeActivityChats20260529");
+
+    if(views) views.textContent = "0";
+    if(chats) chats.textContent = "0";
+
+    toastSafe("Contatori attività azzerati.");
+  }
+
+  function bind(){
+    var btn = $("followmeActivityReset20260529");
+    if(btn && btn.dataset.boundActivityCounters20260529 !== "1"){
+      btn.dataset.boundActivityCounters20260529 = "1";
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        resetCounters();
+      });
+    }
+    loadCounters();
+  }
+
+  document.addEventListener("DOMContentLoaded", bind);
+  setTimeout(bind, 500);
+  setTimeout(loadCounters, 1800);
+  setInterval(loadCounters, 7000);
 })();
 </script>
