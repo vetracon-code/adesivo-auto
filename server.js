@@ -15279,7 +15279,7 @@ app.get('/fm/info/:public_id', async function(req, res) {
     const activeVoice = voiceRes.rows[0] || null;
 
     const voiceHtml = activeVoice
-      ? '<button class="premium-btn ghost" id="voiceBtn" type="button">▶ Ascolta il messaggio</button>'
+      ? '<button class="premium-btn ghost" id="voiceBtn" type="button">▶ Ascolta</button>'
       : '';
 
     if (!activeUrl) {
@@ -15330,7 +15330,7 @@ app.get('/fm/info/:public_id', async function(req, res) {
     box-shadow:0 8px 22px rgba(15,23,42,.10), inset 0 1px 0 rgba(255,255,255,.9);
     cursor:pointer;
   }
-  .premium-btn.green{background:linear-gradient(180deg,#22c55e,#16a34a);color:#fff;border-color:rgba(22,163,74,.35)}
+  .premium-btn.green{background:rgba(17,137,67,.08);color:#0f7a37;border-color:rgba(17,137,67,.14);box-shadow:none}
   .premium-btn.ghost{background:rgba(255,255,255,.82)}
   .content{
     position:fixed;inset:0;padding-top:76px;background:#fff;
@@ -15382,13 +15382,75 @@ app.get('/fm/info/:public_id', async function(req, res) {
     .chat-sheet{border-radius:28px;max-height:720px}
     .messages{height:420px}
   }
+
+  /* FOLLOWME_INFO_INLINE_TRUST_SOFT_REAL_ROUTE_20260529 */
+  .premium-actions{
+    width:calc(100% - 20px);
+    max-width:410px;
+    margin:0 auto 8px;
+    padding:0;
+    display:grid;
+    grid-template-columns:1fr;
+    gap:7px;
+    box-sizing:border-box;
+  }
+  .premium-actions:has(#voiceBtn):has(#infoBtn){
+    grid-template-columns:1fr 1fr;
+  }
+  .premium-btn{
+    min-height:38px;
+    border-radius:13px;
+    padding:8px 10px;
+    font-size:12.7px;
+    font-weight:610;
+    letter-spacing:-.08px;
+    line-height:1.1;
+    box-shadow:0 5px 14px rgba(16,24,40,.045);
+    white-space:nowrap;
+  }
+  #voiceBtn{
+    background:#fff;
+    color:#101828;
+    border:1px solid rgba(16,24,40,.08);
+    box-shadow:0 5px 14px rgba(16,24,40,.045);
+  }
+  #infoBtn,
+  #fallbackInfo,
+  .premium-btn.green{
+    background:rgba(17,137,67,.08);
+    color:#0f7a37;
+    border:1px solid rgba(17,137,67,.14);
+    box-shadow:none;
+  }
+  .premium-btn.ghost{
+    background:rgba(255,255,255,.86);
+    color:#101828;
+  }
+  a.premium-btn[target="_blank"]{
+    margin:10px auto 0;
+    min-height:34px;
+    max-width:410px;
+    border-radius:12px;
+    background:#fff;
+    color:#667085;
+    border:1px solid rgba(16,24,40,.08);
+    box-shadow:none;
+    font-size:12px;
+    font-weight:520;
+  }
+  a.premium-btn[target="_blank"]::before{
+    content:"↗";
+    font-size:12px;
+    opacity:.72;
+  }
+
 </style>
 </head>
 <body>
 <div class="topbar">
   <div class="bar-inner">
     ${voiceHtml}
-    <button class="premium-btn green" id="infoBtn" type="button">Chiedi informazioni</button>
+    <button class="premium-btn green" id="infoBtn" type="button">Chiedi info</button>
   </div>
 </div>
 
@@ -15398,7 +15460,7 @@ app.get('/fm/info/:public_id', async function(req, res) {
     <div class="fallback-card">
       <h1>Contenuto disponibile</h1>
       <p>Se la pagina non viene visualizzata qui, puoi aprirla in una nuova scheda. Puoi comunque chiedere informazioni al proprietario.</p>
-      <button class="premium-btn green" id="fallbackInfo" type="button">Chiedi informazioni</button>
+      <button class="premium-btn green" id="fallbackInfo" type="button">Chiedi info</button>
     </div>
   </div>
 </div>
