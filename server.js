@@ -16032,6 +16032,131 @@ app.get('/followme-voice/:code/:filename', async function(req, res) {
 
 
 
+
+
+// FOLLOWME_VOICE_STORAGE_DIAGNOSTIC_20260529
+app.get('/api/followme/:code/voice-messages/storage-diagnostic', async function(req, res) {
+  try {
+    await ensureFollowMeVoiceMessagesRuntime20260528();
+
+    const fs = require('fs');
+    const path = require('path');
+
+    const codeParam = String(req.params.code || '').trim();
+
+    const projectRes = await pool.query(
+      `SELECT id, code, public_id, active_url
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [codeParam]
+    );
+
+    if (!projectRes.rows.length) {
+      return res.status(404).json({ success:false, error:'FollowMe QR non trovato.' });
+    }
+
+    const project = projectRes.rows[0];
+    const safeCode = followMeVoiceSafeCode20260528(project.code || project.public_id || codeParam);
+
+    const storageRoot = process.env.FOLLOWME_STORAGE_DIR || '/var/data';
+    const voiceStorageDir = FOLLOWME_VOICE_STORAGE_DIR_20260528;
+    const projectVoiceDir = path.join(voiceStorageDir, safeCode);
+
+    let diskFiles = [];
+    try {
+      if (fs.existsSync(projectVoiceDir)) {
+        diskFiles = fs.readdirSync(projectVoiceDir).map(name => {
+          const full = path.join(projectVoiceDir, name);
+          let st = null;
+          try { st = fs.statSync(full); } catch(e) {}
+
+          return {
+            name,
+            path: full,
+            size_bytes: st ? st.size : null,
+            modified_at: st ? st.mtime.toISOString() : null
+          };
+        });
+      }
+    } catch(e) {
+      diskFiles = [{ error:String(e.message || e) }];
+    }
+
+    const dbRes = await pool.query(
+      `SELECT id, source_url, source_label, file_url, file_path, mime_type,
+              duration_seconds, is_active, listened_count, created_at, updated_at
+       FROM followme_voice_messages
+       WHERE project_id = $1
+       ORDER BY created_at DESC
+       LIMIT 10`,
+      [project.id]
+    );
+
+    const dbMessages = dbRes.rows.map(row => {
+      let exists = false;
+      let checked_paths = [];
+
+      try {
+        if (row.file_path) {
+          checked_paths.push(String(row.file_path));
+        }
+
+        if (row.file_url) {
+          const m = String(row.file_url).match(/\/followme-voice\/([^\/?#]+)\/([^\/?#]+)/);
+          if (m) {
+            const c = decodeURIComponent(m[1]);
+            const f = decodeURIComponent(m[2]);
+            checked_paths.push(path.join(voiceStorageDir, c, f));
+            checked_paths.push(path.join('/data', 'followme-voice-messages', c, f));
+            checked_paths.push(path.join('/var/data', 'followme-voice-messages', c, f));
+          }
+        }
+
+        exists = checked_paths.some(p => {
+          try { return p && fs.existsSync(p); } catch(e) { return false; }
+        });
+      } catch(e) {}
+
+      return {
+        ...row,
+        physical_exists: exists,
+        checked_paths
+      };
+    });
+
+    return res.json({
+      success:true,
+      project:{
+        id: project.id,
+        code: project.code,
+        public_id: project.public_id,
+        active_url: project.active_url
+      },
+      env:{
+        FOLLOWME_STORAGE_DIR: process.env.FOLLOWME_STORAGE_DIR || null,
+        NODE_ENV: process.env.NODE_ENV || null
+      },
+      storage:{
+        storage_root: storageRoot,
+        voice_storage_dir: voiceStorageDir,
+        project_voice_dir: projectVoiceDir,
+        voice_storage_dir_exists: fs.existsSync(voiceStorageDir),
+        project_voice_dir_exists: fs.existsSync(projectVoiceDir)
+      },
+      disk_files: diskFiles,
+      db_messages: dbMessages
+    });
+
+  } catch (err) {
+    console.error('followme voice storage diagnostic error:', err);
+    return res.status(500).json({
+      success:false,
+      error:String(err && err.message ? err.message : err)
+    });
+  }
+});
+
 app.get('/api/followme/:code/voice-messages/status', async function(req, res) {
   try {
     await ensureFollowMeVoiceMessagesRuntime20260528();
