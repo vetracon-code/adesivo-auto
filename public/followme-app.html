@@ -7614,16 +7614,14 @@ function updateSimpleDestinationPreview(url){
   }
 }
 
-async function updateUrl(){
+async async function updateUrl(){
   const input = document.getElementById("newUrl");
   const btn = document.getElementById("updateDestinationBtn");
 
+  let url = input ? String(input.value || "").trim() : "";
+
   try{
     CODE = getCode();
-
-    toast("Sto salvando la nuova destinazione...");
-
-    let url = input ? input.value.trim() : "";
 
     if(!url){
       toast("Inserisci un link.");
@@ -7632,7 +7630,11 @@ async function updateUrl(){
 
     if(!/^https?:\/\//i.test(url)){
       url = "https://" + url;
-      if(input) if(document.activeElement !== newUrl){ newUrl.value = ""; newUrl.placeholder = "Incolla qui il nuovo URL che vuoi trasmettere."; }
+      if(input){
+        input.value = url;
+        input.dispatchEvent(new Event("input", { bubbles:true }));
+        input.dispatchEvent(new Event("change", { bubbles:true }));
+      }
     }
 
     try{
@@ -7642,43 +7644,74 @@ async function updateUrl(){
       return;
     }
 
+    /*
+      UX immediata: prima mostro la preview, poi salvo.
+    */
+    followMePreviewImmediate20260529(url);
+
     if(btn){
       btn.disabled = true;
-      btn.textContent = "Aggiorno...";
+      btn.textContent = "Salvo...";
       btn.classList.add("refresh-running");
     }
+
+    toast("Preview aggiornata. Salvataggio in corso...");
 
     const res = await fetch("/api/followme/" + encodeURIComponent(CODE) + "/update-url", {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
-          url:url,
-          client_command_ts: reactivateSeq20260526 || Date.now()
-        })
+        url:url,
+        client_command_ts: reactivateSeq20260526 || Date.now()
+      })
     });
 
     const data = await res.json().catch(()=>null);
 
     if(!res.ok || !data || !data.success){
       toast((data && data.error) || "Errore aggiornamento link.");
+
+      /*
+        Se il server rifiuta, riallineo dopo.
+      */
+      setTimeout(function(){
+        try{ if(typeof loadStatus === "function") loadStatus(); }catch(e){}
+        try{ if(typeof renderFollowMeEmergencyHistory === "function") renderFollowMeEmergencyHistory(); }catch(e){}
+      }, 500);
+
       return;
     }
 
     window.__followMeActiveUrl = url;
+    window.followMeCurrentActiveUrl = url;
+    window.currentFollowMeActiveUrl = url;
 
-    if(typeof updateSimpleDestinationPreview === "function"){
-      updateSimpleDestinationPreview(url);
-    }
+    followMePreviewImmediate20260529(url);
 
-    toast("Fatto. Il QR ora porta al nuovo link.");
+    toast("QR aggiornato.");
 
-    await loadStatus();
+    /*
+      Ricarichi pesanti differiti: non bloccano più la preview.
+    */
+    setTimeout(function(){
+      try{ if(typeof loadStatus === "function") loadStatus(); }catch(e){}
+    }, 650);
 
-    if(typeof renderFollowMeEmergencyHistory === "function"){
-      try{ await renderFollowMeEmergencyHistory(); }catch(e){}
-    }
+    setTimeout(function(){
+      try{ if(typeof renderFollowMeEmergencyHistory === "function") renderFollowMeEmergencyHistory(); }catch(e){}
+    }, 900);
 
   }catch(err){
+    console.error("updateUrl error:", err);
+    toast("Errore aggiornamento: " + (err.message || err));
+  }finally{
+    if(btn){
+      btn.disabled = false;
+      btn.textContent = "Aggiorna QR";
+      btn.classList.remove("refresh-running");
+    }
+  }
+}catch(err){
     console.error("updateUrl error:", err);
     toast("Errore aggiornamento: " + (err.message || err));
   }finally{
@@ -7702,6 +7735,124 @@ function reactivateUrl(encoded){
 let __followMeDeleteHistoryUrl = "";
 let __followMeDeleteHistoryIsActive = false;
 
+/* FOLLOWME_REAL_SPEED_UPDATE_DELETE_20260529 */
+function followMeNormalizeCompareUrl20260529(raw){
+  let u = String(raw || "").trim();
+  if(!u) return "";
+  if(!/^https?:\/\//i.test(u) && !/^mailto:|^tel:|^sms:|^whatsapp:/i.test(u)){
+    u = "https://" + u;
+  }
+  try{
+    const obj = new URL(u);
+    obj.hash = "";
+    return obj.toString().replace(/\/+$/,"").toLowerCase();
+  }catch(e){
+    return u.replace(/\/+$/,"").toLowerCase();
+  }
+}
+
+function followMePreviewImmediate20260529(url){
+  url = String(url || "").trim();
+  if(!url) return;
+
+  try{ window.__followMeActiveUrl = url; }catch(e){}
+  try{ window.followMeCurrentActiveUrl = url; }catch(e){}
+  try{ window.currentFollowMeActiveUrl = url; }catch(e){}
+  try{ window.__followMePreviewWantedUrl = url; }catch(e){}
+
+  try{
+    const activeText = document.getElementById("activeUrl");
+    if(activeText) activeText.textContent = url;
+  }catch(e){}
+
+  try{
+    if(typeof updateSimpleDestinationPreview === "function"){
+      updateSimpleDestinationPreview(url);
+    }
+  }catch(e){}
+
+  try{
+    if(typeof window.forceFollowMePreview === "function"){
+      window.forceFollowMePreview(url);
+    }
+  }catch(e){}
+
+  try{
+    const frame =
+      document.getElementById("simpleDestinationPreviewFrame") ||
+      document.getElementById("previewFrame") ||
+      document.getElementById("followmePreviewFrame") ||
+      document.querySelector("iframe");
+
+    if(frame && frame.tagName && frame.tagName.toLowerCase() === "iframe"){
+      frame.src = url;
+    }
+
+    const open = document.getElementById("simpleDestinationPreviewOpen");
+    if(open){
+      open.href = url;
+      open.style.opacity = "1";
+      open.style.pointerEvents = "auto";
+    }
+
+    const block =
+      document.getElementById("simpleDestinationPreviewBlock") ||
+      frame ||
+      document.querySelector(".simple-preview-card") ||
+      document.querySelector(".preview");
+
+    if(block){
+      setTimeout(function(){
+        try{ block.scrollIntoView({ behavior:"smooth", block:"center" }); }catch(e){}
+      }, 80);
+    }
+  }catch(e){}
+}
+
+function followMeRemoveHistoryCardImmediate20260529(url){
+  const target = followMeNormalizeCompareUrl20260529(url);
+  if(!target) return 0;
+
+  let removed = 0;
+
+  document.querySelectorAll(".history-item,.premium-history-card,[data-history-url],[data-url]").forEach(function(card){
+    try{
+      const dataUrl = card.getAttribute("data-history-url") || card.getAttribute("data-url") || "";
+      const text = String(card.textContent || "");
+      const match =
+        followMeNormalizeCompareUrl20260529(dataUrl) === target ||
+        followMeNormalizeCompareUrl20260529(text.match(/https?:\/\/[^\s]+/i)?.[0] || "") === target ||
+        text.includes(url);
+
+      if(match){
+        removed++;
+        card.style.transition = "opacity .14s ease, transform .14s ease, max-height .18s ease, margin .18s ease, padding .18s ease";
+        card.style.opacity = "0";
+        card.style.transform = "scale(.985)";
+        card.style.pointerEvents = "none";
+
+        setTimeout(function(){
+          try{
+            card.style.maxHeight = "0px";
+            card.style.margin = "0px";
+            card.style.paddingTop = "0px";
+            card.style.paddingBottom = "0px";
+            card.style.overflow = "hidden";
+          }catch(e){}
+        }, 110);
+
+        setTimeout(function(){
+          try{ card.remove(); }catch(e){}
+        }, 260);
+      }
+    }catch(e){}
+  });
+
+  return removed;
+}
+
+
+
 function openDeleteHistoryConfirm(encoded, isActive){
   try{
     const url = decodeURIComponent(encoded || "").trim();
@@ -7711,7 +7862,23 @@ function openDeleteHistoryConfirm(encoded, isActive){
       return;
     }
 
-    if(isActive === true || isActive === "true"){
+    /*
+      Non mi fido più dell'isActive passato dal render: può essere vecchio.
+      Controllo contro gli URL attivi globali aggiornati.
+    */
+    const activeCandidates = [
+      window.__followMeActiveUrl,
+      window.followMeCurrentActiveUrl,
+      window.currentFollowMeActiveUrl,
+      document.getElementById("activeUrl") ? document.getElementById("activeUrl").textContent : ""
+    ];
+
+    const urlNorm = followMeNormalizeCompareUrl20260529(url);
+    const isReallyActive = activeCandidates.some(function(x){
+      return x && followMeNormalizeCompareUrl20260529(x) === urlNorm;
+    });
+
+    if(isReallyActive){
       toast("Prima attiva un altro link, poi potrai eliminare questo.");
       return;
     }
@@ -7744,7 +7911,7 @@ function closeDeleteHistoryConfirm(){
   __followMeDeleteHistoryIsActive = false;
 }
 
-async function confirmDeleteHistoryLink(){
+async async function confirmDeleteHistoryLink(){
   const url = String(__followMeDeleteHistoryUrl || "").trim();
 
   if(!url){
@@ -7753,14 +7920,23 @@ async function confirmDeleteHistoryLink(){
     return;
   }
 
+  const btn = document.getElementById("confirmDeleteHistoryBtn");
+
   try{
     CODE = getCode();
 
-    const btn = document.getElementById("confirmDeleteHistoryBtn");
+    /*
+      UX immediata: chiudo popup e rimuovo la card prima della risposta server.
+    */
+    closeDeleteHistoryConfirm();
+    const removed = followMeRemoveHistoryCardImmediate20260529(url);
+
     if(btn){
       btn.disabled = true;
       btn.textContent = "Elimino...";
     }
+
+    toast(removed ? "Link rimosso." : "Elimino link...");
 
     const res = await fetch("/api/followme/" + encodeURIComponent(CODE) + "/history/delete", {
       method:"POST",
@@ -7772,23 +7948,37 @@ async function confirmDeleteHistoryLink(){
 
     if(!res.ok || !data || !data.success){
       toast((data && data.error) || "Errore eliminazione link.");
+
+      /*
+        Rollback: ricarico lo storico se il server non conferma.
+      */
+      setTimeout(function(){
+        try{ if(typeof renderFollowMeEmergencyHistory === "function") renderFollowMeEmergencyHistory(); }catch(e){}
+      }, 350);
+
       return;
     }
 
-    closeDeleteHistoryConfirm();
-    toast("Link eliminato dallo storico.");
+    /*
+      Riallineo dopo, senza bloccare la percezione.
+    */
+    setTimeout(function(){
+      try{ if(typeof loadStatus === "function") loadStatus(); }catch(e){}
+    }, 550);
 
-    await loadStatus();
-
-    if(typeof renderFollowMeEmergencyHistory === "function"){
-      try{ await renderFollowMeEmergencyHistory(); }catch(e){}
-    }
+    setTimeout(function(){
+      try{ if(typeof renderFollowMeEmergencyHistory === "function") renderFollowMeEmergencyHistory(); }catch(e){}
+    }, 800);
 
   }catch(err){
     console.error("confirmDeleteHistoryLink error:", err);
     toast("Errore eliminazione: " + (err.message || err));
+
+    setTimeout(function(){
+      try{ if(typeof renderFollowMeEmergencyHistory === "function") renderFollowMeEmergencyHistory(); }catch(e){}
+    }, 350);
+
   }finally{
-    const btn = document.getElementById("confirmDeleteHistoryBtn");
     if(btn){
       btn.disabled = false;
       btn.textContent = "Confermi";
@@ -8302,7 +8492,7 @@ document.addEventListener("visibilitychange", function(){
       var empty = document.getElementById("simpleDestinationPreviewEmpty");
       var open = document.getElementById("simpleDestinationPreviewOpen");
       var activeUrlRaw = (data.project && data.project.active_url) || "";
-      var activeUrl = clean(activeUrlRaw);
+      var activeUrl = followMeNormalizeCompareUrl20260529(activeUrlRaw);\n      try{ window.__followMeActiveUrl = activeUrlRaw; window.followMeCurrentActiveUrl = activeUrlRaw; window.currentFollowMeActiveUrl = activeUrlRaw; }catch(e){}
 
       if(frame && activeUrlRaw){
         frame.src = activeUrlRaw;
@@ -8329,8 +8519,8 @@ document.addEventListener("visibilitychange", function(){
       }
 
       rows.sort(function(a,b){
-        var aa = clean(a.url) === activeUrl ? 0 : 1;
-        var bb = clean(b.url) === activeUrl ? 0 : 1;
+        var aa = followMeNormalizeCompareUrl20260529(a.url) === activeUrl ? 0 : 1;
+        var bb = followMeNormalizeCompareUrl20260529(b.url) === activeUrl ? 0 : 1;
         if(aa !== bb) return aa - bb;
 
         var ad = new Date(a.activated_at || a.last_used_at || 0).getTime();
@@ -8340,7 +8530,7 @@ document.addEventListener("visibilitychange", function(){
 
       list.innerHTML = rows.slice(0,20).map(function(x){
         var url = x.url || "";
-        var isActive = clean(url) === activeUrl;
+        var isActive = followMeNormalizeCompareUrl20260529(url) === activeUrl;
         var scans = x.scan_count || 0;
         var last = fmt(x.last_used_at);
         var safeUrl = esc(url);
@@ -8353,7 +8543,7 @@ document.addEventListener("visibilitychange", function(){
         var deleteButton = '<button class="btn secondary followme-delete-btn" type="button" onclick="openDeleteHistoryConfirm(\\'' + encoded + '\\', ' + (isActive ? 'true' : 'false') + ')">Elimina</button>';
 
         return ''
-          + '<div class="history-item ' + (isActive ? 'followme-emergency-active' : '') + '">'
+          + '<div class="history-item ' + (isActive ? 'followme-emergency-active' : '') + '" data-history-url="' + esc(url) + '">'
           + '  <div>'
           + '    <strong>' + safeUrl + '</strong>'
           + '    <span>' + scans + ' scansioni · ultimo uso: ' + esc(last) + '</span>'
