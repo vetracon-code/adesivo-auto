@@ -16262,14 +16262,45 @@ app.get('/api/followme/:code/voice-messages/status', async function(req, res) {
       [project.id]
     );
 
-    const active = list.rows.find(r => r.is_active === true) || null;
+    let rows = list.rows || [];
+    let active = rows.find(r => r.is_active === true) || null;
+
+    // FOLLOWME_VOICE_STATUS_LIST_ROWS_PHYSICAL_CHECK_20260529
+    // La route status reale usa list.rows. Se il DB indica un audio attivo
+    // ma il file fisico non esiste su /data, non lo restituisco come attivo.
+    if (active && !followMeVoiceFileExistsPersistentFinal20260529(active)) {
+      console.warn('followme voice status: audio attivo mancante su disco persistente, lo disattivo', {
+        id: active.id,
+        file_url: active.file_url,
+        file_path: active.file_path
+      });
+
+      try {
+        await pool.query(
+          `UPDATE followme_voice_messages
+           SET is_active = FALSE, updated_at = NOW()
+           WHERE id = $1`,
+          [active.id]
+        );
+      } catch(e) {
+        console.error('followme voice status deactivate missing file error:', e.message || e);
+      }
+
+      rows = rows.map(r =>
+        String(r.id) === String(active.id)
+          ? Object.assign({}, r, { is_active:false })
+          : r
+      );
+
+      active = null;
+    }
 
     return res.json({
       success:true,
       project,
       has_active_voice:!!active,
       active_voice:active,
-      messages:list.rows,
+      messages:rows,
       max_messages:3
     });
   } catch (err) {
