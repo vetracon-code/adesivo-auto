@@ -819,6 +819,7 @@
 
   function forceQrVerifiedOutsideButtonsFinal(){
     injectQrVerifiedOutsideButtonsFinal();
+    injectVariant2CompactOfficial20260529();
 
     /*
       Rimuovo fisicamente il vecchio badge flottante se già creato.
@@ -1025,6 +1026,278 @@
     }
   }
 
+
+
+  // FOLLOWME_VARIANT2_COMPACT_OFFICIAL_20260529
+  function injectVariant2CompactOfficial20260529(){
+    if(document.getElementById("followmeVariant2CompactOfficialCss20260529")) return;
+
+    var style = document.createElement("style");
+    style.id = "followmeVariant2CompactOfficialCss20260529";
+    style.textContent = `
+      /*
+        Variante 2 ufficiale:
+        badge minimo, niente sottotesto, pulsanti compatti.
+      */
+
+      #followmeQrVerifiedBadge20260529,
+      #followmeQrVerifiedDetail20260529,
+      #followmeQrVerifiedStaticBanner20260529,
+      #followmeQrVerifiedStaticDetail20260529{
+        display:none !important;
+        opacity:0 !important;
+        visibility:hidden !important;
+        pointer-events:none !important;
+      }
+
+      #followmeQrVerifiedRealBanner20260529{
+        position:relative !important;
+        z-index:2 !important;
+        width:max-content !important;
+        max-width:calc(100% - 40px) !important;
+        margin:8px auto 9px !important;
+        padding:6px 10px !important;
+        border-radius:999px !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        gap:6px !important;
+        background:rgba(18,137,67,.085) !important;
+        color:#128943 !important;
+        border:1px solid rgba(18,137,67,.13) !important;
+        box-shadow:none !important;
+        font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif !important;
+        font-size:12.5px !important;
+        line-height:1 !important;
+        font-weight:700 !important;
+        letter-spacing:-.1px !important;
+        text-align:center !important;
+        box-sizing:border-box !important;
+      }
+
+      #followmeQrVerifiedRealBanner20260529 .fm-real-shield{
+        width:auto !important;
+        height:auto !important;
+        min-width:0 !important;
+        border-radius:0 !important;
+        display:inline !important;
+        background:transparent !important;
+        box-shadow:none !important;
+        font-size:13px !important;
+        line-height:1 !important;
+      }
+
+      #followmeQrVerifiedRealBanner20260529 .fm-real-copy{
+        display:inline !important;
+      }
+
+      #followmeQrVerifiedRealBanner20260529 strong{
+        display:inline !important;
+        font-size:12.5px !important;
+        line-height:1 !important;
+        font-weight:700 !important;
+        letter-spacing:-.1px !important;
+        color:#128943 !important;
+      }
+
+      /*
+        Rimuovo completamente la frase sotto il badge.
+      */
+      #followmeQrVerifiedRealBanner20260529 small{
+        display:none !important;
+      }
+
+      /*
+        Area azioni compatta.
+      */
+      body .premium-actions,
+      body .actions,
+      body .cta-row{
+        width:calc(100% - 20px) !important;
+        max-width:410px !important;
+        margin:0 auto 10px !important;
+        padding:0 !important;
+        display:grid !important;
+        grid-template-columns:1fr !important;
+        gap:7px !important;
+        box-sizing:border-box !important;
+        align-items:stretch !important;
+      }
+
+      /*
+        Se entrambi i pulsanti sono presenti li affianchiamo.
+        La classe viene applicata via JS sotto.
+      */
+      body .premium-actions.fm-two-actions-20260529,
+      body .actions.fm-two-actions-20260529,
+      body .cta-row.fm-two-actions-20260529{
+        grid-template-columns:1fr 1fr !important;
+      }
+
+      body .premium-btn,
+      body button.premium-btn,
+      body a.premium-btn{
+        min-height:38px !important;
+        height:auto !important;
+        width:100% !important;
+        border-radius:13px !important;
+        padding:8px 10px !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        gap:6px !important;
+        border:1px solid rgba(16,24,40,.08) !important;
+        background:#fff !important;
+        color:#101828 !important;
+        box-shadow:0 4px 10px rgba(16,24,40,.035) !important;
+        font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif !important;
+        font-size:12.8px !important;
+        font-weight:630 !important;
+        letter-spacing:-.1px !important;
+        line-height:1.1 !important;
+        text-decoration:none !important;
+        white-space:nowrap !important;
+        box-sizing:border-box !important;
+        -webkit-tap-highlight-color:transparent !important;
+      }
+
+      body .premium-btn:active,
+      body button.premium-btn:active,
+      body a.premium-btn:active{
+        transform:scale(.985) !important;
+      }
+
+      /*
+        Ascolta messaggio: elegante scuro, non gigante.
+      */
+      body #voiceBtn,
+      body button#voiceBtn.premium-btn{
+        background:#141923 !important;
+        color:#fff !important;
+        border-color:#141923 !important;
+        box-shadow:0 7px 16px rgba(16,24,40,.10) !important;
+      }
+
+      /*
+        Chiedi informazioni: verde compatto.
+      */
+      body #infoBtn,
+      body #fallbackInfo,
+      body button#infoBtn.premium-btn,
+      body button#fallbackInfo.premium-btn{
+        background:#128943 !important;
+        color:#fff !important;
+        border-color:#128943 !important;
+        box-shadow:0 7px 16px rgba(18,137,67,.11) !important;
+      }
+
+      /*
+        Apri in nuova pagina: secondario, sotto, non protagonista.
+      */
+      body a.premium-btn[target="_blank"],
+      body a.premium-btn[href^="http"]{
+        margin:10px auto 0 !important;
+        min-height:34px !important;
+        max-width:410px !important;
+        border-radius:12px !important;
+        padding:8px 10px !important;
+        background:#fff !important;
+        color:#667085 !important;
+        border:1px solid rgba(16,24,40,.08) !important;
+        box-shadow:none !important;
+        font-size:12px !important;
+        font-weight:520 !important;
+        letter-spacing:-.05px !important;
+      }
+
+      body a.premium-btn[target="_blank"]:before,
+      body a.premium-btn[href^="http"]:before{
+        content:"↗";
+        font-size:12px;
+        opacity:.72;
+      }
+
+      /*
+        Il frame deve restare protagonista.
+      */
+      body iframe,
+      body .preview,
+      body .premium-frame,
+      body .frame,
+      body .web-frame,
+      body .content-frame{
+        margin-top:10px !important;
+      }
+
+      body iframe{
+        min-height:62vh !important;
+      }
+
+      @media(max-width:370px){
+        body .premium-actions.fm-two-actions-20260529,
+        body .actions.fm-two-actions-20260529,
+        body .cta-row.fm-two-actions-20260529{
+          grid-template-columns:1fr !important;
+        }
+
+        body .premium-btn,
+        body button.premium-btn,
+        body a.premium-btn{
+          font-size:12.2px !important;
+          padding:8px 8px !important;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function applyVariant2CompactActionLayout20260529(){
+    var containers = Array.prototype.slice.call(document.querySelectorAll(".premium-actions,.actions,.cta-row"));
+
+    containers.forEach(function(container){
+      var voice = container.querySelector("#voiceBtn");
+      var info = container.querySelector("#infoBtn,#fallbackInfo");
+
+      var visibleButtons = Array.prototype.slice.call(container.querySelectorAll("button.premium-btn, a.premium-btn, .premium-btn"))
+        .filter(function(el){
+          if(!el) return false;
+          var st = window.getComputedStyle(el);
+          if(st.display === "none" || st.visibility === "hidden" || Number(st.opacity) === 0) return false;
+
+          /*
+            Escludo il link Apri in nuova pagina dalla griglia principale.
+          */
+          if(el.tagName && el.tagName.toLowerCase() === "a") return false;
+
+          return true;
+        });
+
+      if(visibleButtons.length >= 2 && voice && info){
+        container.classList.add("fm-two-actions-20260529");
+      }else{
+        container.classList.remove("fm-two-actions-20260529");
+      }
+    });
+
+    /*
+      Garantisco che il banner sia solo badge compatto, anche se creato da vecchie funzioni.
+    */
+    var banner = document.getElementById("followmeQrVerifiedRealBanner20260529");
+    if(banner){
+      banner.innerHTML =
+        '<span class="fm-real-shield">🛡️</span>' +
+        '<span class="fm-real-copy">' +
+          '<strong>QR verificato</strong>' +
+        '</span>';
+    }
+  }
+
+  function forceVariant2CompactOfficial20260529(){
+    injectVariant2CompactOfficial20260529();
+    applyVariant2CompactActionLayout20260529();
+  }
+
   function boot(){
     injectStyle();
     injectPremiumPublicActionsUx();
@@ -1034,12 +1307,14 @@
     makeOverlay();
 
     setTimeout(fixPublicFrameNotBlank20260529, 250);
-    setTimeout(forceQrVerifiedOutsideButtonsFinal, 400);
+    setTimeout(function(){ forceQrVerifiedOutsideButtonsFinal(); forceVariant2CompactOfficial20260529(); }, 400);
     setTimeout(fixPublicFrameNotBlank20260529, 900);
-    setTimeout(forceQrVerifiedOutsideButtonsFinal, 1200);
+    setTimeout(function(){ forceQrVerifiedOutsideButtonsFinal(); forceVariant2CompactOfficial20260529(); }, 1200);
     setTimeout(function(){
       forceQrVerifiedOutsideButtonsFinal();
+      forceVariant2CompactOfficial20260529();
       showChatDirectNotice20260529();
+      forceVariant2CompactOfficial20260529();
     }, 2400);
   }
 
