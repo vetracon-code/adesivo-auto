@@ -42338,7 +42338,14 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       if(recorder && recorder.state === "recording"){
         recorder.stop();
       }else{
-        setButtons(blob ? "ready" : "idle");
+        // FOLLOWME_VOICE_BUTTON_STATE_FIX_20260529
+    // Se la registrazione è in corso, bindAll NON deve rimettere i pulsanti in idle.
+    // Altrimenti il tasto Ferma viene disattivato subito dopo l'avvio.
+    if(recorder && recorder.state === "recording"){
+      setButtons("recording");
+    }else{
+      setButtons(blob ? "ready" : "idle");
+    }
       }
     }catch(e){
       setStatus("Errore chiusura registrazione.");
@@ -42550,6 +42557,36 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
     setButtons(blob ? "ready" : "idle");
   }
+
+
+  // FOLLOWME_VOICE_BUTTON_STATE_FIX_20260529
+  function enforceRecordingButtonState20260529(){
+    try{
+      if(recorder && recorder.state === "recording"){
+        const r = recordBtn();
+        const st = stopBtn();
+        const pl = playBtn();
+        const pub = publishBtn();
+
+        if(r){
+          r.disabled = true;
+          r.textContent = "Registra";
+        }
+
+        if(st){
+          st.disabled = false;
+          st.textContent = "Ferma";
+        }
+
+        if(pl) pl.disabled = true;
+        if(pub) pub.disabled = true;
+
+        setStatus("Registrazione in corso...");
+      }
+    }catch(e){}
+  }
+
+  setInterval(enforceRecordingButtonState20260529, 250);
 
   function boot(){
     bindAll();
