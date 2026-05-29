@@ -831,15 +831,132 @@
     insertQrVerifiedOutsideButtonsFinal();
   }
 
+
+
+  // FOLLOWME_QR_VERIFIED_CHAT_DIRECT_FLOW_20260529
+  function followMeInfoData20260529(){
+    try { return window.FOLLOWME_INFO_DATA || {}; }
+    catch(e){ return {}; }
+  }
+
+  function isChatDirectFlow20260529(){
+    var data = followMeInfoData20260529();
+    return data &&
+      data.chat_mode_enabled === true &&
+      typeof data.chat_url === "string" &&
+      data.chat_url.length > 0;
+  }
+
+  function prepareChatDirectFlow20260529(){
+    if(!isChatDirectFlow20260529()) return;
+
+    if(document.getElementById("followmeChatDirectFlowCss20260529")) return;
+
+    var style = document.createElement("style");
+    style.id = "followmeChatDirectFlowCss20260529";
+    style.textContent = `
+      body.followme-chat-direct-flow-20260529 .premium-actions,
+      body.followme-chat-direct-flow-20260529 .actions,
+      body.followme-chat-direct-flow-20260529 .cta-row,
+      body.followme-chat-direct-flow-20260529 iframe,
+      body.followme-chat-direct-flow-20260529 .preview,
+      body.followme-chat-direct-flow-20260529 .premium-frame{
+        display:none !important;
+      }
+
+      #followmeChatDirectNotice20260529{
+        width:calc(100% - 40px);
+        max-width:430px;
+        margin:12px auto 18px;
+        padding:16px 15px;
+        border-radius:22px;
+        background:rgba(255,255,255,.92);
+        border:1px solid rgba(15,23,42,.08);
+        box-shadow:0 14px 34px rgba(15,23,42,.09);
+        font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif;
+        text-align:center;
+        color:#0f172a;
+      }
+
+      #followmeChatDirectNotice20260529 strong{
+        display:block;
+        font-size:16px;
+        font-weight:850;
+        letter-spacing:-.25px;
+        margin-bottom:5px;
+      }
+
+      #followmeChatDirectNotice20260529 span{
+        display:block;
+        font-size:13px;
+        font-weight:560;
+        color:#64748b;
+        line-height:1.35;
+      }
+
+      #followmeChatDirectNotice20260529 a{
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        min-height:46px;
+        margin-top:14px;
+        border-radius:17px;
+        background:linear-gradient(145deg,#18b957,#0f8f43);
+        color:#fff;
+        text-decoration:none;
+        font-size:14px;
+        font-weight:780;
+        box-shadow:0 15px 34px rgba(22,163,74,.20);
+      }
+    `;
+
+    document.head.appendChild(style);
+    document.body.classList.add("followme-chat-direct-flow-20260529");
+  }
+
+  function showChatDirectNotice20260529(){
+    if(!isChatDirectFlow20260529()) return;
+
+    var data = followMeInfoData20260529();
+    var url = data.chat_url;
+
+    if(document.getElementById("followmeChatDirectNotice20260529")) return;
+
+    var banner =
+      document.getElementById("followmeQrVerifiedRealBanner20260529") ||
+      document.getElementById("followmeQrVerifiedStaticBanner20260529");
+
+    var box = document.createElement("div");
+    box.id = "followmeChatDirectNotice20260529";
+    box.innerHTML =
+      "<strong>Apro la chat sicura...</strong>" +
+      "<span>Puoi scrivere direttamente al proprietario del QR.</span>" +
+      '<a href="' + url.replace(/"/g, "&quot;") + '">Apri chat</a>';
+
+    if(banner && banner.parentNode){
+      banner.parentNode.insertBefore(box, banner.nextSibling);
+    }else{
+      document.body.insertBefore(box, document.body.firstChild);
+    }
+
+    setTimeout(function(){
+      try { window.location.href = url; } catch(e) {}
+    }, 1900);
+  }
+
   function boot(){
     injectStyle();
     injectPremiumPublicActionsUx();
     injectQrVerifiedOutsideButtonsFinal();
+    prepareChatDirectFlow20260529();
     makeOverlay();
 
     setTimeout(forceQrVerifiedOutsideButtonsFinal, 400);
     setTimeout(forceQrVerifiedOutsideButtonsFinal, 1200);
-    setTimeout(forceQrVerifiedOutsideButtonsFinal, 2400);
+    setTimeout(function(){
+      forceQrVerifiedOutsideButtonsFinal();
+      showChatDirectNotice20260529();
+    }, 2400);
   }
 
   if(document.readyState === "loading"){
