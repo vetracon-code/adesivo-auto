@@ -9908,6 +9908,36 @@ function makeFollowMePublicId() {
   return 'FM' + Math.random().toString(36).slice(2, 10).toUpperCase();
 }
 
+
+
+// FOLLOWME_PUSH_BADGE_UNREAD_COUNT_20260529
+async function getFollowMeUnreadActivityCount20260529(projectId) {
+  try {
+    await ensureFollowMeActivityCounters20260529();
+
+    const q = await pool.query(
+      `SELECT
+         COALESCE(activity_reset_total_scans,0)::int AS scan_base,
+         COALESCE(activity_reset_chat_requests,0)::int AS chat_base
+       FROM followme_projects
+       WHERE id = $1
+       LIMIT 1`,
+      [projectId]
+    );
+
+    const snap = await getFollowMeActivitySnapshot20260529(projectId);
+    const scanBase = Number(q.rows[0]?.scan_base || 0);
+    const chatBase = Number(q.rows[0]?.chat_base || 0);
+
+    return Math.max(0,
+      Math.max(0, snap.total_scans - scanBase) +
+      Math.max(0, snap.total_chat_requests - chatBase)
+    );
+  } catch(e) {
+    return 1;
+  }
+}
+
 async function sendFollowMeScanPush(project) {
   try {
     const subs = await pool.query(
@@ -9919,9 +9949,12 @@ async function sendFollowMeScanPush(project) {
       [project.id]
     );
 
+    const unreadCount = await getFollowMeUnreadActivityCount20260529(project.id);
+
     const payload = JSON.stringify({
       title: "Follow Me QR 👀",
       body: "Hanno appena inquadrato il tuo QR 👀",
+      unreadCount: unreadCount,
       url: `/fm/app/${encodeURIComponent(project.code)}?focus=scans`,
       targetUrl: `/fm/app/${encodeURIComponent(project.code)}?focus=scans`,
       type: 'followme_scan',
@@ -15126,9 +15159,12 @@ async function sendFollowMeInfoRequestPush20260528(project, sessionId, sourceLab
     const adminUrl = `/fm/chat-v2/admin/${encodeURIComponent(project.code)}?session=${encodeURIComponent(sessionId)}`;
     const label = String(sourceLabel || 'contenuto').slice(0, 18);
 
+    const unreadCount = await getFollowMeUnreadActivityCount20260529(project.id);
+
     const payload = JSON.stringify({
       title: 'Richiesta informazioni',
       body: 'Richiesta informazioni da utente per sito: ' + label,
+      unreadCount: unreadCount,
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
       tag: `followme-info-request-${project.id}-${sessionId}`,

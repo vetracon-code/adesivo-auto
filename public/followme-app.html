@@ -46029,3 +46029,62 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
   setInterval(updateViewsFromTotal, 2500);
 })();
 </script>
+
+
+<script id="FOLLOWME_ACTIVITY_COUNTERS_DIRECT_REFRESH_AND_BADGE_CLEAR_20260529">
+(function(){
+  "use strict";
+
+  function $(id){ return document.getElementById(id); }
+
+  function getCodeSafe(){
+    try{ if(typeof getCode === "function") return getCode(); }catch(e){}
+    try{
+      var qs = new URLSearchParams(location.search);
+      return qs.get("code") || qs.get("qr") || qs.get("c") || "";
+    }catch(e){}
+    return "";
+  }
+
+  async function clearExternalBadge(){
+    try{
+      if(navigator.clearAppBadge) await navigator.clearAppBadge();
+    }catch(e){}
+
+    try{
+      if(navigator.serviceWorker && navigator.serviceWorker.controller){
+        navigator.serviceWorker.controller.postMessage({ type:"SET_BADGE", count:0 });
+      }
+    }catch(e){}
+  }
+
+  async function refreshActivityMini(){
+    var code = getCodeSafe();
+    if(!code) return;
+
+    try{
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/activity-counters?v=" + Date.now(), {
+        cache:"no-store"
+      });
+      var data = await res.json().catch(function(){ return null; });
+      if(!res.ok || !data || data.success === false) return;
+
+      var c = data.counters || {};
+      var views = $("followmeActivityViews20260529");
+      var chats = $("followmeActivityChats20260529");
+
+      if(views) views.textContent = String(c.new_views || 0);
+      if(chats) chats.textContent = String(c.new_chat_requests || 0);
+    }catch(e){}
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    clearExternalBadge();
+    refreshActivityMini();
+  });
+
+  setTimeout(clearExternalBadge, 700);
+  setTimeout(refreshActivityMini, 700);
+  setInterval(refreshActivityMini, 2000);
+})();
+</script>
