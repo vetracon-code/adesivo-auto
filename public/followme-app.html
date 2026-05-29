@@ -42842,6 +42842,342 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<!-- FOLLOWME_VOICE_DEBUG_PANEL_TEMP_START_20260529 -->
+<style id="FOLLOWME_VOICE_DEBUG_PANEL_TEMP_STYLE_20260529">
+  #followmeVoiceDebugPanelTemp20260529{
+    position:fixed;
+    left:12px;
+    right:12px;
+    bottom:12px;
+    z-index:999999;
+    max-height:38vh;
+    overflow:auto;
+    background:rgba(15,23,42,.96);
+    color:#e5e7eb;
+    border:1px solid rgba(148,163,184,.35);
+    border-radius:18px;
+    box-shadow:0 22px 70px rgba(0,0,0,.35);
+    padding:12px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+    font-size:12px;
+    line-height:1.35;
+  }
+  #followmeVoiceDebugPanelTemp20260529 .fmvdbg-head{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    align-items:center;
+    margin-bottom:8px;
+  }
+  #followmeVoiceDebugPanelTemp20260529 .fmvdbg-title{
+    font-weight:900;
+    color:#fff;
+    letter-spacing:-.02em;
+  }
+  #followmeVoiceDebugPanelTemp20260529 .fmvdbg-actions{
+    display:flex;
+    gap:6px;
+    flex-wrap:wrap;
+  }
+  #followmeVoiceDebugPanelTemp20260529 button{
+    appearance:none;
+    border:1px solid rgba(255,255,255,.18);
+    background:rgba(255,255,255,.08);
+    color:#fff;
+    border-radius:999px;
+    padding:6px 9px;
+    font-weight:800;
+    cursor:pointer;
+    font-size:11px;
+  }
+  #followmeVoiceDebugPanelTemp20260529 pre{
+    margin:0;
+    white-space:pre-wrap;
+    word-break:break-word;
+  }
+  #followmeVoiceDebugPanelTemp20260529 .ok{color:#86efac}
+  #followmeVoiceDebugPanelTemp20260529 .warn{color:#fde68a}
+  #followmeVoiceDebugPanelTemp20260529 .err{color:#fca5a5}
+</style>
+
+<div id="followmeVoiceDebugPanelTemp20260529" aria-live="polite">
+  <div class="fmvdbg-head">
+    <div class="fmvdbg-title">VOICE DEBUG TEMP · da rimuovere a fine test</div>
+    <div class="fmvdbg-actions">
+      <button type="button" id="followmeVoiceDebugRefreshTemp20260529">Aggiorna</button>
+      <button type="button" id="followmeVoiceDebugClearTemp20260529">Pulisci log</button>
+      <button type="button" id="followmeVoiceDebugHideTemp20260529">Nascondi</button>
+    </div>
+  </div>
+  <pre id="followmeVoiceDebugLogTemp20260529">Diagnostica pronta. Apri “Registra messaggio” e prova Registra → Ferma → Riascolta → Pubblica.</pre>
+</div>
+
+<script id="FOLLOWME_VOICE_DEBUG_PANEL_TEMP_SCRIPT_20260529">
+(function(){
+  "use strict";
+
+  if(window.__followMeVoiceDebugPanelTemp20260529) return;
+  window.__followMeVoiceDebugPanelTemp20260529 = true;
+
+  const MAX_LINES = 120;
+  const lines = [];
+
+  function $(id){ return document.getElementById(id); }
+
+  function now(){
+    try{ return new Date().toLocaleTimeString(); }
+    catch(e){ return String(Date.now()); }
+  }
+
+  function log(msg, kind){
+    const line = "[" + now() + "] " + (kind ? kind.toUpperCase() + " · " : "") + String(msg || "");
+    lines.push(line);
+    while(lines.length > MAX_LINES) lines.shift();
+
+    const el = $("followmeVoiceDebugLogTemp20260529");
+    if(el) el.textContent = lines.join("\n");
+  }
+
+  function getCode(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim();
+      const p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim();
+    }catch(e){ return ""; }
+  }
+
+  function btn(id){ return document.getElementById(id); }
+
+  function buttonState(){
+    const ids = [
+      "voiceRecordClean20260528",
+      "voiceStopClean20260528",
+      "voicePlayClean20260528",
+      "voicePublishClean20260528",
+      "voicePlaySavedClean20260528",
+      "voiceUseClean20260528",
+      "voiceDeleteClean20260528",
+      "voiceDisableClean20260528"
+    ];
+
+    ids.forEach(id => {
+      const el = btn(id);
+      if(!el){
+        log(id + ": non trovato", "warn");
+        return;
+      }
+
+      log(
+        id +
+        " | text=" + JSON.stringify((el.textContent || "").trim()) +
+        " | disabled=" + String(!!el.disabled) +
+        " | dataset=" + JSON.stringify(el.dataset || {})
+      );
+    });
+  }
+
+  async function statusCheck(){
+    const code = getCode();
+    if(!code){
+      log("Codice FollowMe non trovato.", "err");
+      return;
+    }
+
+    try{
+      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/voice-messages/status?v=" + Date.now(), { cache:"no-store" });
+      const data = await res.json().catch(() => null);
+
+      log("STATUS HTTP " + res.status + " ok=" + res.ok, res.ok ? "ok" : "err");
+
+      if(data){
+        log(
+          "STATUS has_active_voice=" + data.has_active_voice +
+          " active_id=" + (data.active_voice && data.active_voice.id ? data.active_voice.id : "null") +
+          " messages=" + (Array.isArray(data.messages) ? data.messages.length : "n/d")
+        );
+      }
+    }catch(e){
+      log("STATUS errore: " + (e && e.message ? e.message : String(e)), "err");
+    }
+  }
+
+  async function storageCheck(){
+    const code = getCode();
+    if(!code) return;
+
+    try{
+      const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/voice-messages/storage-diagnostic?v=" + Date.now(), { cache:"no-store" });
+      const data = await res.json().catch(() => null);
+
+      log("STORAGE HTTP " + res.status + " ok=" + res.ok, res.ok ? "ok" : "err");
+
+      if(data){
+        const disk = Array.isArray(data.disk_files) ? data.disk_files.length : "n/d";
+        const db = Array.isArray(data.db_messages) ? data.db_messages.length : "n/d";
+        log("STORAGE disk_files=" + disk + " db_messages=" + db);
+
+        if(Array.isArray(data.db_messages)){
+          data.db_messages.forEach(m => {
+            log(
+              "DB id=" + m.id +
+              " active=" + m.is_active +
+              " exists=" + m.physical_exists +
+              " mime=" + m.mime_type +
+              " file=" + m.file_url
+            );
+          });
+        }
+      }
+    }catch(e){
+      log("STORAGE errore: " + (e && e.message ? e.message : String(e)), "err");
+    }
+  }
+
+  function installFetchSpy(){
+    if(window.__followMeVoiceDebugFetchSpyTemp20260529) return;
+    window.__followMeVoiceDebugFetchSpyTemp20260529 = true;
+
+    const originalFetch = window.fetch;
+
+    window.fetch = async function(input, init){
+      const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+      const isVoice = String(url || "").includes("/voice-messages/");
+
+      if(isVoice){
+        log("FETCH START " + (init && init.method ? init.method : "GET") + " " + url, "warn");
+
+        if(init && init.body){
+          const b = init.body;
+          log(
+            "FETCH BODY constructor=" + (b.constructor ? b.constructor.name : typeof b) +
+            " type=" + (b.type || "n/d") +
+            " size=" + (b.size || "n/d")
+          );
+        }
+
+        if(init && init.headers){
+          log("FETCH HEADERS " + JSON.stringify(init.headers));
+        }
+      }
+
+      try{
+        const res = await originalFetch.apply(this, arguments);
+
+        if(isVoice){
+          log("FETCH RESPONSE status=" + res.status + " ok=" + res.ok, res.ok ? "ok" : "err");
+
+          try{
+            const txt = await res.clone().text();
+            log("FETCH RESPONSE TEXT " + txt.slice(0, 900));
+          }catch(e){
+            log("FETCH RESPONSE TEXT non leggibile: " + (e.message || e), "warn");
+          }
+
+          setTimeout(statusCheck, 300);
+          setTimeout(storageCheck, 700);
+        }
+
+        return res;
+      }catch(err){
+        if(isVoice){
+          log("FETCH FAILED " + (err && err.message ? err.message : String(err)), "err");
+          setTimeout(statusCheck, 300);
+          setTimeout(storageCheck, 700);
+        }
+
+        throw err;
+      }
+    };
+
+    log("Fetch spy installato.", "ok");
+  }
+
+  function installButtonSpy(){
+    document.addEventListener("click", function(ev){
+      const el = ev.target && ev.target.closest ? ev.target.closest("button,label") : null;
+      if(!el) return;
+
+      const id = el.id || "";
+      const txt = String(el.textContent || "").trim();
+
+      if(id.includes("voice") || txt.toLowerCase().includes("registra") || txt.toLowerCase().includes("ferma") || txt.toLowerCase().includes("riascolta") || txt.toLowerCase().includes("pubblica")){
+        log("CLICK id=" + id + " text=" + JSON.stringify(txt) + " disabled=" + String(!!el.disabled), "warn");
+        setTimeout(buttonState, 80);
+        setTimeout(buttonState, 500);
+      }
+    }, true);
+
+    log("Button spy installato.", "ok");
+  }
+
+  function observeRecorderTexts(){
+    const ids = [
+      "voiceStatusClean20260528",
+      "voiceDiagClean20260528",
+      "voiceMeterClean20260528"
+    ];
+
+    ids.forEach(id => {
+      const el = btn(id);
+      if(!el) return;
+
+      try{
+        const mo = new MutationObserver(function(){
+          if(id.includes("Meter")){
+            log(id + " changed width=" + (el.style && el.style.width ? el.style.width : ""));
+          }else{
+            log(id + " changed: " + String(el.textContent || "").slice(0, 500));
+          }
+        });
+
+        mo.observe(el, { childList:true, characterData:true, subtree:true, attributes:true });
+        log("Observer installato su " + id, "ok");
+      }catch(e){}
+    });
+  }
+
+  async function refreshAll(){
+    log("----- REFRESH DIAGNOSTICA -----", "warn");
+    buttonState();
+    await statusCheck();
+    await storageCheck();
+  }
+
+  function boot(){
+    installFetchSpy();
+    installButtonSpy();
+
+    setTimeout(observeRecorderTexts, 700);
+    setTimeout(refreshAll, 900);
+    setTimeout(refreshAll, 2500);
+  }
+
+  const refresh = $("followmeVoiceDebugRefreshTemp20260529");
+  if(refresh) refresh.addEventListener("click", refreshAll);
+
+  const clear = $("followmeVoiceDebugClearTemp20260529");
+  if(clear) clear.addEventListener("click", function(){
+    lines.length = 0;
+    log("Log pulito.");
+  });
+
+  const hide = $("followmeVoiceDebugHideTemp20260529");
+  if(hide) hide.addEventListener("click", function(){
+    const panel = $("followmeVoiceDebugPanelTemp20260529");
+    if(panel) panel.style.display = "none";
+  });
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+})();
+</script>
+<!-- FOLLOWME_VOICE_DEBUG_PANEL_TEMP_END_20260529 -->
+
 </body>
 </html>
 
