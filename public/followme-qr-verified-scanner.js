@@ -1907,7 +1907,158 @@
     });
   }
 
+
+
+  // FOLLOWME_FORCE_SOFT_BUTTONS_INLINE_STYLE_FINAL_20260529
+  function forceSoftButtonsInlineStyleFinal20260529(){
+    function set(el, prop, value){
+      if(!el) return;
+      try { el.style.setProperty(prop, value, "important"); } catch(e){}
+    }
+
+    function visible(el){
+      if(!el) return false;
+      var st = window.getComputedStyle(el);
+      return st.display !== "none" && st.visibility !== "hidden" && Number(st.opacity) !== 0;
+    }
+
+    var voice = document.getElementById("voiceBtn");
+    var info = document.getElementById("infoBtn") || document.getElementById("fallbackInfo");
+    var fallbackInfo = document.getElementById("fallbackInfo");
+    var openLinks = Array.prototype.slice.call(document.querySelectorAll('a.premium-btn[target="_blank"], a.premium-btn[href^="http"]'));
+
+    var containers = Array.prototype.slice.call(document.querySelectorAll(".premium-actions,.actions,.cta-row"));
+
+    containers.forEach(function(c){
+      set(c, "width", "calc(100% - 20px)");
+      set(c, "max-width", "410px");
+      set(c, "margin", "0 auto 8px");
+      set(c, "padding", "0");
+      set(c, "display", "grid");
+      set(c, "gap", "7px");
+      set(c, "box-sizing", "border-box");
+
+      if(visible(voice) && visible(info) && voice.closest(".premium-actions,.actions,.cta-row") === c && info.closest(".premium-actions,.actions,.cta-row") === c){
+        set(c, "grid-template-columns", "1fr 1fr");
+      }else{
+        set(c, "grid-template-columns", "1fr");
+      }
+    });
+
+    /*
+      Reset base pulsanti.
+    */
+    [voice, info, fallbackInfo].forEach(function(btn){
+      if(!btn) return;
+
+      set(btn, "min-height", "38px");
+      set(btn, "height", "38px");
+      set(btn, "border-radius", "13px");
+      set(btn, "padding", "8px 10px");
+      set(btn, "display", "flex");
+      set(btn, "align-items", "center");
+      set(btn, "justify-content", "center");
+      set(btn, "gap", "6px");
+      set(btn, "font-family", '-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif');
+      set(btn, "font-size", "12.7px");
+      set(btn, "font-weight", "610");
+      set(btn, "letter-spacing", "-.08px");
+      set(btn, "line-height", "1.1");
+      set(btn, "white-space", "nowrap");
+      set(btn, "box-sizing", "border-box");
+      set(btn, "transform", "none");
+    });
+
+    /*
+      Ascolta: bianco soft, NON nero.
+    */
+    if(voice){
+      voice.textContent = voice.textContent.replace("▶ Ascolta il messaggio", "▶ Ascolta");
+
+      set(voice, "background", "#ffffff");
+      set(voice, "background-image", "none");
+      set(voice, "color", "#101828");
+      set(voice, "border", "1px solid rgba(16,24,40,.08)");
+      set(voice, "box-shadow", "0 5px 14px rgba(16,24,40,.045)");
+    }
+
+    /*
+      Info: verde soft, NON verde pieno.
+    */
+    [info, fallbackInfo].forEach(function(btn){
+      if(!btn) return;
+
+      btn.textContent = btn.textContent.replace("Chiedi informazioni", "Chiedi info");
+
+      set(btn, "background", "rgba(17,137,67,.08)");
+      set(btn, "background-image", "none");
+      set(btn, "color", "#0f7a37");
+      set(btn, "border", "1px solid rgba(17,137,67,.14)");
+      set(btn, "box-shadow", "none");
+    });
+
+    /*
+      Apri in nuova pagina: secondario.
+    */
+    openLinks.forEach(function(a){
+      set(a, "margin", "10px auto 0");
+      set(a, "min-height", "34px");
+      set(a, "height", "34px");
+      set(a, "max-width", "410px");
+      set(a, "border-radius", "12px");
+      set(a, "padding", "8px 10px");
+      set(a, "background", "#ffffff");
+      set(a, "background-image", "none");
+      set(a, "color", "#667085");
+      set(a, "border", "1px solid rgba(16,24,40,.08)");
+      set(a, "box-shadow", "none");
+      set(a, "font-size", "12px");
+      set(a, "font-weight", "520");
+    });
+
+    /*
+      Banner inline trust.
+    */
+    var banner = document.getElementById("followmeQrVerifiedRealBanner20260529");
+    if(banner){
+      banner.innerHTML =
+        '<span class="fm-real-copy">' +
+          '<strong><span>🛡️</span> QR verificato</strong>' +
+          '<small>Destinazione controllata prima della pubblicazione.</small>' +
+        '</span>';
+
+      set(banner, "background", "transparent");
+      set(banner, "box-shadow", "none");
+      set(banner, "border", "0");
+      set(banner, "border-radius", "0");
+      set(banner, "width", "calc(100% - 20px)");
+      set(banner, "max-width", "410px");
+      set(banner, "margin", "5px auto 8px");
+      set(banner, "padding", "0 2px");
+      set(banner, "display", "flex");
+      set(banner, "align-items", "center");
+      set(banner, "justify-content", "space-between");
+    }
+  }
+
+  function scheduleForceSoftButtonsInlineStyleFinal20260529(){
+    forceSoftButtonsInlineStyleFinal20260529();
+
+    [100, 300, 700, 1200, 2000, 3500, 5000].forEach(function(ms){
+      setTimeout(forceSoftButtonsInlineStyleFinal20260529, ms);
+    });
+
+    try{
+      var mo = new MutationObserver(function(){
+        clearTimeout(window.__fmForceSoftButtonsTimer20260529);
+        window.__fmForceSoftButtonsTimer20260529 = setTimeout(forceSoftButtonsInlineStyleFinal20260529, 80);
+      });
+      mo.observe(document.documentElement || document.body, { childList:true, subtree:true, attributes:true, attributeFilter:["class","style"] });
+    }catch(e){}
+  }
+
   function boot(){
+    setTimeout(scheduleForceSoftButtonsInlineStyleFinal20260529, 50);
     injectStyle();
     injectPremiumPublicActionsUx();
     injectQrVerifiedOutsideButtonsFinal();
