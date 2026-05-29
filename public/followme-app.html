@@ -46046,3 +46046,110 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
   });
 })();
 </script>
+
+<script id="FOLLOWME_FIX_RIASCOLTA_SALVATO_20260529">
+(function(){
+  "use strict";
+
+  function $(id){ return document.getElementById(id); }
+
+  function toast(msg){
+    if(window.followmeToast) return window.followmeToast(msg);
+    alert(msg);
+  }
+
+  function abs(url){
+    try{ return new URL(url, window.location.origin).toString(); }
+    catch(e){ return url; }
+  }
+
+  let audio = null;
+
+  function fixButton(){
+    const oldBtn = $("voicePlaySavedClean20260528");
+    if(!oldBtn || oldBtn.dataset.riascoltaFix20260529 === "1") return;
+
+    const btn = oldBtn.cloneNode(true);
+    btn.dataset.riascoltaFix20260529 = "1";
+    btn.textContent = "▶ Riascolta salvato";
+
+    oldBtn.parentNode.replaceChild(btn, oldBtn);
+
+    btn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+
+      const sel = $("voiceSelectClean20260528");
+      const opt = sel && sel.options ? sel.options[sel.selectedIndex] : null;
+
+      if(!sel || !sel.value){
+        toast("Seleziona un messaggio salvato.");
+        return false;
+      }
+
+      const selectedId = String(sel.value);
+
+      fetchCurrentMessages().then(function(messages){
+        const m = messages.find(x => String(x.id) === selectedId);
+
+        if(!m || !m.file_url){
+          toast("Audio salvato non trovato.");
+          return;
+        }
+
+        if(audio){
+          try{ audio.pause(); audio.currentTime = 0; }catch(e){}
+          audio = null;
+          btn.textContent = "▶ Riascolta salvato";
+          return;
+        }
+
+        audio = new Audio(abs(m.file_url) + (String(m.file_url).includes("?") ? "&" : "?") + "v=" + Date.now());
+        btn.textContent = "■ Stop";
+
+        audio.onended = function(){
+          audio = null;
+          btn.textContent = "▶ Riascolta salvato";
+        };
+
+        audio.onerror = function(){
+          audio = null;
+          btn.textContent = "▶ Riascolta salvato";
+          toast("Non riesco a riprodurre l’audio salvato.");
+        };
+
+        audio.play().catch(function(err){
+          audio = null;
+          btn.textContent = "▶ Riascolta salvato";
+          toast("Audio non riproducibile: " + (err && err.message ? err.message : err));
+        });
+      });
+
+      return false;
+    }, true);
+  }
+
+  function getCode(){
+    const qs = new URLSearchParams(location.search);
+    return qs.get("code") || qs.get("qr") || qs.get("c") || "";
+  }
+
+  async function fetchCurrentMessages(){
+    const code = getCode();
+    if(!code) throw new Error("Codice QR non trovato nella pagina.");
+
+    const res = await fetch("/api/followme/" + encodeURIComponent(code) + "/voice-messages/status?v=" + Date.now());
+    const data = await res.json();
+
+    if(!res.ok || !data) throw new Error("Stato messaggi non leggibile.");
+
+    return Array.isArray(data.messages) ? data.messages : [];
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    fixButton();
+    setInterval(fixButton, 800);
+  });
+})();
+</script>
