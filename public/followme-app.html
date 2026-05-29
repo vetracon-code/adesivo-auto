@@ -45946,3 +45946,86 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
   setInterval(loadCounters, 7000);
 })();
 </script>
+
+<script id="FOLLOWME_ACTIVITY_VIEWS_FROM_TOTAL_FIX_20260529">
+(function(){
+  "use strict";
+
+  function $(id){ return document.getElementById(id); }
+
+  function getCodeSafe(){
+    try{ if(typeof getCode === "function") return getCode(); }catch(e){}
+    try{
+      var qs = new URLSearchParams(location.search);
+      return qs.get("code") || qs.get("qr") || qs.get("c") || "";
+    }catch(e){}
+    return "";
+  }
+
+  function key(code){
+    return "followme_activity_views_reset_total_" + String(code || "default");
+  }
+
+  async function fetchStatus(){
+    var code = getCodeSafe();
+    if(!code) return null;
+
+    var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
+      cache:"no-store"
+    });
+
+    var data = await res.json().catch(function(){ return null; });
+    if(!res.ok || !data || data.success === false) return null;
+    return data;
+  }
+
+  async function updateViewsFromTotal(){
+    var code = getCodeSafe();
+    if(!code) return;
+
+    var data = await fetchStatus();
+    if(!data || !data.stats) return;
+
+    var total = Number(data.stats.total_scans || 0);
+    var base = Number(localStorage.getItem(key(code)) || 0);
+    var newer = Math.max(0, total - base);
+
+    var el = $("followmeActivityViews20260529");
+    if(el) el.textContent = String(newer);
+  }
+
+  async function resetViewsBaseline(){
+    var code = getCodeSafe();
+    if(!code) return;
+
+    var data = await fetchStatus();
+    if(!data || !data.stats) return;
+
+    var total = Number(data.stats.total_scans || 0);
+    localStorage.setItem(key(code), String(total));
+
+    var el = $("followmeActivityViews20260529");
+    if(el) el.textContent = "0";
+  }
+
+  function bindReset(){
+    var btn = $("followmeActivityReset20260529");
+    if(!btn || btn.dataset.viewsFromTotalFix20260529 === "1") return;
+
+    btn.dataset.viewsFromTotalFix20260529 = "1";
+
+    btn.addEventListener("click", function(){
+      setTimeout(resetViewsBaseline, 250);
+      setTimeout(updateViewsFromTotal, 900);
+    }, true);
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    bindReset();
+    updateViewsFromTotal();
+  });
+
+  setTimeout(function(){ bindReset(); updateViewsFromTotal(); }, 700);
+  setInterval(updateViewsFromTotal, 2500);
+})();
+</script>
