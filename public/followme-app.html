@@ -42576,6 +42576,235 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="FOLLOWME_ADMIN_VOICE_MISSING_FILE_WARNING_20260529">
+(function(){
+  "use strict";
+
+  if(window.__followMeAdminVoiceMissingFileWarning20260529) return;
+  window.__followMeAdminVoiceMissingFileWarning20260529 = true;
+
+  let lastWarnAt = 0;
+  let lastMissingIds = "";
+
+  function getCode(){
+    try{
+      const m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim();
+      const p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim();
+    }catch(e){
+      return "";
+    }
+  }
+
+  function toast(msg){
+    try{
+      if(typeof window.toast === "function") return window.toast(msg);
+      if(typeof window.showToast === "function") return window.showToast(msg);
+    }catch(e){}
+    alert(msg);
+  }
+
+  function statusEl(){
+    return document.getElementById("voiceStatusClean20260528") ||
+           document.querySelector("[id*='voiceStatus']");
+  }
+
+  function diagEl(){
+    return document.getElementById("voiceDiagClean20260528");
+  }
+
+  function selectEl(){
+    return document.getElementById("voiceSelectClean20260528") ||
+           document.querySelector("select[id*='voiceSelect']");
+  }
+
+  function playSavedBtn(){
+    return document.getElementById("voicePlaySavedClean20260528") ||
+           document.querySelector("button[id*='voicePlaySaved']");
+  }
+
+  function useBtn(){
+    return document.getElementById("voiceUseClean20260528") ||
+           document.querySelector("button[id*='voiceUse']");
+  }
+
+  function setWarningBox(message, details){
+    const st = statusEl();
+    const dg = diagEl();
+
+    if(st){
+      st.textContent = message;
+      st.style.color = "#991b1b";
+      st.style.fontWeight = "900";
+    }
+
+    if(dg){
+      dg.innerHTML =
+        '<div style="display:grid;gap:8px">' +
+          '<div style="font-weight:1000;color:#991b1b">⚠️ Audio salvato non disponibile</div>' +
+          '<div style="color:#7f1d1d;line-height:1.35">' + escapeHtml(details || message) + '</div>' +
+          '<div style="color:#334155;line-height:1.35">Registra e pubblica nuovamente il messaggio. Il nuovo file verrà scritto sul disco persistente Render.</div>' +
+        '</div>';
+
+      dg.style.background = "#fff1f2";
+      dg.style.border = "1px solid rgba(190,18,60,.25)";
+      dg.style.color = "#7f1d1d";
+    }
+  }
+
+  function clearWarningStyle(){
+    const st = statusEl();
+    const dg = diagEl();
+
+    if(st){
+      st.style.color = "";
+      st.style.fontWeight = "";
+    }
+
+    if(dg){
+      dg.style.background = "";
+      dg.style.border = "";
+      dg.style.color = "";
+    }
+  }
+
+  function escapeHtml(s){
+    return String(s || "").replace(/[&<>"']/g, function(c){
+      return {
+        "&":"&amp;",
+        "<":"&lt;",
+        ">":"&gt;",
+        '"':"&quot;",
+        "'":"&#39;"
+      }[c];
+    });
+  }
+
+  function selectedMessageId(){
+    const sel = selectEl();
+    return sel ? String(sel.value || "") : "";
+  }
+
+  async function checkVoiceFiles(reason){
+    const code = getCode();
+    if(!code) return;
+
+    try{
+      const res = await fetch(
+        "/api/followme/" + encodeURIComponent(code) + "/voice-messages/storage-diagnostic?v=" + Date.now(),
+        { cache:"no-store" }
+      );
+
+      const data = await res.json().catch(() => null);
+
+      if(!res.ok || !data || data.success === false){
+        return;
+      }
+
+      const list = Array.isArray(data.db_messages) ? data.db_messages : [];
+      const missing = list.filter(m => m && m.physical_exists === false);
+      const activeMissing = missing.find(m => m.is_active === true);
+
+      const missingIds = missing.map(m => String(m.id)).join(",");
+
+      if(!missing.length){
+        lastMissingIds = "";
+        clearWarningStyle();
+        return;
+      }
+
+      lastMissingIds = missingIds;
+
+      const selectedId = selectedMessageId();
+      const selectedMissing = selectedId && missing.some(m => String(m.id) === selectedId);
+
+      let title = "Uno o più messaggi audio salvati non hanno più il file fisico.";
+      let detail = "";
+
+      if(activeMissing){
+        title = "Il messaggio audio attivo non è riproducibile.";
+        detail =
+          "Il database indica un audio attivo, ma il file non esiste più sul disco persistente. " +
+          "File indicato: " + (activeMissing.file_url || activeMissing.file_path || "non disponibile");
+      }else if(selectedMissing){
+        detail =
+          "Il messaggio selezionato esiste nel database, ma il file audio fisico è mancante. " +
+          "Se provi a riascoltarlo, l'utente non lo sentirà.";
+      }else{
+        detail =
+          "Sono presenti messaggi salvati nel database senza file fisico sul disco. " +
+          "Ti consiglio di cancellarli o sostituirli registrando nuovamente.";
+      }
+
+      setWarningBox(title, detail);
+
+      const p = playSavedBtn();
+      if(p){
+        p.title = "Attenzione: uno o più audio salvati risultano senza file fisico.";
+      }
+
+      const u = useBtn();
+      if(u && selectedMissing){
+        u.title = "Questo audio non può essere usato perché il file fisico manca.";
+      }
+
+      const now = Date.now();
+      if(reason === "open" && now - lastWarnAt > 5000){
+        lastWarnAt = now;
+        toast("Attenzione: audio salvato non trovato sul disco. Registra e pubblica nuovamente.");
+      }
+
+    }catch(err){
+      console.warn("[FollowMe voice missing check]", err);
+    }
+  }
+
+  function isVoiceFrameOpen(){
+    const modal =
+      document.getElementById("followmeVoiceModalClean20260528") ||
+      document.querySelector("[id*='VoiceModal']");
+
+    if(!modal) return false;
+
+    return modal.classList.contains("show") ||
+           modal.classList.contains("is-open") ||
+           getComputedStyle(modal).display !== "none";
+  }
+
+  document.addEventListener("click", function(ev){
+    const btn = ev.target && ev.target.closest ? ev.target.closest("button,[role='button']") : null;
+    if(!btn) return;
+
+    const txt = String(btn.textContent || btn.ariaLabel || btn.title || "").toLowerCase();
+
+    if(txt.includes("registra messaggio") || txt.includes("messaggio vocale")){
+      setTimeout(function(){ checkVoiceFiles("open"); }, 350);
+      setTimeout(function(){ checkVoiceFiles("open"); }, 1200);
+    }
+
+    if(btn.id === "voicePlaySavedClean20260528" || txt.includes("riascolta salvato")){
+      setTimeout(function(){ checkVoiceFiles("play-saved"); }, 80);
+    }
+  }, true);
+
+  document.addEventListener("change", function(ev){
+    const el = ev.target;
+    if(el && el.id === "voiceSelectClean20260528"){
+      setTimeout(function(){ checkVoiceFiles("select-change"); }, 80);
+    }
+  }, true);
+
+  setInterval(function(){
+    if(isVoiceFrameOpen()){
+      checkVoiceFiles("interval");
+    }
+  }, 5000);
+
+})();
+</script>
+
 </body>
 </html>
 
