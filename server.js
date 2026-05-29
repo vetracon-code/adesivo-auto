@@ -20959,10 +20959,10 @@ const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || ''
     /*
       Regola corretta 20260528:
       Gli allegati restano salvati per admin.
-      Lato utente vengono solo NASCOSTI dopo 60 secondi.
+      Lato utente vengono solo NASCOSTI dopo 600 secondi.
       La cancellazione fisica avviene solo al reset admin.
     */
-    const ttlSeconds = 60;
+    const ttlSeconds = 600;
 
     const payload = {
       __followme_attachment_v2: true,
