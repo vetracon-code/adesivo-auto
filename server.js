@@ -17363,6 +17363,64 @@ app.post('/api/followme/:code/voice-messages/:id/listened', express.json({ limit
 });
 
 
+
+// FOLLOWME_PUBLIC_FM_U_CHAT_PRIORITY_RESTORE_20260530
+// Priorità corretta QR pubblico:
+// - se "Parla con gli utenti" è acceso, /fm/u/:public_id apre Chat V2;
+// - se è spento, passa alla rotta esistente e torna al redirect normale verso active_url.
+app.get('/fm/u/:public_id', async function followMePublicQrChatPriority20260530(req, res, next) {
+  try {
+    if (typeof ensureFollowMeChatV2Runtime === 'function') {
+      await ensureFollowMeChatV2Runtime();
+    } else if (typeof ensureFollowMeChatSchemaFast === 'function') {
+      await ensureFollowMeChatSchemaFast();
+    }
+
+    const rawPublicId = String(req.params.public_id || '').trim();
+    const publicId = typeof normalizeFollowMePublicId === 'function'
+      ? normalizeFollowMePublicId(rawPublicId)
+      : rawPublicId.toUpperCase();
+
+    if (!publicId) return next();
+
+    const q = await pool.query(
+      `SELECT id, code, public_id, active_url, chat_mode_enabled, chat_public_token
+       FROM followme_projects
+       WHERE public_id = $1 OR code = $1
+       LIMIT 1`,
+      [publicId]
+    );
+
+    if (!q.rows.length) return next();
+
+    const project = q.rows[0];
+
+    if (project.chat_mode_enabled === true) {
+      let token = String(project.chat_public_token || '').trim();
+
+      if (!token) {
+        if (typeof ensureFollowMeChatV2Token === 'function') {
+          token = await ensureFollowMeChatV2Token(project.id);
+        } else if (typeof rotateFollowMeChatV2Token === 'function') {
+          token = await rotateFollowMeChatV2Token(project.id);
+        }
+      }
+
+      if (token) {
+        return res.redirect(302, '/fm/chat-v2/c/' + encodeURIComponent(token) + '?v=' + Date.now());
+      }
+
+      console.warn('followme public chat priority: chat attiva ma token mancante per progetto', project.code || publicId);
+    }
+
+    return next();
+  } catch (err) {
+    console.error('followme public /fm/u chat priority guard error:', err);
+    return next();
+  }
+});
+
+
 // FOLLOWME_FAST_PUBLIC_QR_CHAT_V2_20260528
 app.get('/fm/u/:public_id', async function(req, res, next) {
   try {
