@@ -19573,6 +19573,23 @@ app.get('/api/followme/admin/storage-audit', async (req, res) => {
 });
 
 
+// ==============================
+// CITOFONAMI - ADMIN DEMO
+// ==============================
+app.get('/citofonami-admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'citofonami-admin.html'));
+});
+
+// ==============================
+// CITOFONAMI - WEB APP PUBBLICA UTENTE
+// ==============================
+app.get('/citofonami/:code', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'citofonami-app.html'));
+});
+
+app.get('/citofonami', (req, res) => {
+  res.redirect('/citofonami/DEMO');
+});
 
 app.listen(PORT, () => {
       console.log(`Server attivo su ${BASE_URL}`);
