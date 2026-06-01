@@ -819,6 +819,148 @@
       }
     }
 
+  
+    .qr-preview-card {
+      margin-top: 16px;
+      border-radius: 30px;
+      padding: 20px;
+      background:
+        radial-gradient(circle at top, rgba(215,180,106,.14), transparent 42%),
+        linear-gradient(145deg, rgba(255,255,255,.09), rgba(255,255,255,.028)),
+        var(--panel);
+      border: 1px solid rgba(215,180,106,.20);
+      box-shadow: 0 22px 60px rgba(0,0,0,.34);
+    }
+
+    .qr-preview-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    .qr-preview-head h2 {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: -.04em;
+    }
+
+    .qr-preview-head p {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .qr-preview-layout {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 18px;
+      align-items: center;
+    }
+
+    .qr-frame {
+      width: 220px;
+      min-height: 220px;
+      border-radius: 28px;
+      padding: 16px;
+      background: #f7f4ea;
+      box-shadow:
+        0 18px 45px rgba(0,0,0,.34),
+        inset 0 0 0 1px rgba(0,0,0,.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .qr-frame img {
+      width: 188px;
+      height: 188px;
+      display: block;
+      border-radius: 12px;
+    }
+
+    .qr-info-box {
+      border-radius: 22px;
+      padding: 16px;
+      background: rgba(0,0,0,.24);
+      border: 1px solid rgba(255,255,255,.08);
+    }
+
+    .qr-info-box small {
+      display: block;
+      color: var(--gold2);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-weight: 850;
+      font-size: 11px;
+      margin-bottom: 5px;
+    }
+
+    .qr-info-box strong {
+      display: block;
+      font-size: 28px;
+      letter-spacing: -.05em;
+      line-height: 1;
+      margin-bottom: 10px;
+    }
+
+    .qr-public-url {
+      padding: 12px;
+      border-radius: 15px;
+      background: rgba(255,255,255,.055);
+      border: 1px solid rgba(255,255,255,.08);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+      margin-top: 10px;
+    }
+
+    .qr-actions {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .qr-actions button,
+    .qr-actions a {
+      text-decoration: none;
+      text-align: center;
+      border-radius: 16px;
+      padding: 13px 14px;
+      font: inherit;
+      font-weight: 850;
+      border: 1px solid rgba(255,255,255,.10);
+      color: var(--text);
+      background: rgba(255,255,255,.075);
+      box-shadow: none;
+      cursor: pointer;
+    }
+
+    .qr-actions a.primary,
+    .qr-actions button.primary {
+      color: #211807;
+      background: linear-gradient(135deg, #fff2be, #d7b46a);
+      border: 0;
+    }
+
+    @media (max-width: 720px) {
+      .qr-preview-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .qr-frame {
+        width: 100%;
+      }
+
+      .qr-actions {
+        grid-template-columns: 1fr;
+      }
+    }
+
   </style>
 </head>
 
@@ -1024,6 +1166,35 @@
           </div>
         </div>
       
+
+        <div class="qr-preview-card" id="qrPreviewCard">
+          <div class="qr-preview-head">
+            <div>
+              <h2>QR pubblico</h2>
+              <p>Anteprima elegante del QR da stampare o condividere. Aggiorna la preview dopo aver salvato l’App.</p>
+            </div>
+          </div>
+
+          <div class="qr-preview-layout">
+            <div class="qr-frame">
+              <img id="qrPreviewImage" alt="QR Citofonami" />
+            </div>
+
+            <div class="qr-info-box">
+              <small>Citofonami</small>
+              <strong id="qrPreviewName">Mario Rossi</strong>
+              <div class="qr-public-url" id="qrPreviewUrl">https://adesivo-auto.onrender.com/citofonami/DEMO</div>
+            </div>
+          </div>
+
+          <div class="qr-actions">
+            <button class="primary" id="downloadQrButton" type="button">Scarica QR</button>
+            <a id="openQrUserLink" href="/citofonami/DEMO" target="_blank" rel="noopener">Apri pagina utente</a>
+            <button id="refreshQrButton" type="button">Aggiorna preview</button>
+          </div>
+        </div>
+
+
         <div class="card">
           <h2>Rubrica citofono</h2>
           <div class="button-row" style="margin-top:0;">
@@ -1562,6 +1733,64 @@
       }
     }
 
+
+    function getCitofonamiPublicUrl() {
+      const code = getCode ? getCode() : 'DEMO';
+      return `${window.location.origin}/citofonami/${encodeURIComponent(code)}`;
+    }
+
+    function getCitofonamiQrImageUrl(size = 700) {
+      const publicUrl = getCitofonamiPublicUrl();
+      return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=18&data=${encodeURIComponent(publicUrl)}`;
+    }
+
+    function updateQrPreview() {
+      if (typeof qrPreviewImage === 'undefined') return;
+
+      const config = getConfig ? getConfig() : {
+        firstName: 'Mario',
+        lastName: 'Rossi',
+        buttonLabel: 'Mario Rossi'
+      };
+
+      const owner = config.buttonLabel || `${config.firstName || 'Mario'} ${config.lastName || 'Rossi'}`;
+      const publicUrl = getCitofonamiPublicUrl();
+      const qrUrl = getCitofonamiQrImageUrl(700);
+
+      qrPreviewName.textContent = owner;
+      qrPreviewUrl.textContent = publicUrl;
+      qrPreviewImage.src = qrUrl;
+      openQrUserLink.href = publicUrl;
+    }
+
+    async function downloadCitofonamiQr() {
+      try {
+        updateQrPreview();
+
+        const config = getConfig ? getConfig() : { qrCode: 'DEMO' };
+        const code = config.qrCode || getCode() || 'DEMO';
+        const imageUrl = getCitofonamiQrImageUrl(1000);
+
+        const res = await fetch(imageUrl);
+        const blob = await res.blob();
+
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+
+        a.href = objectUrl;
+        a.download = `citofonami-${code}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 1200);
+        setState('QR scaricato correttamente.', true);
+      } catch (error) {
+        console.error(error);
+        setState('Non sono riuscito a scaricare il QR: ' + error.message, false);
+      }
+    }
+
     function resetDemo() {
       applyConfig(defaults);
       setState('Demo Mario Rossi ripristinata. Premi Salva sul server per renderla attiva.');
@@ -1590,6 +1819,9 @@
     });
 
     resetButton.addEventListener('click', resetDemo);
+
+    downloadQrButton.addEventListener('click', downloadCitofonamiQr);
+    refreshQrButton.addEventListener('click', updateQrPreview);
     topMicButton.addEventListener('click', enableAdminMicrophone);
 
     closeBalloon.addEventListener('click', () => {
@@ -1604,6 +1836,7 @@
     updateSetupBar();
     checkExistingPushStatusSafe();
     loadConfig();
+    setTimeout(updateQrPreview, 500);
   
     async function saveCallerNameFromIncoming() {
       if (!currentIncomingCall || !currentIncomingCall.callerId) {
