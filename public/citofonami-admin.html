@@ -1551,6 +1551,47 @@
       opacity: .82;
     }
 
+  
+    /* CITOFONAMI_HIDE_OPEN_CALL */
+
+    .open-hidden-call-button {
+      display: none;
+      position: sticky;
+      top: 8px;
+      z-index: 1900;
+      width: 100%;
+      min-height: 48px;
+      margin-bottom: 12px;
+      border-radius: 18px;
+      border: 1px solid rgba(215,180,106,.34);
+      background: linear-gradient(135deg, rgba(215,180,106,.22), rgba(255,255,255,.07));
+      color: var(--text);
+      font-weight: 950;
+      letter-spacing: -.02em;
+      box-shadow: 0 14px 38px rgba(0,0,0,.32);
+    }
+
+    .open-hidden-call-button.show {
+      display: block;
+    }
+
+    .hide-call-panel-button {
+      width: 100%;
+      min-height: 44px;
+      margin: 0 0 10px;
+      border-radius: 16px;
+      background: rgba(255,255,255,.07) !important;
+      border: 1px solid rgba(255,255,255,.12) !important;
+      color: var(--muted) !important;
+      box-shadow: none !important;
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .final-call-overlay.temporarily-hidden {
+      display: none !important;
+    }
+
   </style>
 </head>
 
@@ -1614,6 +1655,11 @@
     </div>
 
     
+    
+    <button class="open-hidden-call-button" id="openHiddenCallButton" type="button">
+      Apri Chiamata in arrivo
+    </button>
+
     <div class="final-call-overlay" id="finalCallOverlay">
       <div class="final-call-head">
         <div class="final-call-brand">Citofonami</div>
@@ -1633,6 +1679,7 @@
         <button class="secondary" id="finalSaveNameButton" type="button">Salva nome</button>
       </div>
 
+      <button class="hide-call-panel-button" id="hideCallPanelButton" type="button">Nascondi pannello e continua configurazione</button>
       <button class="final-answer-button" id="finalAnswerButton" type="button">Rispondi</button>
       <button class="final-voicemail-button" id="finalVoicemailButton" type="button">Invia in segreteria</button>
 
@@ -2600,8 +2647,15 @@
         finalCallerNameInput.placeholder = savedName ? 'Nome salvato' : 'Nome da salvare in rubrica';
       }
 
-      finalCallOverlay.classList.add('active');
-      finalCallOverlay.classList.add('force-visible');
+      if (finalCallPanelHiddenByAdmin) {
+        finalCallOverlay.classList.add('temporarily-hidden');
+        openHiddenCallButton.classList.add('show');
+      } else {
+        finalCallOverlay.classList.remove('temporarily-hidden');
+        finalCallOverlay.classList.add('active');
+        finalCallOverlay.classList.add('force-visible');
+        openHiddenCallButton.classList.remove('show');
+      }
 
       try {
         if (typeof playCitofonamiDoorbell === 'function') playCitofonamiDoorbell();
@@ -2612,6 +2666,7 @@
       if (typeof finalCallOverlay !== 'undefined') {
         finalCallOverlay.classList.remove('active');
         finalCallOverlay.classList.remove('force-visible');
+      closeHiddenCallButtonAfterHandled();
       }
     }
 
@@ -3012,6 +3067,49 @@
       }
 
       return null;
+    }
+
+
+    let finalCallPanelHiddenByAdmin = false;
+
+    function hideCallPanelForConfiguration() {
+      try {
+        if (!finalCurrentCall) {
+          return;
+        }
+
+        finalCallPanelHiddenByAdmin = true;
+        finalCallOverlay.classList.add('temporarily-hidden');
+        finalCallOverlay.classList.remove('force-visible');
+        openHiddenCallButton.classList.add('show');
+      } catch (error) {
+        console.warn('hideCallPanelForConfiguration error:', error);
+      }
+    }
+
+    function openHiddenIncomingCallPanel() {
+      try {
+        if (!finalCurrentCall) {
+          openHiddenCallButton.classList.remove('show');
+          return;
+        }
+
+        finalCallPanelHiddenByAdmin = false;
+        finalCallOverlay.classList.remove('temporarily-hidden');
+        finalCallOverlay.classList.add('active');
+        finalCallOverlay.classList.add('force-visible');
+        openHiddenCallButton.classList.remove('show');
+      } catch (error) {
+        console.warn('openHiddenIncomingCallPanel error:', error);
+      }
+    }
+
+    function closeHiddenCallButtonAfterHandled() {
+      try {
+        finalCallPanelHiddenByAdmin = false;
+        openHiddenCallButton.classList.remove('show');
+        finalCallOverlay.classList.remove('temporarily-hidden');
+      } catch (error) {}
     }
 
     const defaults = {
@@ -3478,9 +3576,14 @@
     checkExistingPushStatusSafe();
 
     finalSaveNameButton.addEventListener('click', finalSaveName);
+    hideCallPanelButton.addEventListener('click', hideCallPanelForConfiguration);
+    openHiddenCallButton.addEventListener('click', openHiddenIncomingCallPanel);
     finalAnswerButton.addEventListener('click', () => finalAct('answer'));
     finalVoicemailButton.addEventListener('click', () => finalAct('voicemail'));
-    finalCloseButton.addEventListener('click', () => finalAct('close'));
+    finalCloseButton.addEventListener('click', async () => {
+      await finalAct('close');
+      closeHiddenCallButtonAfterHandled();
+    });
     finalBlockButton.addEventListener('click', () => finalAct('block'));
 
     if (typeof topMicButton !== 'undefined') {
