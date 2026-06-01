@@ -433,6 +433,7 @@
     let config = null;
     let localStream = null;
     let citofonamiDebugStep = 'inizio';
+    let citofonamiMemoryCallerId = null;
 
     for (let i = 0; i < 120; i++) {
       const dot = document.createElement('span');
@@ -534,15 +535,25 @@
 
 
     function getLocalCitofonamiCallCount() {
-      const key = 'citofonami_call_count_' + code;
-      return Number(localStorage.getItem(key) || 0);
+      try {
+        const key = 'citofonami_call_count_' + code;
+        return Number(localStorage.getItem(key) || 0);
+      } catch (error) {
+        console.warn('Citofonami localStorage call count non disponibile:', error);
+        return 0;
+      }
     }
 
     function incrementLocalCitofonamiCallCount() {
-      const key = 'citofonami_call_count_' + code;
-      const next = getLocalCitofonamiCallCount() + 1;
-      localStorage.setItem(key, String(next));
-      return next;
+      try {
+        const key = 'citofonami_call_count_' + code;
+        const next = getLocalCitofonamiCallCount() + 1;
+        localStorage.setItem(key, String(next));
+        return next;
+      } catch (error) {
+        console.warn('Citofonami impossibile aggiornare call count locale:', error);
+        return 1;
+      }
     }
 
     function shouldAskLocationNow() {
@@ -765,7 +776,9 @@
 
         const cleaned = cleanCitofonamiError(
           error,
-          'Non è stato possibile avviare la chiamata. Riprova.'
+          citofonamiDebugStep === 'caller id' || citofonamiDebugStep === 'payload' || citofonamiDebugStep === 'preparo richiesta server'
+            ? 'Il telefono ha bloccato un dato locale necessario alla chiamata. Riprova dopo aver chiuso e riaperto la pagina.'
+            : 'Non è stato possibile avviare la chiamata. Riprova.'
         );
 
         const detail = error && error.message ? String(error.message) : String(error || '');
