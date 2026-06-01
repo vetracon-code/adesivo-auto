@@ -19925,13 +19925,87 @@ app.get('/citofonami-admin', (req, res) => {
 });
 
 // ==============================
+
+// CITOFONAMI_SERVER_SIDE_USER_CONFIG
+function escapeHtmlCitofonami(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function renderCitofonamiUserHtml(code) {
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+  const config = db.configs[code] || defaultCitofonamiConfig(code);
+
+  const firstName = config.firstName || '';
+  const lastName = config.lastName || '';
+  const fallbackName = `${firstName} ${lastName}`.trim() || 'Citofonami';
+  const buttonLabel = config.buttonLabel || fallbackName;
+  const publicText = config.publicText || 'Premi e chiama.';
+
+  const htmlPath = path.join(__dirname, 'public', 'citofonami-app.html');
+  let html = fs.readFileSync(htmlPath, 'utf8');
+
+  const safeName = escapeHtmlCitofonami(buttonLabel);
+  const safeText = escapeHtmlCitofonami(publicText);
+
+  // Sostituzioni visive principali, anche se l'HTML contiene ancora vecchi valori.
+  html = html.replace(/Mario Rossi/g, safeName);
+  html = html.replace(/Suona/g, 'Citofona');
+  html = html.replace(/premi per parlare/g, 'premi e chiama');
+  html = html.replace(/Premi il pulsante per parlare con il proprietario\./g, safeText);
+  html = html.replace(/Premi il pulsante per chiamare\./g, safeText);
+
+  // Se esistono elementi specifici, li forziamo.
+  html = html.replace(
+    /(<span[^>]*id=["']buttonName["'][^>]*>)([\s\S]*?)(<\/span>)/,
+    `$1${safeName}$3`
+  );
+
+  html = html.replace(
+    /(<[^>]*id=["']ownerName["'][^>]*>)([\s\S]*?)(<\/[^>]+>)/,
+    `$1${safeName}$3`
+  );
+
+  html = html.replace(
+    /(<[^>]*id=["']publicText["'][^>]*>)([\s\S]*?)(<\/[^>]+>)/,
+    `$1${safeText}$3`
+  );
+
+  // Espone anche la config iniziale al JS, così non parte mai con valori vecchi.
+  const injected = `
+<script>
+window.CITOFONAMI_SERVER_CONFIG = ${JSON.stringify(config)};
+window.CITOFONAMI_SERVER_CODE = ${JSON.stringify(code)};
+</script>
+`;
+
+  html = html.replace('</head>', injected + '\n</head>');
+
+  return html;
+}
+
+
 // CITOFONAMI - WEB APP PUBBLICA UTENTE
 // ==============================
 app.get('/citofonami/:code', (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
-  res.sendFile(path.join(__dirname, 'public', 'citofonami-app.html'));
+  res.setHeader('Surrogate-Control', 'no-store');
+
+  try {
+    const html = renderCitofonamiUserHtml(code);
+    res.type('html').send(html);
+  } catch (error) {
+    console.error('Errore render pagina Citofonami utente:', error);
+    res.sendFile(path.join(__dirname, 'public', 'citofonami-app.html'));
+  }
 });
 
 app.get('/citofonami', (req, res) => {
