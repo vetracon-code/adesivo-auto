@@ -1519,6 +1519,38 @@
       box-shadow: 0 0 10px currentColor;
     }
 
+  
+    /* PLATFORM_DEVICE_PROMPTS */
+    .device-guidance-box {
+      display: none;
+      margin-top: 10px;
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(255,255,255,.055);
+      border: 1px solid rgba(255,255,255,.10);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .device-guidance-box.show {
+      display: block;
+    }
+
+    .device-guidance-box strong {
+      display: block;
+      color: var(--gold2);
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+
+    .device-guidance-box .tiny {
+      display: block;
+      margin-top: 5px;
+      font-size: 12px;
+      opacity: .82;
+    }
+
   </style>
 </head>
 
@@ -1543,6 +1575,12 @@
 
       <div class="setup-needed-action" id="setupNeededAction">
         <button class="urgent" id="setupNeededButton" type="button">Completa configurazione</button>
+      </div>
+
+      <div class="device-guidance-box" id="deviceGuidanceBox">
+        <strong id="deviceGuidanceTitle">Attiva notifiche</strong>
+        <span id="deviceGuidanceText">Consenti gli avvisi del browser per ricevere chiamate e messaggi importanti.</span>
+        <span class="tiny" id="deviceGuidanceExtra"></span>
       </div>
 
       <div class="setup-grid">
@@ -2252,12 +2290,14 @@
         if (!missing) {
           setupMainMessage.innerHTML = '<strong>Citofonami pronto:</strong> App, notifiche e microfono sono attivi.';
           setupNeededAction.classList.remove('show');
+          renderDeviceGuidance('');
           if (typeof setupToggleButton !== 'undefined') setupToggleButton.textContent = 'Apri';
           adminSetupBar.classList.add('setup-collapsed');
           return;
         }
 
         setupMainMessage.innerHTML = missing.message;
+        renderDeviceGuidance(missing.key);
         setupNeededButton.textContent = missing.label;
         setupNeededButton.dataset.step = missing.key;
         setupNeededAction.classList.add('show');
@@ -2417,13 +2457,20 @@
       } else {
         adminSetupBar.classList.remove('auto-compact-ready');
 
+        let missing = '';
+
         if (!citofonamiAppSaved) {
+          missing = 'app';
           setupMainMessage.innerHTML = '<strong>Da completare:</strong> salva l’App sul server.';
         } else if (!citofonamiPushReady) {
+          missing = 'push';
           setupMainMessage.innerHTML = '<strong>Da completare:</strong> attiva le notifiche.';
         } else if (!citofonamiAdminMicReady) {
+          missing = 'mic';
           setupMainMessage.innerHTML = '<strong>Da completare:</strong> abilita il microfono admin.';
         }
+
+        renderDeviceGuidance(missing);
       }
 
       try {
@@ -2601,6 +2648,166 @@
         console.warn('forceLoadCallFromNotificationUrl error', e);
       }
       return false;
+    }
+
+
+    function detectPlatformDevice() {
+      const ua = navigator.userAgent || '';
+      const platform = navigator.platform || '';
+      const vendor = navigator.vendor || '';
+
+      const isIOS =
+        /iPhone|iPad|iPod/i.test(ua) ||
+        (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+      const isSamsung = /SamsungBrowser/i.test(ua);
+      const isHuawei = /Huawei|HUAWEI|HONOR/i.test(ua);
+      const isAndroid = /Android/i.test(ua);
+      const isChrome = /Chrome|CriOS/i.test(ua) && !isSamsung;
+      const isSafari = /Safari/i.test(ua) && /Apple/i.test(vendor) && !/Chrome|CriOS|FxiOS/i.test(ua);
+      const isDesktop = !isIOS && !isAndroid && /Macintosh|Windows|Linux/i.test(ua);
+
+      if (isIOS) return { key: 'ios', label: 'iPhone/iPad' };
+      if (isSamsung) return { key: 'samsung', label: 'Samsung' };
+      if (isHuawei) return { key: 'huawei', label: 'Huawei/Android' };
+      if (isAndroid && isChrome) return { key: 'android_chrome', label: 'Android Chrome' };
+      if (isAndroid) return { key: 'android', label: 'Android' };
+      if (isDesktop) return { key: 'desktop', label: 'Computer' };
+
+      return { key: 'unknown', label: 'Dispositivo' };
+    }
+
+    function getPlatformPrompt(step) {
+      const device = detectPlatformDevice();
+
+      const base = {
+        app: {
+          title: 'Salva App',
+          text: 'Salva la configurazione del citofono su questo dispositivo.',
+          extra: ''
+        },
+        push: {
+          title: 'Attiva notifiche',
+          text: 'Consenti gli avvisi per ricevere chiamate e messaggi importanti.',
+          extra: ''
+        },
+        mic: {
+          title: 'Attiva microfono',
+          text: 'Abilita il microfono per rispondere alle chiamate Citofonami.',
+          extra: ''
+        }
+      };
+
+      if (step === 'app') {
+        if (device.key === 'ios') {
+          return {
+            title: 'iPhone rilevato',
+            text: 'Per ricevere meglio gli avvisi, usa Citofonami come App installata.',
+            extra: 'Tocca Condividi → Aggiungi alla schermata Home, poi torna qui e salva.'
+          };
+        }
+
+        if (device.key === 'android_chrome' || device.key === 'android' || device.key === 'samsung' || device.key === 'huawei') {
+          return {
+            title: device.label + ' rilevato',
+            text: 'Salva l’App e tieni attive le autorizzazioni per ricevere gli avvisi.',
+            extra: 'Se il browser propone “Installa App”, accetta: migliora la ricezione.'
+          };
+        }
+
+        return base.app;
+      }
+
+      if (step === 'push') {
+        if (device.key === 'ios') {
+          return {
+            title: 'Notifiche su iPhone',
+            text: 'Consenti le notifiche dall’App installata sulla schermata Home.',
+            extra: 'Per Apple Watch, verifica dall’app Watch che le notifiche dell’iPhone siano duplicate.'
+          };
+        }
+
+        if (device.key === 'samsung') {
+          return {
+            title: 'Notifiche Samsung',
+            text: 'Consenti le notifiche di questo sito/App in Samsung Internet.',
+            extra: 'Controlla che le notifiche in background non siano bloccate.'
+          };
+        }
+
+        if (device.key === 'huawei') {
+          return {
+            title: 'Notifiche Huawei',
+            text: 'Consenti notifiche e attività in background per questa App.',
+            extra: 'Se non arrivano, controlla risparmio energetico e avvio automatico.'
+          };
+        }
+
+        if (device.key === 'android_chrome' || device.key === 'android') {
+          return {
+            title: 'Notifiche Android',
+            text: 'Consenti le notifiche per ricevere subito il campanello Citofonami.',
+            extra: 'Se usi Non disturbare, consenti gli avvisi importanti per questa App.'
+          };
+        }
+
+        if (device.key === 'desktop') {
+          return {
+            title: 'Notifiche computer',
+            text: 'Consenti le notifiche del browser per ricevere avvisi mentre lavori.',
+            extra: ''
+          };
+        }
+
+        return base.push;
+      }
+
+      if (step === 'mic') {
+        if (device.key === 'ios') {
+          return {
+            title: 'Microfono iPhone',
+            text: 'Consenti il microfono quando richiesto per rispondere alle chiamate.',
+            extra: 'Se lo hai negato, riattivalo dalle impostazioni del sito/App.'
+          };
+        }
+
+        if (device.key === 'android_chrome' || device.key === 'android' || device.key === 'samsung' || device.key === 'huawei') {
+          return {
+            title: 'Microfono ' + device.label,
+            text: 'Consenti il microfono per parlare con chi citofona.',
+            extra: 'Se è già concesso, il semaforo diventa verde automaticamente.'
+          };
+        }
+
+        return base.mic;
+      }
+
+      return {
+        title: 'Citofonami pronto',
+        text: 'App, notifiche e microfono sono attivi.',
+        extra: ''
+      };
+    }
+
+    function renderDeviceGuidance(step) {
+      try {
+        if (!deviceGuidanceBox) return;
+
+        if (!step) {
+          deviceGuidanceBox.classList.remove('show');
+          return;
+        }
+
+        const prompt = getPlatformPrompt(step);
+
+        deviceGuidanceTitle.textContent = prompt.title;
+        deviceGuidanceText.textContent = prompt.text;
+        deviceGuidanceExtra.textContent = prompt.extra || '';
+
+        deviceGuidanceBox.classList.add('show');
+      } catch (error) {
+        console.warn('renderDeviceGuidance error:', error);
+      }
     }
 
     const defaults = {

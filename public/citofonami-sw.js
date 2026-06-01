@@ -8,6 +8,30 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+/* CITOFONAMI_IMPORTANT_NOTIFICATION_DEFAULTS */
+
+function enhanceCitofonamiNotificationOptions(options) {
+  const next = Object.assign({}, options || {});
+
+  next.tag = next.tag || 'citofonami-important';
+  next.renotify = true;
+  next.requireInteraction = true;
+  next.silent = false;
+
+  if (!next.vibrate) {
+    next.vibrate = [250, 110, 250, 110, 500];
+  }
+
+  next.data = Object.assign({}, next.data || {}, {
+    important: true,
+    receivedAt: Date.now(),
+    url: next.url || (next.data && next.data.url) || '/'
+  });
+
+  return next;
+}
+
+
 self.addEventListener('push', (event) => {
   let data = {};
 
@@ -38,7 +62,7 @@ self.addEventListener('push', (event) => {
     ]
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(self.registration.showNotification(title, enhanceCitofonamiNotificationOptions(options)));
 });
 
 self.addEventListener('notificationclick', (event) => {
