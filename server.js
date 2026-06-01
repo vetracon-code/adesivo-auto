@@ -19616,17 +19616,19 @@ function defaultCitofonamiConfig(code) {
     locationName: 'Studio Mario Rossi',
     publicText: 'Premi il pulsante per parlare con il proprietario. Nessun numero telefonico verrà mostrato.',
     qrCode: normalizeCitofonamiCode(code),
+    buttonLabel: 'Mario Rossi',
+    address: 'Monza, Italia',
     radius: 50,
+    radiusPreset: '50',
     hours: '08:00 - 20:00',
     latitude: 45.584500,
     longitude: 9.274400,
     enabled: true,
     pushEnabled: true,
     fallbackEnabled: true,
+    requireLocation: true,
     doors: [
-      { name: 'Mario Rossi', description: 'Citofono principale' },
-      { name: 'Ufficio', description: 'Interno 1' },
-      { name: 'Magazzino', description: 'Accesso merci' }
+      { name: 'Mario Rossi', description: 'Citofono principale' }
     ],
     updatedAt: new Date().toISOString()
   };
@@ -19691,23 +19693,39 @@ app.get('/api/citofonami/:code/config', (req, res) => {
 app.post('/api/citofonami/:code/config', express.json({ limit: '1mb' }), (req, res) => {
   const code = normalizeCitofonamiCode(req.params.code);
   const body = req.body || {};
+  const defaultConfig = defaultCitofonamiConfig(code);
+
+  const buttonLabel = String(
+    body.buttonLabel ||
+    (Array.isArray(body.doors) && body.doors[0] && body.doors[0].name) ||
+    `${body.firstName || 'Mario'} ${body.lastName || 'Rossi'}`
+  ).slice(0, 80);
 
   const config = {
-    ...defaultCitofonamiConfig(code),
+    ...defaultConfig,
     ...body,
     qrCode: code,
+    firstName: String(body.firstName || defaultConfig.firstName).slice(0, 60),
+    lastName: String(body.lastName || defaultConfig.lastName).slice(0, 60),
+    locationName: String(body.locationName || defaultConfig.locationName).slice(0, 120),
+    publicText: String(body.publicText || defaultConfig.publicText).slice(0, 240),
+    buttonLabel,
+    address: String(body.address || '').slice(0, 240),
     radius: Number(body.radius || 50),
+    radiusPreset: String(body.radius || 50),
+    hours: String(body.hours || defaultConfig.hours).slice(0, 60),
     latitude: Number(body.latitude || 0),
     longitude: Number(body.longitude || 0),
     enabled: body.enabled !== false,
     pushEnabled: body.pushEnabled !== false,
     fallbackEnabled: body.fallbackEnabled !== false,
-    doors: Array.isArray(body.doors) && body.doors.length
-      ? body.doors.map((door) => ({
-          name: String(door.name || 'Citofono').slice(0, 80),
-          description: String(door.description || 'Premi per parlare').slice(0, 120)
-        }))
-      : defaultCitofonamiConfig(code).doors,
+    requireLocation: body.requireLocation !== false,
+    doors: [
+      {
+        name: buttonLabel,
+        description: 'Premi per parlare'
+      }
+    ],
     updatedAt: new Date().toISOString()
   };
 
@@ -19770,23 +19788,26 @@ app.post('/api/citofonami/:code/ring', express.json({ limit: '1mb' }), async (re
   }
 
   const body = req.body || {};
-  const lat = Number(body.lat);
-  const lng = Number(body.lng);
-
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return res.status(400).json({ ok: false, error: 'Posizione mancante' });
-  }
-
-  const configuredLat = Number(config.latitude);
-  const configuredLng = Number(config.longitude);
-  const radius = Number(config.radius || 50);
+  const requireLocation = config.requireLocation !== false;
 
   let distance = null;
   let allowed = true;
+  let lat = body.lat === null || body.lat === undefined ? null : Number(body.lat);
+  let lng = body.lng === null || body.lng === undefined ? null : Number(body.lng);
 
-  if (Number.isFinite(configuredLat) && Number.isFinite(configuredLng) && configuredLat !== 0 && configuredLng !== 0) {
-    distance = distanceMeters(lat, lng, configuredLat, configuredLng);
-    allowed = distance <= radius;
+  if (requireLocation) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return res.status(400).json({ ok: false, error: 'Posizione richiesta' });
+    }
+
+    const configuredLat = Number(config.latitude);
+    const configuredLng = Number(config.longitude);
+    const radius = Number(config.radius || 50);
+
+    if (Number.isFinite(configuredLat) && Number.isFinite(configuredLng) && configuredLat !== 0 && configuredLng !== 0) {
+      distance = distanceMeters(lat, lng, configuredLat, configuredLng);
+      allowed = distance <= radius;
+    }
   }
 
   const event = {
@@ -19798,6 +19819,7 @@ app.post('/api/citofonami/:code/ring', express.json({ limit: '1mb' }), async (re
     accuracy: body.accuracy || null,
     distance,
     allowed,
+    requireLocation,
     createdAt: new Date().toISOString(),
     userAgent: req.headers['user-agent'] || body.userAgent || ''
   };
@@ -19812,34 +19834,40 @@ app.post('/api/citofonami/:code/ring', express.json({ limit: '1mb' }), async (re
       ok: true,
       allowed: false,
       distance,
-      radius
+      radius: Number(config.radius || 50)
     });
   }
 
   const subscriptions = (db.subscriptions[code] || []).filter((item) => item.role === 'admin');
 
   const owner = `${config.firstName || ''} ${config.lastName || ''}`.trim() || 'proprietario';
-  const doorName = body.door && body.door.name ? body.door.name : 'Citofonami';
+  const doorName =
+    body.door && body.door.name
+      ? body.door.name
+      : (config.buttonLabel || owner || 'Citofonami');
 
   const payload = {
     title: 'Citofonami',
-    body: `${doorName}: qualcuno sta suonando per ${owner}.`,
+    body: `${doorName}: qualcuno sta suonando.`,
     tag: 'citofonami-ring-' + code,
     url: '/citofonami-admin'
   };
 
   const pushResults = [];
 
-  for (const item of subscriptions) {
-    const result = await sendCitofonamiPush(item.subscription, payload);
-    pushResults.push(result);
+  if (config.pushEnabled !== false) {
+    for (const item of subscriptions) {
+      const result = await sendCitofonamiPush(item.subscription, payload);
+      pushResults.push(result);
+    }
   }
 
   res.json({
     ok: true,
     allowed: true,
     distance,
-    radius,
+    radius: Number(config.radius || 50),
+    requireLocation,
     pushed: pushResults.filter(r => r.ok).length,
     subscriptions: subscriptions.length
   });
