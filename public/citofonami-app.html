@@ -446,6 +446,32 @@
   </main>
 
   <script>
+
+    // CITOFONAMI_FRESH_SCAN_SESSION
+    // Ogni apertura/scansione deve partire con una sessione pulita.
+    window.CITOFONAMI_SCAN_SESSION_ID =
+      'scan_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+
+    window.CITOFONAMI_PAGE_OPENED_AT = Date.now();
+
+    try {
+      // Non riutilizzare mai vecchie chiamate o vecchi stati conversazione.
+      sessionStorage.removeItem('citofonami_active_call_id');
+      sessionStorage.removeItem('citofonami_active_call_status');
+      sessionStorage.removeItem('citofonami_voicemail_call_id');
+    } catch (error) {}
+
+    function citofonamiNoStoreFetch(url, options) {
+      const finalOptions = Object.assign({}, options || {}, {
+        cache: 'no-store'
+      });
+
+      const separator = String(url).includes('?') ? '&' : '?';
+      const freshUrl = String(url) + separator + '_fresh=' + encodeURIComponent(window.CITOFONAMI_SCAN_SESSION_ID) + '_' + Date.now();
+
+      return fetch(freshUrl, finalOptions);
+    }
+
     const speaker = document.getElementById('speaker');
     const statusBox = document.getElementById('statusBox');
     const buttonName = document.getElementById('buttonName');
@@ -512,7 +538,7 @@
 
     async function loadConfig() {
       try {
-        const res = await fetch(`/api/citofonami/${encodeURIComponent(code)}/config`);
+        const res = await citofonamiNoStoreFetch(`/api/citofonami/${encodeURIComponent(code)}/config`);
         setCitofonamiStep('lettura risposta server');
         const data = await res.json();
 
@@ -935,7 +961,7 @@
     // CITOFONAMI_DEMO_CONFIG_SYNC_FINAL
     // ==============================
     let citofonamiLiveConfig = null;
-    let citofonamiLiveCallerId = 'caller_demo_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    let citofonamiLiveCallerId = 'caller_demo_' + window.CITOFONAMI_SCAN_SESSION_ID;
     let citofonamiLiveCallId = null;
     let citofonamiLiveStatusTimer = null;
 
@@ -980,7 +1006,7 @@
       const code = getCitofonamiCodeFinal();
 
       try {
-        const res = await fetch(`/api/citofonami/${encodeURIComponent(code)}/config?t=${Date.now()}`, {
+        const res = await citofonamiNoStoreFetch(`/api/citofonami/${encodeURIComponent(code)}/config`, {
           cache: 'no-store'
         });
 

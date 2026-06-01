@@ -2190,6 +2190,24 @@ app.use(
   })
 );
 
+
+// CITOFONAMI_NO_CACHE_MIDDLEWARE
+app.use('/citofonami', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  next();
+});
+
+app.use('/api/citofonami', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 
@@ -19910,6 +19928,9 @@ app.get('/citofonami-admin', (req, res) => {
 // CITOFONAMI - WEB APP PUBBLICA UTENTE
 // ==============================
 app.get('/citofonami/:code', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.sendFile(path.join(__dirname, 'public', 'citofonami-app.html'));
 });
 

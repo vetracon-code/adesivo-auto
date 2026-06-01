@@ -87,3 +87,20 @@ self.addEventListener('notificationclick', (event) => {
     })
   );
 });
+
+
+// CITOFONAMI_SW_NO_CACHE_NAVIGATION
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+
+  if (
+    url.pathname.startsWith('/citofonami/') ||
+    url.pathname.startsWith('/api/citofonami/')
+  ) {
+    event.respondWith(
+      fetch(event.request, { cache: 'no-store' }).catch(() => fetch(event.request))
+    );
+    return;
+  }
+});
+
