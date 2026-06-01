@@ -2038,6 +2038,233 @@
 
     setInterval(forceRecoverFromLatestAnsweredCall, 1200);
 
+  
+    // ==============================
+    // CITOFONAMI_HARD_BYPASS_ANSWERED_20260601
+    // ==============================
+    window.CITOFONAMI_HARD_BYPASS = window.CITOFONAMI_HARD_BYPASS || {
+      active: false,
+      startedAt: 0,
+      lastCallId: '',
+      timer: null
+    };
+
+    function hardBypassCode() {
+      try {
+        if (typeof forceCitofonamiCode === 'function') return forceCitofonamiCode();
+      } catch (e) {}
+
+      return String((window.location.pathname.split('/').filter(Boolean).pop() || 'DEMO')).trim().toUpperCase();
+    }
+
+    function hardBypassSetStatus(text, type) {
+      try {
+        if (typeof forceSetStatus === 'function') {
+          forceSetStatus(text, type);
+          return;
+        }
+
+        if (typeof setStatus === 'function') {
+          setStatus(text, type);
+          return;
+        }
+
+        const box = document.getElementById('statusBox');
+        if (box) {
+          box.textContent = text;
+          box.className = 'status ' + (type || '');
+        }
+      } catch (e) {}
+    }
+
+    function hardBypassShowTalkNow(call) {
+      try {
+        if (window.CITOFONAMI_FORCE_STATE) {
+          window.CITOFONAMI_FORCE_STATE.callId = call.id;
+          window.CITOFONAMI_FORCE_STATE.callerId = call.callerId || window.CITOFONAMI_FORCE_STATE.callerId;
+        }
+
+        if (typeof citofonamiLiveCallId !== 'undefined') {
+          citofonamiLiveCallId = call.id;
+        }
+
+        try {
+          sessionStorage.setItem('citofonami_active_call_id', call.id);
+          if (call.callerId) sessionStorage.setItem('citofonami_active_caller_id', call.callerId);
+        } catch (e) {}
+
+        const debug = document.getElementById('userWebrtcDebugLine');
+        if (debug) {
+          debug.style.display = 'block';
+          debug.textContent = 'callId: ' + call.id + ' · stato: answered · bypass attivo';
+        }
+
+        hardBypassSetStatus('Admin ha risposto. Tocca “Parla ora” e avvicinati al telefono.', 'ok');
+
+        const talkNowButton = document.getElementById('talkNowButton');
+        if (talkNowButton) {
+          talkNowButton.classList.add('show');
+          talkNowButton.style.display = 'block';
+          talkNowButton.disabled = false;
+        }
+
+        window.CITOFONAMI_HARD_BYPASS.active = false;
+
+        if (window.CITOFONAMI_HARD_BYPASS.timer) {
+          clearInterval(window.CITOFONAMI_HARD_BYPASS.timer);
+          window.CITOFONAMI_HARD_BYPASS.timer = null;
+        }
+      } catch (error) {
+        console.warn('hardBypassShowTalkNow error:', error);
+      }
+    }
+
+    async function hardBypassPollLatestAnswered() {
+      try {
+        if (!window.CITOFONAMI_HARD_BYPASS.active) return;
+
+        const code = hardBypassCode();
+
+        const res = await fetch(`/api/citofonami/${encodeURIComponent(code)}/calls-list/latest?bypass=${Date.now()}`, {
+          cache: 'no-store'
+        });
+
+        const data = await res.json();
+
+        if (!data || !data.ok || !Array.isArray(data.calls) || !data.calls.length) return;
+
+        const startedAt = window.CITOFONAMI_HARD_BYPASS.startedAt || 0;
+
+        // Cerco la chiamata più recente dopo il click utente.
+        const candidate = data.calls.find(call => {
+          const created = call.createdAt ? new Date(call.createdAt).getTime() : 0;
+          return created >= (startedAt - 15000);
+        }) || data.calls[0];
+
+        if (!candidate) return;
+
+        const debug = document.getElementById('userWebrtcDebugLine');
+        if (debug) {
+          debug.style.display = 'block';
+          debug.textContent = 'callId: ' + candidate.id + ' · stato: ' + candidate.status + ' · controllo bypass';
+        }
+
+        if (candidate.status === 'answered') {
+          hardBypassShowTalkNow(candidate);
+          return;
+        }
+
+        if (candidate.status === 'closed') {
+          hardBypassSetStatus('Chiamata chiusa dall’admin.', 'ko');
+          window.CITOFONAMI_HARD_BYPASS.active = false;
+          return;
+        }
+
+        if (candidate.status === 'blocked') {
+          hardBypassSetStatus('Sei stato bloccato dal sistema.', 'ko');
+          window.CITOFONAMI_HARD_BYPASS.active = false;
+          return;
+        }
+
+        if (candidate.status === 'voicemail_requested') {
+          hardBypassSetStatus('Admin non disponibile. Puoi lasciare un messaggio vocale.', 'ok');
+          window.CITOFONAMI_HARD_BYPASS.active = false;
+          return;
+        }
+      } catch (error) {
+        console.warn('hardBypassPollLatestAnswered error:', error);
+      }
+    }
+
+    function startHardBypassPolling() {
+      window.CITOFONAMI_HARD_BYPASS.active = true;
+      window.CITOFONAMI_HARD_BYPASS.startedAt = Date.now();
+
+      if (window.CITOFONAMI_HARD_BYPASS.timer) {
+        clearInterval(window.CITOFONAMI_HARD_BYPASS.timer);
+      }
+
+      window.CITOFONAMI_HARD_BYPASS.timer = setInterval(hardBypassPollLatestAnswered, 800);
+      hardBypassPollLatestAnswered();
+    }
+
+    function hardBypassWireCleanButtons() {
+      const oldCallButton = document.getElementById('callButton');
+
+      if (oldCallButton && !oldCallButton.dataset.hardBypassWired) {
+        const clean = oldCallButton.cloneNode(true);
+        clean.dataset.hardBypassWired = '1';
+
+        oldCallButton.parentNode.replaceChild(clean, oldCallButton);
+
+        clean.addEventListener('click', async function(event) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+
+          startHardBypassPolling();
+
+          if (typeof forceCitofona === 'function') {
+            await forceCitofona(event);
+          } else if (typeof ringCitofonamiFinal === 'function') {
+            await ringCitofonamiFinal(event);
+          } else if (typeof ring === 'function') {
+            await ring(event);
+          }
+
+          // Dopo l’invio, tengo vivo il bypass in ogni caso.
+          startHardBypassPolling();
+        }, true);
+      }
+
+      const oldTalkButton = document.getElementById('talkNowButton');
+
+      if (oldTalkButton && !oldTalkButton.dataset.hardBypassWired) {
+        const cleanTalk = oldTalkButton.cloneNode(true);
+        cleanTalk.dataset.hardBypassWired = '1';
+
+        oldTalkButton.parentNode.replaceChild(cleanTalk, oldTalkButton);
+
+        cleanTalk.addEventListener('click', async function(event) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+
+          const callId =
+            (window.CITOFONAMI_FORCE_STATE && window.CITOFONAMI_FORCE_STATE.callId) ||
+            sessionStorage.getItem('citofonami_active_call_id') ||
+            '';
+
+          if (!callId) {
+            hardBypassSetStatus('Chiamata non trovata. Riprova a citofonare.', 'ko');
+            return;
+          }
+
+          if (typeof startUserWebrtcAudio === 'function') {
+            await startUserWebrtcAudio();
+            return;
+          }
+
+          if (typeof userStartTalkingFinal === 'function') {
+            await userStartTalkingFinal();
+            return;
+          }
+
+          hardBypassSetStatus('Modulo audio non disponibile.', 'ko');
+        }, true);
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', hardBypassWireCleanButtons);
+    } else {
+      hardBypassWireCleanButtons();
+    }
+
+    setTimeout(hardBypassWireCleanButtons, 600);
+    setTimeout(hardBypassWireCleanButtons, 1600);
+    setInterval(hardBypassWireCleanButtons, 4000);
+
   </script>
 </body>
 </html>
