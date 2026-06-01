@@ -2462,5 +2462,74 @@ textarea {
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_ADMIN_CLEAN_LOCAL_NOTIFICATION_TEST_20260601 */
+async function citofonamiLocalNotificationTest() {
+  try {
+    toast('Test notifica…');
+
+    if (!('serviceWorker' in navigator)) {
+      throw new Error('Service worker non supportato');
+    }
+
+    if (typeof Notification === 'undefined') {
+      throw new Error('Notifiche non supportate');
+    }
+
+    const permission = Notification.permission === 'granted'
+      ? 'granted'
+      : await Notification.requestPermission();
+
+    if (permission !== 'granted') {
+      throw new Error('Notifiche non autorizzate');
+    }
+
+    const registration = await navigator.serviceWorker.register('/citofonami-sw.js', { scope: '/' });
+    await navigator.serviceWorker.ready;
+
+    await registration.showNotification('Citofonami Admin', {
+      body: 'Test notifica locale riuscito.',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag: 'citofonami-local-test',
+      renotify: true,
+      requireInteraction: true,
+      silent: false,
+      data: {
+        url: '/citofonami-admin-clean',
+        localTest: true,
+        createdAt: Date.now()
+      }
+    });
+
+    toast('Notifica locale inviata.');
+  } catch (error) {
+    toast('Test notifica fallito: ' + (error.message || error));
+  }
+}
+
+(function wireLocalNotificationTest() {
+  function wire() {
+    const btn = document.getElementById('localNotifyTestButton');
+    if (!btn || btn.dataset.wired === '1') return;
+
+    btn.dataset.wired = '1';
+    btn.addEventListener('click', citofonamiLocalNotificationTest, true);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wire);
+  } else {
+    wire();
+  }
+
+  setTimeout(wire, 500);
+  setTimeout(wire, 1500);
+})();
+
+window.citofonamiLocalNotificationTest = citofonamiLocalNotificationTest;
+</script>
+
 </body>
 </html>
