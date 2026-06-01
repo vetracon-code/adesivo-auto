@@ -402,6 +402,19 @@
       display: block;
     }
 
+  
+    .user-webrtc-debug-line {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: rgba(255,255,255,.055);
+      border: 1px solid rgba(255,255,255,.08);
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
   </style>
 </head>
 
@@ -1102,6 +1115,7 @@
         }
 
         citofonamiLiveCallId = data.callId;
+        updateUserWebrtcDebugLine('callId: ' + data.callId + ' · attendo risposta admin');
 
         setStatus('Chiamata inviata. Attendi la risposta…', 'ok');
 
@@ -1223,6 +1237,61 @@
     setTimeout(wireCitofonamiFinalButtons, 700);
 
   
+
+    function updateUserWebrtcDebugLine(text) {
+      try {
+        const el = document.getElementById('userWebrtcDebugLine');
+        if (!el) return;
+        el.style.display = 'block';
+        el.textContent = text;
+      } catch (error) {}
+    }
+
+    async function forceCheckLatestCallIfWaiting() {
+      try {
+        const code =
+          typeof forceCitofonamiCode === 'function'
+            ? forceCitofonamiCode()
+            : ((window.location.pathname.split('/').filter(Boolean).pop() || 'DEMO').toUpperCase());
+
+        const currentCallId =
+          (window.CITOFONAMI_FORCE_STATE && window.CITOFONAMI_FORCE_STATE.callId) ||
+          (typeof citofonamiLiveCallId !== 'undefined' ? citofonamiLiveCallId : '') ||
+          sessionStorage.getItem('citofonami_active_call_id');
+
+        if (!currentCallId) return;
+
+        const res = await fetch(`/api/citofonami/${encodeURIComponent(code)}/calls/${encodeURIComponent(currentCallId)}?t=${Date.now()}`, {
+          cache: 'no-store'
+        });
+
+        const data = await res.json();
+
+        if (data && data.ok && data.call) {
+          updateUserWebrtcDebugLine('callId: ' + currentCallId + ' · stato: ' + data.call.status);
+
+          if (data.call.status === 'answered') {
+            if (typeof forceShowTalkNowFromAnswered === 'function') {
+              forceShowTalkNowFromAnswered();
+            } else {
+              const talkNowButton = document.getElementById('talkNowButton');
+              if (talkNowButton) {
+                talkNowButton.classList.add('show');
+                talkNowButton.style.display = 'block';
+              }
+              if (typeof setStatus === 'function') {
+                setStatus('Admin ha risposto. Tocca “Parla ora” e avvicinati al telefono.', 'ok');
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('forceCheckLatestCallIfWaiting error:', error);
+      }
+    }
+
+    setInterval(forceCheckLatestCallIfWaiting, 1200);
+
     // ==============================
     // CITOFONAMI_USER_WEBRTC_AUDIO_V1
     // ==============================
@@ -1580,6 +1649,7 @@
         }
 
         window.CITOFONAMI_FORCE_STATE.callId = data.callId;
+        updateUserWebrtcDebugLine('callId: ' + data.callId + ' · attendo risposta admin');
 
         try {
           sessionStorage.setItem('citofonami_active_call_id', data.callId);

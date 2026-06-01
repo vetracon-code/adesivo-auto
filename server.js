@@ -21017,6 +21017,27 @@ app.delete('/api/citofonami/:code/calls/:callId/webrtc', (req, res) => {
 });
 
 
+
+
+// ==============================
+// CITOFONAMI - LATEST CALLS DEBUG
+// ==============================
+app.get('/api/citofonami/:code/calls/latest', (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+
+  const calls = (db.events || [])
+    .filter((event) => event.code === code && event.type === 'call')
+    .slice(0, 20);
+
+  res.json({
+    ok: true,
+    code,
+    calls
+  });
+});
+
+
 app.listen(PORT, () => {
       console.log(`Server attivo su ${BASE_URL}`);
     });
