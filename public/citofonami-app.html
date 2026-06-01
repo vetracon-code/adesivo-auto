@@ -447,6 +447,38 @@
 
   <script>
 
+    // ==============================
+    // CITOFONAMI_FORCE_UNREGISTER_OLD_SW_20260601
+    // ==============================
+    async function forceCleanOldCitofonamiServiceWorker() {
+      try {
+        if (!('serviceWorker' in navigator)) return;
+
+        const alreadyCleaned = sessionStorage.getItem('citofonami_sw_cleaned_once') === '1';
+
+        const regs = await navigator.serviceWorker.getRegistrations();
+        let removed = false;
+
+        for (const reg of regs) {
+          const script = reg.active && reg.active.scriptURL ? reg.active.scriptURL : '';
+          if (script.includes('citofonami-sw.js')) {
+            await reg.unregister();
+            removed = true;
+          }
+        }
+
+        if (removed && !alreadyCleaned) {
+          sessionStorage.setItem('citofonami_sw_cleaned_once', '1');
+          window.location.reload();
+        }
+      } catch (error) {
+        console.warn('forceCleanOldCitofonamiServiceWorker error:', error);
+      }
+    }
+
+    forceCleanOldCitofonamiServiceWorker();
+
+
     // CITOFONAMI_FRESH_SCAN_SESSION
     // Ogni apertura/scansione deve partire con una sessione pulita.
     window.CITOFONAMI_SCAN_SESSION_ID =
@@ -833,11 +865,9 @@
     callButton.addEventListener('click', ring);
     talkNowButton.addEventListener('click', userStartTalkingAfterAnswer);
 
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/citofonami-sw.js').catch((error) => {
-        console.warn('Citofonami service worker non registrato:', error);
-      });
-    }
+    // Service worker disattivato sulla pagina utente Citofonami:
+    // la pagina QR deve essere sempre fresca a ogni scansione.
+    
 
     loadConfig();
   
