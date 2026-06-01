@@ -434,6 +434,7 @@
     let localStream = null;
     let citofonamiDebugStep = 'inizio';
     let citofonamiMemoryCallerId = null;
+    let citofonamiSessionCallerId = 'caller_tmp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
 
     for (let i = 0; i < 120; i++) {
       const dot = document.createElement('span');
@@ -534,26 +535,15 @@
     }
 
 
+    let citofonamiSessionCallCount = 0;
+
     function getLocalCitofonamiCallCount() {
-      try {
-        const key = 'citofonami_call_count_' + code;
-        return Number(localStorage.getItem(key) || 0);
-      } catch (error) {
-        console.warn('Citofonami localStorage call count non disponibile:', error);
-        return 0;
-      }
+      return citofonamiSessionCallCount;
     }
 
     function incrementLocalCitofonamiCallCount() {
-      try {
-        const key = 'citofonami_call_count_' + code;
-        const next = getLocalCitofonamiCallCount() + 1;
-        localStorage.setItem(key, String(next));
-        return next;
-      } catch (error) {
-        console.warn('Citofonami impossibile aggiornare call count locale:', error);
-        return 1;
-      }
+      citofonamiSessionCallCount += 1;
+      return citofonamiSessionCallCount;
     }
 
     function shouldAskLocationNow() {
@@ -730,15 +720,31 @@
 
         setCitofonamiStep('preparo richiesta server');
 
+        let callerId = 'caller_tmp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+
+        try {
+          callerId = getCitofonamiCallerId();
+        } catch (callerError) {
+          console.warn('CallerId fallback:', callerError);
+        }
+
+        setCitofonamiStep('payload minimo');
+
+        const safeFirstName = config && config.firstName ? String(config.firstName) : 'Mario';
+        const safeLastName = config && config.lastName ? String(config.lastName) : 'Rossi';
+        const ownerFallback = safeFirstName + ' ' + safeLastName;
+        const buttonLabelSafe = config && config.buttonLabel ? String(config.buttonLabel) : ownerFallback;
+
         const payload = {
+          callerId: callerId,
           door: {
-            name: config.buttonLabel || `${config.firstName || 'Mario'} ${config.lastName || 'Rossi'}`,
+            name: buttonLabelSafe,
             description: 'Citofono principale'
           },
-          lat: position ? position.coords.latitude : null,
-          lng: position ? position.coords.longitude : null,
-          accuracy: position ? position.coords.accuracy : null,
-          userAgent: navigator.userAgent
+          lat: position && position.coords ? Number(position.coords.latitude) : null,
+          lng: position && position.coords ? Number(position.coords.longitude) : null,
+          accuracy: position && position.coords ? Number(position.coords.accuracy || 0) : null,
+          userAgent: 'citofonami-user'
         };
 
         const res = await fetch(`/api/citofonami/${encodeURIComponent(code)}/ring`, {
@@ -776,7 +782,7 @@
 
         const cleaned = cleanCitofonamiError(
           error,
-          citofonamiDebugStep === 'caller id' || citofonamiDebugStep === 'payload' || citofonamiDebugStep === 'preparo richiesta server'
+          citofonamiDebugStep === 'caller id semplice' || citofonamiDebugStep === 'payload minimo' || citofonamiDebugStep === 'preparo richiesta server'
             ? 'Il telefono ha bloccato un dato locale necessario alla chiamata. Riprova dopo aver chiuso e riaperto la pagina.'
             : 'Non è stato possibile avviare la chiamata. Riprova.'
         );
