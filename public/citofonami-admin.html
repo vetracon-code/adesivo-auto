@@ -3989,6 +3989,305 @@
     document.addEventListener('click', unlockCitofonamiBell, { once: true });
     document.addEventListener('touchstart', unlockCitofonamiBell, { once: true });
 
+  
+    // ==============================
+    // CITOFONAMI_ADMIN_WEBRTC_AUDIO_V1
+    // ==============================
+    let adminRtcPeer = null;
+    let adminRtcStream = null;
+    let adminRtcRemoteAudio = null;
+    let adminRtcIceTimer = null;
+    let adminRtcAnswerTimer = null;
+    const adminRtcSeenIce = new Set();
+
+    function getAdminWebrtcCode() {
+      try {
+        if (typeof finalGetCode === 'function') return finalGetCode();
+      } catch (e) {}
+
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get('code');
+      const fromInput = document.getElementById('qrCode') ? document.getElementById('qrCode').value : '';
+      return String(fromUrl || fromInput || 'DEMO').trim().toUpperCase();
+    }
+
+    function ensureAdminRemoteAudio() {
+      if (adminRtcRemoteAudio) return adminRtcRemoteAudio;
+
+      adminRtcRemoteAudio = document.createElement('audio');
+      adminRtcRemoteAudio.autoplay = true;
+      adminRtcRemoteAudio.playsInline = true;
+      adminRtcRemoteAudio.controls = false;
+      adminRtcRemoteAudio.id = 'adminRtcRemoteAudio';
+
+      document.body.appendChild(adminRtcRemoteAudio);
+      return adminRtcRemoteAudio;
+    }
+
+    function stopAdminWebrtcAudio() {
+      try {
+        if (adminRtcAnswerTimer) clearInterval(adminRtcAnswerTimer);
+        if (adminRtcIceTimer) clearInterval(adminRtcIceTimer);
+
+        adminRtcAnswerTimer = null;
+        adminRtcIceTimer = null;
+
+        if (adminRtcPeer) {
+          adminRtcPeer.close();
+        }
+
+        if (adminRtcStream) {
+          adminRtcStream.getTracks().forEach(track => track.stop());
+        }
+      } catch (e) {}
+
+      adminRtcPeer = null;
+      adminRtcStream = null;
+      adminRtcSeenIce.clear();
+    }
+
+    async function postAdminIceCandidate(code, callId, candidate) {
+      try {
+        await fetch(`/api/citofonami/${encodeURIComponent(code)}/calls/${encodeURIComponent(callId)}/webrtc/ice`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            role: 'admin',
+            candidate
+          })
+        });
+      } catch (error) {
+        console.warn('postAdminIceCandidate error:', error);
+      }
+    }
+
+    async function pollAdminRemoteIce(code, callId) {
+      try {
+        if (!adminRtcPeer) return;
+
+        const res = await fetch(`/api/citofonami/${encodeURIComponent(code)}/calls/${encodeURIComponent(callId)}/webrtc/ice?role=admin&t=${Date.now()}`, {
+          cache: 'no-store'
+        });
+
+        const data = await res.json();
+
+        if (!data.ok || !Array.isArray(data.candidates)) return;
+
+        for (const candidate of data.candidates) {
+          const key = JSON.stringify(candidate);
+          if (adminRtcSeenIce.has(key)) continue;
+
+          adminRtcSeenIce.add(key);
+
+          try {
+            await adminRtcPeer.addIceCandidate(candidate);
+          } catch (iceError) {
+            console.warn('Admin addIceCandidate error:', iceError);
+          }
+        }
+      } catch (error) {
+        console.warn('pollAdminRemoteIce error:', error);
+      }
+    }
+
+    async function pollAdminAnswer(code, callId) {
+      try {
+        if (!adminRtcPeer || adminRtcPeer.remoteDescription) return;
+
+        const res = await fetch(`/api/citofonami/${encodeURIComponent(code)}/calls/${encodeURIComponent(callId)}/webrtc/answer?t=${Date.now()}`, {
+          cache: 'no-store'
+        });
+
+        const data = await res.json();
+
+        if (data.ok && data.answer) {
+          await adminRtcPeer.setRemoteDescription(data.answer);
+
+          if (adminRtcAnswerTimer) {
+            clearInterval(adminRtcAnswerTimer);
+            adminRtcAnswerTimer = null;
+          }
+
+          if (typeof adminConnectedState !== 'undefined' && adminConnectedState) {
+            adminConnectedState.innerHTML = 'Audio collegato. Puoi parlare con l’utente.';
+            adminConnectedState.style.display = 'block';
+          }
+
+          if (typeof finalCallSubtitle !== 'undefined') {
+            finalCallSubtitle.textContent = 'Audio collegato. Parla normalmente, come in una telefonata.';
+          }
+
+          if (typeof setState === 'function') {
+            setState('Audio WebRTC collegato.', true);
+          }
+        }
+      } catch (error) {
+        console.warn('pollAdminAnswer error:', error);
+      }
+    }
+
+    async function startAdminWebrtcAudioForCurrentCall() {
+      if (!finalCurrentCall || !finalCurrentCall.id) {
+        if (typeof setState === 'function') setState('Nessuna chiamata selezionata.', false);
+        return;
+      }
+
+      const code = getAdminWebrtcCode();
+      const callId = finalCurrentCall.id;
+
+      try {
+        stopAdminWebrtcAudio();
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error('Microfono non supportato da questo browser.');
+        }
+
+        adminRtcStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          },
+          video: false
+        });
+
+        citofonamiAdminMicStream = adminRtcStream;
+        citofonamiAdminMicReady = true;
+
+        try { localStorage.setItem('citofonami_admin_mic_ready', '1'); } catch (e) {}
+
+        if (typeof forceRefreshAdminSetupUi === 'function') forceRefreshAdminSetupUi();
+        if (typeof forceRenderSetupState === 'function') forceRenderSetupState();
+
+        adminRtcPeer = new RTCPeerConnection({
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
+        });
+
+        adminRtcStream.getTracks().forEach(track => {
+          adminRtcPeer.addTrack(track, adminRtcStream);
+        });
+
+        adminRtcPeer.ontrack = (event) => {
+          const audio = ensureAdminRemoteAudio();
+          audio.srcObject = event.streams[0];
+          audio.play().catch(() => null);
+        };
+
+        adminRtcPeer.onicecandidate = (event) => {
+          if (event.candidate) {
+            postAdminIceCandidate(code, callId, event.candidate);
+          }
+        };
+
+        adminRtcPeer.onconnectionstatechange = () => {
+          const state = adminRtcPeer ? adminRtcPeer.connectionState : '';
+
+          if (typeof adminConnectedState !== 'undefined' && adminConnectedState) {
+            if (state === 'connected') {
+              adminConnectedState.innerHTML = 'Conversazione attiva. Audio collegato.';
+              adminConnectedState.style.display = 'block';
+            }
+
+            if (state === 'failed' || state === 'disconnected') {
+              adminConnectedState.innerHTML = 'Audio non stabile. Riprova la chiamata.';
+              adminConnectedState.style.display = 'block';
+            }
+          }
+        };
+
+        const offer = await adminRtcPeer.createOffer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: false
+        });
+
+        await adminRtcPeer.setLocalDescription(offer);
+
+        await fetch(`/api/citofonami/${encodeURIComponent(code)}/calls/${encodeURIComponent(callId)}/webrtc/offer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            offer: adminRtcPeer.localDescription
+          })
+        });
+
+        if (typeof finalCallTitle !== 'undefined') {
+          finalCallTitle.textContent = 'Chiamata accettata';
+        }
+
+        if (typeof finalCallSubtitle !== 'undefined') {
+          finalCallSubtitle.textContent = 'Attendo che l’utente prema “Parla ora”.';
+        }
+
+        if (typeof adminConnectedState !== 'undefined' && adminConnectedState) {
+          adminConnectedState.innerHTML = 'Microfono admin attivo. Attendo l’utente.';
+          adminConnectedState.style.display = 'block';
+        }
+
+        adminRtcAnswerTimer = setInterval(() => pollAdminAnswer(code, callId), 1200);
+        adminRtcIceTimer = setInterval(() => pollAdminRemoteIce(code, callId), 1200);
+
+        if (typeof setState === 'function') {
+          setState('Risposta inviata. Attendo collegamento utente.', true);
+        }
+      } catch (error) {
+        console.error('startAdminWebrtcAudioForCurrentCall error:', error);
+
+        if (typeof setState === 'function') {
+          setState('Errore audio admin: ' + (error.message || error), false);
+        }
+      }
+    }
+
+    async function finalAnswerWithWebrtcAudio() {
+      if (!finalCurrentCall || !finalCurrentCall.id) {
+        if (typeof setState === 'function') setState('Nessuna chiamata selezionata.', false);
+        return;
+      }
+
+      const code = getAdminWebrtcCode();
+
+      try {
+        const r = await fetch(`/api/citofonami/${encodeURIComponent(code)}/calls/${encodeURIComponent(finalCurrentCall.id)}/action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'answer' })
+        });
+
+        const data = await r.json();
+        if (!r.ok || !data.ok) throw new Error(data.error || 'Risposta non riuscita');
+
+        finalCallOverlay.classList.add('call-answered');
+        finalCallOverlay.classList.add('active');
+        finalCallOverlay.classList.add('force-visible');
+        finalCallOverlay.classList.remove('temporarily-hidden');
+
+        finalAnswerButton.textContent = 'In attesa utente';
+        finalAnswerButton.disabled = true;
+
+        await startAdminWebrtcAudioForCurrentCall();
+      } catch (error) {
+        if (typeof setState === 'function') {
+          setState('Errore risposta chiamata: ' + (error.message || error), false);
+        }
+      }
+    }
+
+    function wireAdminWebrtcAnswerButton() {
+      const btn = document.getElementById('finalAnswerButton');
+      if (!btn) return;
+
+      const clone = btn.cloneNode(true);
+      btn.parentNode.replaceChild(clone, btn);
+
+      clone.addEventListener('click', finalAnswerWithWebrtcAudio);
+    }
+
+    setTimeout(wireAdminWebrtcAnswerButton, 800);
+    setTimeout(wireAdminWebrtcAnswerButton, 2000);
+
   </script>
 </body>
 </html>

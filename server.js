@@ -20753,6 +20753,196 @@ app.delete('/api/citofonami/:code/contacts/:callerId', (req, res) => {
   });
 });
 
+
+
+// ==============================
+// CITOFONAMI - WEBRTC AUDIO SIGNALING V1
+// ==============================
+function ensureCitofonamiWebrtcStore(db) {
+  db.webrtc = db.webrtc || {};
+  return db;
+}
+
+function getCitofonamiWebrtcSession(db, code, callId) {
+  ensureCitofonamiWebrtcStore(db);
+
+  const key = code + ':' + callId;
+
+  db.webrtc[key] = db.webrtc[key] || {
+    code,
+    callId,
+    offer: null,
+    answer: null,
+    ice: {
+      admin: [],
+      user: []
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  return db.webrtc[key];
+}
+
+function normalizeCitofonamiWebrtcRole(value) {
+  const role = String(value || '').trim().toLowerCase();
+  return role === 'admin' ? 'admin' : 'user';
+}
+
+app.post('/api/citofonami/:code/calls/:callId/webrtc/offer', express.json({ limit: '2mb' }), (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const callId = String(req.params.callId || '');
+  const offer = (req.body || {}).offer;
+
+  if (!callId || !offer || offer.type !== 'offer') {
+    return res.status(400).json({ ok: false, error: 'Offer WebRTC non valida' });
+  }
+
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+  const session = getCitofonamiWebrtcSession(db, code, callId);
+
+  session.offer = offer;
+  session.answer = null;
+  session.ice = { admin: [], user: [] };
+  session.updatedAt = new Date().toISOString();
+
+  writeCitofonamiDb(db);
+
+  res.json({
+    ok: true,
+    code,
+    callId
+  });
+});
+
+app.get('/api/citofonami/:code/calls/:callId/webrtc/offer', (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const callId = String(req.params.callId || '');
+
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+  const session = getCitofonamiWebrtcSession(db, code, callId);
+
+  res.json({
+    ok: true,
+    code,
+    callId,
+    offer: session.offer || null
+  });
+});
+
+app.post('/api/citofonami/:code/calls/:callId/webrtc/answer', express.json({ limit: '2mb' }), (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const callId = String(req.params.callId || '');
+  const answer = (req.body || {}).answer;
+
+  if (!callId || !answer || answer.type !== 'answer') {
+    return res.status(400).json({ ok: false, error: 'Answer WebRTC non valida' });
+  }
+
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+  const session = getCitofonamiWebrtcSession(db, code, callId);
+
+  session.answer = answer;
+  session.updatedAt = new Date().toISOString();
+
+  writeCitofonamiDb(db);
+
+  res.json({
+    ok: true,
+    code,
+    callId
+  });
+});
+
+app.get('/api/citofonami/:code/calls/:callId/webrtc/answer', (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const callId = String(req.params.callId || '');
+
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+  const session = getCitofonamiWebrtcSession(db, code, callId);
+
+  res.json({
+    ok: true,
+    code,
+    callId,
+    answer: session.answer || null
+  });
+});
+
+app.post('/api/citofonami/:code/calls/:callId/webrtc/ice', express.json({ limit: '2mb' }), (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const callId = String(req.params.callId || '');
+  const role = normalizeCitofonamiWebrtcRole((req.body || {}).role);
+  const candidate = (req.body || {}).candidate;
+
+  if (!callId || !candidate) {
+    return res.status(400).json({ ok: false, error: 'ICE candidate mancante' });
+  }
+
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+  const session = getCitofonamiWebrtcSession(db, code, callId);
+
+  session.ice[role] = session.ice[role] || [];
+
+  const key = JSON.stringify(candidate);
+  const exists = session.ice[role].some((item) => JSON.stringify(item) === key);
+
+  if (!exists) {
+    session.ice[role].push(candidate);
+  }
+
+  session.ice[role] = session.ice[role].slice(-80);
+  session.updatedAt = new Date().toISOString();
+
+  writeCitofonamiDb(db);
+
+  res.json({
+    ok: true,
+    code,
+    callId,
+    role,
+    count: session.ice[role].length
+  });
+});
+
+app.get('/api/citofonami/:code/calls/:callId/webrtc/ice', (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const callId = String(req.params.callId || '');
+  const role = normalizeCitofonamiWebrtcRole(req.query.role);
+  const otherRole = role === 'admin' ? 'user' : 'admin';
+
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+  const session = getCitofonamiWebrtcSession(db, code, callId);
+
+  res.json({
+    ok: true,
+    code,
+    callId,
+    role,
+    candidates: session.ice[otherRole] || []
+  });
+});
+
+app.delete('/api/citofonami/:code/calls/:callId/webrtc', (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const callId = String(req.params.callId || '');
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+
+  ensureCitofonamiWebrtcStore(db);
+
+  const key = code + ':' + callId;
+  delete db.webrtc[key];
+
+  writeCitofonamiDb(db);
+
+  res.json({
+    ok: true,
+    code,
+    callId
+  });
+});
+
+
 app.listen(PORT, () => {
       console.log(`Server attivo su ${BASE_URL}`);
     });

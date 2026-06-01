@@ -1192,6 +1192,229 @@
     setTimeout(loadCitofonamiConfigFinal, 500);
     setTimeout(wireCitofonamiFinalButtons, 700);
 
+  
+    // ==============================
+    // CITOFONAMI_USER_WEBRTC_AUDIO_V1
+    // ==============================
+    let userRtcPeer = null;
+    let userRtcStream = null;
+    let userRtcRemoteAudio = null;
+    let userRtcIceTimer = null;
+    const userRtcSeenIce = new Set();
+
+    function getUserWebrtcCode() {
+      try {
+        if (typeof getCitofonamiCodeFinal === 'function') return getCitofonamiCodeFinal();
+      } catch (e) {}
+
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      return String(parts[parts.length - 1] || 'DEMO').trim().toUpperCase();
+    }
+
+    function getUserWebrtcCallId() {
+      return citofonamiLiveCallId || null;
+    }
+
+    function ensureUserRemoteAudio() {
+      if (userRtcRemoteAudio) return userRtcRemoteAudio;
+
+      userRtcRemoteAudio = document.createElement('audio');
+      userRtcRemoteAudio.autoplay = true;
+      userRtcRemoteAudio.playsInline = true;
+      userRtcRemoteAudio.controls = false;
+      userRtcRemoteAudio.id = 'userRtcRemoteAudio';
+
+      document.body.appendChild(userRtcRemoteAudio);
+      return userRtcRemoteAudio;
+    }
+
+    function stopUserWebrtcAudio() {
+      try {
+        if (userRtcIceTimer) clearInterval(userRtcIceTimer);
+        userRtcIceTimer = null;
+
+        if (userRtcPeer) userRtcPeer.close();
+
+        if (userRtcStream) {
+          userRtcStream.getTracks().forEach(track => track.stop());
+        }
+      } catch (e) {}
+
+      userRtcPeer = null;
+      userRtcStream = null;
+      userRtcSeenIce.clear();
+    }
+
+    async function postUserIceCandidate(code, callId, candidate) {
+      try {
+        await fetch(`/api/citofonami/${encodeURIComponent(code)}/calls/${encodeURIComponent(callId)}/webrtc/ice`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            role: 'user',
+            candidate
+          })
+        });
+      } catch (error) {
+        console.warn('postUserIceCandidate error:', error);
+      }
+    }
+
+    async function pollUserRemoteIce(code, callId) {
+      try {
+        if (!userRtcPeer) return;
+
+        const res = await fetch(`/api/citofonami/${encodeURIComponent(code)}/calls/${encodeURIComponent(callId)}/webrtc/ice?role=user&t=${Date.now()}`, {
+          cache: 'no-store'
+        });
+
+        const data = await res.json();
+
+        if (!data.ok || !Array.isArray(data.candidates)) return;
+
+        for (const candidate of data.candidates) {
+          const key = JSON.stringify(candidate);
+          if (userRtcSeenIce.has(key)) continue;
+
+          userRtcSeenIce.add(key);
+
+          try {
+            await userRtcPeer.addIceCandidate(candidate);
+          } catch (iceError) {
+            console.warn('User addIceCandidate error:', iceError);
+          }
+        }
+      } catch (error) {
+        console.warn('pollUserRemoteIce error:', error);
+      }
+    }
+
+    async function waitForAdminOffer(code, callId) {
+      for (let i = 0; i < 20; i++) {
+        const res = await fetch(`/api/citofonami/${encodeURIComponent(code)}/calls/${encodeURIComponent(callId)}/webrtc/offer?t=${Date.now()}`, {
+          cache: 'no-store'
+        });
+
+        const data = await res.json();
+
+        if (data.ok && data.offer) {
+          return data.offer;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 700));
+      }
+
+      throw new Error('Offerta audio admin non disponibile.');
+    }
+
+    async function startUserWebrtcAudio() {
+      const code = getUserWebrtcCode();
+      const callId = getUserWebrtcCallId();
+
+      if (!callId) {
+        setStatus('Chiamata non trovata. Riprova a citofonare.', 'ko');
+        return;
+      }
+
+      try {
+        stopUserWebrtcAudio();
+
+        setStatus('Attivo il microfono…');
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error('Microfono non supportato da questo browser.');
+        }
+
+        userRtcStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          },
+          video: false
+        });
+
+        if (typeof startAudioLevelMeter === 'function') {
+          startAudioLevelMeter(userRtcStream);
+        }
+
+        setStatus('Collegamento audio in corso…', 'ok');
+
+        const offer = await waitForAdminOffer(code, callId);
+
+        userRtcPeer = new RTCPeerConnection({
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
+        });
+
+        userRtcStream.getTracks().forEach(track => {
+          userRtcPeer.addTrack(track, userRtcStream);
+        });
+
+        userRtcPeer.ontrack = (event) => {
+          const audio = ensureUserRemoteAudio();
+          audio.srcObject = event.streams[0];
+          audio.play().catch(() => null);
+        };
+
+        userRtcPeer.onicecandidate = (event) => {
+          if (event.candidate) {
+            postUserIceCandidate(code, callId, event.candidate);
+          }
+        };
+
+        userRtcPeer.onconnectionstatechange = () => {
+          const state = userRtcPeer ? userRtcPeer.connectionState : '';
+
+          if (state === 'connected') {
+            setStatus('Audio collegato. Parla come a un citofono.', 'ok');
+          }
+
+          if (state === 'failed' || state === 'disconnected') {
+            setStatus('Audio non stabile. Riprova ad avvicinarti o richiama.', 'ko');
+          }
+        };
+
+        await userRtcPeer.setRemoteDescription(offer);
+
+        const answer = await userRtcPeer.createAnswer();
+        await userRtcPeer.setLocalDescription(answer);
+
+        await fetch(`/api/citofonami/${encodeURIComponent(code)}/calls/${encodeURIComponent(callId)}/webrtc/answer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            answer: userRtcPeer.localDescription
+          })
+        });
+
+        userRtcIceTimer = setInterval(() => pollUserRemoteIce(code, callId), 1200);
+
+        const talkNowButton = document.getElementById('talkNowButton');
+        if (talkNowButton) talkNowButton.classList.remove('show');
+
+        setStatus('Audio attivo. Parla vicino al telefono, come a un citofono.', 'ok');
+      } catch (error) {
+        console.error('startUserWebrtcAudio error:', error);
+        setStatus('Errore collegamento audio: ' + (error.message || error), 'ko');
+      }
+    }
+
+    function wireUserWebrtcTalkButton() {
+      const btn = document.getElementById('talkNowButton');
+      if (!btn) return;
+
+      const clone = btn.cloneNode(true);
+      btn.parentNode.replaceChild(clone, btn);
+
+      clone.addEventListener('click', startUserWebrtcAudio);
+    }
+
+    setTimeout(wireUserWebrtcTalkButton, 800);
+    setTimeout(wireUserWebrtcTalkButton, 2000);
+
   </script>
 </body>
 </html>
