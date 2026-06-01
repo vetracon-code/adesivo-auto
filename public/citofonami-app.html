@@ -1729,6 +1729,116 @@
       console.warn('Errore applicazione config server immediata:', error);
     }
 
+  
+    // ==============================
+    // CITOFONAMI_USER_ANSWER_RESCUE_20260601
+    // ==============================
+    function forceShowTalkNowFromAnswered() {
+      try {
+        forceSetStatus('Admin ha risposto. Tocca “Parla ora” e avvicinati al telefono.', 'ok');
+      } catch (e) {
+        try { setStatus('Admin ha risposto. Tocca “Parla ora” e avvicinati al telefono.', 'ok'); } catch (x) {}
+      }
+
+      const talkNowButton = document.getElementById('talkNowButton');
+      if (talkNowButton) {
+        talkNowButton.classList.add('show');
+        talkNowButton.style.display = 'block';
+      }
+    }
+
+    async function rescueCheckAnsweredStatus() {
+      const state = window.CITOFONAMI_FORCE_STATE || {};
+      const code =
+        typeof forceCitofonamiCode === 'function'
+          ? forceCitofonamiCode()
+          : ((window.location.pathname.split('/').filter(Boolean).pop() || 'DEMO').toUpperCase());
+
+      const callId =
+        state.callId ||
+        (typeof citofonamiLiveCallId !== 'undefined' ? citofonamiLiveCallId : '') ||
+        sessionStorage.getItem('citofonami_active_call_id');
+
+      const callerId =
+        state.callerId ||
+        sessionStorage.getItem('citofonami_active_caller_id') ||
+        '';
+
+      if (!callId) return;
+
+      try {
+        // Primo controllo: endpoint status, senza affidarsi solo al callerId.
+        const url = `/api/citofonami/${encodeURIComponent(code)}/calls/${encodeURIComponent(callId)}/status?t=${Date.now()}`;
+        const res = await fetch(url, { cache: 'no-store' });
+        const data = await res.json();
+
+        if (data && data.ok && data.status === 'answered') {
+          forceShowTalkNowFromAnswered();
+          return;
+        }
+
+        if (data && data.ok && data.status === 'voicemail_requested') {
+          try { forceSetStatus('Admin non disponibile. Puoi lasciare un messaggio vocale.', 'ok'); } catch (e) {}
+          return;
+        }
+
+        if (data && data.ok && data.status === 'closed') {
+          try { forceSetStatus('Chiamata chiusa dall’admin.', 'ko'); } catch (e) {}
+          return;
+        }
+
+        // Secondo controllo: endpoint call completa.
+        const fullRes = await fetch(`/api/citofonami/${encodeURIComponent(code)}/calls/${encodeURIComponent(callId)}?t=${Date.now()}`, {
+          cache: 'no-store'
+        });
+
+        const full = await fullRes.json();
+
+        if (full && full.ok && full.call && full.call.status === 'answered') {
+          forceShowTalkNowFromAnswered();
+          return;
+        }
+
+        // Terzo controllo: vecchio status con callerId, se esiste.
+        if (callerId) {
+          const res2 = await fetch(`/api/citofonami/${encodeURIComponent(code)}/calls/${encodeURIComponent(callId)}/status?callerId=${encodeURIComponent(callerId)}&t=${Date.now()}`, {
+            cache: 'no-store'
+          });
+          const data2 = await res2.json();
+
+          if (data2 && data2.ok && data2.status === 'answered') {
+            forceShowTalkNowFromAnswered();
+            return;
+          }
+        }
+      } catch (error) {
+        console.warn('rescueCheckAnsweredStatus error:', error);
+      }
+    }
+
+    function startRescueAnsweredPolling() {
+      if (window.CITOFONAMI_RESCUE_ANSWER_TIMER) {
+        clearInterval(window.CITOFONAMI_RESCUE_ANSWER_TIMER);
+      }
+
+      window.CITOFONAMI_RESCUE_ANSWER_TIMER = setInterval(rescueCheckAnsweredStatus, 1000);
+    }
+
+    // Aggancia il rescue ogni volta che parte una chiamata.
+    const originalForceCitofonaForRescue = window.forceCitofona;
+    setTimeout(() => {
+      try {
+        const callButton = document.getElementById('callButton');
+        if (callButton) {
+          callButton.addEventListener('click', () => {
+            setTimeout(startRescueAnsweredPolling, 1200);
+          }, true);
+        }
+      } catch (e) {}
+    }, 800);
+
+    startRescueAnsweredPolling();
+
   </script>
 </body>
 </html>

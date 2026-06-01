@@ -4288,6 +4288,137 @@
     setTimeout(wireAdminWebrtcAnswerButton, 800);
     setTimeout(wireAdminWebrtcAnswerButton, 2000);
 
+  
+    // ==============================
+    // CITOFONAMI_FORCE_ANSWER_SYNC_20260601
+    // ==============================
+    async function forceGetCurrentAdminCallForAnswer() {
+      if (typeof finalCurrentCall !== 'undefined' && finalCurrentCall && finalCurrentCall.id) {
+        return finalCurrentCall;
+      }
+
+      if (typeof currentIncomingCall !== 'undefined' && currentIncomingCall && currentIncomingCall.id) {
+        finalCurrentCall = currentIncomingCall;
+        return currentIncomingCall;
+      }
+
+      try {
+        const code =
+          typeof finalGetCode === 'function'
+            ? finalGetCode()
+            : ((document.getElementById('qrCode') && document.getElementById('qrCode').value) || 'DEMO');
+
+        const res = await fetch(`/api/citofonami/${encodeURIComponent(String(code).trim().toUpperCase())}/calls/pending?t=${Date.now()}`, {
+          cache: 'no-store'
+        });
+
+        const data = await res.json();
+
+        if (data && data.ok && Array.isArray(data.calls) && data.calls.length) {
+          finalCurrentCall = data.calls[0];
+
+          try {
+            if (typeof forceShowAnswerPanel === 'function') forceShowAnswerPanel(finalCurrentCall);
+            else if (typeof finalShowCall === 'function') finalShowCall(finalCurrentCall);
+          } catch (e) {}
+
+          return finalCurrentCall;
+        }
+      } catch (error) {
+        console.warn('forceGetCurrentAdminCallForAnswer error:', error);
+      }
+
+      return null;
+    }
+
+    async function forceAnswerCurrentCallAndKeepOpen() {
+      const call = await forceGetCurrentAdminCallForAnswer();
+
+      if (!call || !call.id) {
+        if (typeof setState === 'function') {
+          setState('Nessuna chiamata in arrivo trovata.', false);
+        }
+        return;
+      }
+
+      const code =
+        typeof finalGetCode === 'function'
+          ? finalGetCode()
+          : ((document.getElementById('qrCode') && document.getElementById('qrCode').value) || 'DEMO');
+
+      try {
+        const res = await fetch(`/api/citofonami/${encodeURIComponent(String(code).trim().toUpperCase())}/calls/${encodeURIComponent(call.id)}/action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store',
+          body: JSON.stringify({ action: 'answer' })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.ok) {
+          throw new Error((data && data.error) || 'Risposta non riuscita');
+        }
+
+        finalCurrentCall = call;
+        finalCurrentCall.status = 'answered';
+
+        try {
+          finalCallOverlay.classList.add('active');
+          finalCallOverlay.classList.add('force-visible');
+          finalCallOverlay.classList.add('call-answered');
+          finalCallOverlay.classList.remove('temporarily-hidden');
+          openHiddenCallButton && openHiddenCallButton.classList.remove('show');
+        } catch (e) {}
+
+        try {
+          finalCallTitle.textContent = 'Chiamata accettata';
+          finalCallSubtitle.textContent = 'Attendo che l’utente prema “Parla ora”.';
+          finalAnswerButton.textContent = 'In attesa utente';
+          finalAnswerButton.disabled = true;
+        } catch (e) {}
+
+        try {
+          if (typeof adminConnectedState !== 'undefined' && adminConnectedState) {
+            adminConnectedState.innerHTML = 'Risposta inviata. Attendo il microfono dell’utente.';
+            adminConnectedState.style.display = 'block';
+          }
+        } catch (e) {}
+
+        if (typeof setState === 'function') {
+          setState('Chiamata accettata. L’utente riceverà “Parla ora”.', true);
+        }
+
+        // Avvio WebRTC admin, ma senza bloccare l’aggiornamento answered.
+        try {
+          if (typeof startAdminWebrtcAudioForCurrentCall === 'function') {
+            await startAdminWebrtcAudioForCurrentCall();
+          }
+        } catch (webrtcError) {
+          console.warn('WebRTC admin non avviato, ma chiamata answered:', webrtcError);
+        }
+      } catch (error) {
+        if (typeof setState === 'function') {
+          setState('Errore risposta chiamata: ' + (error.message || error), false);
+        }
+      }
+    }
+
+    // Cattura il click prima degli handler vecchi che potrebbero chiudere il pannello.
+    document.addEventListener('click', function(event) {
+      const target = event.target && event.target.closest
+        ? event.target.closest('#finalAnswerButton, #answerCallButton')
+        : null;
+
+      if (!target) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+
+      forceAnswerCurrentCallAndKeepOpen();
+    }, true);
+
   </script>
 </body>
 </html>
