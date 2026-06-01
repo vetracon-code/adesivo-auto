@@ -19574,7 +19574,279 @@ app.get('/api/followme/admin/storage-audit', async (req, res) => {
 
 
 // ==============================
-// CITOFONAMI - ADMIN DEMO
+// CITOFONAMI - BACKEND ISOLATO
+// ==============================
+const CITOFONAMI_STORAGE_DIR = process.env.CITOFONAMI_STORAGE_DIR || process.env.FOLLOWME_STORAGE_DIR || path.join(__dirname, 'data');
+const CITOFONAMI_DB_FILE = path.join(CITOFONAMI_STORAGE_DIR, 'citofonami-db.json');
+
+function ensureCitofonamiStorage() {
+  try {
+    fs.mkdirSync(CITOFONAMI_STORAGE_DIR, { recursive: true });
+    if (!fs.existsSync(CITOFONAMI_DB_FILE)) {
+      fs.writeFileSync(CITOFONAMI_DB_FILE, JSON.stringify({ configs: {}, subscriptions: {}, events: [] }, null, 2));
+    }
+  } catch (error) {
+    console.error('Errore storage Citofonami:', error);
+  }
+}
+
+function readCitofonamiDb() {
+  ensureCitofonamiStorage();
+
+  try {
+    return JSON.parse(fs.readFileSync(CITOFONAMI_DB_FILE, 'utf8'));
+  } catch (error) {
+    return { configs: {}, subscriptions: {}, events: [] };
+  }
+}
+
+function writeCitofonamiDb(db) {
+  ensureCitofonamiStorage();
+  fs.writeFileSync(CITOFONAMI_DB_FILE, JSON.stringify(db, null, 2));
+}
+
+function normalizeCitofonamiCode(code) {
+  return String(code || 'DEMO').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '') || 'DEMO';
+}
+
+function defaultCitofonamiConfig(code) {
+  return {
+    firstName: 'Mario',
+    lastName: 'Rossi',
+    locationName: 'Studio Mario Rossi',
+    publicText: 'Premi il pulsante per parlare con il proprietario. Nessun numero telefonico verrà mostrato.',
+    qrCode: normalizeCitofonamiCode(code),
+    radius: 50,
+    hours: '08:00 - 20:00',
+    latitude: 45.584500,
+    longitude: 9.274400,
+    enabled: true,
+    pushEnabled: true,
+    fallbackEnabled: true,
+    doors: [
+      { name: 'Mario Rossi', description: 'Citofono principale' },
+      { name: 'Ufficio', description: 'Interno 1' },
+      { name: 'Magazzino', description: 'Accesso merci' }
+    ],
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function toRad(value) {
+  return value * Math.PI / 180;
+}
+
+function distanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function sendCitofonamiPush(subscription, payload) {
+  if (typeof webpush === 'undefined' || !webpush || typeof webpush.sendNotification !== 'function') {
+    return { ok: false, error: 'webpush non disponibile in server.js' };
+  }
+
+  try {
+    await webpush.sendNotification(subscription, JSON.stringify(payload));
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+app.get('/api/citofonami/vapid-public-key', (req, res) => {
+  const publicKey =
+    process.env.VAPID_PUBLIC_KEY ||
+    process.env.PUBLIC_VAPID_KEY ||
+    process.env.WEB_PUSH_PUBLIC_KEY ||
+    '';
+
+  if (!publicKey) {
+    return res.json({ ok: false, error: 'VAPID public key non configurata' });
+  }
+
+  res.json({ ok: true, publicKey });
+});
+
+app.get('/api/citofonami/:code/config', (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const db = readCitofonamiDb();
+
+  const config = db.configs[code] || defaultCitofonamiConfig(code);
+
+  res.json({
+    ok: true,
+    code,
+    config
+  });
+});
+
+app.post('/api/citofonami/:code/config', express.json({ limit: '1mb' }), (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const body = req.body || {};
+
+  const config = {
+    ...defaultCitofonamiConfig(code),
+    ...body,
+    qrCode: code,
+    radius: Number(body.radius || 50),
+    latitude: Number(body.latitude || 0),
+    longitude: Number(body.longitude || 0),
+    enabled: body.enabled !== false,
+    pushEnabled: body.pushEnabled !== false,
+    fallbackEnabled: body.fallbackEnabled !== false,
+    doors: Array.isArray(body.doors) && body.doors.length
+      ? body.doors.map((door) => ({
+          name: String(door.name || 'Citofono').slice(0, 80),
+          description: String(door.description || 'Premi per parlare').slice(0, 120)
+        }))
+      : defaultCitofonamiConfig(code).doors,
+    updatedAt: new Date().toISOString()
+  };
+
+  const db = readCitofonamiDb();
+  db.configs[code] = config;
+  writeCitofonamiDb(db);
+
+  res.json({
+    ok: true,
+    code,
+    config
+  });
+});
+
+app.post('/api/citofonami/:code/subscribe', express.json({ limit: '1mb' }), (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const body = req.body || {};
+  const subscription = body.subscription;
+
+  if (!subscription || !subscription.endpoint) {
+    return res.status(400).json({ ok: false, error: 'Subscription mancante' });
+  }
+
+  const db = readCitofonamiDb();
+  db.subscriptions[code] = db.subscriptions[code] || [];
+
+  const existingIndex = db.subscriptions[code].findIndex((item) => {
+    return item.subscription && item.subscription.endpoint === subscription.endpoint;
+  });
+
+  const item = {
+    role: body.role || 'admin',
+    subscription,
+    createdAt: new Date().toISOString(),
+    userAgent: req.headers['user-agent'] || ''
+  };
+
+  if (existingIndex >= 0) {
+    db.subscriptions[code][existingIndex] = item;
+  } else {
+    db.subscriptions[code].push(item);
+  }
+
+  writeCitofonamiDb(db);
+
+  res.json({
+    ok: true,
+    code,
+    subscriptions: db.subscriptions[code].length
+  });
+});
+
+app.post('/api/citofonami/:code/ring', express.json({ limit: '1mb' }), async (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const db = readCitofonamiDb();
+  const config = db.configs[code] || defaultCitofonamiConfig(code);
+
+  if (config.enabled === false) {
+    return res.status(403).json({ ok: false, error: 'Citofono disattivato' });
+  }
+
+  const body = req.body || {};
+  const lat = Number(body.lat);
+  const lng = Number(body.lng);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return res.status(400).json({ ok: false, error: 'Posizione mancante' });
+  }
+
+  const configuredLat = Number(config.latitude);
+  const configuredLng = Number(config.longitude);
+  const radius = Number(config.radius || 50);
+
+  let distance = null;
+  let allowed = true;
+
+  if (Number.isFinite(configuredLat) && Number.isFinite(configuredLng) && configuredLat !== 0 && configuredLng !== 0) {
+    distance = distanceMeters(lat, lng, configuredLat, configuredLng);
+    allowed = distance <= radius;
+  }
+
+  const event = {
+    id: 'citofonami_' + Date.now(),
+    code,
+    door: body.door || null,
+    lat,
+    lng,
+    accuracy: body.accuracy || null,
+    distance,
+    allowed,
+    createdAt: new Date().toISOString(),
+    userAgent: req.headers['user-agent'] || body.userAgent || ''
+  };
+
+  db.events = Array.isArray(db.events) ? db.events : [];
+  db.events.unshift(event);
+  db.events = db.events.slice(0, 500);
+  writeCitofonamiDb(db);
+
+  if (!allowed) {
+    return res.json({
+      ok: true,
+      allowed: false,
+      distance,
+      radius
+    });
+  }
+
+  const subscriptions = (db.subscriptions[code] || []).filter((item) => item.role === 'admin');
+
+  const owner = `${config.firstName || ''} ${config.lastName || ''}`.trim() || 'proprietario';
+  const doorName = body.door && body.door.name ? body.door.name : 'Citofonami';
+
+  const payload = {
+    title: 'Citofonami',
+    body: `${doorName}: qualcuno sta suonando per ${owner}.`,
+    tag: 'citofonami-ring-' + code,
+    url: '/citofonami-admin'
+  };
+
+  const pushResults = [];
+
+  for (const item of subscriptions) {
+    const result = await sendCitofonamiPush(item.subscription, payload);
+    pushResults.push(result);
+  }
+
+  res.json({
+    ok: true,
+    allowed: true,
+    distance,
+    radius,
+    pushed: pushResults.filter(r => r.ok).length,
+    subscriptions: subscriptions.length
+  });
+});
+
+// ==============================
+// CITOFONAMI - ADMIN
 // ==============================
 app.get('/citofonami-admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'citofonami-admin.html'));
