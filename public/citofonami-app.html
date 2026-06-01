@@ -5214,5 +5214,315 @@ body.citofonami-final-ui-ready [id*="grille"] {
 </script>
 
 <script>/* CITOFONAMI_USER_FINAL_CLEAN_UI_MARKER_20260601 */</script>
+
+<script>
+/* CITOFONAMI_USER_FINAL_RING_V2_DIRECT_20260601 */
+(function () {
+  let ringLock = false;
+
+  function code() {
+    const parts = window.location.pathname.split("/").filter(Boolean);
+    return String(parts[parts.length - 1] || "DEMO").trim().toUpperCase();
+  }
+
+  function cfg() {
+    return window.CITOFONAMI_SERVER_CONFIG || {};
+  }
+
+  function clean(value) {
+    return String(value || "").trim();
+  }
+
+  function callerId() {
+    let id = sessionStorage.getItem("citofonami_final_caller_id");
+    if (!id) {
+      id = "web_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+      sessionStorage.setItem("citofonami_final_caller_id", id);
+    }
+    return id;
+  }
+
+  function setFinalStatus(text) {
+    const el = document.getElementById("citofonamiFinalStatus");
+    if (el) el.textContent = text || "";
+  }
+
+  function currentDoor() {
+    const c = cfg();
+    const name =
+      clean(c.buttonLabel) ||
+      [clean(c.firstName), clean(c.lastName)].filter(Boolean).join(" ") ||
+      "Citofona";
+
+    return {
+      name,
+      description: "Citofono"
+    };
+  }
+
+  async function finalRingV2(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    }
+
+    if (ringLock) return;
+    ringLock = true;
+
+    const btn = document.getElementById("callButton");
+
+    try {
+      if (btn) {
+        btn.classList.add("calling");
+        const action = btn.querySelector(".final-action");
+        if (action) action.textContent = "chiamata…";
+      }
+
+      setFinalStatus("Chiamata inviata…");
+
+      const payload = {
+        callerId: callerId(),
+        door: currentDoor(),
+        lat: null,
+        lng: null,
+        accuracy: null,
+        userAgent: navigator.userAgent || ""
+      };
+
+      const res = await fetch(`/api/citofonami/${encodeURIComponent(code())}/ring-v2`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "Chiamata non inviata");
+      }
+
+      const callId = data.callId || data.id || "";
+
+      if (callId) {
+        sessionStorage.setItem("citofonami_active_call_id", callId);
+        sessionStorage.setItem("citofonami_active_caller_id", payload.callerId);
+
+        try {
+          if (!window.CITOFONAMI_FORCE_STATE) window.CITOFONAMI_FORCE_STATE = {};
+          window.CITOFONAMI_FORCE_STATE.callId = callId;
+          window.CITOFONAMI_FORCE_STATE.callerId = payload.callerId;
+        } catch(e) {}
+
+        try {
+          window.citofonamiLiveCallId = callId;
+          window.citofonamiLiveCallerId = payload.callerId;
+        } catch(e) {}
+      }
+
+      setFinalStatus("Chiamata inviata. Attendi…");
+
+      // Avvia i recuperi vecchi se esistono: servono per far comparire Parla ora.
+      try {
+        if (typeof window.forceRecoverFromLatestAnsweredCall === "function") {
+          window.forceRecoverFromLatestAnsweredCall();
+        }
+      } catch(e) {}
+
+      try {
+        if (typeof window.forcePollAnsweredStatus === "function") {
+          window.forcePollAnsweredStatus();
+        }
+      } catch(e) {}
+
+      // Poll diretto: quando admin risponde, mostra Parla ora anche se i vecchi handler non partono.
+      startFinalAnsweredPoll(callId);
+    } catch (error) {
+      console.error("finalRingV2 error:", error);
+      setFinalStatus("Errore chiamata. Riprova.");
+
+      if (btn) {
+        const action = btn.querySelector(".final-action");
+        if (action) action.textContent = "tocca e chiama";
+      }
+
+      ringLock = false;
+    }
+  }
+
+  function ensureTalkNowButton(callId) {
+    let panel = document.getElementById("citofonamiExternalAnswerPanel");
+
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.id = "citofonamiExternalAnswerPanel";
+      panel.style.cssText = [
+        "position:fixed",
+        "left:12px",
+        "right:12px",
+        "bottom:12px",
+        "z-index:1000200",
+        "padding:16px",
+        "border-radius:24px",
+        "background:rgba(8,10,14,.97)",
+        "border:1px solid rgba(215,180,106,.35)",
+        "box-shadow:0 22px 70px rgba(0,0,0,.60)",
+        "color:white",
+        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+        "text-align:center"
+      ].join(";");
+
+      panel.innerHTML = `
+        <div style="font-size:22px;font-weight:950;letter-spacing:-.05em;margin-bottom:6px;">Risposta ricevuta</div>
+        <div style="font-size:13px;line-height:1.35;color:rgba(255,255,255,.70);margin-bottom:12px;">Tocca per parlare.</div>
+        <button id="citofonamiFinalTalkNowButton" type="button" style="
+          width:100%;
+          min-height:56px;
+          border:0;
+          border-radius:18px;
+          background:linear-gradient(135deg,#d7ffe7,#39d77b);
+          color:#06170d;
+          font-size:16px;
+          font-weight:950;
+          text-transform:uppercase;
+          letter-spacing:.05em;
+        ">Parla ora</button>
+      `;
+
+      document.body.appendChild(panel);
+    }
+
+    panel.style.display = "block";
+
+    const btn = document.getElementById("citofonamiFinalTalkNowButton");
+
+    if (btn && btn.dataset.wired !== "1") {
+      btn.dataset.wired = "1";
+
+      btn.addEventListener("pointerdown", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        try {
+          if (typeof window.createAnswerFromPointerGesture === "function") {
+            window.createAnswerFromPointerGesture();
+            return;
+          }
+        } catch(e) {
+          console.warn("createAnswerFromPointerGesture failed:", e);
+        }
+
+        try {
+          if (typeof window.forceCreateUserAnswer === "function") {
+            window.forceCreateUserAnswer();
+            return;
+          }
+        } catch(e) {
+          console.warn("forceCreateUserAnswer failed:", e);
+        }
+
+        try {
+          if (typeof window.startUserWebrtcAudio === "function") {
+            window.startUserWebrtcAudio();
+            return;
+          }
+        } catch(e) {
+          console.warn("startUserWebrtcAudio failed:", e);
+        }
+
+        setFinalStatus("Audio non disponibile. Riprova.");
+      }, true);
+
+      btn.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        try {
+          btn.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
+        } catch(e) {}
+      }, true);
+    }
+
+    setFinalStatus("Admin ha risposto. Tocca Parla ora.");
+  }
+
+  let finalAnsweredTimer = null;
+
+  function startFinalAnsweredPoll(callId) {
+    if (finalAnsweredTimer) clearInterval(finalAnsweredTimer);
+
+    finalAnsweredTimer = setInterval(async function () {
+      try {
+        const currentCallId =
+          callId ||
+          sessionStorage.getItem("citofonami_active_call_id") ||
+          (window.CITOFONAMI_FORCE_STATE && window.CITOFONAMI_FORCE_STATE.callId) ||
+          "";
+
+        if (!currentCallId) return;
+
+        const res = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(currentCallId)}?t=${Date.now()}`, {
+          cache: "no-store"
+        });
+
+        const data = await res.json();
+
+        if (!data || !data.ok || !data.call) return;
+
+        if (data.call.status === "answered") {
+          clearInterval(finalAnsweredTimer);
+          finalAnsweredTimer = null;
+          ensureTalkNowButton(currentCallId);
+        }
+
+        if (data.call.status === "closed") {
+          clearInterval(finalAnsweredTimer);
+          finalAnsweredTimer = null;
+          setFinalStatus("Collegamento chiuso.");
+        }
+      } catch(e) {}
+    }, 700);
+  }
+
+  function wireFinalButtonDirect() {
+    const btn = document.getElementById("callButton");
+    if (!btn) return false;
+
+    // Clona il pulsante per eliminare vecchi listener rotti, mantenendo classi e contenuto.
+    if (btn.dataset.finalRingV2Wired !== "1") {
+      const clone = btn.cloneNode(true);
+      clone.id = "callButton";
+      clone.dataset.finalRingV2Wired = "1";
+      btn.parentNode.replaceChild(clone, btn);
+
+      clone.addEventListener("click", finalRingV2, true);
+      clone.addEventListener("pointerdown", function () {}, true);
+
+      return true;
+    }
+
+    return true;
+  }
+
+  function boot() {
+    wireFinalButtonDirect();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
+
+  setTimeout(boot, 100);
+  setTimeout(boot, 500);
+  setTimeout(boot, 1200);
+
+  window.citofonamiFinalRingV2 = finalRingV2;
+  window.citofonamiEnsureTalkNowButton = ensureTalkNowButton;
+})();
+</script>
+
 </body>
 </html>
