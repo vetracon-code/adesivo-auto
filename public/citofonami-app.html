@@ -691,104 +691,80 @@
     }
 
     async function ring() {
-      setCitofonamiStep('inizio chiamata');
-      setStatus('Connessione in corso…');
+      setCitofonamiStep('inizio chiamata pulita');
+      setStatus('Sto suonando…');
+
+      const callCode = String(code || 'DEMO');
+
+      const simpleCallerId =
+        'web_' +
+        Date.now().toString() +
+        '_' +
+        Math.random().toString(36).slice(2, 8);
+
+      const simplePayload = {
+        callerId: simpleCallerId,
+        door: {
+          name: 'Fabrizio Vezzoli',
+          description: 'Citofono'
+        }
+      };
 
       try {
-        let position = null;
+        setCitofonamiStep('invio chiamata server');
 
-        if (shouldAskLocationNow()) {
-          setCitofonamiStep('posizione');
-          setStatus('Verifico la tua posizione…');
-          position = await getPositionIfNeeded();
-        } else if (config.requireLocation !== false) {
-          setStatus('Prima chiamata libera. Invio la richiesta…');
-        }
-
-        setCitofonamiStep('microfono');
-        setStatus('Attivo il microfono…');
-        logCitofonamiStep('microphone_start');
-
-        const micResult = await openMicrophone();
-
-        if (!micResult.ok) {
-          logCitofonamiStep('microphone_optional_failed', micResult.error);
-          setStatus('Microfono non attivo, invio comunque la chiamata…');
-        }
-
-        logCitofonamiStep('server_ring_start');
-
-        setCitofonamiStep('preparo richiesta server');
-
-        const callerId = 'caller_web_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-
-        setCitofonamiStep('payload ultra minimo');
-
-        const payload = {
-          callerId: callerId,
-          door: {
-            name: 'Fabrizio Vezzoli',
-            description: 'Citofono'
-          }
-        };
-
-        const res = await fetch(`/api/citofonami/${encodeURIComponent(code)}/ring`, {
+        const response = await fetch('/api/citofonami/' + encodeURIComponent(callCode) + '/ring-v2', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(simplePayload)
         });
 
-        const data = await res.json();
+        setCitofonamiStep('lettura risposta chiamata');
 
-        setCitofonamiStep('verifica risposta server');
+        const rawText = await response.text();
 
-        if (!res.ok || !data.ok) {
-          if (data && data.requireLocation) {
-            localStorage.setItem('citofonami_call_count_' + code, '1');
-            throw new Error('Per questa chiamata è richiesta la posizione.');
-          }
+        let data = null;
 
+        try {
+          data = JSON.parse(rawText);
+        } catch (parseError) {
+          console.error('Risposta non JSON:', rawText);
+          throw new Error('Il server ha risposto in modo non valido.');
+        }
+
+        if (!response.ok || !data.ok) {
           if (data && data.blocked) {
             throw new Error('Sei stato bloccato dal sistema.');
           }
 
-          throw new Error(data.error || 'Richiesta non riuscita');
+          throw new Error((data && data.error) || 'Chiamata non riuscita.');
         }
 
         if (data.allowed === false) {
-          setStatus('Devi essere in prossimità del citofono per parlare.', 'ko');
+          setStatus('Devi essere vicino al citofono per parlare.', 'ko');
           return;
         }
 
         setCitofonamiStep('chiamata inviata');
         setStatus('Chiamata inviata. Attendi la risposta…', 'ok');
-      } catch (error) {
-        console.error('Citofonami ring error:', error);
 
-        const cleaned = cleanCitofonamiError(
-          error,
-          citofonamiDebugStep === 'payload ultra minimo' || citofonamiDebugStep === 'preparo richiesta server'
-            ? 'Il telefono ha bloccato la preparazione della chiamata. Ho ridotto i dati al minimo: ricarica la pagina e riprova.'
-            : 'Non è stato possibile avviare la chiamata. Riprova.'
-        );
-
-        const detail = error && error.message ? String(error.message) : String(error || '');
-        const message = `Errore fase: ${citofonamiDebugStep}. ${cleaned}`;
-
-        if (!String(message).includes('Microfono')) {
-          stopAudioLevelMeter();
+        if (data.callId && typeof pollCallStatus === 'function') {
+          pollCallStatus(data.callId);
         }
+      } catch (error) {
+        console.error('Citofonami ring clean error:', error);
 
-        setStatus(message, 'ko');
+        const message =
+          error && error.message
+            ? error.message
+            : 'Non è stato possibile inviare la chiamata.';
 
-        try {
-          console.error('[Citofonami dettaglio errore]', {
-            step: citofonamiDebugStep,
-            error: detail
-          });
-        } catch (e) {}
+        setStatus('Errore fase: ' + citofonamiDebugStep + '. ' + message, 'ko');
       }
     }
+
 
     callButton.addEventListener('click', ring);
 
