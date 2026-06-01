@@ -2493,5 +2493,153 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_FORCE_TALK_NOW_MIC_20260601 */
+(function () {
+  let forcedUserStream = null;
+  let forcedRemoteAudio = null;
+
+  function setUserText(text, type) {
+    try {
+      if (typeof forceSetStatus === "function") {
+        forceSetStatus(text, type);
+        return;
+      }
+
+      if (typeof setStatus === "function") {
+        setStatus(text, type);
+        return;
+      }
+
+      const box = document.getElementById("statusBox");
+      if (box) {
+        box.textContent = text;
+        box.className = "status " + (type || "");
+      }
+    } catch (e) {}
+  }
+
+  function getCurrentCallId() {
+    return (
+      (window.CITOFONAMI_FORCE_STATE && window.CITOFONAMI_FORCE_STATE.callId) ||
+      (typeof citofonamiLiveCallId !== "undefined" ? citofonamiLiveCallId : "") ||
+      sessionStorage.getItem("citofonami_active_call_id") ||
+      ""
+    );
+  }
+
+  async function forceTalkNowMicAndAudio() {
+    const btn =
+      document.getElementById("citofonamiExternalTalkButton") ||
+      document.getElementById("talkNowButton");
+
+    const callId = getCurrentCallId();
+
+    if (!callId) {
+      setUserText("Chiamata non trovata. Riprova a citofonare.", "ko");
+      return;
+    }
+
+    try {
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Attivo microfono…";
+      }
+
+      setUserText("Attivo il microfono…");
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Microfono non supportato da questo browser.");
+      }
+
+      forcedUserStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        },
+        video: false
+      });
+
+      try {
+        if (typeof startAudioLevelMeter === "function") {
+          startAudioLevelMeter(forcedUserStream);
+        }
+      } catch (e) {}
+
+      if (window.CITOFONAMI_FORCE_STATE) {
+        window.CITOFONAMI_FORCE_STATE.callId = callId;
+      }
+
+      if (typeof citofonamiLiveCallId !== "undefined") {
+        citofonamiLiveCallId = callId;
+      }
+
+      try {
+        sessionStorage.setItem("citofonami_active_call_id", callId);
+      } catch (e) {}
+
+      // Se il modulo WebRTC è presente, lo uso.
+      if (typeof startUserWebrtcAudio === "function") {
+        setUserText("Microfono attivo. Collegamento audio in corso…", "ok");
+        await startUserWebrtcAudio();
+
+        if (btn) {
+          btn.textContent = "Audio attivo";
+        }
+
+        return;
+      }
+
+      // Fallback minimo: microfono attivo anche se WebRTC non parte.
+      setUserText("Microfono attivo. Parla vicino al telefono, come a un citofono.", "ok");
+
+      if (btn) {
+        btn.textContent = "Microfono attivo";
+      }
+    } catch (error) {
+      setUserText("Microfono non attivo: " + (error && error.message ? error.message : error), "ko");
+
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Parla ora";
+      }
+    }
+  }
+
+  function wireTalkNowButtonsHard() {
+    const buttons = [
+      document.getElementById("citofonamiExternalTalkButton"),
+      document.getElementById("talkNowButton")
+    ].filter(Boolean);
+
+    buttons.forEach((btn) => {
+      if (btn.dataset.forceTalkMicWired === "1") return;
+
+      btn.dataset.forceTalkMicWired = "1";
+
+      btn.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+
+        forceTalkNowMicAndAudio();
+      }, true);
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", wireTalkNowButtonsHard);
+  } else {
+    wireTalkNowButtonsHard();
+  }
+
+  setTimeout(wireTalkNowButtonsHard, 500);
+  setTimeout(wireTalkNowButtonsHard, 1500);
+  setInterval(wireTalkNowButtonsHard, 2000);
+})();
+</script>
+
 </body>
 </html>

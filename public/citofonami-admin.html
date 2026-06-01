@@ -4445,5 +4445,94 @@
     }, true);
 
   </script>
+
+<script>
+/* CITOFONAMI_STOP_RINGING_ON_ANSWER_20260601 */
+(function () {
+  function stopEveryCitofonamiRingSound() {
+    try {
+      // Ferma audio HTML eventualmente creati.
+      document.querySelectorAll("audio").forEach((audio) => {
+        try {
+          audio.pause();
+          audio.currentTime = 0;
+        } catch (e) {}
+      });
+
+      // Ferma eventuali WebAudio oscillator/gain se salvati in globali.
+      [
+        "citofonamiDoorbellAudio",
+        "citofonamiBellAudio",
+        "doorbellAudio",
+        "ringAudio"
+      ].forEach((key) => {
+        try {
+          if (window[key] && typeof window[key].pause === "function") {
+            window[key].pause();
+            window[key].currentTime = 0;
+          }
+        } catch (e) {}
+      });
+    } catch (error) {
+      console.warn("stopEveryCitofonamiRingSound error:", error);
+    }
+  }
+
+  function markAdminCallAsAnsweredUi() {
+    try {
+      stopEveryCitofonamiRingSound();
+
+      if (typeof finalCallOverlay !== "undefined" && finalCallOverlay) {
+        finalCallOverlay.classList.add("call-answered");
+        finalCallOverlay.classList.add("active");
+        finalCallOverlay.classList.add("force-visible");
+        finalCallOverlay.classList.remove("temporarily-hidden");
+      }
+
+      if (typeof finalCallTitle !== "undefined" && finalCallTitle) {
+        finalCallTitle.textContent = "Chiamata accettata";
+      }
+
+      if (typeof finalCallSubtitle !== "undefined" && finalCallSubtitle) {
+        finalCallSubtitle.textContent = "Attendo che l’utente prema “Parla ora”.";
+      }
+
+      if (typeof finalAnswerButton !== "undefined" && finalAnswerButton) {
+        finalAnswerButton.textContent = "In attesa utente";
+        finalAnswerButton.disabled = true;
+      }
+
+      if (typeof adminConnectedState !== "undefined" && adminConnectedState) {
+        adminConnectedState.innerHTML = "Risposta inviata. Attendo il microfono dell’utente.";
+        adminConnectedState.style.display = "block";
+      }
+
+      const badge = document.querySelector(".final-call-badge");
+      if (badge) {
+        badge.innerHTML = '<span class="dot"></span> Risposto';
+      }
+    } catch (error) {
+      console.warn("markAdminCallAsAnsweredUi error:", error);
+    }
+  }
+
+  document.addEventListener("click", function (event) {
+    const answer = event.target && event.target.closest
+      ? event.target.closest("#finalAnswerButton, #answerCallButton")
+      : null;
+
+    if (!answer) return;
+
+    // Non blocco gli handler esistenti: aggiungo solo lo stop suono e cambio UI.
+    setTimeout(markAdminCallAsAnsweredUi, 50);
+    setTimeout(markAdminCallAsAnsweredUi, 500);
+    setTimeout(stopEveryCitofonamiRingSound, 1200);
+  }, true);
+
+  window.stopEveryCitofonamiRingSound = stopEveryCitofonamiRingSound;
+  window.markAdminCallAsAnsweredUi = markAdminCallAsAnsweredUi;
+})();
+</script>
+
 </body>
 </html>
