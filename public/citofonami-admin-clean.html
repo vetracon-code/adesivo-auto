@@ -516,6 +516,43 @@
     }
   </style>
 <!-- CITOFONAMI_ADMIN_CLEAN_OWN_MANIFEST_20260601 -->
+
+<style>
+/* CITOFONAMI_ADMIN_CLEAN_IOS_AUDIO_UNLOCK_20260601 */
+.ios-audio-unlock {
+  display: none;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 18px;
+  background: rgba(215,180,106,.10);
+  border: 1px solid rgba(215,180,106,.20);
+}
+
+.ios-audio-unlock.show {
+  display: block;
+}
+
+.ios-audio-unlock button {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 16px;
+  border: 0;
+  background: linear-gradient(135deg, #d7ffe7, #39d77b);
+  color: #06170d;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.ios-audio-unlock small {
+  display: block;
+  margin-top: 8px;
+  color: rgba(255,255,255,.66);
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: center;
+}
+</style>
+
 </head>
 
 <body>
@@ -681,6 +718,12 @@
     <div class="call-card">
       <div class="call-title" id="callTitle">Chiamata in arrivo</div>
       <div class="call-sub" id="callSub">Qualcuno sta citofonando.</div>
+
+      <div class="ios-audio-unlock" id="iosAudioUnlockBox">
+        <button id="iosAudioUnlockButton" type="button">Attiva audio</button>
+        <small>Su iPhone può servire un tocco per ascoltare la conversazione.</small>
+        <audio id="iosRemoteAudio" autoplay playsinline controls style="width:100%;margin-top:10px;display:none;"></audio>
+      </div>
 
       <div class="call-actions">
         <button class="primary" id="answerButton" type="button">Rispondi</button>
@@ -1016,6 +1059,10 @@
           body: JSON.stringify({ action: 'answer' })
         });
 
+        if (window.citofonamiAdminCleanUnlockIOSAudio) {
+          await window.citofonamiAdminCleanUnlockIOSAudio();
+        }
+
         await createAdminOffer(currentCall.id);
 
         $('callTitle').textContent = 'Collegamento attivo';
@@ -1055,7 +1102,15 @@
 
       adminPeer.ontrack = (event) => {
         audio.srcObject = event.streams[0];
+        audio.autoplay = true;
+        audio.playsInline = true;
+        audio.muted = false;
+        audio.volume = 1;
         audio.play().catch(() => null);
+
+        if (window.citofonamiAdminCleanAttachIOSRemoteStream) {
+          window.citofonamiAdminCleanAttachIOSRemoteStream(event.streams[0]);
+        }
       };
 
       adminPeer.onicecandidate = (event) => {
@@ -1327,5 +1382,128 @@
 </script>
 
 <script>/* CITOFONAMI_ADMIN_CLEAN_SUBSCRIBE_ENDPOINT_FIXED_20260601 */</script>
+
+<script>
+/* CITOFONAMI_ADMIN_CLEAN_IOS_AUDIO_UNLOCK_20260601 */
+(function () {
+  let iosAudioUnlocked = false;
+
+  function iosLike() {
+    const ua = navigator.userAgent || "";
+    const platform = navigator.platform || "";
+    return /iPhone|iPad|iPod/i.test(ua) || (platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  }
+
+  function audioEl() {
+    let el = document.getElementById("iosRemoteAudio");
+
+    if (!el) {
+      el = document.createElement("audio");
+      el.id = "iosRemoteAudio";
+      el.autoplay = true;
+      el.playsInline = true;
+      el.controls = iosLike();
+      document.body.appendChild(el);
+    }
+
+    el.autoplay = true;
+    el.playsInline = true;
+    el.controls = iosLike();
+    el.muted = false;
+    el.volume = 1;
+
+    return el;
+  }
+
+  function showUnlockBox() {
+    const box = document.getElementById("iosAudioUnlockBox");
+    if (box && iosLike()) box.classList.add("show");
+
+    const el = audioEl();
+    if (iosLike()) el.style.display = "block";
+  }
+
+  async function unlockIOSAudio() {
+    showUnlockBox();
+
+    const el = audioEl();
+
+    try {
+      // Piccolo tentativo di sblocco audio con gesto utente.
+      el.muted = false;
+      el.volume = 1;
+      await el.play().catch(() => null);
+
+      iosAudioUnlocked = true;
+
+      const btn = document.getElementById("iosAudioUnlockButton");
+      if (btn) btn.textContent = "Audio attivo";
+
+      return true;
+    } catch (error) {
+      iosAudioUnlocked = false;
+
+      const btn = document.getElementById("iosAudioUnlockButton");
+      if (btn) btn.textContent = "Tocca per attivare audio";
+
+      return false;
+    }
+  }
+
+  async function attachIOSRemoteStream(stream) {
+    const el = audioEl();
+
+    try {
+      el.srcObject = stream;
+      el.muted = false;
+      el.volume = 1;
+
+      if (iosLike()) {
+        showUnlockBox();
+      }
+
+      await el.play().catch(() => {
+        if (iosLike()) showUnlockBox();
+      });
+    } catch (error) {
+      if (iosLike()) showUnlockBox();
+    }
+  }
+
+  function wireIOSAudioButton() {
+    const btn = document.getElementById("iosAudioUnlockButton");
+    if (!btn || btn.dataset.wired === "1") return;
+
+    btn.dataset.wired = "1";
+    btn.addEventListener("click", unlockIOSAudio, true);
+    btn.addEventListener("pointerdown", unlockIOSAudio, true);
+    btn.addEventListener("touchstart", unlockIOSAudio, true);
+  }
+
+  document.addEventListener("click", function (event) {
+    const answer = event.target && event.target.closest
+      ? event.target.closest("#answerButton")
+      : null;
+
+    if (answer && iosLike()) {
+      // Deve partire dal gesto reale su Rispondi.
+      unlockIOSAudio();
+    }
+  }, true);
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", wireIOSAudioButton);
+  } else {
+    wireIOSAudioButton();
+  }
+
+  setTimeout(wireIOSAudioButton, 500);
+  setTimeout(wireIOSAudioButton, 1500);
+
+  window.citofonamiAdminCleanUnlockIOSAudio = unlockIOSAudio;
+  window.citofonamiAdminCleanAttachIOSRemoteStream = attachIOSRemoteStream;
+})();
+</script>
+
 </body>
 </html>
