@@ -4958,5 +4958,135 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_ADMIN_FORCE_CLOSE_LATEST_20260601 */
+(function () {
+  function getCode() {
+    try {
+      if (typeof finalGetCode === "function") return finalGetCode();
+    } catch (e) {}
+
+    const input = document.getElementById("qrCode");
+    return String((input && input.value) || "DEMO").trim().toUpperCase();
+  }
+
+  async function getLatestCallId() {
+    try {
+      if (typeof finalCurrentCall !== "undefined" && finalCurrentCall && finalCurrentCall.id) {
+        return finalCurrentCall.id;
+      }
+
+      const res = await fetch(`/api/citofonami/${encodeURIComponent(getCode())}/calls-list/latest?forceClose=${Date.now()}`, {
+        cache: "no-store"
+      });
+
+      const data = await res.json();
+
+      if (data && data.ok && Array.isArray(data.calls) && data.calls.length) {
+        return data.calls[0].id;
+      }
+    } catch (error) {
+      console.warn("getLatestCallId close error:", error);
+    }
+
+    return "";
+  }
+
+  async function forceCloseLatestConversation(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    }
+
+    const code = getCode();
+    const callId = await getLatestCallId();
+
+    if (!callId) {
+      try {
+        if (typeof setState === "function") setState("Nessuna chiamata da chiudere.", false);
+      } catch (e) {}
+      return;
+    }
+
+    try {
+      if (typeof stopEveryCitofonamiRingSound === "function") stopEveryCitofonamiRingSound();
+
+      document.querySelectorAll("audio").forEach(audio => {
+        try {
+          audio.pause();
+          audio.currentTime = 0;
+          audio.srcObject = null;
+        } catch (e) {}
+      });
+
+      const res = await fetch(`/api/citofonami/${encodeURIComponent(code)}/calls/${encodeURIComponent(callId)}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ action: "close", force: true, closedBy: "admin" })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        throw new Error((data && data.error) || "Chiusura non riuscita");
+      }
+
+      try {
+        if (typeof finalCurrentCall !== "undefined" && finalCurrentCall) {
+          finalCurrentCall.status = "closed";
+        }
+      } catch (e) {}
+
+      try {
+        if (typeof finalCallTitle !== "undefined" && finalCallTitle) {
+          finalCallTitle.textContent = "Conversazione terminata";
+        }
+
+        if (typeof finalCallSubtitle !== "undefined" && finalCallSubtitle) {
+          finalCallSubtitle.textContent = "Audio chiuso. Puoi salvare o modificare il nome in rubrica.";
+        }
+
+        if (typeof adminConnectedState !== "undefined" && adminConnectedState) {
+          adminConnectedState.style.display = "block";
+          adminConnectedState.innerHTML = "Chiamata chiusa anche lato utente. Puoi salvare il contatto.";
+        }
+
+        if (typeof finalCloseButton !== "undefined" && finalCloseButton) {
+          finalCloseButton.textContent = "Chiusa";
+          finalCloseButton.disabled = true;
+        }
+      } catch (e) {}
+
+      try {
+        if (typeof setState === "function") {
+          setState("Conversazione chiusa. L’utente riceverà la schermata di ringraziamento.", true);
+        }
+      } catch (e) {}
+    } catch (error) {
+      try {
+        if (typeof setState === "function") {
+          setState("Errore chiusura: " + (error.message || error), false);
+        }
+      } catch (e) {}
+    }
+  }
+
+  document.addEventListener("click", function (event) {
+    const close = event.target && event.target.closest
+      ? event.target.closest("#finalCloseButton, #closeCallButton")
+      : null;
+
+    if (!close) return;
+
+    forceCloseLatestConversation(event);
+  }, true);
+
+  window.citofonamiForceCloseLatestConversation = forceCloseLatestConversation;
+})();
+</script>
+
 </body>
 </html>

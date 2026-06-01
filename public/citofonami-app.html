@@ -3769,5 +3769,260 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_USER_FORCE_STOP_ON_CLOSED_20260601 */
+(function () {
+  let closedHandled = false;
+
+  function code() {
+    const parts = window.location.pathname.split("/").filter(Boolean);
+    return String(parts[parts.length - 1] || "DEMO").trim().toUpperCase();
+  }
+
+  function knownCallId() {
+    return (
+      (window.CITOFONAMI_FORCE_STATE && window.CITOFONAMI_FORCE_STATE.callId) ||
+      (typeof citofonamiLiveCallId !== "undefined" ? citofonamiLiveCallId : "") ||
+      sessionStorage.getItem("citofonami_active_call_id") ||
+      ""
+    );
+  }
+
+  function hardStopAllUserMedia() {
+    // 1) stop audio HTML
+    try {
+      document.querySelectorAll("audio, video").forEach(el => {
+        try {
+          if (el.srcObject && el.srcObject.getTracks) {
+            el.srcObject.getTracks().forEach(track => {
+              try { track.stop(); } catch (e) {}
+            });
+          }
+          el.pause();
+          el.currentTime = 0;
+          el.srcObject = null;
+          el.removeAttribute("src");
+          el.load && el.load();
+        } catch (e) {}
+      });
+    } catch (e) {}
+
+    // 2) stop stream globali noti
+    [
+      "userRtcStream",
+      "diagnosticStream",
+      "forcedUserStream",
+      "stream"
+    ].forEach(name => {
+      try {
+        const value = window[name];
+        if (value && value.getTracks) {
+          value.getTracks().forEach(track => {
+            try { track.stop(); } catch (e) {}
+          });
+          window[name] = null;
+        }
+      } catch (e) {}
+    });
+
+    // 3) funzioni stop già esistenti
+    [
+      "stopUserWebrtcAudio"
+    ].forEach(name => {
+      try {
+        if (typeof window[name] === "function") {
+          window[name]();
+        }
+      } catch (e) {}
+    });
+
+    // 4) prova a chiudere eventuali peer globali se esposti
+    [
+      "userRtcPeer",
+      "peer"
+    ].forEach(name => {
+      try {
+        const value = window[name];
+        if (value && typeof value.close === "function") {
+          value.close();
+          window[name] = null;
+        }
+      } catch (e) {}
+    });
+
+    // 5) nascondi pulsanti/audio panel ancora attivi
+    [
+      "citofonamiExternalAnswerPanel",
+      "citofonamiTalkDiagnosticPanel",
+      "citofonamiForceAnswerDebug",
+      "citofonamiPointerAnswerDebug"
+    ].forEach(id => {
+      try {
+        const el = document.getElementById(id);
+        if (el) el.style.display = "none";
+      } catch (e) {}
+    });
+
+    try {
+      const btn1 = document.getElementById("citofonamiExternalTalkButton");
+      if (btn1) {
+        btn1.disabled = true;
+        btn1.textContent = "Terminata";
+      }
+
+      const btn2 = document.getElementById("talkNowButton");
+      if (btn2) {
+        btn2.disabled = true;
+        btn2.textContent = "Terminata";
+        btn2.classList.remove("show");
+        btn2.style.display = "none";
+      }
+    } catch (e) {}
+  }
+
+  function clearSession() {
+    try {
+      sessionStorage.removeItem("citofonami_active_call_id");
+      sessionStorage.removeItem("citofonami_active_caller_id");
+      sessionStorage.removeItem("citofonami_active_call_status");
+      sessionStorage.removeItem("citofonami_voicemail_call_id");
+    } catch (e) {}
+
+    try {
+      if (window.CITOFONAMI_FORCE_STATE) {
+        window.CITOFONAMI_FORCE_STATE.callId = "";
+      }
+      if (typeof citofonamiLiveCallId !== "undefined") {
+        citofonamiLiveCallId = null;
+      }
+    } catch (e) {}
+  }
+
+  function showClosedThanks() {
+    if (closedHandled) return;
+    closedHandled = true;
+
+    hardStopAllUserMedia();
+    clearSession();
+
+    let panel = document.getElementById("citofonamiClosedFinalPanel");
+
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.id = "citofonamiClosedFinalPanel";
+      panel.style.cssText = [
+        "position:fixed",
+        "inset:0",
+        "z-index:1000020",
+        "display:flex",
+        "align-items:center",
+        "justify-content:center",
+        "padding:22px",
+        "background:#080a0e",
+        "color:white",
+        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+        "text-align:center"
+      ].join(";");
+
+      panel.innerHTML = `
+        <div style="width:min(430px,100%);border:1px solid rgba(215,180,106,.35);border-radius:30px;padding:25px;background:rgba(255,255,255,.06);box-shadow:0 24px 80px rgba(0,0,0,.55);">
+          <div style="font-size:31px;font-weight:950;letter-spacing:-.05em;margin-bottom:8px;">Grazie</div>
+          <div style="font-size:15px;line-height:1.45;color:rgba(255,255,255,.76);margin-bottom:18px;">
+            Collegamento terminato. Audio e microfono sono stati disattivati.
+          </div>
+          <button id="citofonamiClosedFinalButton" type="button" style="
+            width:100%;
+            min-height:54px;
+            border:0;
+            border-radius:18px;
+            background:linear-gradient(135deg,#d7ffe7,#39d77b);
+            color:#06170d;
+            font-size:16px;
+            font-weight:950;
+            text-transform:uppercase;
+            letter-spacing:.05em;
+          ">Chiudi pagina</button>
+        </div>
+      `;
+
+      document.body.appendChild(panel);
+
+      document.getElementById("citofonamiClosedFinalButton").addEventListener("click", () => {
+        hardStopAllUserMedia();
+        try { window.close(); } catch (e) {}
+        try { history.back(); } catch (e) {}
+      });
+    }
+
+    try {
+      const status = document.getElementById("statusBox");
+      if (status) {
+        status.textContent = "Collegamento terminato. Grazie.";
+        status.className = "status ok";
+      }
+    } catch (e) {}
+
+    setTimeout(() => {
+      hardStopAllUserMedia();
+      try { window.close(); } catch (e) {}
+    }, 1200);
+  }
+
+  async function checkClosedByCallId(callId) {
+    if (!callId) return false;
+
+    try {
+      const res = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}?forceClosed=${Date.now()}`, {
+        cache: "no-store"
+      });
+
+      const data = await res.json();
+
+      if (data && data.ok && data.call && data.call.status === "closed") {
+        showClosedThanks();
+        return true;
+      }
+    } catch (e) {}
+
+    return false;
+  }
+
+  async function checkLatestClosed() {
+    if (closedHandled) return;
+
+    const callId = knownCallId();
+
+    if (await checkClosedByCallId(callId)) return;
+
+    try {
+      const res = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls-list/latest?closedPoll=${Date.now()}`, {
+        cache: "no-store"
+      });
+
+      const data = await res.json();
+
+      if (!data || !data.ok || !Array.isArray(data.calls) || !data.calls.length) return;
+
+      const latest = data.calls[0];
+
+      // Se la pagina conosce la callId, accetta solo quella.
+      // Se non la conosce più, accetta l'ultima chiamata chiusa recente.
+      const latestCreated = latest.createdAt ? new Date(latest.createdAt).getTime() : 0;
+      const pageOpened = window.CITOFONAMI_PAGE_OPENED_AT || 0;
+      const isRecent = !pageOpened || latestCreated >= (pageOpened - 20000);
+
+      if (latest.status === "closed" && (!callId || latest.id === callId || isRecent)) {
+        showClosedThanks();
+      }
+    } catch (e) {}
+  }
+
+  setInterval(checkLatestClosed, 700);
+  window.citofonamiHardStopAllUserMedia = hardStopAllUserMedia;
+  window.citofonamiShowClosedThanks = showClosedThanks;
+})();
+</script>
+
 </body>
 </html>
