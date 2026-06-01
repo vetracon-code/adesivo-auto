@@ -4024,5 +4024,264 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_APPLE_AUDIO_AND_CLOSE_REDIRECT_20260601 */
+(function () {
+  let appleRemoteAudio = null;
+  let appleUnlockDone = false;
+  let closedRedirectDone = false;
+
+  function isAppleDevice() {
+    const ua = navigator.userAgent || "";
+    const platform = navigator.platform || "";
+    return /iPhone|iPad|iPod|Safari/i.test(ua) && !/Chrome|CriOS|Android/i.test(ua)
+      || (platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  }
+
+  function code() {
+    const parts = window.location.pathname.split("/").filter(Boolean);
+    return String(parts[parts.length - 1] || "DEMO").trim().toUpperCase();
+  }
+
+  function knownCallId() {
+    return (
+      (window.CITOFONAMI_FORCE_STATE && window.CITOFONAMI_FORCE_STATE.callId) ||
+      (typeof citofonamiLiveCallId !== "undefined" ? citofonamiLiveCallId : "") ||
+      sessionStorage.getItem("citofonami_active_call_id") ||
+      ""
+    );
+  }
+
+  function ensureAppleAudioPanel() {
+    let panel = document.getElementById("citofonamiAppleAudioPanel");
+
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.id = "citofonamiAppleAudioPanel";
+      panel.style.cssText = [
+        "display:none",
+        "position:fixed",
+        "left:12px",
+        "right:12px",
+        "bottom:12px",
+        "z-index:1000030",
+        "padding:14px",
+        "border-radius:22px",
+        "background:rgba(8,10,14,.96)",
+        "border:1px solid rgba(215,180,106,.38)",
+        "box-shadow:0 20px 70px rgba(0,0,0,.55)",
+        "color:white",
+        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+        "text-align:center"
+      ].join(";");
+
+      panel.innerHTML = `
+        <div style="font-size:17px;font-weight:950;margin-bottom:6px;color:#f4d990;">Audio iPhone</div>
+        <div style="font-size:13px;line-height:1.35;color:rgba(255,255,255,.72);margin-bottom:10px;">
+          Tocca per attivare l’audio della conversazione.
+        </div>
+        <button id="citofonamiAppleAudioButton" type="button" style="
+          width:100%;
+          min-height:50px;
+          border:0;
+          border-radius:17px;
+          background:linear-gradient(135deg,#d7ffe7,#39d77b);
+          color:#06170d;
+          font-size:15px;
+          font-weight:950;
+          text-transform:uppercase;
+          letter-spacing:.04em;
+        ">Attiva audio</button>
+        <audio id="citofonamiAppleRemoteAudio" autoplay playsinline controls style="width:100%;margin-top:10px;display:none;"></audio>
+      `;
+
+      document.body.appendChild(panel);
+
+      document.getElementById("citofonamiAppleAudioButton").addEventListener("click", function () {
+        unlockAppleRemoteAudio();
+      }, true);
+    }
+
+    return panel;
+  }
+
+  function getAppleRemoteAudio() {
+    ensureAppleAudioPanel();
+
+    if (!appleRemoteAudio) {
+      appleRemoteAudio = document.getElementById("citofonamiAppleRemoteAudio");
+      appleRemoteAudio.autoplay = true;
+      appleRemoteAudio.playsInline = true;
+      appleRemoteAudio.controls = true;
+    }
+
+    return appleRemoteAudio;
+  }
+
+  async function unlockAppleRemoteAudio() {
+    const panel = ensureAppleAudioPanel();
+    const audio = getAppleRemoteAudio();
+
+    panel.style.display = "block";
+    audio.style.display = isAppleDevice() ? "block" : "none";
+
+    try {
+      audio.muted = false;
+      audio.volume = 1;
+      await audio.play().catch(() => null);
+      appleUnlockDone = true;
+
+      const btn = document.getElementById("citofonamiAppleAudioButton");
+      if (btn) btn.textContent = "Audio attivo";
+
+      setTimeout(() => {
+        if (panel && appleUnlockDone && !isAppleDevice()) panel.style.display = "none";
+      }, 1200);
+    } catch (error) {
+      const btn = document.getElementById("citofonamiAppleAudioButton");
+      if (btn) btn.textContent = "Tocca ancora per audio";
+    }
+  }
+
+  function attachAppleRemoteStream(stream) {
+    const audio = getAppleRemoteAudio();
+    const panel = ensureAppleAudioPanel();
+
+    audio.srcObject = stream;
+    audio.autoplay = true;
+    audio.playsInline = true;
+    audio.controls = isAppleDevice();
+    audio.muted = false;
+    audio.volume = 1;
+
+    if (isAppleDevice()) {
+      panel.style.display = "block";
+      audio.style.display = "block";
+    }
+
+    audio.play().catch(() => {
+      if (isAppleDevice()) {
+        panel.style.display = "block";
+        audio.style.display = "block";
+      }
+    });
+
+    return audio;
+  }
+
+  // Intercetta tutti gli ontrack utente già esistenti: se appare uno stream remoto, lo aggancia anche all'audio Apple-safe.
+  const originalAddEventListener = RTCPeerConnection.prototype.addEventListener;
+  RTCPeerConnection.prototype.addEventListener = function(type, listener, options) {
+    if (type === "track") {
+      const wrapped = function(event) {
+        try {
+          if (event && event.streams && event.streams[0]) {
+            attachAppleRemoteStream(event.streams[0]);
+          }
+        } catch(e) {}
+        return listener.call(this, event);
+      };
+      return originalAddEventListener.call(this, type, wrapped, options);
+    }
+    return originalAddEventListener.call(this, type, listener, options);
+  };
+
+  const descriptor = Object.getOwnPropertyDescriptor(RTCPeerConnection.prototype, "ontrack");
+  try {
+    Object.defineProperty(RTCPeerConnection.prototype, "ontrack", {
+      set: function(handler) {
+        this._citofonamiOnTrack = handler;
+        originalAddEventListener.call(this, "track", function(event) {
+          try {
+            if (event && event.streams && event.streams[0]) {
+              attachAppleRemoteStream(event.streams[0]);
+            }
+          } catch(e) {}
+          if (typeof handler === "function") handler.call(this, event);
+        });
+      },
+      get: function() {
+        return this._citofonamiOnTrack;
+      }
+    });
+  } catch(e) {}
+
+  function stopEverything() {
+    try {
+      document.querySelectorAll("audio,video").forEach(el => {
+        try {
+          if (el.srcObject && el.srcObject.getTracks) {
+            el.srcObject.getTracks().forEach(track => {
+              try { track.stop(); } catch(e) {}
+            });
+          }
+          el.pause();
+          el.currentTime = 0;
+          el.srcObject = null;
+          el.removeAttribute("src");
+          if (el.load) el.load();
+        } catch(e) {}
+      });
+    } catch(e) {}
+
+    try {
+      [
+        "userRtcStream",
+        "diagnosticStream",
+        "forcedUserStream",
+        "stream"
+      ].forEach(name => {
+        const value = window[name];
+        if (value && value.getTracks) {
+          value.getTracks().forEach(track => {
+            try { track.stop(); } catch(e) {}
+          });
+          window[name] = null;
+        }
+      });
+    } catch(e) {}
+  }
+
+  async function checkClosedAndRedirect() {
+    if (closedRedirectDone) return;
+
+    const callId = knownCallId();
+    if (!callId) return;
+
+    try {
+      const res = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}?appleClosed=${Date.now()}`, {
+        cache: "no-store"
+      });
+      const data = await res.json();
+
+      if (data && data.ok && data.call && data.call.status === "closed") {
+        closedRedirectDone = true;
+        stopEverything();
+        try { sessionStorage.clear(); } catch(e) {}
+        window.location.replace(`/citofonami-closed?code=${encodeURIComponent(code())}&t=${Date.now()}`);
+      }
+    } catch(e) {}
+  }
+
+  ["pointerdown", "touchstart", "click"].forEach(evt => {
+    document.addEventListener(evt, function(event) {
+      const target = event.target && event.target.closest
+        ? event.target.closest("#citofonamiExternalTalkButton,#talkNowButton,#citofonamiAppleAudioButton")
+        : null;
+      if (target) {
+        setTimeout(unlockAppleRemoteAudio, 20);
+      }
+    }, true);
+  });
+
+  setInterval(checkClosedAndRedirect, 700);
+
+  window.citofonamiAttachAppleRemoteStream = attachAppleRemoteStream;
+  window.citofonamiUnlockAppleRemoteAudio = unlockAppleRemoteAudio;
+  window.citofonamiAppleStopEverything = stopEverything;
+})();
+</script>
+
 </body>
 </html>
