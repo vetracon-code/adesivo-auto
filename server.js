@@ -21183,6 +21183,20 @@ app.get('/citofonami-closed', (req, res) => {
 });
 
 
+
+
+// ==============================
+// CITOFONAMI ADMIN CLEAN
+// ==============================
+app.get('/citofonami-admin-clean', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'public', 'citofonami-admin-clean.html'));
+});
+
+
 app.listen(PORT, () => {
       console.log(`Server attivo su ${BASE_URL}`);
     });
