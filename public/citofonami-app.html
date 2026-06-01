@@ -151,30 +151,72 @@
       max-width: 290px;
     }
 
-    .speaker {
+.speaker {
       position: relative;
       z-index: 1;
-      margin: 0 auto 18px;
-      width: 76%;
-      border-radius: 20px;
-      padding: 16px;
+      margin: 4px auto 22px;
+      width: 92%;
+      min-height: 190px;
+      border-radius: 28px;
+      padding: 22px;
       background:
-        linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.22)),
+        radial-gradient(circle at 50% 20%, rgba(215,180,106,.08), transparent 42%),
+        linear-gradient(180deg, rgba(255,255,255,.065), rgba(0,0,0,.26)),
         #101217;
-      border: 1px solid rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.085);
       display: grid;
-      grid-template-columns: repeat(9, 1fr);
-      gap: 8px;
-      box-shadow: inset 0 12px 26px rgba(0,0,0,.44);
+      grid-template-columns: repeat(10, 1fr);
+      gap: 11px;
+      box-shadow:
+        inset 0 18px 38px rgba(0,0,0,.52),
+        0 16px 34px rgba(0,0,0,.26);
     }
 
     .hole {
-      width: 7px;
-      height: 7px;
+      width: 9px;
+      height: 9px;
       border-radius: 50%;
       justify-self: center;
+      align-self: center;
       background: rgba(255,255,255,.16);
-      box-shadow: inset 0 2px 4px rgba(0,0,0,.6);
+      box-shadow:
+        inset 0 2px 4px rgba(0,0,0,.65),
+        0 0 0 rgba(215,180,106,0);
+      transition:
+        background .08s ease,
+        box-shadow .08s ease,
+        transform .08s ease,
+        opacity .08s ease;
+      opacity: .62;
+    }
+
+    .hole.live {
+      background: rgba(244,217,144,.95);
+      box-shadow:
+        0 0 12px rgba(215,180,106,.58),
+        inset 0 1px 2px rgba(255,255,255,.35);
+      transform: scale(1.22);
+      opacity: 1;
+    }
+
+    .low-volume-warning {
+      display: none;
+      position: relative;
+      z-index: 1;
+      margin: -8px 0 14px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(215,180,106,.12);
+      border: 1px solid rgba(215,180,106,.26);
+      color: var(--gold2);
+      font-size: 14px;
+      line-height: 1.35;
+      text-align: center;
+      font-weight: 750;
+    }
+
+    .low-volume-warning.show {
+      display: block;
     }
 
     .call-button {
@@ -348,13 +390,9 @@
         <div class="online"><span class="dot"></span> Online</div>
       </div>
 
-      <div class="screen">
-        <small>Citofono digitale</small>
-        <h1 id="ownerName">Mario Rossi</h1>
-        <p id="publicText">Premi il pulsante per parlare con il proprietario.</p>
-      </div>
+      <div class="speaker" id="speaker" aria-label="Indicatore audio"></div>
 
-      <div class="speaker" id="speaker"></div>
+      <div class="low-volume-warning" id="lowVolumeWarning">Per cortesia avvicinati, non sento bene. Grazie.</div>
 
       <button class="call-button" id="callButton" type="button">
         <span class="action">Suona</span>
@@ -387,8 +425,6 @@
   <script>
     const speaker = document.getElementById('speaker');
     const statusBox = document.getElementById('statusBox');
-    const ownerName = document.getElementById('ownerName');
-    const publicText = document.getElementById('publicText');
     const buttonName = document.getElementById('buttonName');
     const callButton = document.getElementById('callButton');
 
@@ -397,7 +433,7 @@
     let config = null;
     let localStream = null;
 
-    for (let i = 0; i < 63; i++) {
+    for (let i = 0; i < 120; i++) {
       const dot = document.createElement('span');
       dot.className = 'hole';
       speaker.appendChild(dot);
@@ -474,9 +510,7 @@
       const owner = `${config.firstName || 'Mario'} ${config.lastName || 'Rossi'}`;
       const label = config.buttonLabel || owner;
 
-      ownerName.textContent = owner;
       buttonName.textContent = label;
-      publicText.textContent = config.publicText || 'Premi il pulsante per parlare con il proprietario.';
 
       if (config.enabled === false) {
         setStatus('Citofono momentaneamente non disponibile.', 'ko');
@@ -533,6 +567,89 @@
       });
     }
 
+
+    let audioContext = null;
+    let analyser = null;
+    let audioDataArray = null;
+    let audioMeterAnimation = null;
+    let lowVolumeFrames = 0;
+
+    function stopAudioLevelMeter() {
+      if (audioMeterAnimation) {
+        cancelAnimationFrame(audioMeterAnimation);
+        audioMeterAnimation = null;
+      }
+
+      document.querySelectorAll('.hole.live').forEach(dot => dot.classList.remove('live'));
+
+      if (typeof lowVolumeWarning !== 'undefined' && lowVolumeWarning) {
+        lowVolumeWarning.classList.remove('show');
+      }
+    }
+
+    function startAudioLevelMeter(stream) {
+      try {
+        stopAudioLevelMeter();
+
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioContext.createMediaStreamSource(stream);
+
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.72;
+
+        source.connect(analyser);
+
+        audioDataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        const dots = Array.from(document.querySelectorAll('.hole'));
+
+        function tick() {
+          analyser.getByteFrequencyData(audioDataArray);
+
+          let sum = 0;
+          for (let i = 0; i < audioDataArray.length; i++) {
+            sum += audioDataArray[i];
+          }
+
+          const average = sum / audioDataArray.length;
+          const normalized = Math.min(1, average / 82);
+
+          const activeDots = Math.max(2, Math.round(normalized * dots.length));
+
+          dots.forEach((dot, index) => {
+            if (index < activeDots && normalized > 0.045) {
+              dot.classList.add('live');
+            } else {
+              dot.classList.remove('live');
+            }
+          });
+
+          if (normalized < 0.055) {
+            lowVolumeFrames++;
+          } else {
+            lowVolumeFrames = 0;
+            if (typeof lowVolumeWarning !== 'undefined' && lowVolumeWarning) {
+              lowVolumeWarning.classList.remove('show');
+            }
+          }
+
+          // circa 3 secondi a 60 fps
+          if (lowVolumeFrames > 180) {
+            if (typeof lowVolumeWarning !== 'undefined' && lowVolumeWarning) {
+              lowVolumeWarning.classList.add('show');
+            }
+          }
+
+          audioMeterAnimation = requestAnimationFrame(tick);
+        }
+
+        tick();
+      } catch (error) {
+        console.warn('Citofonami audio meter non disponibile:', error);
+      }
+    }
+
     async function openMicrophone() {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         return {
@@ -546,6 +663,8 @@
           audio: true,
           video: false
         });
+
+        startAudioLevelMeter(localStream);
 
         return {
           ok: true
@@ -630,6 +749,10 @@
           error,
           'Non è stato possibile avviare la chiamata. Riprova.'
         );
+
+        if (!String(message).includes('Microfono')) {
+          stopAudioLevelMeter();
+        }
 
         setStatus(message, 'ko');
       }
