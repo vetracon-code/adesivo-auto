@@ -995,8 +995,8 @@ textarea {
     <div class="admin-audio-meter-card" id="adminAudioMeterCard">
       <div class="admin-audio-meter-left">
         <div class="admin-audio-meter-title">Audio admin</div>
-        <div class="admin-audio-meter-sub" id="adminAudioMeterSub">Microfono pronto in chiamata</div>
-        <button class="admin-audio-unlock-mini" id="adminAudioUnlockMini" type="button">Attiva audio iPhone</button>
+        <div class="admin-audio-meter-sub" id="adminAudioMeterSub">Premi Rispondi per attivare microfono e audio</div>
+        <button class="admin-audio-unlock-mini" id="adminAudioUnlockMini" type="button">Attiva microfono e audio</button>
       </div>
       <div class="admin-audio-leds" id="adminAudioLeds" aria-hidden="true">
         <span class="admin-audio-led"></span>
@@ -1355,10 +1355,6 @@ textarea {
           body: JSON.stringify({ action: 'answer' })
         });
 
-        if (window.citofonamiAdminCleanUnlockIOSAudio) {
-          await window.citofonamiAdminCleanUnlockIOSAudio();
-        }
-
         await createAdminOffer(currentCall.id);
 
         $('callTitle').textContent = 'Collegamento attivo';
@@ -1376,13 +1372,24 @@ textarea {
         throw new Error('Microfono non supportato');
       }
 
+      const meterSub = document.getElementById('adminAudioMeterSub');
+      if (meterSub) meterSub.textContent = 'Richiedo microfono…';
+
+      // Su iPhone questa richiesta DEVE partire dal gesto Rispondi.
       adminStream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
         video: false
       });
 
+      if (meterSub) meterSub.textContent = 'Microfono attivo';
+
       if (window.startCitofonamiAdminCleanAudioMeter) {
         window.startCitofonamiAdminCleanAudioMeter(adminStream);
+      }
+
+      // Sblocco audio remoto iPhone nello stesso flusso della risposta.
+      if (window.citofonamiAdminCleanUnlockIOSAudio) {
+        await window.citofonamiAdminCleanUnlockIOSAudio();
       }
 
       adminPeer = new RTCPeerConnection({
@@ -1394,23 +1401,41 @@ textarea {
 
       adminStream.getTracks().forEach(track => adminPeer.addTrack(track, adminStream));
 
-      const audio = document.createElement('audio');
+      const audio = document.getElementById('iosRemoteAudio') || document.createElement('audio');
+      audio.id = 'iosRemoteAudio';
       audio.autoplay = true;
       audio.playsInline = true;
       audio.controls = false;
-      document.body.appendChild(audio);
+      audio.muted = false;
+      audio.volume = 1;
+
+      if (!audio.parentElement) {
+        document.body.appendChild(audio);
+      }
 
       adminPeer.ontrack = (event) => {
-        audio.srcObject = event.streams[0];
+        const stream = event.streams && event.streams[0];
+        if (!stream) return;
+
+        audio.srcObject = stream;
         audio.autoplay = true;
         audio.playsInline = true;
         audio.muted = false;
         audio.volume = 1;
-        audio.play().catch(() => null);
+
+        audio.play().catch(() => {
+          const mini = document.getElementById('adminAudioUnlockMini');
+          if (mini) {
+            mini.classList.add('show');
+            mini.textContent = 'Tocca per ascoltare';
+          }
+        });
 
         if (window.citofonamiAdminCleanAttachIOSRemoteStream) {
-          window.citofonamiAdminCleanAttachIOSRemoteStream(event.streams[0]);
+          window.citofonamiAdminCleanAttachIOSRemoteStream(stream);
         }
+
+        if (meterSub) meterSub.textContent = 'Audio remoto collegato';
       };
 
       adminPeer.onicecandidate = (event) => {
@@ -1424,9 +1449,13 @@ textarea {
       };
 
       adminPeer.onconnectionstatechange = () => {
-        if (adminPeer.connectionState === 'connected') {
+        const state = adminPeer ? adminPeer.connectionState : '';
+        if (state === 'connected') {
           $('callTitle').textContent = 'Audio collegato';
           $('callSub').textContent = 'Puoi parlare.';
+          if (meterSub) meterSub.textContent = 'Conversazione attiva';
+        } else if (state === 'failed' || state === 'disconnected') {
+          if (meterSub) meterSub.textContent = 'Connessione audio instabile';
         }
       };
 
@@ -1951,6 +1980,39 @@ textarea {
 
   window.startCitofonamiAdminCleanAudioMeter = startAdminAudioMeter;
   window.stopCitofonamiAdminCleanAudioMeter = stopAdminAudioMeter;
+})();
+</script>
+
+
+<script>
+/* CITOFONAMI_ADMIN_CLEAN_MIC_AUDIO_SINGLE_FLOW_20260601 */
+(function () {
+  function iosLikeDevice() {
+    const ua = navigator.userAgent || "";
+    const platform = navigator.platform || "";
+    return /iPhone|iPad|iPod/i.test(ua) || (platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  }
+
+  function showMiniAudioButton(text) {
+    const btn = document.getElementById('adminAudioUnlockMini');
+    if (!btn) return;
+    btn.textContent = text || 'Attiva microfono e audio';
+    btn.classList.add('show');
+  }
+
+  document.addEventListener('click', function (event) {
+    const answer = event.target && event.target.closest
+      ? event.target.closest('#answerButton')
+      : null;
+
+    if (answer && iosLikeDevice()) {
+      showMiniAudioButton('Attivo microfono e audio…');
+      const sub = document.getElementById('adminAudioMeterSub');
+      if (sub) sub.textContent = 'iPhone: autorizza microfono e audio';
+    }
+  }, true);
+
+  window.citofonamiAdminCleanShowMiniAudioButton = showMiniAudioButton;
 })();
 </script>
 
