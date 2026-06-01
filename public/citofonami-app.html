@@ -2941,5 +2941,343 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_FORCE_USER_ANSWER_20260601 */
+(function () {
+  let peer = null;
+  let stream = null;
+  let remoteAudio = null;
+  let iceTimer = null;
+  const seenIce = new Set();
+
+  function code() {
+    const parts = window.location.pathname.split("/").filter(Boolean);
+    return String(parts[parts.length - 1] || "DEMO").trim().toUpperCase();
+  }
+
+  function setMsg(text, type) {
+    try {
+      if (typeof forceSetStatus === "function") {
+        forceSetStatus(text, type);
+        return;
+      }
+
+      if (typeof setStatus === "function") {
+        setStatus(text, type);
+        return;
+      }
+
+      const box = document.getElementById("statusBox");
+      if (box) {
+        box.textContent = text;
+        box.className = "status " + (type || "");
+      }
+    } catch (e) {}
+  }
+
+  function debug(text) {
+    let el = document.getElementById("citofonamiForceAnswerDebug");
+
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "citofonamiForceAnswerDebug";
+      el.style.cssText = [
+        "position:fixed",
+        "left:12px",
+        "right:12px",
+        "top:12px",
+        "z-index:1000002",
+        "padding:10px 12px",
+        "border-radius:16px",
+        "background:rgba(8,10,14,.94)",
+        "border:1px solid rgba(215,180,106,.35)",
+        "color:#f4d990",
+        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+        "font-size:12px",
+        "line-height:1.35",
+        "overflow-wrap:anywhere"
+      ].join(";");
+
+      document.body.appendChild(el);
+    }
+
+    el.style.display = "block";
+    el.textContent = text;
+  }
+
+  function currentCallId() {
+    return (
+      (window.CITOFONAMI_FORCE_STATE && window.CITOFONAMI_FORCE_STATE.callId) ||
+      (typeof citofonamiLiveCallId !== "undefined" ? citofonamiLiveCallId : "") ||
+      sessionStorage.getItem("citofonami_active_call_id") ||
+      ""
+    );
+  }
+
+  async function recoverLatestAnsweredCallId() {
+    const current = currentCallId();
+
+    if (current) return current;
+
+    const res = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls-list/latest?t=${Date.now()}`, {
+      cache: "no-store"
+    });
+
+    const data = await res.json();
+
+    if (!data || !data.ok || !Array.isArray(data.calls) || !data.calls.length) {
+      throw new Error("Nessuna chiamata trovata.");
+    }
+
+    const call =
+      data.calls.find(item => item.status === "answered") ||
+      data.calls[0];
+
+    if (!call || !call.id) {
+      throw new Error("CallId non trovata.");
+    }
+
+    try {
+      if (window.CITOFONAMI_FORCE_STATE) {
+        window.CITOFONAMI_FORCE_STATE.callId = call.id;
+        window.CITOFONAMI_FORCE_STATE.callerId = call.callerId || window.CITOFONAMI_FORCE_STATE.callerId;
+      }
+
+      if (typeof citofonamiLiveCallId !== "undefined") {
+        citofonamiLiveCallId = call.id;
+      }
+
+      sessionStorage.setItem("citofonami_active_call_id", call.id);
+      if (call.callerId) sessionStorage.setItem("citofonami_active_caller_id", call.callerId);
+    } catch (e) {}
+
+    return call.id;
+  }
+
+  function ensureRemoteAudio() {
+    if (remoteAudio) return remoteAudio;
+
+    remoteAudio = document.createElement("audio");
+    remoteAudio.id = "citofonamiUserForceRemoteAudio";
+    remoteAudio.autoplay = true;
+    remoteAudio.playsInline = true;
+    remoteAudio.controls = false;
+
+    document.body.appendChild(remoteAudio);
+    return remoteAudio;
+  }
+
+  async function postIce(callId, candidate) {
+    try {
+      await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/webrtc/ice`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          role: "user",
+          candidate
+        })
+      });
+    } catch (error) {
+      console.warn("User postIce error:", error);
+    }
+  }
+
+  async function pollAdminIce(callId) {
+    try {
+      if (!peer) return;
+
+      const res = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/webrtc/ice?role=user&t=${Date.now()}`, {
+        cache: "no-store"
+      });
+
+      const data = await res.json();
+
+      if (!data || !data.ok || !Array.isArray(data.candidates)) return;
+
+      for (const candidate of data.candidates) {
+        const key = JSON.stringify(candidate);
+        if (seenIce.has(key)) continue;
+
+        seenIce.add(key);
+
+        try {
+          await peer.addIceCandidate(candidate);
+        } catch (error) {
+          console.warn("User addIceCandidate error:", error);
+        }
+      }
+    } catch (error) {
+      console.warn("User pollAdminIce error:", error);
+    }
+  }
+
+  async function forceCreateUserAnswer() {
+    let btn =
+      document.getElementById("citofonamiExternalTalkButton") ||
+      document.getElementById("talkNowButton");
+
+    try {
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Collego audio…";
+      }
+
+      const callId = await recoverLatestAnsweredCallId();
+
+      debug("callId: " + callId + " · leggo offer admin…");
+      setMsg("Collegamento audio in corso…", "ok");
+
+      const offerRes = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/webrtc/offer?t=${Date.now()}`, {
+        cache: "no-store"
+      });
+
+      const offerData = await offerRes.json();
+
+      if (!offerData || !offerData.ok || !offerData.offer) {
+        throw new Error("Offerta audio admin non disponibile.");
+      }
+
+      debug("Offer ricevuta. Richiedo microfono…");
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Microfono non supportato da questo browser.");
+      }
+
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        },
+        video: false
+      });
+
+      debug("Microfono autorizzato. Creo answer…");
+
+      try {
+        if (typeof startAudioLevelMeter === "function") {
+          startAudioLevelMeter(stream);
+        }
+      } catch (e) {}
+
+      peer = new RTCPeerConnection({
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" }
+        ]
+      });
+
+      stream.getTracks().forEach(track => peer.addTrack(track, stream));
+
+      peer.ontrack = function (event) {
+        const audio = ensureRemoteAudio();
+        audio.srcObject = event.streams[0];
+        audio.play().catch(() => null);
+      };
+
+      peer.onicecandidate = function (event) {
+        if (event.candidate) {
+          postIce(callId, event.candidate);
+        }
+      };
+
+      peer.onconnectionstatechange = function () {
+        const state = peer ? peer.connectionState : "";
+
+        debug("callId: " + callId + " · WebRTC: " + state);
+
+        if (state === "connected") {
+          setMsg("Audio collegato. Parla come a un citofono.", "ok");
+          if (btn) btn.textContent = "Audio collegato";
+        }
+
+        if (state === "failed" || state === "disconnected") {
+          setMsg("Audio non stabile. Potrebbe servire un server TURN.", "ko");
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Riprova audio";
+          }
+        }
+      };
+
+      await peer.setRemoteDescription(offerData.offer);
+
+      const answer = await peer.createAnswer();
+      await peer.setLocalDescription(answer);
+
+      const save = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/webrtc/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          answer: peer.localDescription
+        })
+      });
+
+      const saved = await save.json();
+
+      if (!save.ok || !saved.ok) {
+        throw new Error((saved && saved.error) || "Answer non salvata.");
+      }
+
+      debug("Answer salvata. Scambio ICE in corso…");
+      setMsg("Microfono attivo. Collegamento audio in corso…", "ok");
+
+      if (iceTimer) clearInterval(iceTimer);
+      iceTimer = setInterval(() => pollAdminIce(callId), 800);
+      pollAdminIce(callId);
+
+      if (btn) {
+        btn.textContent = "Audio in corso";
+      }
+    } catch (error) {
+      console.error("forceCreateUserAnswer error:", error);
+
+      debug("Errore: " + (error.message || error));
+      setMsg("Errore audio: " + (error.message || error), "ko");
+
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Parla ora";
+      }
+    }
+  }
+
+  function wire() {
+    const buttons = [
+      document.getElementById("citofonamiExternalTalkButton"),
+      document.getElementById("talkNowButton")
+    ].filter(Boolean);
+
+    buttons.forEach(btn => {
+      if (btn.dataset.forceUserAnswerWired === "1") return;
+
+      btn.dataset.forceUserAnswerWired = "1";
+
+      btn.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+
+        forceCreateUserAnswer();
+      }, true);
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", wire);
+  } else {
+    wire();
+  }
+
+  setTimeout(wire, 500);
+  setTimeout(wire, 1500);
+  setTimeout(wire, 2500);
+  setInterval(wire, 2000);
+
+  window.citofonamiForceCreateUserAnswer = forceCreateUserAnswer;
+})();
+</script>
+
 </body>
 </html>
