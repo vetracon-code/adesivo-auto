@@ -6154,5 +6154,260 @@ body.citofonami-final-ui-ready [id*="grille"] {
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_ANDROID_CALL_START_CAPTURE_20260601 */
+(function () {
+  let callLock = false;
+  let lastCallAt = 0;
+
+  function getCode() {
+    const parts = location.pathname.split("/").filter(Boolean);
+    return String(parts[parts.length - 1] || "DEMO").trim().toUpperCase();
+  }
+
+  function cfg() {
+    return window.CITOFONAMI_SERVER_CONFIG || {};
+  }
+
+  function clean(value) {
+    return String(value || "").trim();
+  }
+
+  function getCallerId() {
+    let id =
+      sessionStorage.getItem("citofonami_final_caller_id") ||
+      sessionStorage.getItem("citofonami_active_caller_id") ||
+      "";
+
+    if (!id) {
+      id = "web_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+      sessionStorage.setItem("citofonami_final_caller_id", id);
+      sessionStorage.setItem("citofonami_active_caller_id", id);
+    }
+
+    return id;
+  }
+
+  function setStatus(text) {
+    const el = document.getElementById("citofonamiFinalStatus");
+    if (el) el.textContent = text || "";
+  }
+
+  function setMainButtonState(text) {
+    const btn = document.getElementById("callButton");
+    if (!btn) return;
+
+    const action = btn.querySelector(".final-action");
+    if (action) action.textContent = text || "tocca e chiama";
+  }
+
+  function currentDoor() {
+    const c = cfg();
+
+    const name =
+      clean(c.buttonLabel) ||
+      [clean(c.firstName), clean(c.lastName)].filter(Boolean).join(" ") ||
+      "Citofona";
+
+    return {
+      name,
+      description: "Citofono"
+    };
+  }
+
+  async function startCallDirect(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    }
+
+    const now = Date.now();
+
+    if (callLock || now - lastCallAt < 1800) return;
+
+    callLock = true;
+    lastCallAt = now;
+
+    try {
+      setMainButtonState("chiamata…");
+      setStatus("Chiamata inviata…");
+
+      const payload = {
+        callerId: getCallerId(),
+        door: currentDoor(),
+        lat: null,
+        lng: null,
+        accuracy: null,
+        userAgent: navigator.userAgent || ""
+      };
+
+      const res = await fetch(`/api/citofonami/${encodeURIComponent(getCode())}/ring-v2`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "Chiamata non inviata");
+      }
+
+      const callId = data.callId || data.id || "";
+
+      if (callId) {
+        sessionStorage.setItem("citofonami_active_call_id", callId);
+        sessionStorage.setItem("citofonami_live_call_id", callId);
+
+        try {
+          if (!window.CITOFONAMI_FORCE_STATE) window.CITOFONAMI_FORCE_STATE = {};
+          window.CITOFONAMI_FORCE_STATE.callId = callId;
+          window.CITOFONAMI_FORCE_STATE.callerId = payload.callerId;
+        } catch(e) {}
+
+        try {
+          window.citofonamiLiveCallId = callId;
+          window.citofonamiLiveCallerId = payload.callerId;
+        } catch(e) {}
+      }
+
+      setStatus("Chiamata inviata. Attendi risposta…");
+      setMainButtonState("in attesa");
+
+      startAnsweredPoll(callId);
+    } catch (error) {
+      console.error("startCallDirect error:", error);
+      setStatus("Errore chiamata. Riprova.");
+      setMainButtonState("tocca e chiama");
+      callLock = false;
+    }
+  }
+
+  function showTalkNow(callId) {
+    let panel = document.getElementById("citofonamiExternalAnswerPanel");
+
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.id = "citofonamiExternalAnswerPanel";
+      panel.style.cssText = [
+        "position:fixed",
+        "left:12px",
+        "right:12px",
+        "bottom:12px",
+        "z-index:1000500",
+        "padding:16px",
+        "border-radius:24px",
+        "background:rgba(8,10,14,.97)",
+        "border:1px solid rgba(215,180,106,.35)",
+        "box-shadow:0 22px 70px rgba(0,0,0,.60)",
+        "color:white",
+        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+        "text-align:center"
+      ].join(";");
+
+      panel.innerHTML = `
+        <div style="font-size:22px;font-weight:950;letter-spacing:-.05em;margin-bottom:6px;">Admin ha risposto</div>
+        <div style="font-size:13px;line-height:1.35;color:rgba(255,255,255,.70);margin-bottom:12px;">Tocca per attivare il microfono e parlare.</div>
+        <button id="citofonamiFinalTalkNowButton" type="button" style="
+          width:100%;
+          min-height:58px;
+          border:0;
+          border-radius:18px;
+          background:linear-gradient(135deg,#d7ffe7,#39d77b);
+          color:#06170d;
+          font-size:17px;
+          font-weight:950;
+          text-transform:uppercase;
+          letter-spacing:.05em;
+        ">Parla ora</button>
+      `;
+
+      document.body.appendChild(panel);
+    }
+
+    panel.style.display = "block";
+
+    if (callId) {
+      sessionStorage.setItem("citofonami_active_call_id", callId);
+      sessionStorage.setItem("citofonami_live_call_id", callId);
+    }
+
+    setStatus("Admin ha risposto. Tocca Parla ora.");
+
+    // Lascia alla patch microfono immediato il compito di agganciare il bottone.
+    if (typeof window.citofonamiAndroidImmediateMicTalk === "function") {
+      const btn = document.getElementById("citofonamiFinalTalkNowButton");
+      if (btn && btn.dataset.captureTalkNowWired !== "1") {
+        btn.dataset.captureTalkNowWired = "1";
+        btn.addEventListener("pointerdown", window.citofonamiAndroidImmediateMicTalk, true);
+      }
+    }
+  }
+
+  let pollTimer = null;
+
+  function startAnsweredPoll(callId) {
+    if (pollTimer) clearInterval(pollTimer);
+
+    pollTimer = setInterval(async function () {
+      try {
+        const activeCallId =
+          callId ||
+          sessionStorage.getItem("citofonami_active_call_id") ||
+          sessionStorage.getItem("citofonami_live_call_id") ||
+          "";
+
+        if (!activeCallId) return;
+
+        const data = await fetch(`/api/citofonami/${encodeURIComponent(getCode())}/calls/${encodeURIComponent(activeCallId)}?t=${Date.now()}`, {
+          cache: "no-store"
+        }).then(r => r.json());
+
+        if (!data || !data.ok || !data.call) return;
+
+        if (data.call.status === "answered") {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          callLock = false;
+          showTalkNow(activeCallId);
+        }
+
+        if (data.call.status === "closed") {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          callLock = false;
+          setStatus("Collegamento chiuso.");
+          setMainButtonState("tocca e chiama");
+        }
+      } catch(e) {}
+    }, 700);
+  }
+
+  function isMainCallTarget(target) {
+    if (!target || !target.closest) return false;
+
+    return !!(
+      target.closest("#callButton") ||
+      target.closest(".citofonami-final-button") ||
+      target.closest("#citofonamiFinalButtonMount")
+    );
+  }
+
+  function globalCapture(event) {
+    if (!isMainCallTarget(event.target)) return;
+    startCallDirect(event);
+  }
+
+  // Capture globale: più forte dei vecchi handler e dei cloni del bottone.
+  document.addEventListener("pointerdown", globalCapture, true);
+  document.addEventListener("click", globalCapture, true);
+
+  window.citofonamiAndroidStartCallCapture = startCallDirect;
+})();
+</script>
+
 </body>
 </html>
