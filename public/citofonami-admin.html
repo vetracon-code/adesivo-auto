@@ -4777,5 +4777,186 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_ADMIN_CLOSE_CONVERSATION_20260601 */
+(function () {
+  async function getAdminCloseCallId() {
+    try {
+      if (typeof finalCurrentCall !== "undefined" && finalCurrentCall && finalCurrentCall.id) {
+        return finalCurrentCall.id;
+      }
+
+      if (typeof currentIncomingCall !== "undefined" && currentIncomingCall && currentIncomingCall.id) {
+        return currentIncomingCall.id;
+      }
+    } catch (e) {}
+
+    try {
+      const latest = await fetch("/api/citofonami/DEMO/calls-list/latest?t=" + Date.now(), {
+        cache: "no-store"
+      });
+      const data = await latest.json();
+      if (data && data.ok && data.calls && data.calls[0]) return data.calls[0].id;
+    } catch (e) {}
+
+    return "";
+  }
+
+  function getAdminCloseCode() {
+    try {
+      if (typeof finalGetCode === "function") return finalGetCode();
+    } catch (e) {}
+
+    const input = document.getElementById("qrCode");
+    return String((input && input.value) || "DEMO").trim().toUpperCase();
+  }
+
+  function stopAdminConversationMedia() {
+    try {
+      if (typeof stopEveryCitofonamiRingSound === "function") {
+        stopEveryCitofonamiRingSound();
+      }
+    } catch (e) {}
+
+    try {
+      document.querySelectorAll("audio").forEach((audio) => {
+        try {
+          audio.pause();
+          audio.currentTime = 0;
+          audio.srcObject = null;
+        } catch (e) {}
+      });
+    } catch (e) {}
+
+    try {
+      if (typeof stopAdminWebrtcAudio === "function") {
+        stopAdminWebrtcAudio();
+      }
+    } catch (e) {}
+
+    try {
+      if (window.citofonamiAdminMicStream) {
+        window.citofonamiAdminMicStream.getTracks().forEach(track => track.stop());
+        window.citofonamiAdminMicStream = null;
+      }
+    } catch (e) {}
+
+    try {
+      if (typeof adminRtcStream !== "undefined" && adminRtcStream) {
+        adminRtcStream.getTracks().forEach(track => track.stop());
+      }
+    } catch (e) {}
+
+    try {
+      if (typeof stream !== "undefined" && stream && stream.getTracks) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    } catch (e) {}
+  }
+
+  function keepAdminPanelForContactSave(callId) {
+    try {
+      if (typeof finalCallOverlay !== "undefined" && finalCallOverlay) {
+        finalCallOverlay.classList.add("active");
+        finalCallOverlay.classList.add("force-visible");
+        finalCallOverlay.classList.remove("temporarily-hidden");
+        finalCallOverlay.classList.add("call-answered");
+      }
+
+      if (typeof finalCallTitle !== "undefined" && finalCallTitle) {
+        finalCallTitle.textContent = "Conversazione terminata";
+      }
+
+      if (typeof finalCallSubtitle !== "undefined" && finalCallSubtitle) {
+        finalCallSubtitle.textContent = "Puoi salvare o modificare il nome in rubrica, poi nascondere il pannello.";
+      }
+
+      if (typeof finalAnswerButton !== "undefined" && finalAnswerButton) {
+        finalAnswerButton.disabled = true;
+        finalAnswerButton.textContent = "Terminata";
+      }
+
+      if (typeof adminConnectedState !== "undefined" && adminConnectedState) {
+        adminConnectedState.style.display = "block";
+        adminConnectedState.innerHTML = "Comunicazione chiusa. La scheda resta aperta per salvare il contatto.";
+      }
+
+      const debug = document.getElementById("adminWebrtcDebugLine");
+      if (debug) {
+        debug.style.display = "block";
+        debug.textContent = "callId: " + callId + " · conversazione chiusa · puoi salvare il nome";
+      }
+
+      const badge = document.querySelector(".final-call-badge");
+      if (badge) {
+        badge.innerHTML = '<span class="dot"></span> Chiusa';
+      }
+    } catch (e) {}
+  }
+
+  async function closeConversationFromAdmin(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    }
+
+    const code = getAdminCloseCode();
+    const callId = await getAdminCloseCallId();
+
+    if (!callId) {
+      try {
+        if (typeof setState === "function") setState("Nessuna chiamata da chiudere.", false);
+      } catch (e) {}
+      return;
+    }
+
+    try {
+      stopAdminConversationMedia();
+
+      const res = await fetch(`/api/citofonami/${encodeURIComponent(code)}/calls/${encodeURIComponent(callId)}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ action: "close" })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        throw new Error((data && data.error) || "Chiusura non riuscita");
+      }
+
+      keepAdminPanelForContactSave(callId);
+
+      try {
+        if (typeof setState === "function") {
+          setState("Conversazione chiusa. Puoi salvare il contatto.", true);
+        }
+      } catch (e) {}
+    } catch (error) {
+      try {
+        if (typeof setState === "function") {
+          setState("Errore chiusura: " + (error.message || error), false);
+        }
+      } catch (e) {}
+    }
+  }
+
+  document.addEventListener("click", function (event) {
+    const close = event.target && event.target.closest
+      ? event.target.closest("#finalCloseButton, #closeCallButton")
+      : null;
+
+    if (!close) return;
+
+    closeConversationFromAdmin(event);
+  }, true);
+
+  window.citofonamiCloseConversationFromAdmin = closeConversationFromAdmin;
+})();
+</script>
+
 </body>
 </html>
