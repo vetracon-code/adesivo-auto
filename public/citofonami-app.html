@@ -2641,5 +2641,305 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_TALK_NOW_DIAGNOSTIC_20260601 */
+(function () {
+  let diagnosticStream = null;
+  let diagnosticAudioUnlocked = false;
+
+  function ensureDiagnosticPanel() {
+    let panel = document.getElementById("citofonamiTalkDiagnosticPanel");
+
+    if (panel) return panel;
+
+    panel = document.createElement("div");
+    panel.id = "citofonamiTalkDiagnosticPanel";
+    panel.style.cssText = [
+      "display:none",
+      "position:fixed",
+      "left:12px",
+      "right:12px",
+      "top:12px",
+      "z-index:1000000",
+      "padding:14px",
+      "border-radius:20px",
+      "background:rgba(8,10,14,.96)",
+      "border:1px solid rgba(215,180,106,.38)",
+      "box-shadow:0 20px 60px rgba(0,0,0,.48)",
+      "color:white",
+      "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+      "font-size:13px",
+      "line-height:1.35"
+    ].join(";");
+
+    panel.innerHTML = `
+      <div style="font-weight:950;font-size:17px;margin-bottom:8px;color:#f4d990;">
+        Diagnostica audio Citofonami
+      </div>
+      <div id="citofonamiTalkDiagnosticSteps"></div>
+      <button id="citofonamiTalkDiagnosticClose" type="button" style="
+        margin-top:10px;
+        width:100%;
+        min-height:38px;
+        border:1px solid rgba(255,255,255,.14);
+        border-radius:13px;
+        background:rgba(255,255,255,.08);
+        color:white;
+        font-weight:800;
+      ">Nascondi diagnostica</button>
+    `;
+
+    document.body.appendChild(panel);
+
+    document.getElementById("citofonamiTalkDiagnosticClose").addEventListener("click", function () {
+      panel.style.display = "none";
+    });
+
+    return panel;
+  }
+
+  function diagnosticLine(text, ok) {
+    const panel = ensureDiagnosticPanel();
+    const box = document.getElementById("citofonamiTalkDiagnosticSteps");
+
+    panel.style.display = "block";
+
+    const row = document.createElement("div");
+    row.style.cssText = [
+      "padding:7px 8px",
+      "margin-top:5px",
+      "border-radius:12px",
+      "background:" + (ok === true ? "rgba(57,215,123,.12)" : ok === false ? "rgba(255,98,98,.14)" : "rgba(255,255,255,.07)"),
+      "border:1px solid " + (ok === true ? "rgba(57,215,123,.28)" : ok === false ? "rgba(255,98,98,.30)" : "rgba(255,255,255,.10)"),
+      "color:" + (ok === true ? "#39d77b" : ok === false ? "#ff7777" : "rgba(255,255,255,.78)")
+    ].join(";");
+
+    row.textContent = text;
+    box.appendChild(row);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function resetDiagnostic() {
+    const panel = ensureDiagnosticPanel();
+    const box = document.getElementById("citofonamiTalkDiagnosticSteps");
+    box.innerHTML = "";
+    panel.style.display = "block";
+  }
+
+  function setMainStatus(text, type) {
+    try {
+      if (typeof forceSetStatus === "function") {
+        forceSetStatus(text, type);
+        return;
+      }
+
+      if (typeof setStatus === "function") {
+        setStatus(text, type);
+        return;
+      }
+
+      const status = document.getElementById("statusBox");
+      if (status) {
+        status.textContent = text;
+        status.className = "status " + (type || "");
+      }
+    } catch (e) {}
+  }
+
+  function getKnownCallId() {
+    return (
+      (window.CITOFONAMI_FORCE_STATE && window.CITOFONAMI_FORCE_STATE.callId) ||
+      (typeof citofonamiLiveCallId !== "undefined" ? citofonamiLiveCallId : "") ||
+      sessionStorage.getItem("citofonami_active_call_id") ||
+      ""
+    );
+  }
+
+  async function unlockRemoteAudioElement() {
+    diagnosticLine("Preparo audio remoto…");
+
+    let audio = document.getElementById("citofonamiDiagnosticRemoteAudio");
+
+    if (!audio) {
+      audio = document.createElement("audio");
+      audio.id = "citofonamiDiagnosticRemoteAudio";
+      audio.autoplay = true;
+      audio.playsInline = true;
+      audio.controls = false;
+      document.body.appendChild(audio);
+    }
+
+    try {
+      // Piccolo stream vuoto non necessario: su mobile basta tentare play dentro il tap.
+      await audio.play().catch(() => null);
+      diagnosticAudioUnlocked = true;
+      diagnosticLine("Audio remoto sbloccato dal tap utente.", true);
+    } catch (error) {
+      diagnosticLine("Audio remoto non sbloccato ora: " + (error.message || error), false);
+    }
+
+    return audio;
+  }
+
+  async function requestMicrophoneDiagnostic() {
+    diagnosticLine("Controllo supporto microfono…");
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      diagnosticLine("Questo browser non supporta getUserMedia.", false);
+      throw new Error("Microfono non supportato da questo browser.");
+    }
+
+    diagnosticLine("Richiedo autorizzazione microfono…");
+
+    try {
+      diagnosticStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        },
+        video: false
+      });
+
+      const tracks = diagnosticStream.getAudioTracks ? diagnosticStream.getAudioTracks() : [];
+      const label = tracks[0] && tracks[0].label ? tracks[0].label : "microfono autorizzato";
+
+      diagnosticLine("Microfono autorizzato: " + label, true);
+
+      try {
+        if (typeof startAudioLevelMeter === "function") {
+          startAudioLevelMeter(diagnosticStream);
+          diagnosticLine("Misuratore volume avviato.", true);
+        }
+      } catch (meterError) {
+        diagnosticLine("Misuratore volume non avviato: " + (meterError.message || meterError), false);
+      }
+
+      return diagnosticStream;
+    } catch (error) {
+      const name = error && error.name ? error.name : "";
+      const message = error && error.message ? error.message : String(error || "");
+
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        diagnosticLine("Microfono negato o bloccato nelle impostazioni del browser.", false);
+        setMainStatus("Microfono bloccato. Tocca il lucchetto del browser e consenti il microfono.", "ko");
+      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        diagnosticLine("Nessun microfono trovato sul dispositivo.", false);
+        setMainStatus("Nessun microfono trovato su questo dispositivo.", "ko");
+      } else if (name === "NotReadableError") {
+        diagnosticLine("Microfono già in uso da un’altra app o non leggibile.", false);
+        setMainStatus("Microfono non disponibile: potrebbe essere usato da un’altra app.", "ko");
+      } else {
+        diagnosticLine("Errore microfono: " + message, false);
+        setMainStatus("Errore microfono: " + message, "ko");
+      }
+
+      throw error;
+    }
+  }
+
+  async function diagnosticStartWebRtc(stream) {
+    const callId = getKnownCallId();
+
+    if (!callId) {
+      diagnosticLine("CallId mancante: non posso avviare WebRTC.", false);
+      setMainStatus("Chiamata non trovata. Riprova a citofonare.", "ko");
+      return;
+    }
+
+    diagnosticLine("CallId trovato: " + callId, true);
+
+    try {
+      if (window.CITOFONAMI_FORCE_STATE) {
+        window.CITOFONAMI_FORCE_STATE.callId = callId;
+      }
+
+      if (typeof citofonamiLiveCallId !== "undefined") {
+        citofonamiLiveCallId = callId;
+      }
+
+      sessionStorage.setItem("citofonami_active_call_id", callId);
+    } catch (e) {}
+
+    if (typeof startUserWebrtcAudio === "function") {
+      diagnosticLine("Avvio modulo WebRTC utente…");
+      await startUserWebrtcAudio();
+      diagnosticLine("Funzione WebRTC chiamata. Verifica se compare Audio collegato.", true);
+      return;
+    }
+
+    diagnosticLine("Modulo WebRTC startUserWebrtcAudio non trovato.", false);
+    setMainStatus("Microfono attivo, ma modulo WebRTC non trovato.", "ko");
+  }
+
+  async function runTalkNowDiagnostic(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    }
+
+    resetDiagnostic();
+    diagnosticLine("Tap Parla ora ricevuto.", true);
+    setMainStatus("Richiesta microfono in corso…");
+
+    const btn =
+      document.getElementById("citofonamiExternalTalkButton") ||
+      document.getElementById("talkNowButton");
+
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Controllo audio…";
+    }
+
+    try {
+      await unlockRemoteAudioElement();
+      const stream = await requestMicrophoneDiagnostic();
+      setMainStatus("Microfono autorizzato. Collegamento audio in corso…", "ok");
+      await diagnosticStartWebRtc(stream);
+
+      if (btn) {
+        btn.textContent = "Audio in corso";
+      }
+    } catch (error) {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Parla ora";
+      }
+    }
+  }
+
+  function hardWireDiagnosticTalkButtons() {
+    const selectors = [
+      "#citofonamiExternalTalkButton",
+      "#talkNowButton"
+    ];
+
+    selectors.forEach(function (selector) {
+      const btn = document.querySelector(selector);
+      if (!btn || btn.dataset.talkDiagnosticWired === "1") return;
+
+      btn.dataset.talkDiagnosticWired = "1";
+
+      btn.addEventListener("click", runTalkNowDiagnostic, true);
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", hardWireDiagnosticTalkButtons);
+  } else {
+    hardWireDiagnosticTalkButtons();
+  }
+
+  setTimeout(hardWireDiagnosticTalkButtons, 400);
+  setTimeout(hardWireDiagnosticTalkButtons, 1200);
+  setTimeout(hardWireDiagnosticTalkButtons, 2500);
+  setInterval(hardWireDiagnosticTalkButtons, 2000);
+
+  window.citofonamiRunTalkNowDiagnostic = runTalkNowDiagnostic;
+})();
+</script>
+
 </body>
 </html>
