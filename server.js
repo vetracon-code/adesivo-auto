@@ -21197,6 +21197,20 @@ app.get('/citofonami-admin-clean', (req, res) => {
 });
 
 
+
+
+// ==============================
+// CITOFONAMI ADMIN CLEAN MANIFEST
+// ==============================
+app.get('/citofonami-admin-clean-manifest.json', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.type('application/manifest+json');
+  res.sendFile(path.join(__dirname, 'public', 'citofonami-admin-clean-manifest.json'));
+});
+
+
 app.listen(PORT, () => {
       console.log(`Server attivo su ${BASE_URL}`);
     });
