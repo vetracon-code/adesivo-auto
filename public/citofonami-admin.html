@@ -1635,6 +1635,36 @@
     }
 
   </style>
+
+<style>
+/* CITOFONAMI_ADMIN_TOP_CLOSE_BUTTON_20260601 */
+.citofonami-top-close-call {
+  display: none;
+  position: fixed;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  left: 12px;
+  right: 12px;
+  z-index: 1000040;
+  min-height: 52px;
+  border: 0;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #ffefef, #ff6868);
+  color: #260707;
+  font-size: 15px;
+  font-weight: 950;
+  letter-spacing: .02em;
+  box-shadow: 0 18px 48px rgba(255, 72, 72, .30), 0 16px 50px rgba(0,0,0,.35);
+}
+
+.citofonami-top-close-call.show {
+  display: block;
+}
+
+body.citofonami-call-active {
+  padding-top: 72px;
+}
+</style>
+
 </head>
 
 <body>
@@ -5359,6 +5389,133 @@
   window.citofonamiAttachAdminAppleRemoteStream = attachAdminAppleRemoteStream;
   window.citofonamiUnlockAdminAppleAudio = unlockAdminAppleAudio;
   window.citofonamiReleaseOverlayAndScroll = releaseOverlayAndScroll;
+})();
+</script>
+
+
+<script>
+/* CITOFONAMI_ADMIN_TOP_CLOSE_BUTTON_20260601 */
+(function () {
+  function ensureTopCloseButton() {
+    let btn = document.getElementById("citofonamiTopCloseCallButton");
+
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.id = "citofonamiTopCloseCallButton";
+      btn.className = "citofonami-top-close-call";
+      btn.type = "button";
+      btn.textContent = "Chiudi collegamento";
+      document.body.appendChild(btn);
+
+      btn.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+
+        if (typeof window.citofonamiForceCloseLatestConversation === "function") {
+          window.citofonamiForceCloseLatestConversation(event);
+        } else if (typeof window.citofonamiCloseConversationFromAdmin === "function") {
+          window.citofonamiCloseConversationFromAdmin(event);
+        } else {
+          const oldClose = document.getElementById("finalCloseButton") || document.getElementById("closeCallButton");
+          if (oldClose) oldClose.click();
+        }
+
+        setTimeout(hideTopCloseButton, 900);
+        setTimeout(releaseAdminAfterClose, 1200);
+      }, true);
+    }
+
+    return btn;
+  }
+
+  function showTopCloseButton() {
+    const btn = ensureTopCloseButton();
+    btn.classList.add("show");
+    document.body.classList.add("citofonami-call-active");
+  }
+
+  function hideTopCloseButton() {
+    const btn = ensureTopCloseButton();
+    btn.classList.remove("show");
+    document.body.classList.remove("citofonami-call-active");
+  }
+
+  function releaseAdminAfterClose() {
+    try {
+      document.documentElement.style.overflow = "auto";
+      document.body.style.overflow = "auto";
+      document.body.style.position = "";
+      document.body.style.height = "auto";
+      document.body.style.touchAction = "auto";
+
+      const overlay = document.getElementById("finalCallOverlay");
+      if (overlay) {
+        overlay.classList.remove("active", "force-visible", "temporarily-hidden", "call-answered");
+        overlay.style.display = "none";
+      }
+
+      const openBtn = document.getElementById("openHiddenCallButton");
+      if (openBtn) {
+        openBtn.classList.remove("show");
+        openBtn.style.display = "none";
+      }
+    } catch (e) {}
+  }
+
+  // Mostra Chiudi appena compare una chiamata o il pannello risposta.
+  const observer = new MutationObserver(function () {
+    try {
+      const overlay = document.getElementById("finalCallOverlay");
+      const active =
+        overlay &&
+        (
+          overlay.classList.contains("active") ||
+          overlay.classList.contains("force-visible") ||
+          overlay.style.display === "block"
+        );
+
+      const text = overlay ? (overlay.innerText || "").toLowerCase() : "";
+      const hasCall = text.includes("chiamata") || text.includes("rispondi") || text.includes("audio") || text.includes("utente");
+
+      if (active && hasCall && !text.includes("conversazione terminata")) {
+        showTopCloseButton();
+      }
+    } catch (e) {}
+  });
+
+  if (document.body) {
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class", "style"]
+    });
+  }
+
+  document.addEventListener("click", function (event) {
+    const answer = event.target && event.target.closest
+      ? event.target.closest("#finalAnswerButton,#answerCallButton,#openHiddenCallButton")
+      : null;
+
+    if (answer) {
+      setTimeout(showTopCloseButton, 150);
+      setTimeout(showTopCloseButton, 900);
+    }
+
+    const close = event.target && event.target.closest
+      ? event.target.closest("#finalCloseButton,#closeCallButton")
+      : null;
+
+    if (close) {
+      setTimeout(hideTopCloseButton, 900);
+      setTimeout(releaseAdminAfterClose, 1200);
+    }
+  }, true);
+
+  window.citofonamiShowTopCloseButton = showTopCloseButton;
+  window.citofonamiHideTopCloseButton = hideTopCloseButton;
+  window.citofonamiReleaseAdminAfterClose = releaseAdminAfterClose;
 })();
 </script>
 

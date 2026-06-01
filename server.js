@@ -12181,7 +12181,7 @@ app.get('/fm/document-closed', (req, res) => {
 <body>
   <section class="card">
     <div class="line"></div>
-    <h1>Grazie</h1>
+    <h1>Collegamento chiuso</h1>
     <p>Il documento è stato chiuso correttamente.</p>
     <div class="saluto">A presto</div>
   </section>
@@ -12402,7 +12402,7 @@ app.get('/fm/document/closed', (req, res) => {
 <body>
   <section class="card">
     <div class="line"></div>
-    <h1>Grazie</h1>
+    <h1>Collegamento chiuso</h1>
     <p>Il documento è stato chiuso correttamente.</p>
     <div class="saluto">A presto</div>
   </section>
@@ -12685,7 +12685,7 @@ app.get('/fm/document/closed', (req, res) => {
 <body>
   <section class="card">
     <div class="line"></div>
-    <h1>Grazie</h1>
+    <h1>Collegamento chiuso</h1>
     <p>Il documento è stato chiuso. Puoi tornare alla pagina precedente o continuare la navigazione dal tuo dispositivo.</p>
     <div class="silver">A presto</div>
   </section>
@@ -21105,7 +21105,7 @@ app.get('/citofonami-closed', (req, res) => {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>Collegamento terminato</title>
+  <title>Collegamento chiuso</title>
   <style>
     html,body{
       margin:0;
@@ -21157,8 +21157,8 @@ app.get('/citofonami-closed', (req, res) => {
 </head>
 <body>
   <div class="card">
-    <h1>Grazie</h1>
-    <p>Collegamento terminato.<br>Audio e microfono sono stati disattivati.</p>
+    <h1>Collegamento chiuso</h1>
+    <p>Collegamento chiuso.<br>Grazie. Audio e microfono sono stati disattivati.</p>
     <button onclick="try{window.close()}catch(e){};try{history.back()}catch(e){}">Chiudi pagina</button>
   </div>
   <script>
