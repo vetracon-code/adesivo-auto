@@ -20587,6 +20587,50 @@ app.get('/api/citofonami/:code/calls/pending', (req, res) => {
 });
 
 
+
+
+// ==============================
+// CITOFONAMI - NON AMBIGUOUS LATEST CALLS
+// ==============================
+app.get('/api/citofonami/:code/calls-list/latest', (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+
+  const calls = (db.events || [])
+    .filter((event) => event.code === code && event.type === 'call')
+    .slice(0, 20);
+
+  res.json({
+    ok: true,
+    code,
+    calls
+  });
+});
+
+app.get('/api/citofonami/:code/calls-list/by-caller/:callerId/latest', (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const callerId = String(req.params.callerId || '');
+
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+
+  const calls = (db.events || [])
+    .filter((event) =>
+      event.code === code &&
+      event.type === 'call' &&
+      String(event.callerId || '') === callerId
+    )
+    .slice(0, 20);
+
+  res.json({
+    ok: true,
+    code,
+    callerId,
+    call: calls[0] || null,
+    calls
+  });
+});
+
+
 app.get('/api/citofonami/:code/calls/:callId', (req, res) => {
   const code = normalizeCitofonamiCode(req.params.code);
   const callId = String(req.params.callId || '');
