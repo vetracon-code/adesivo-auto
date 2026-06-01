@@ -930,6 +930,242 @@
     playVoicemailButton.addEventListener('click', playVoicemail);
     sendVoicemailButton.addEventListener('click', sendVoicemail);
 
+  
+    // ==============================
+    // CITOFONAMI_DEMO_CONFIG_SYNC_FINAL
+    // ==============================
+    let citofonamiLiveConfig = null;
+    let citofonamiLiveCallerId = 'caller_demo_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    let citofonamiLiveCallId = null;
+    let citofonamiLiveStatusTimer = null;
+
+    function getCitofonamiCodeFinal() {
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      const last = parts[parts.length - 1] || 'DEMO';
+      return String(last || 'DEMO').trim().toUpperCase();
+    }
+
+    function applyCitofonamiConfigFinal(config) {
+      citofonamiLiveConfig = config || citofonamiLiveConfig || {};
+
+      const first = citofonamiLiveConfig.firstName || '';
+      const last = citofonamiLiveConfig.lastName || '';
+      const fallbackName = (first + ' ' + last).trim() || 'Citofonami';
+      const buttonLabel = citofonamiLiveConfig.buttonLabel || fallbackName;
+      const publicText = citofonamiLiveConfig.publicText || 'Premi e chiama.';
+
+      try {
+        const buttonName = document.getElementById('buttonName');
+        if (buttonName) buttonName.textContent = buttonLabel;
+
+        const ownerName = document.getElementById('ownerName');
+        if (ownerName) ownerName.textContent = buttonLabel;
+
+        const publicTextEl = document.getElementById('publicText');
+        if (publicTextEl) publicTextEl.textContent = publicText;
+
+        document.querySelectorAll('.call-button .action').forEach(el => {
+          el.textContent = 'Citofona';
+        });
+
+        document.querySelectorAll('.call-button .sub').forEach(el => {
+          el.textContent = 'premi e chiama';
+        });
+      } catch (error) {
+        console.warn('applyCitofonamiConfigFinal error:', error);
+      }
+    }
+
+    async function loadCitofonamiConfigFinal() {
+      const code = getCitofonamiCodeFinal();
+
+      try {
+        const res = await fetch(`/api/citofonami/${encodeURIComponent(code)}/config?t=${Date.now()}`, {
+          cache: 'no-store'
+        });
+
+        const data = await res.json();
+
+        if (data && data.ok && data.config) {
+          applyCitofonamiConfigFinal(data.config);
+          return data.config;
+        }
+      } catch (error) {
+        console.warn('loadCitofonamiConfigFinal error:', error);
+      }
+
+      return citofonamiLiveConfig;
+    }
+
+    async function ringCitofonamiFinal(event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+
+      const code = getCitofonamiCodeFinal();
+      const config = await loadCitofonamiConfigFinal();
+
+      const first = config && config.firstName ? config.firstName : '';
+      const last = config && config.lastName ? config.lastName : '';
+      const fallbackName = (first + ' ' + last).trim() || 'Citofonami';
+      const buttonLabel = config && config.buttonLabel ? config.buttonLabel : fallbackName;
+
+      setStatus('Sto chiamando…');
+
+      const payload = {
+        callerId: citofonamiLiveCallerId,
+        door: {
+          name: buttonLabel,
+          description: 'Citofono'
+        }
+      };
+
+      try {
+        const response = await fetch(`/api/citofonami/${encodeURIComponent(code)}/ring-v2`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.ok) {
+          if (data && data.blocked) {
+            throw new Error('Sei stato bloccato dal sistema.');
+          }
+
+          throw new Error((data && data.error) || 'Chiamata non riuscita.');
+        }
+
+        if (data.allowed === false) {
+          setStatus('Devi essere vicino al citofono per parlare.', 'ko');
+          return;
+        }
+
+        citofonamiLiveCallId = data.callId;
+
+        setStatus('Chiamata inviata. Attendi la risposta…', 'ok');
+
+        startCitofonamiStatusPollingFinal();
+      } catch (error) {
+        console.error('ringCitofonamiFinal error:', error);
+        setStatus('Errore chiamata: ' + (error.message || error), 'ko');
+      }
+    }
+
+    function startCitofonamiStatusPollingFinal() {
+      if (citofonamiLiveStatusTimer) {
+        clearInterval(citofonamiLiveStatusTimer);
+      }
+
+      citofonamiLiveStatusTimer = setInterval(checkCitofonamiCallStatusFinal, 1500);
+      checkCitofonamiCallStatusFinal();
+    }
+
+    async function checkCitofonamiCallStatusFinal() {
+      if (!citofonamiLiveCallId) return;
+
+      const code = getCitofonamiCodeFinal();
+
+      try {
+        const res = await fetch(`/api/citofonami/${encodeURIComponent(code)}/calls/${encodeURIComponent(citofonamiLiveCallId)}/status?callerId=${encodeURIComponent(citofonamiLiveCallerId)}&t=${Date.now()}`, {
+          cache: 'no-store'
+        });
+
+        const data = await res.json();
+
+        if (!data || !data.ok) return;
+
+        if (data.status === 'answered') {
+          clearInterval(citofonamiLiveStatusTimer);
+          citofonamiLiveStatusTimer = null;
+
+          setStatus('Admin ha risposto. Tocca “Parla ora” e avvicinati al telefono.', 'ok');
+
+          const talkNowButton = document.getElementById('talkNowButton');
+          if (talkNowButton) {
+            talkNowButton.classList.add('show');
+          }
+
+          return;
+        }
+
+        if (data.status === 'voicemail_requested') {
+          clearInterval(citofonamiLiveStatusTimer);
+          citofonamiLiveStatusTimer = null;
+
+          if (typeof openVoicemailPanel === 'function') {
+            openVoicemailPanel(citofonamiLiveCallId);
+          } else {
+            setStatus('Admin non disponibile. Puoi lasciare un messaggio vocale.', 'ok');
+          }
+
+          return;
+        }
+
+        if (data.status === 'closed') {
+          clearInterval(citofonamiLiveStatusTimer);
+          citofonamiLiveStatusTimer = null;
+          setStatus('Chiamata chiusa dall’admin.', 'ko');
+          return;
+        }
+
+        if (data.status === 'blocked') {
+          clearInterval(citofonamiLiveStatusTimer);
+          citofonamiLiveStatusTimer = null;
+          setStatus('Sei stato bloccato dal sistema.', 'ko');
+          return;
+        }
+      } catch (error) {
+        console.warn('checkCitofonamiCallStatusFinal error:', error);
+      }
+    }
+
+    async function userStartTalkingFinal() {
+      setStatus('Attivo il microfono…');
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: false
+        });
+
+        if (typeof startAudioLevelMeter === 'function') {
+          startAudioLevelMeter(stream);
+        }
+
+        const talkNowButton = document.getElementById('talkNowButton');
+        if (talkNowButton) {
+          talkNowButton.classList.remove('show');
+        }
+
+        setStatus('Microfono attivo. Parla vicino al telefono, come a un citofono.', 'ok');
+      } catch (error) {
+        setStatus('Microfono non attivo: ' + (error.message || error), 'ko');
+      }
+    }
+
+    function wireCitofonamiFinalButtons() {
+      const callButton = document.getElementById('callButton');
+      const talkNowButton = document.getElementById('talkNowButton');
+
+      if (callButton) {
+        callButton.onclick = ringCitofonamiFinal;
+      }
+
+      if (talkNowButton) {
+        talkNowButton.onclick = userStartTalkingFinal;
+      }
+    }
+
+    loadCitofonamiConfigFinal();
+    wireCitofonamiFinalButtons();
+    setTimeout(loadCitofonamiConfigFinal, 500);
+    setTimeout(wireCitofonamiFinalButtons, 700);
+
   </script>
 </body>
 </html>
