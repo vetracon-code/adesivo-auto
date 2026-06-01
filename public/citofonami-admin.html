@@ -1454,6 +1454,71 @@
       font-size: 13px;
     }
 
+  
+    /* CITOFONAMI_FORCE_TOP_ANSWER */
+    .final-call-overlay.force-visible {
+      display: block !important;
+      position: sticky !important;
+      top: 8px !important;
+      z-index: 2000 !important;
+    }
+
+    .admin-setup-bar.auto-compact-ready .setup-grid,
+    .admin-setup-bar.auto-compact-ready .setup-actions,
+    .admin-setup-bar.auto-compact-ready .setup-needed-action {
+      display: none !important;
+    }
+
+    .admin-setup-bar.auto-compact-ready {
+      padding: 9px 12px !important;
+      border-radius: 18px !important;
+    }
+
+    .admin-setup-bar.auto-compact-ready .setup-main-message {
+      margin: 0 !important;
+      font-size: 12px !important;
+      opacity: .85;
+    }
+
+    .setup-mini-badges.force-mini {
+      display: flex !important;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .setup-mini-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border-radius: 999px;
+      padding: 5px 8px;
+      font-size: 11px;
+      font-weight: 850;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.055);
+      color: var(--muted);
+    }
+
+    .setup-mini-badge.ok {
+      color: var(--green);
+      background: rgba(57,215,123,.08);
+      border-color: rgba(57,215,123,.22);
+    }
+
+    .setup-mini-badge.ko {
+      color: var(--red);
+      background: rgba(255,98,98,.08);
+      border-color: rgba(255,98,98,.22);
+    }
+
+    .setup-mini-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 10px currentColor;
+    }
+
   </style>
 </head>
 
@@ -2078,6 +2143,7 @@
         }
 
         finalHideCall();
+        forceHideAnswerPanel();
       } catch (e) {
         setState('Errore azione chiamata: ' + e.message, false);
       }
@@ -2313,6 +2379,228 @@
         renderAutoSetupMinimal();
         return;
       }
+    }
+
+
+    function forceSetBadge(el, ok) {
+      if (!el) return;
+      el.classList.toggle('ok', !!ok);
+      el.classList.toggle('ko', !ok);
+    }
+
+    function forceRememberSetupState() {
+      try {
+        localStorage.setItem('citofonami_admin_app_saved', citofonamiAppSaved ? '1' : '0');
+        localStorage.setItem('citofonami_admin_push_ready', citofonamiPushReady ? '1' : '0');
+        localStorage.setItem('citofonami_admin_mic_ready', citofonamiAdminMicReady ? '1' : '0');
+      } catch (e) {}
+    }
+
+    function forceLoadRememberedSetupState() {
+      try {
+        citofonamiAppSaved = localStorage.getItem('citofonami_admin_app_saved') === '1' || citofonamiAppSaved;
+        citofonamiPushReady = localStorage.getItem('citofonami_admin_push_ready') === '1' || citofonamiPushReady;
+        citofonamiAdminMicReady = localStorage.getItem('citofonami_admin_mic_ready') === '1' || citofonamiAdminMicReady;
+      } catch (e) {}
+    }
+
+    function forceRenderSetupState() {
+      forceSetBadge(forceAppBadge, citofonamiAppSaved);
+      forceSetBadge(forcePushBadge, citofonamiPushReady);
+      forceSetBadge(forceMicBadge, citofonamiAdminMicReady);
+
+      const allOk = !!(citofonamiAppSaved && citofonamiPushReady && citofonamiAdminMicReady);
+
+      if (allOk) {
+        adminSetupBar.classList.add('auto-compact-ready');
+        setupMainMessage.innerHTML = '<strong>Pronto:</strong> App, notifiche e microfono attivi.';
+      } else {
+        adminSetupBar.classList.remove('auto-compact-ready');
+
+        if (!citofonamiAppSaved) {
+          setupMainMessage.innerHTML = '<strong>Da completare:</strong> salva l’App sul server.';
+        } else if (!citofonamiPushReady) {
+          setupMainMessage.innerHTML = '<strong>Da completare:</strong> attiva le notifiche.';
+        } else if (!citofonamiAdminMicReady) {
+          setupMainMessage.innerHTML = '<strong>Da completare:</strong> abilita il microfono admin.';
+        }
+      }
+
+      try {
+        if (typeof setupNeededAction !== 'undefined' && setupNeededAction) {
+          const missing = !citofonamiAppSaved ? 'app' : (!citofonamiPushReady ? 'push' : (!citofonamiAdminMicReady ? 'mic' : ''));
+          if (missing) {
+            setupNeededAction.classList.add('show');
+            setupNeededButton.dataset.step = missing;
+            setupNeededButton.textContent = missing === 'app' ? 'Salva App' : (missing === 'push' ? 'Attiva notifiche' : 'Attiva microfono');
+          } else {
+            setupNeededAction.classList.remove('show');
+          }
+        }
+      } catch (e) {}
+
+      forceRememberSetupState();
+    }
+
+    async function forceCheckAppSaved() {
+      try {
+        const code = (document.getElementById('qrCode') && document.getElementById('qrCode').value) ? document.getElementById('qrCode').value : 'DEMO';
+        const res = await fetch(`/api/citofonami/${encodeURIComponent(String(code).trim().toUpperCase())}/config`, { cache: 'no-store' });
+        const data = await res.json();
+        citofonamiAppSaved = !!(data && data.ok && data.config);
+      } catch (e) {
+        citofonamiAppSaved = false;
+      }
+      forceRenderSetupState();
+    }
+
+    async function forceCheckPushReady() {
+      try {
+        if (!('Notification' in window) || Notification.permission !== 'granted' || !('serviceWorker' in navigator)) {
+          citofonamiPushReady = false;
+          forceRenderSetupState();
+          return;
+        }
+
+        const regs = await navigator.serviceWorker.getRegistrations();
+        let found = false;
+
+        for (const reg of regs) {
+          if (reg && reg.pushManager) {
+            const sub = await reg.pushManager.getSubscription();
+            if (sub) {
+              found = true;
+              break;
+            }
+          }
+        }
+
+        citofonamiPushReady = found;
+      } catch (e) {
+        citofonamiPushReady = false;
+      }
+      forceRenderSetupState();
+    }
+
+    async function forceCheckMicReady() {
+      try {
+        if (citofonamiAdminMicStream && citofonamiAdminMicStream.active) {
+          citofonamiAdminMicReady = true;
+          forceRenderSetupState();
+          return;
+        }
+
+        if (navigator.permissions && navigator.permissions.query) {
+          try {
+            const status = await navigator.permissions.query({ name: 'microphone' });
+
+            // Importante: se il browser dice granted, il semaforo deve essere verde.
+            citofonamiAdminMicReady = status.state === 'granted';
+
+            status.onchange = () => {
+              citofonamiAdminMicReady = status.state === 'granted' || !!(citofonamiAdminMicStream && citofonamiAdminMicStream.active);
+              forceRenderSetupState();
+            };
+          } catch (permError) {
+            citofonamiAdminMicReady = !!(citofonamiAdminMicStream && citofonamiAdminMicStream.active);
+          }
+        } else {
+          // Fallback: se era già stato concesso in questa app/browser, mantieni verde.
+          try {
+            citofonamiAdminMicReady = localStorage.getItem('citofonami_admin_mic_ready') === '1' || !!(citofonamiAdminMicStream && citofonamiAdminMicStream.active);
+          } catch (e) {
+            citofonamiAdminMicReady = !!(citofonamiAdminMicStream && citofonamiAdminMicStream.active);
+          }
+        }
+      } catch (e) {
+        citofonamiAdminMicReady = false;
+      }
+
+      forceRenderSetupState();
+    }
+
+    async function forceRunInitialAdminChecks() {
+      forceLoadRememberedSetupState();
+      forceRenderSetupState();
+
+      await forceCheckAppSaved();
+      await forceCheckPushReady();
+      await forceCheckMicReady();
+
+      forceRenderSetupState();
+    }
+
+    function forceShowAnswerPanel(call) {
+      if (!call) return;
+
+      finalCurrentCall = call;
+
+      try {
+        if (typeof finalPopulateGrid === 'function') {
+          finalPopulateGrid();
+        }
+      } catch (e) {}
+
+      const savedName = call.contactName || '';
+      const name = savedName || (call.door && call.door.name ? call.door.name : 'Visitatore');
+      const count = call.callCount ? `${call.callCount} chiamate ricevute` : 'Nuova chiamata';
+
+      finalCallTitle.innerHTML = `${escapeHtml(name)} sta citofonando <span class="caller-counter">${escapeHtml(count)}</span>`;
+      finalCallSubtitle.textContent = 'Rispondi, invia in segreteria, chiudi o blocca.';
+
+      if (typeof finalCallerNameInput !== 'undefined') {
+        finalCallerNameInput.value = savedName;
+        finalCallerNameInput.placeholder = savedName ? 'Nome salvato' : 'Nome da salvare in rubrica';
+      }
+
+      finalCallOverlay.classList.add('active');
+      finalCallOverlay.classList.add('force-visible');
+
+      try {
+        if (typeof playCitofonamiDoorbell === 'function') playCitofonamiDoorbell();
+      } catch (e) {}
+    }
+
+    function forceHideAnswerPanel() {
+      if (typeof finalCallOverlay !== 'undefined') {
+        finalCallOverlay.classList.remove('active');
+        finalCallOverlay.classList.remove('force-visible');
+      }
+    }
+
+    async function forceFetchPendingAndShow() {
+      try {
+        const code = (document.getElementById('qrCode') && document.getElementById('qrCode').value) ? document.getElementById('qrCode').value : 'DEMO';
+        const res = await fetch(`/api/citofonami/${encodeURIComponent(String(code).trim().toUpperCase())}/calls/pending`, { cache: 'no-store' });
+        const data = await res.json();
+
+        if (data && data.ok && Array.isArray(data.calls) && data.calls.length) {
+          forceShowAnswerPanel(data.calls[0]);
+        }
+      } catch (e) {
+        console.warn('forceFetchPendingAndShow error', e);
+      }
+    }
+
+    async function forceLoadCallFromNotificationUrl() {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const callId = params.get('call');
+        const code = params.get('code') || ((document.getElementById('qrCode') && document.getElementById('qrCode').value) ? document.getElementById('qrCode').value : 'DEMO');
+
+        if (!callId) return false;
+
+        const res = await fetch(`/api/citofonami/${encodeURIComponent(String(code).trim().toUpperCase())}/calls/${encodeURIComponent(callId)}`, { cache: 'no-store' });
+        const data = await res.json();
+
+        if (data && data.ok && data.call) {
+          forceShowAnswerPanel(data.call);
+          return true;
+        }
+      } catch (e) {
+        console.warn('forceLoadCallFromNotificationUrl error', e);
+      }
+      return false;
     }
 
     const defaults = {
@@ -2795,6 +3083,12 @@
 
     setupNeededButton.addEventListener('click', handleNeededSetupAction);
     runAutoSetupChecks();
+
+
+    forceRunInitialAdminChecks();
+    forceLoadCallFromNotificationUrl();
+    forceFetchPendingAndShow();
+    setInterval(forceFetchPendingAndShow, 2000);
 
     loadConfig();
     setTimeout(updateQrPreview, 500);
