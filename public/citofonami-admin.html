@@ -4534,5 +4534,248 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_FORCE_ADMIN_OFFER_20260601 */
+(function () {
+  let peer = null;
+  let stream = null;
+  let answerTimer = null;
+  let iceTimer = null;
+  const seenIce = new Set();
+
+  function code() {
+    try {
+      if (typeof finalGetCode === "function") return finalGetCode();
+    } catch (e) {}
+
+    const input = document.getElementById("qrCode");
+    return String((input && input.value) || "DEMO").trim().toUpperCase();
+  }
+
+  function currentCallId() {
+    try {
+      if (typeof finalCurrentCall !== "undefined" && finalCurrentCall && finalCurrentCall.id) {
+        return finalCurrentCall.id;
+      }
+
+      if (typeof currentIncomingCall !== "undefined" && currentIncomingCall && currentIncomingCall.id) {
+        return currentIncomingCall.id;
+      }
+    } catch (e) {}
+
+    const match = (document.body.innerText || "").match(/call_[0-9]+_[a-z0-9]+/i);
+    return match ? match[0] : "";
+  }
+
+  function setAdminAudioState(text, ok) {
+    try {
+      if (typeof adminConnectedState !== "undefined" && adminConnectedState) {
+        adminConnectedState.style.display = "block";
+        adminConnectedState.innerHTML = text;
+      }
+
+      if (typeof setState === "function") {
+        setState(text.replace(/<[^>]*>/g, ""), ok !== false);
+      }
+    } catch (e) {}
+  }
+
+  function ensureRemoteAudio() {
+    let audio = document.getElementById("citofonamiAdminForceRemoteAudio");
+
+    if (!audio) {
+      audio = document.createElement("audio");
+      audio.id = "citofonamiAdminForceRemoteAudio";
+      audio.autoplay = true;
+      audio.playsInline = true;
+      audio.controls = false;
+      document.body.appendChild(audio);
+    }
+
+    return audio;
+  }
+
+  async function postIce(callId, candidate) {
+    try {
+      await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/webrtc/ice`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          role: "admin",
+          candidate
+        })
+      });
+    } catch (error) {
+      console.warn("Admin force postIce error:", error);
+    }
+  }
+
+  async function pollAnswer(callId) {
+    try {
+      if (!peer || peer.remoteDescription) return;
+
+      const res = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/webrtc/answer?t=${Date.now()}`, {
+        cache: "no-store"
+      });
+
+      const data = await res.json();
+
+      if (data && data.ok && data.answer) {
+        await peer.setRemoteDescription(data.answer);
+
+        if (answerTimer) {
+          clearInterval(answerTimer);
+          answerTimer = null;
+        }
+
+        setAdminAudioState("Audio collegato. Puoi parlare con l’utente.", true);
+      }
+    } catch (error) {
+      console.warn("Admin force pollAnswer error:", error);
+    }
+  }
+
+  async function pollUserIce(callId) {
+    try {
+      if (!peer) return;
+
+      const res = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/webrtc/ice?role=admin&t=${Date.now()}`, {
+        cache: "no-store"
+      });
+
+      const data = await res.json();
+
+      if (!data || !data.ok || !Array.isArray(data.candidates)) return;
+
+      for (const candidate of data.candidates) {
+        const key = JSON.stringify(candidate);
+        if (seenIce.has(key)) continue;
+
+        seenIce.add(key);
+
+        try {
+          await peer.addIceCandidate(candidate);
+        } catch (error) {
+          console.warn("Admin force addIceCandidate error:", error);
+        }
+      }
+    } catch (error) {
+      console.warn("Admin force pollUserIce error:", error);
+    }
+  }
+
+  async function forceCreateAdminOffer() {
+    const callId = currentCallId();
+
+    if (!callId) {
+      setAdminAudioState("Chiamata accettata, ma callId non trovata per creare l’audio.", false);
+      return;
+    }
+
+    try {
+      setAdminAudioState("Creo collegamento audio admin…", true);
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Microfono non supportato da questo browser.");
+      }
+
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        },
+        video: false
+      });
+
+      try {
+        window.citofonamiAdminMicStream = stream;
+        window.citofonamiAdminMicReady = true;
+        localStorage.setItem("citofonami_admin_mic_ready", "1");
+      } catch (e) {}
+
+      peer = new RTCPeerConnection({
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" }
+        ]
+      });
+
+      stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+
+      peer.ontrack = function (event) {
+        const audio = ensureRemoteAudio();
+        audio.srcObject = event.streams[0];
+        audio.play().catch(() => null);
+      };
+
+      peer.onicecandidate = function (event) {
+        if (event.candidate) {
+          postIce(callId, event.candidate);
+        }
+      };
+
+      peer.onconnectionstatechange = function () {
+        const state = peer ? peer.connectionState : "";
+
+        if (state === "connected") {
+          setAdminAudioState("Conversazione attiva. Audio collegato.", true);
+        }
+
+        if (state === "failed" || state === "disconnected") {
+          setAdminAudioState("Audio non stabile. Potrebbe servire un server TURN.", false);
+        }
+      };
+
+      const offer = await peer.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: false
+      });
+
+      await peer.setLocalDescription(offer);
+
+      const save = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/webrtc/offer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          offer: peer.localDescription
+        })
+      });
+
+      const saved = await save.json();
+
+      if (!save.ok || !saved.ok) {
+        throw new Error((saved && saved.error) || "Offer non salvata");
+      }
+
+      setAdminAudioState("Microfono admin attivo. Offerta audio creata. Attendo Parla ora dall’utente.", true);
+
+      if (answerTimer) clearInterval(answerTimer);
+      if (iceTimer) clearInterval(iceTimer);
+
+      answerTimer = setInterval(() => pollAnswer(callId), 900);
+      iceTimer = setInterval(() => pollUserIce(callId), 900);
+    } catch (error) {
+      console.error("forceCreateAdminOffer error:", error);
+      setAdminAudioState("Errore creazione audio admin: " + (error.message || error), false);
+    }
+  }
+
+  document.addEventListener("click", function (event) {
+    const answer = event.target && event.target.closest
+      ? event.target.closest("#finalAnswerButton, #answerCallButton")
+      : null;
+
+    if (!answer) return;
+
+    setTimeout(forceCreateAdminOffer, 250);
+    setTimeout(forceCreateAdminOffer, 1400);
+  }, true);
+
+  window.citofonamiForceCreateAdminOffer = forceCreateAdminOffer;
+})();
+</script>
+
 </body>
 </html>
