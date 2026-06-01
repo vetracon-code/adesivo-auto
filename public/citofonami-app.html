@@ -5884,5 +5884,275 @@ body.citofonami-final-ui-ready [id*="grille"] {
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_ANDROID_IMMEDIATE_MIC_ON_TALK_20260601 */
+(function () {
+  let micLock = false;
+  let localStream = null;
+  let peer = null;
+  let iceTimer = null;
+  const seenIce = new Set();
+
+  function getCode() {
+    const parts = location.pathname.split("/").filter(Boolean);
+    return String(parts[parts.length - 1] || "DEMO").trim().toUpperCase();
+  }
+
+  function getCallId() {
+    return (
+      sessionStorage.getItem("citofonami_active_call_id") ||
+      sessionStorage.getItem("citofonami_live_call_id") ||
+      (window.CITOFONAMI_FORCE_STATE && window.CITOFONAMI_FORCE_STATE.callId) ||
+      window.citofonamiLiveCallId ||
+      ""
+    );
+  }
+
+  function setStatus(text) {
+    const el = document.getElementById("citofonamiFinalStatus");
+    if (el) el.textContent = text || "";
+  }
+
+  function setTalkButton(text, disabled) {
+    const btn = document.getElementById("citofonamiFinalTalkNowButton");
+    if (!btn) return;
+    btn.textContent = text;
+    btn.disabled = !!disabled;
+  }
+
+  function ensureRemoteAudio() {
+    let audio = document.getElementById("citofonamiUserRemoteAudio");
+
+    if (!audio) {
+      audio = document.createElement("audio");
+      audio.id = "citofonamiUserRemoteAudio";
+      audio.autoplay = true;
+      audio.playsInline = true;
+      audio.controls = false;
+      audio.style.cssText = "position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;";
+      document.body.appendChild(audio);
+    }
+
+    audio.autoplay = true;
+    audio.playsInline = true;
+    audio.controls = false;
+    audio.muted = false;
+    audio.volume = 1;
+
+    return audio;
+  }
+
+  async function requestMicImmediately() {
+    setStatus("Richiesta microfono…");
+    setTalkButton("Autorizza microfono", true);
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error("Microfono non supportato su questo dispositivo");
+    }
+
+    // Deve partire direttamente dal tocco su Parla ora.
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      },
+      video: false
+    });
+
+    localStream = stream;
+    setStatus("Microfono attivo. Collegamento…");
+    setTalkButton("Microfono attivo", true);
+
+    return stream;
+  }
+
+  async function waitForOffer(callId) {
+    setStatus("Microfono attivo. Attendo collegamento admin…");
+
+    for (let i = 0; i < 40; i++) {
+      const data = await fetch(`/api/citofonami/${encodeURIComponent(getCode())}/calls/${encodeURIComponent(callId)}/webrtc/offer?t=${Date.now()}`, {
+        cache: "no-store"
+      }).then(r => r.json()).catch(() => null);
+
+      if (data && data.ok && data.offer) {
+        return data.offer;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 400));
+    }
+
+    throw new Error("Admin non ha ancora creato l'audio");
+  }
+
+  async function pollAdminIce(callId) {
+    if (!peer) return;
+
+    try {
+      const data = await fetch(`/api/citofonami/${encodeURIComponent(getCode())}/calls/${encodeURIComponent(callId)}/webrtc/ice?role=user&t=${Date.now()}`, {
+        cache: "no-store"
+      }).then(r => r.json());
+
+      if (!data.ok || !Array.isArray(data.candidates)) return;
+
+      for (const candidate of data.candidates) {
+        const key = JSON.stringify(candidate);
+        if (seenIce.has(key)) continue;
+        seenIce.add(key);
+
+        try {
+          await peer.addIceCandidate(candidate);
+        } catch(e) {}
+      }
+    } catch(e) {}
+  }
+
+  async function startAndroidTalkNow(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    }
+
+    if (micLock) return;
+    micLock = true;
+
+    try {
+      const callId = getCallId();
+
+      if (!callId) {
+        throw new Error("Chiamata non trovata");
+      }
+
+      // 1. PRIMA: microfono immediato dal gesto utente.
+      const stream = await requestMicImmediately();
+
+      // 2. POI: attendo la offer admin.
+      const offer = await waitForOffer(callId);
+
+      peer = new RTCPeerConnection({
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" }
+        ]
+      });
+
+      stream.getTracks().forEach(track => peer.addTrack(track, stream));
+
+      const audio = ensureRemoteAudio();
+
+      peer.ontrack = (event) => {
+        const remoteStream = event.streams && event.streams[0];
+        if (!remoteStream) return;
+
+        audio.srcObject = remoteStream;
+        audio.muted = false;
+        audio.volume = 1;
+        audio.play().catch(() => null);
+
+        setStatus("Audio collegato. Puoi parlare.");
+        setTalkButton("Collegato", true);
+      };
+
+      peer.onicecandidate = (event) => {
+        if (!event.candidate) return;
+
+        fetch(`/api/citofonami/${encodeURIComponent(getCode())}/calls/${encodeURIComponent(callId)}/webrtc/ice`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+          body: JSON.stringify({
+            role: "user",
+            candidate: event.candidate
+          })
+        }).catch(() => null);
+      };
+
+      peer.onconnectionstatechange = () => {
+        const state = peer ? peer.connectionState : "";
+
+        if (state === "connected") {
+          setStatus("Collegato. Puoi parlare.");
+          setTalkButton("Collegato", true);
+        }
+
+        if (state === "failed" || state === "disconnected") {
+          setStatus("Connessione audio instabile. Riprova.");
+          setTalkButton("Riprova", false);
+          micLock = false;
+        }
+      };
+
+      await peer.setRemoteDescription(offer);
+
+      const answer = await peer.createAnswer();
+      await peer.setLocalDescription(answer);
+
+      const saved = await fetch(`/api/citofonami/${encodeURIComponent(getCode())}/calls/${encodeURIComponent(callId)}/webrtc/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ answer: peer.localDescription })
+      }).then(r => r.json());
+
+      if (!saved.ok) {
+        throw new Error(saved.error || "Answer non salvata");
+      }
+
+      iceTimer = setInterval(() => pollAdminIce(callId), 700);
+      pollAdminIce(callId);
+
+      setStatus("Collegamento audio in corso…");
+      setTalkButton("Parla", true);
+    } catch (error) {
+      console.error("startAndroidTalkNow error:", error);
+
+      setStatus("Microfono/audio non attivo: " + (error.message || error));
+      setTalkButton("Parla ora", false);
+
+      micLock = false;
+    }
+  }
+
+  function wireTalkButton() {
+    const btn = document.getElementById("citofonamiFinalTalkNowButton");
+    if (!btn || btn.dataset.immediateMicWired === "1") return;
+
+    const clone = btn.cloneNode(true);
+    clone.id = "citofonamiFinalTalkNowButton";
+    clone.dataset.immediateMicWired = "1";
+    clone.textContent = "Parla ora";
+    clone.disabled = false;
+
+    btn.parentNode.replaceChild(clone, btn);
+
+    // Solo pointerdown: gesto più affidabile su Android.
+    clone.addEventListener("pointerdown", startAndroidTalkNow, true);
+  }
+
+  const observer = new MutationObserver(wireTalkButton);
+
+  function boot() {
+    wireTalkButton();
+
+    if (document.body && !window.__citofonamiAndroidMicObserver) {
+      window.__citofonamiAndroidMicObserver = true;
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
+
+  setInterval(wireTalkButton, 500);
+
+  window.citofonamiAndroidImmediateMicTalk = startAndroidTalkNow;
+})();
+</script>
+
 </body>
 </html>
