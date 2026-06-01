@@ -3643,7 +3643,8 @@ app.post('/api/log-contact-message', async (req, res) => {
         const unreadCount = unreadRes.rows[0]?.unread_count || 0;
 
         for (const sub of subs.rows) {
-          const payload = JSON.stringify({
+          // CITOFONAMI_SERVER_PUSH_TARGET_ADMIN_CLEAN_20260601
+const payload = JSON.stringify({
             title,
             body,
             url: targetUrl,
@@ -19902,7 +19903,7 @@ app.post('/api/citofonami/:code/ring', express.json({ limit: '1mb' }), async (re
     title: 'Citofonami',
     body: `${doorName}: qualcuno sta suonando.`,
     tag: 'citofonami-ring-' + code,
-    url: '/citofonami-admin'
+    url: '/citofonami-admin-clean'
   };
 
   const pushResults = [];
@@ -20557,7 +20558,7 @@ app.post('/api/citofonami/:code/ring-v2', express.json({ limit: '1mb' }), async 
     title: 'Citofonami',
     body: `${displayDoorName}: qualcuno sta suonando.`,
     tag: 'citofonami-ring-' + code,
-    url: `/citofonami-admin?code=${encodeURIComponent(code)}&call=${encodeURIComponent(callId)}`
+    url: `/citofonami-admin-clean?code=${encodeURIComponent(code)}&call=${encodeURIComponent(callId)}`
   };
 
   const pushResults = [];

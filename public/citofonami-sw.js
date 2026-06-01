@@ -53,7 +53,7 @@ self.addEventListener('push', (event) => {
     tag: data.tag || 'citofonami-ring',
     requireInteraction: true,
     data: {
-      url: data.url || '/citofonami-admin-clean'
+      url: forceCitofonamiAdminCleanUrl(data.url || '/citofonami-admin-clean')
     },
     actions: [
       {
@@ -66,12 +66,25 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(title, enhanceCitofonamiNotificationOptions(options)));
 });
 
+// CITOFONAMI_SW_FORCE_ADMIN_CLEAN_URL_20260601
+function forceCitofonamiAdminCleanUrl(url) {
+  let next = String(url || '/citofonami-admin-clean');
+
+  if (next.includes('/citofonami-admin') && !next.includes('/citofonami-admin-clean')) {
+    next = next.replace('/citofonami-admin', '/citofonami-admin-clean');
+  }
+
+  if (next === '/citofonami-admin') {
+    next = '/citofonami-admin-clean';
+  }
+
+  return next;
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  const url = event.notification.data && event.notification.data.url
-    ? event.notification.data.url
-    : '/citofonami-admin-clean';
+  const url = forceCitofonamiAdminCleanUrl(event.notification.data && event.notification.data.url ? event.notification.data.url : '/citofonami-admin-clean');
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
