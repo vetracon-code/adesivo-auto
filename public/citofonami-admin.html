@@ -1362,6 +1362,98 @@
       }
     }
 
+  
+    /* CITOFONAMI_AUTO_SETUP_MINIMAL */
+    .admin-setup-bar.auto-minimal {
+      padding: 10px 12px;
+      border-radius: 20px;
+    }
+
+    .setup-mini-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .setup-mini-badges {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .setup-mini-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border-radius: 999px;
+      padding: 6px 8px;
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: .02em;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.055);
+      color: var(--muted);
+    }
+
+    .setup-mini-badge.ok {
+      color: var(--green);
+      background: rgba(57,215,123,.08);
+      border-color: rgba(57,215,123,.22);
+    }
+
+    .setup-mini-badge.ko {
+      color: var(--red);
+      background: rgba(255,98,98,.08);
+      border-color: rgba(255,98,98,.22);
+    }
+
+    .setup-mini-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 10px currentColor;
+    }
+
+    .setup-needed-action {
+      display: none;
+      width: 100%;
+      margin-top: 10px;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    .setup-needed-action.show {
+      display: grid;
+    }
+
+    .setup-needed-action button {
+      min-height: 48px;
+      border-radius: 16px;
+      font-size: 14px;
+      font-weight: 900;
+      box-shadow: none;
+    }
+
+    .setup-needed-action button.urgent {
+      animation: urgentPulse 1.7s infinite;
+      background: linear-gradient(135deg, #fff2be, #d7b46a);
+      color: #211807;
+    }
+
+    .admin-setup-bar.auto-minimal .setup-grid,
+    .admin-setup-bar.auto-minimal .setup-actions {
+      display: none !important;
+    }
+
+    .admin-setup-bar.auto-minimal .setup-main-message {
+      margin: 0;
+      font-size: 13px;
+    }
+
   </style>
 </head>
 
@@ -1374,6 +1466,18 @@
           <strong>Prima configurazione:</strong> salva l’App sul server, poi attiva notifiche e microfono.
         </p>
         <button class="setup-toggle-button" id="setupToggleButton" type="button">Nascondi</button>
+      </div>
+
+      <div class="setup-mini-row">
+        <div class="setup-mini-badges" id="setupMiniBadges">
+          <span class="setup-mini-badge ko" id="miniAppBadge"><i class="setup-mini-dot"></i>App</span>
+          <span class="setup-mini-badge ko" id="miniPushBadge"><i class="setup-mini-dot"></i>Notifiche</span>
+          <span class="setup-mini-badge ko" id="miniMicBadge"><i class="setup-mini-dot"></i>Microfono</span>
+        </div>
+      </div>
+
+      <div class="setup-needed-action" id="setupNeededAction">
+        <button class="urgent" id="setupNeededButton" type="button">Completa configurazione</button>
       </div>
 
       <div class="setup-grid">
@@ -1754,6 +1858,7 @@
         setupMainMessage.innerHTML = '<strong>Ultimo passaggio:</strong> abilita il microfono admin per poter rispondere alle chiamate.';
       }
       updateSetupCollapseFinal();
+      renderAutoSetupMinimal();
     }
 
     async function enableAdminMicrophone() {
@@ -2030,6 +2135,183 @@
         updateSetupBar();
         finalRefreshSetupCollapse();
         setState('Microfono admin non attivo: ' + e.message, false);
+      }
+    }
+
+
+    function setMiniBadge(el, ok) {
+      if (!el) return;
+      el.classList.toggle('ok', !!ok);
+      el.classList.toggle('ko', !ok);
+    }
+
+    function getNextMissingSetupStep() {
+      if (!citofonamiAppSaved) {
+        return {
+          key: 'app',
+          label: 'Salva App',
+          message: '<strong>Completa configurazione:</strong> salva l’App sul server.'
+        };
+      }
+
+      if (!citofonamiPushReady) {
+        return {
+          key: 'push',
+          label: 'Attiva notifiche',
+          message: '<strong>Completa configurazione:</strong> attiva le notifiche per ricevere il campanello.'
+        };
+      }
+
+      if (!citofonamiAdminMicReady) {
+        return {
+          key: 'mic',
+          label: 'Attiva microfono',
+          message: '<strong>Completa configurazione:</strong> abilita il microfono admin per rispondere.'
+        };
+      }
+
+      return null;
+    }
+
+    function renderAutoSetupMinimal() {
+      try {
+        adminSetupBar.classList.add('auto-minimal');
+
+        setMiniBadge(miniAppBadge, citofonamiAppSaved);
+        setMiniBadge(miniPushBadge, citofonamiPushReady);
+        setMiniBadge(miniMicBadge, citofonamiAdminMicReady);
+
+        const missing = getNextMissingSetupStep();
+
+        if (!missing) {
+          setupMainMessage.innerHTML = '<strong>Citofonami pronto:</strong> App, notifiche e microfono sono attivi.';
+          setupNeededAction.classList.remove('show');
+          if (typeof setupToggleButton !== 'undefined') setupToggleButton.textContent = 'Apri';
+          adminSetupBar.classList.add('setup-collapsed');
+          return;
+        }
+
+        setupMainMessage.innerHTML = missing.message;
+        setupNeededButton.textContent = missing.label;
+        setupNeededButton.dataset.step = missing.key;
+        setupNeededAction.classList.add('show');
+        adminSetupBar.classList.remove('setup-collapsed');
+      } catch (error) {
+        console.warn('renderAutoSetupMinimal error:', error);
+      }
+    }
+
+    async function autoCheckAppSaved() {
+      try {
+        const code = getCode ? getCode() : 'DEMO';
+        const res = await fetch(`/api/citofonami/${encodeURIComponent(code)}/config`, { cache: 'no-store' });
+        const data = await res.json();
+
+        citofonamiAppSaved = !!(data && data.ok && data.config);
+      } catch (error) {
+        citofonamiAppSaved = false;
+      }
+
+      renderAutoSetupMinimal();
+    }
+
+    async function autoCheckPushReady() {
+      try {
+        if (!('serviceWorker' in navigator) || !('Notification' in window) || Notification.permission !== 'granted') {
+          citofonamiPushReady = false;
+          renderAutoSetupMinimal();
+          return;
+        }
+
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        let found = false;
+
+        for (const registration of registrations) {
+          if (registration && registration.pushManager) {
+            const sub = await registration.pushManager.getSubscription();
+            if (sub) {
+              found = true;
+              break;
+            }
+          }
+        }
+
+        citofonamiPushReady = found;
+      } catch (error) {
+        citofonamiPushReady = false;
+      }
+
+      renderAutoSetupMinimal();
+    }
+
+    async function autoCheckMicrophoneReady() {
+      try {
+        if (citofonamiAdminMicStream && citofonamiAdminMicStream.active) {
+          citofonamiAdminMicReady = true;
+          renderAutoSetupMinimal();
+          return;
+        }
+
+        // Alcuni browser Android/Chrome supportano Permissions API per microphone.
+        // Se risulta granted, il semaforo può essere verde; lo stream verrà riaperto al bisogno.
+        if (navigator.permissions && navigator.permissions.query) {
+          try {
+            const st = await navigator.permissions.query({ name: 'microphone' });
+            citofonamiAdminMicReady = st.state === 'granted';
+
+            st.onchange = () => {
+              citofonamiAdminMicReady = st.state === 'granted' || !!(citofonamiAdminMicStream && citofonamiAdminMicStream.active);
+              renderAutoSetupMinimal();
+            };
+          } catch (permissionError) {
+            citofonamiAdminMicReady = !!(citofonamiAdminMicStream && citofonamiAdminMicStream.active);
+          }
+        } else {
+          citofonamiAdminMicReady = !!(citofonamiAdminMicStream && citofonamiAdminMicStream.active);
+        }
+      } catch (error) {
+        citofonamiAdminMicReady = false;
+      }
+
+      renderAutoSetupMinimal();
+    }
+
+    async function runAutoSetupChecks() {
+      renderAutoSetupMinimal();
+      await autoCheckAppSaved();
+      await autoCheckPushReady();
+      await autoCheckMicrophoneReady();
+      renderAutoSetupMinimal();
+    }
+
+    async function handleNeededSetupAction() {
+      const step = setupNeededButton.dataset.step;
+
+      if (step === 'app') {
+        await saveConfig();
+        citofonamiAppSaved = true;
+        renderAutoSetupMinimal();
+        await autoCheckPushReady();
+        await autoCheckMicrophoneReady();
+        return;
+      }
+
+      if (step === 'push') {
+        await enableAdminNotifications();
+        await autoCheckPushReady();
+        renderAutoSetupMinimal();
+        return;
+      }
+
+      if (step === 'mic') {
+        if (typeof finalEnableAdminMic === 'function') {
+          await finalEnableAdminMic();
+        } else if (typeof enableAdminMicrophone === 'function') {
+          await enableAdminMicrophone();
+        }
+        await autoCheckMicrophoneReady();
+        renderAutoSetupMinimal();
+        return;
       }
     }
 
@@ -2510,6 +2792,9 @@
     finalLoadCallFromUrl();
     finalFetchPendingCalls();
     finalCallPoll = setInterval(finalFetchPendingCalls, 2500);
+
+    setupNeededButton.addEventListener('click', handleNeededSetupAction);
+    runAutoSetupChecks();
 
     loadConfig();
     setTimeout(updateQrPreview, 500);
