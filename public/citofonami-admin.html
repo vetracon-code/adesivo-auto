@@ -5088,5 +5088,93 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_ADMIN_CLOSE_RELEASE_SCROLL_20260601 */
+(function () {
+  function restoreAdminScroll() {
+    try {
+      document.documentElement.style.overflow = "auto";
+      document.documentElement.style.position = "";
+      document.documentElement.style.height = "auto";
+      document.body.style.overflow = "auto";
+      document.body.style.position = "";
+      document.body.style.height = "auto";
+      document.body.style.touchAction = "auto";
+    } catch (e) {}
+  }
+
+  function releaseAdminCallPanelAfterClose() {
+    try {
+      restoreAdminScroll();
+
+      if (typeof finalCallOverlay !== "undefined" && finalCallOverlay) {
+        finalCallOverlay.classList.remove("active");
+        finalCallOverlay.classList.remove("force-visible");
+        finalCallOverlay.classList.remove("temporarily-hidden");
+        finalCallOverlay.classList.remove("call-answered");
+        finalCallOverlay.style.display = "none";
+      }
+
+      const overlay = document.getElementById("finalCallOverlay");
+      if (overlay) {
+        overlay.classList.remove("active");
+        overlay.classList.remove("force-visible");
+        overlay.classList.remove("temporarily-hidden");
+        overlay.classList.remove("call-answered");
+        overlay.style.display = "none";
+      }
+
+      const openBtn = document.getElementById("openHiddenCallButton");
+      if (openBtn) {
+        openBtn.classList.remove("show");
+        openBtn.style.display = "none";
+      }
+
+      // Se serve salvare il nome, lascio/mostro la rubrica o la sezione contatti, non il pannello chiamata bloccante.
+      const contactInput =
+        document.getElementById("finalCallerNameInput") ||
+        document.querySelector("input[placeholder*='Nome'], input[placeholder*='nome']");
+
+      if (contactInput) {
+        try {
+          contactInput.scrollIntoView({ behavior: "smooth", block: "center" });
+          setTimeout(() => contactInput.focus(), 500);
+        } catch (e) {}
+      }
+
+      if (typeof setState === "function") {
+        setState("Conversazione chiusa. Puoi continuare a configurare l’App.", true);
+      }
+    } catch (error) {
+      console.warn("releaseAdminCallPanelAfterClose error:", error);
+    }
+  }
+
+  // Intercetto il pulsante Chiudi e, dopo la chiusura server, libero comunque la schermata.
+  document.addEventListener("click", function (event) {
+    const close = event.target && event.target.closest
+      ? event.target.closest("#finalCloseButton, #closeCallButton")
+      : null;
+
+    if (!close) return;
+
+    setTimeout(releaseAdminCallPanelAfterClose, 450);
+    setTimeout(releaseAdminCallPanelAfterClose, 1300);
+    setTimeout(restoreAdminScroll, 2200);
+  }, true);
+
+  // Pulsante Esc ripristina scrolling/pannello se resta appeso.
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      releaseAdminCallPanelAfterClose();
+    }
+  });
+
+  window.citofonamiReleaseAdminCallPanelAfterClose = releaseAdminCallPanelAfterClose;
+  window.citofonamiRestoreAdminScroll = restoreAdminScroll;
+})();
+</script>
+
 </body>
 </html>

@@ -19627,6 +19627,14 @@ function normalizeCitofonamiCode(code) {
   return String(code || 'DEMO').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '') || 'DEMO';
 }
 
+
+// CITOFONAMI_REQUIRE_LOCATION_DEFAULT_OFF_NORMALIZER
+function normalizeCitofonamiRequireLocation(config) {
+  const next = config || {};
+  next.requireLocation = next.requireLocation === true || next.requireLocation === 'true';
+  return next;
+}
+
 function defaultCitofonamiConfig(code) {
   return {
     firstName: 'Mario',
@@ -19644,7 +19652,7 @@ function defaultCitofonamiConfig(code) {
     enabled: true,
     pushEnabled: true,
     fallbackEnabled: true,
-    requireLocation: true,
+    requireLocation: false,
     doors: [
       { name: 'Mario Rossi', description: 'Citofono principale' }
     ],
@@ -19718,7 +19726,7 @@ app.get('/api/citofonami/:code/config', (req, res) => {
   res.json({
     ok: true,
     code,
-    config
+    config: normalizeCitofonamiRequireLocation(config)
   });
 });
 
@@ -19768,7 +19776,7 @@ app.post('/api/citofonami/:code/config', express.json({ limit: '1mb' }), (req, r
   res.json({
     ok: true,
     code,
-    config
+    config: normalizeCitofonamiRequireLocation(config)
   });
 });
 
@@ -19838,7 +19846,7 @@ app.post('/api/citofonami/:code/ring', express.json({ limit: '1mb' }), async (re
       return res.status(400).json({
         ok: false,
         error: 'Posizione richiesta',
-        requireLocation: true,
+        requireLocation: false,
         firstCallFree: false,
         previousCallCount
       });
@@ -20478,7 +20486,7 @@ app.post('/api/citofonami/:code/ring-v2', express.json({ limit: '1mb' }), async 
       return res.status(400).json({
         ok: false,
         error: 'Posizione richiesta',
-        requireLocation: true,
+        requireLocation: false,
         previousCallCount
       });
     }
