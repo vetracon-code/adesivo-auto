@@ -280,6 +280,63 @@
         font-size: 29px;
       }
     }
+  
+    .voicemail-panel {
+      display: none;
+      position: relative;
+      z-index: 1;
+      margin-top: 14px;
+      border-radius: 18px;
+      padding: 14px;
+      background: rgba(215,180,106,.10);
+      border: 1px solid rgba(215,180,106,.24);
+      color: var(--text);
+    }
+
+    .voicemail-panel.open {
+      display: block;
+    }
+
+    .voicemail-panel strong {
+      display: block;
+      font-size: 16px;
+      margin-bottom: 6px;
+    }
+
+    .voicemail-panel p {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .voicemail-actions {
+      display: grid;
+      gap: 9px;
+    }
+
+    .voicemail-actions button {
+      width: 100%;
+      border: 1px solid rgba(215,180,106,.34);
+      border-radius: 15px;
+      padding: 13px;
+      background: rgba(255,255,255,.08);
+      color: var(--text);
+      font: inherit;
+      font-weight: 850;
+    }
+
+    .voicemail-actions button.primary {
+      background: linear-gradient(135deg, #fff1bd, #d7b46a);
+      color: #211807;
+    }
+
+    .voicemail-panel audio {
+      width: 100%;
+      margin: 10px 0;
+      display: none;
+    }
+
   </style>
 </head>
 
@@ -307,6 +364,18 @@
 
       <div class="status-box" id="statusBox">
         Premi il pulsante per chiamare.
+      </div>
+
+
+      <div class="voicemail-panel" id="voicemailPanel">
+        <strong>Non riesco a rispondere in questo momento.</strong>
+        <p>Vuoi lasciarmi un messaggio vocale?</p>
+        <audio id="voicemailPreview" controls></audio>
+        <div class="voicemail-actions">
+          <button class="primary" id="recordVoicemailButton" type="button">Registra</button>
+          <button id="playVoicemailButton" type="button">Riascolta</button>
+          <button id="sendVoicemailButton" type="button">Invia</button>
+        </div>
       </div>
 
       <div class="footer">
@@ -484,6 +553,122 @@
     }
 
     loadConfig();
+  
+    let activeCallId = null;
+    let voicemailRecorder = null;
+    let voicemailChunks = [];
+    let voicemailBlob = null;
+
+    function openVoicemailPanel(callId) {
+      activeCallId = callId;
+      voicemailPanel.classList.add('open');
+      setStatus('L’admin non può rispondere ora. Puoi lasciare un messaggio vocale.', 'ok');
+    }
+
+    async function startVoicemailRecording() {
+      try {
+        voicemailChunks = [];
+        voicemailBlob = null;
+
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        voicemailRecorder = new MediaRecorder(stream);
+
+        voicemailRecorder.ondataavailable = (event) => {
+          if (event.data && event.data.size) {
+            voicemailChunks.push(event.data);
+          }
+        };
+
+        voicemailRecorder.onstop = () => {
+          voicemailBlob = new Blob(voicemailChunks, { type: voicemailRecorder.mimeType || 'audio/webm' });
+          voicemailPreview.src = URL.createObjectURL(voicemailBlob);
+          voicemailPreview.style.display = 'block';
+          setStatus('Registrazione pronta. Puoi riascoltarla o inviarla.', 'ok');
+          stream.getTracks().forEach(track => track.stop());
+        };
+
+        voicemailRecorder.start();
+        recordVoicemailButton.textContent = 'Stop registrazione';
+        setStatus('Registrazione in corso…');
+
+        recordVoicemailButton.onclick = stopVoicemailRecording;
+      } catch (error) {
+        console.error(error);
+        setStatus('Non riesco ad accedere al microfono.', 'ko');
+      }
+    }
+
+    function stopVoicemailRecording() {
+      if (voicemailRecorder && voicemailRecorder.state !== 'inactive') {
+        voicemailRecorder.stop();
+      }
+
+      recordVoicemailButton.textContent = 'Registra di nuovo';
+      recordVoicemailButton.onclick = startVoicemailRecording;
+    }
+
+    function playVoicemail() {
+      if (!voicemailBlob || !voicemailPreview.src) {
+        setStatus('Prima registra un messaggio.', 'ko');
+        return;
+      }
+
+      voicemailPreview.play().catch(() => null);
+    }
+
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    async function sendVoicemail() {
+      if (!activeCallId) {
+        setStatus('Chiamata non trovata.', 'ko');
+        return;
+      }
+
+      if (!voicemailBlob) {
+        setStatus('Prima registra un messaggio.', 'ko');
+        return;
+      }
+
+      try {
+        setStatus('Invio messaggio vocale…');
+
+        const audioBase64 = await blobToBase64(voicemailBlob);
+
+        const res = await fetch(`/api/citofonami/${encodeURIComponent(code)}/calls/${encodeURIComponent(activeCallId)}/voicemail`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            callerId: getCitofonamiCallerId(),
+            audioBase64,
+            mimeType: voicemailBlob.type || 'audio/webm'
+          })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || 'Invio non riuscito');
+        }
+
+        setStatus('Messaggio vocale inviato.', 'ok');
+        voicemailPanel.classList.remove('open');
+      } catch (error) {
+        console.error(error);
+        setStatus('Errore invio messaggio vocale: ' + error.message, 'ko');
+      }
+    }
+
+    recordVoicemailButton.onclick = startVoicemailRecording;
+    playVoicemailButton.addEventListener('click', playVoicemail);
+    sendVoicemailButton.addEventListener('click', sendVoicemail);
+
   </script>
 </body>
 </html>
