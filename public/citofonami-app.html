@@ -456,8 +456,30 @@
       }
     }
 
+
+    function getLocalCitofonamiCallCount() {
+      const key = 'citofonami_call_count_' + code;
+      return Number(localStorage.getItem(key) || 0);
+    }
+
+    function incrementLocalCitofonamiCallCount() {
+      const key = 'citofonami_call_count_' + code;
+      const next = getLocalCitofonamiCallCount() + 1;
+      localStorage.setItem(key, String(next));
+      return next;
+    }
+
+    function shouldAskLocationNow() {
+      // Se admin disattiva geolocalizzazione, non chiediamo mai posizione.
+      if (!config || config.requireLocation === false) return false;
+
+      // Se admin attiva geolocalizzazione:
+      // prima chiamata locale senza posizione, dalla seconda in poi con posizione.
+      return getLocalCitofonamiCallCount() >= 1;
+    }
+
     async function getPositionIfNeeded() {
-      if (config.requireLocation === false) {
+      if (!shouldAskLocationNow()) {
         return null;
       }
 
@@ -498,9 +520,11 @@
       try {
         let position = null;
 
-        if (config.requireLocation !== false) {
+        if (shouldAskLocationNow()) {
           setStatus('Verifico la tua posizione…');
           position = await getPositionIfNeeded();
+        } else if (config.requireLocation !== false) {
+          setStatus('Prima chiamata libera. Invio la richiesta…');
         }
 
         setStatus('Attivo il microfono…');
@@ -531,6 +555,15 @@
         const data = await res.json();
 
         if (!res.ok || !data.ok) {
+          if (data && data.requireLocation) {
+            localStorage.setItem('citofonami_call_count_' + code, '1');
+            throw new Error('Per questa chiamata è richiesta la posizione.');
+          }
+
+          if (data && data.blocked) {
+            throw new Error('Sei stato bloccato dal sistema.');
+          }
+
           throw new Error(data.error || 'Richiesta non riuscita');
         }
 

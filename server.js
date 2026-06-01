@@ -19788,7 +19788,13 @@ app.post('/api/citofonami/:code/ring', express.json({ limit: '1mb' }), async (re
   }
 
   const body = req.body || {};
-  const requireLocation = config.requireLocation !== false;
+  const adminRequiresLocation = config.requireLocation !== false;
+  const previousCallCount = Number((existingContact && existingContact.callCount) || 0);
+
+  // Regola Citofonami:
+  // - se admin NON richiede geolocalizzazione: non chiederla mai;
+  // - se admin richiede geolocalizzazione: prima chiamata libera, dalla seconda obbligatoria.
+  const requireLocation = adminRequiresLocation && previousCallCount >= 1;
 
   let distance = null;
   let allowed = true;
@@ -19797,7 +19803,13 @@ app.post('/api/citofonami/:code/ring', express.json({ limit: '1mb' }), async (re
 
   if (requireLocation) {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return res.status(400).json({ ok: false, error: 'Posizione richiesta' });
+      return res.status(400).json({
+        ok: false,
+        error: 'Posizione richiesta',
+        requireLocation: true,
+        firstCallFree: false,
+        previousCallCount
+      });
     }
 
     const configuredLat = Number(config.latitude);
