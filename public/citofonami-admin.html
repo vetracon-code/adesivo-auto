@@ -563,7 +563,7 @@
     <div class="citofonami-balloon" id="citofonamiBalloon">
       <button class="close" id="closeBalloon" type="button">×</button>
       <strong>Citofonami Admin</strong>
-      Configura il citofono, scegli se richiedere la posizione e abilita le notifiche admin su questo dispositivo.
+      Configura il citofono, scegli se richiedere la posizione e abilita le notifiche admin su questo dispositivo. Dopo il primo tocco sulla pagina, il campanello sonoro sarà attivo.
     </div>
 
     <section class="hero">
@@ -1408,6 +1408,61 @@
     });
 
     refreshContactsButton.addEventListener('click', loadCitofonamiContacts);
+
+  
+    let citofonamiBellUnlocked = false;
+
+    function unlockCitofonamiBell() {
+      citofonamiBellUnlocked = true;
+    }
+
+    function playCitofonamiDoorbell() {
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+
+        if (!AudioContextClass) {
+          return;
+        }
+
+        const ctx = new AudioContextClass();
+        const master = ctx.createGain();
+        master.gain.value = 0.82;
+        master.connect(ctx.destination);
+
+        function tone(freq, start, duration, gainValue) {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+
+          gain.gain.setValueAtTime(0.0001, ctx.currentTime + start);
+          gain.gain.exponentialRampToValueAtTime(gainValue, ctx.currentTime + start + 0.025);
+          gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + duration);
+
+          osc.connect(gain);
+          gain.connect(master);
+
+          osc.start(ctx.currentTime + start);
+          osc.stop(ctx.currentTime + start + duration + 0.04);
+        }
+
+        // Campanello tipo casa: ding-dong ripetuto.
+        tone(880, 0.00, 0.42, 0.90);
+        tone(660, 0.22, 0.55, 0.78);
+        tone(880, 0.90, 0.42, 0.90);
+        tone(660, 1.12, 0.60, 0.78);
+
+        setTimeout(() => {
+          try { ctx.close(); } catch (error) {}
+        }, 2300);
+      } catch (error) {
+        console.warn('Campanello Citofonami non riproducibile:', error);
+      }
+    }
+
+    document.addEventListener('click', unlockCitofonamiBell, { once: true });
+    document.addEventListener('touchstart', unlockCitofonamiBell, { once: true });
 
   </script>
 </body>
