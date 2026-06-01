@@ -1592,6 +1592,35 @@
       display: none !important;
     }
 
+  
+    .admin-call-connected-state {
+      margin-top: 12px;
+      padding: 13px;
+      border-radius: 18px;
+      background: rgba(57,215,123,.10);
+      border: 1px solid rgba(57,215,123,.25);
+      color: var(--green);
+      font-size: 13px;
+      line-height: 1.35;
+      font-weight: 750;
+      text-align: center;
+    }
+
+    .final-call-overlay.call-answered {
+      animation: none !important;
+      border-color: rgba(57,215,123,.38);
+    }
+
+    .final-call-overlay.call-answered .final-call-badge {
+      background: rgba(57,215,123,.16);
+      color: var(--green);
+    }
+
+    .final-call-overlay.call-answered .final-answer-button {
+      opacity: .55;
+      pointer-events: none;
+    }
+
   </style>
 </head>
 
@@ -1681,6 +1710,9 @@
 
       <button class="hide-call-panel-button" id="hideCallPanelButton" type="button">Nascondi pannello e continua configurazione</button>
       <button class="final-answer-button" id="finalAnswerButton" type="button">Rispondi</button>
+      <div class="admin-call-connected-state" id="adminConnectedState" style="display:none;">
+        Chiamata accettata. Microfono admin pronto. Attendo collegamento audio utente.
+      </div>
       <button class="final-voicemail-button" id="finalVoicemailButton" type="button">Invia in segreteria</button>
 
       <div class="final-call-actions">
@@ -2666,6 +2698,7 @@
       if (typeof finalCallOverlay !== 'undefined') {
         finalCallOverlay.classList.remove('active');
         finalCallOverlay.classList.remove('force-visible');
+      finalCallOverlay.classList.remove('call-answered');
       closeHiddenCallButtonAfterHandled();
       }
     }
@@ -3110,6 +3143,62 @@
         openHiddenCallButton.classList.remove('show');
         finalCallOverlay.classList.remove('temporarily-hidden');
       } catch (error) {}
+    }
+
+
+    async function finalAnswerWithoutClosing() {
+      if (!finalCurrentCall) {
+        setState('Nessuna chiamata selezionata.', false);
+        return;
+      }
+
+      const code = finalGetCode ? finalGetCode() : (
+        document.getElementById('qrCode') ? document.getElementById('qrCode').value : 'DEMO'
+      );
+
+      try {
+        // Prima attivo/ricontrollo il microfono admin.
+        if (typeof forceReliableMicrophoneCheck === 'function') {
+          await forceReliableMicrophoneCheck();
+        }
+
+        if (!citofonamiAdminMicReady) {
+          if (typeof forceReliableEnableAdminMic === 'function') {
+            await forceReliableEnableAdminMic();
+          } else if (typeof finalEnableAdminMic === 'function') {
+            await finalEnableAdminMic();
+          }
+        }
+
+        const r = await fetch(`/api/citofonami/${encodeURIComponent(String(code).trim().toUpperCase())}/calls/${encodeURIComponent(finalCurrentCall.id)}/action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'answer' })
+        });
+
+        const data = await r.json();
+
+        if (!r.ok || !data.ok) {
+          throw new Error(data.error || 'Risposta non riuscita');
+        }
+
+        finalCallOverlay.classList.add('call-answered');
+        finalCallOverlay.classList.add('active');
+        finalCallOverlay.classList.add('force-visible');
+        finalCallOverlay.classList.remove('temporarily-hidden');
+
+        finalCallTitle.textContent = 'Chiamata accettata';
+        finalCallSubtitle.textContent = 'Ora l’utente deve autorizzare il microfono. Il collegamento audio WebRTC sarà il prossimo modulo.';
+        finalAnswerButton.textContent = 'Risposto';
+
+        if (typeof adminConnectedState !== 'undefined' && adminConnectedState) {
+          adminConnectedState.style.display = 'block';
+        }
+
+        setState('Chiamata accettata. Il pannello resta aperto.', true);
+      } catch (error) {
+        setState('Errore risposta chiamata: ' + error.message, false);
+      }
     }
 
     const defaults = {
@@ -3578,7 +3667,7 @@
     finalSaveNameButton.addEventListener('click', finalSaveName);
     hideCallPanelButton.addEventListener('click', hideCallPanelForConfiguration);
     openHiddenCallButton.addEventListener('click', openHiddenIncomingCallPanel);
-    finalAnswerButton.addEventListener('click', () => finalAct('answer'));
+    finalAnswerButton.addEventListener('click', finalAnswerWithoutClosing);
     finalVoicemailButton.addEventListener('click', () => finalAct('voicemail'));
     finalCloseButton.addEventListener('click', async () => {
       await finalAct('close');
