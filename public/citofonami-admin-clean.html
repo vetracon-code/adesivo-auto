@@ -1241,5 +1241,84 @@
 
     boot();
   </script>
+
+<script>
+/* CITOFONAMI_ADMIN_CLEAN_PREVENT_TOP_JUMP_20260601 */
+(function () {
+  let userIsEditing = false;
+  let lastUserScrollY = 0;
+  let lockUntil = 0;
+
+  function markUserEditing() {
+    userIsEditing = true;
+    lastUserScrollY = window.scrollY || 0;
+    lockUntil = Date.now() + 6000;
+  }
+
+  function shouldProtectScroll() {
+    return userIsEditing || Date.now() < lockUntil;
+  }
+
+  function protectScrollPosition() {
+    if (!shouldProtectScroll()) return;
+
+    const current = window.scrollY || 0;
+
+    // Se la pagina viene riportata in alto mentre l'utente era più sotto,
+    // la rimettiamo dove stava.
+    if (lastUserScrollY > 120 && current < 80) {
+      requestAnimationFrame(() => {
+        window.scrollTo(0, lastUserScrollY);
+      });
+    }
+  }
+
+  // Quando l'utente tocca o compila un campo, lo scroll non deve più essere comandato dall'onboarding.
+  document.addEventListener('focusin', function (event) {
+    if (event.target && event.target.matches && event.target.matches('input, textarea, select')) {
+      markUserEditing();
+    }
+  }, true);
+
+  document.addEventListener('input', function (event) {
+    if (event.target && event.target.matches && event.target.matches('input, textarea, select')) {
+      markUserEditing();
+    }
+  }, true);
+
+  document.addEventListener('touchstart', function () {
+    lastUserScrollY = window.scrollY || 0;
+    lockUntil = Date.now() + 2500;
+  }, { passive: true });
+
+  document.addEventListener('scroll', function () {
+    const y = window.scrollY || 0;
+    if (y > 80) {
+      lastUserScrollY = y;
+    }
+  }, { passive: true });
+
+  // Neutralizza scrollIntoView/focus automatici durante compilazione.
+  const nativeScrollIntoView = Element.prototype.scrollIntoView;
+  Element.prototype.scrollIntoView = function () {
+    if (shouldProtectScroll()) return;
+    return nativeScrollIntoView.apply(this, arguments);
+  };
+
+  const nativeFocus = HTMLElement.prototype.focus;
+  HTMLElement.prototype.focus = function () {
+    if (shouldProtectScroll() && this.matches && this.matches('input, textarea, select')) {
+      return;
+    }
+    return nativeFocus.apply(this, arguments);
+  };
+
+  // Protezione continua contro salti verso l'alto causati da renderSetup o classi compact.
+  setInterval(protectScrollPosition, 250);
+
+  window.citofonamiPreventTopJumpActive = true;
+})();
+</script>
+
 </body>
 </html>
