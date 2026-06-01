@@ -1415,6 +1415,280 @@
     setTimeout(wireUserWebrtcTalkButton, 800);
     setTimeout(wireUserWebrtcTalkButton, 2000);
 
+  
+    // ==============================
+    // CITOFONAMI_FORCE_DEMO_LIVE_SYNC_20260601
+    // ==============================
+    window.CITOFONAMI_FORCE_STATE = window.CITOFONAMI_FORCE_STATE || {
+      code: 'DEMO',
+      config: null,
+      callerId: 'caller_force_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10),
+      callId: null,
+      statusTimer: null
+    };
+
+    function forceCitofonamiCode() {
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      return String(parts[parts.length - 1] || 'DEMO').trim().toUpperCase();
+    }
+
+    function forceSetStatus(text, type) {
+      try {
+        if (typeof setStatus === 'function') {
+          setStatus(text, type);
+          return;
+        }
+
+        const box = document.getElementById('statusBox');
+        if (box) {
+          box.textContent = text;
+          box.className = 'status ' + (type || '');
+        }
+      } catch (error) {
+        console.warn('forceSetStatus error:', error);
+      }
+    }
+
+    function forceApplyUserConfig(config) {
+      if (!config) return;
+
+      window.CITOFONAMI_FORCE_STATE.config = config;
+
+      const first = config.firstName || '';
+      const last = config.lastName || '';
+      const fallbackName = (first + ' ' + last).trim() || 'Citofonami';
+      const buttonLabel = config.buttonLabel || fallbackName;
+      const text = config.publicText || 'Premi e chiama.';
+
+      const buttonName = document.getElementById('buttonName');
+      if (buttonName) buttonName.textContent = buttonLabel;
+
+      const ownerName = document.getElementById('ownerName');
+      if (ownerName) ownerName.textContent = buttonLabel;
+
+      const publicText = document.getElementById('publicText');
+      if (publicText) publicText.textContent = text;
+
+      document.querySelectorAll('.call-button .action').forEach(el => {
+        el.textContent = 'Citofona';
+      });
+
+      document.querySelectorAll('.call-button .sub').forEach(el => {
+        el.textContent = 'premi e chiama';
+      });
+
+      document.title = 'Citofonami · ' + buttonLabel;
+    }
+
+    async function forceLoadUserConfig() {
+      const code = forceCitofonamiCode();
+      window.CITOFONAMI_FORCE_STATE.code = code;
+
+      try {
+        const res = await fetch('/api/citofonami/' + encodeURIComponent(code) + '/config?force=' + Date.now(), {
+          cache: 'no-store'
+        });
+
+        const data = await res.json();
+
+        if (data && data.ok && data.config) {
+          forceApplyUserConfig(data.config);
+          return data.config;
+        }
+
+        console.warn('Config DEMO non valida:', data);
+      } catch (error) {
+        console.warn('forceLoadUserConfig error:', error);
+      }
+
+      return window.CITOFONAMI_FORCE_STATE.config;
+    }
+
+    async function forceCitofona(event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+
+      const code = forceCitofonamiCode();
+      const config = await forceLoadUserConfig();
+
+      const first = config && config.firstName ? config.firstName : '';
+      const last = config && config.lastName ? config.lastName : '';
+      const fallbackName = (first + ' ' + last).trim() || 'Citofonami';
+      const buttonLabel = config && config.buttonLabel ? config.buttonLabel : fallbackName;
+
+      forceSetStatus('Sto chiamando…');
+
+      try {
+        const res = await fetch('/api/citofonami/' + encodeURIComponent(code) + '/ring-v2', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          cache: 'no-store',
+          body: JSON.stringify({
+            callerId: window.CITOFONAMI_FORCE_STATE.callerId,
+            door: {
+              name: buttonLabel,
+              description: 'Citofono'
+            },
+            pageUrl: window.location.href,
+            scanSessionId: window.CITOFONAMI_SCAN_SESSION_ID || ''
+          })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.ok) {
+          throw new Error((data && data.error) || 'Chiamata non riuscita.');
+        }
+
+        if (data.allowed === false) {
+          forceSetStatus('Citofonami può essere usato solo quando sei vicino a questo ingresso.', 'ko');
+          return;
+        }
+
+        window.CITOFONAMI_FORCE_STATE.callId = data.callId;
+
+        try {
+          sessionStorage.setItem('citofonami_active_call_id', data.callId);
+          sessionStorage.setItem('citofonami_active_caller_id', window.CITOFONAMI_FORCE_STATE.callerId);
+        } catch (error) {}
+
+        forceSetStatus('Chiamata inviata. Attendi la risposta…', 'ok');
+        forceStartAnsweredPolling();
+      } catch (error) {
+        console.error('forceCitofona error:', error);
+        forceSetStatus('Errore chiamata: ' + (error.message || error), 'ko');
+      }
+    }
+
+    function forceStartAnsweredPolling() {
+      if (window.CITOFONAMI_FORCE_STATE.statusTimer) {
+        clearInterval(window.CITOFONAMI_FORCE_STATE.statusTimer);
+      }
+
+      window.CITOFONAMI_FORCE_STATE.statusTimer = setInterval(forcePollAnsweredStatus, 1200);
+      forcePollAnsweredStatus();
+    }
+
+    async function forcePollAnsweredStatus() {
+      const code = forceCitofonamiCode();
+      const callId = window.CITOFONAMI_FORCE_STATE.callId;
+      const callerId = window.CITOFONAMI_FORCE_STATE.callerId;
+
+      if (!callId) return;
+
+      try {
+        const res = await fetch(
+          '/api/citofonami/' +
+          encodeURIComponent(code) +
+          '/calls/' +
+          encodeURIComponent(callId) +
+          '/status?callerId=' +
+          encodeURIComponent(callerId) +
+          '&force=' +
+          Date.now(),
+          {
+            cache: 'no-store'
+          }
+        );
+
+        const data = await res.json();
+
+        if (!data || !data.ok) {
+          console.warn('Status non ok:', data);
+          return;
+        }
+
+        if (data.status === 'answered') {
+          clearInterval(window.CITOFONAMI_FORCE_STATE.statusTimer);
+          window.CITOFONAMI_FORCE_STATE.statusTimer = null;
+
+          forceSetStatus('Admin ha risposto. Tocca “Parla ora” e avvicinati al telefono.', 'ok');
+
+          const talkNowButton = document.getElementById('talkNowButton');
+          if (talkNowButton) {
+            talkNowButton.classList.add('show');
+            talkNowButton.style.display = 'block';
+          }
+
+          return;
+        }
+
+        if (data.status === 'voicemail_requested') {
+          clearInterval(window.CITOFONAMI_FORCE_STATE.statusTimer);
+          window.CITOFONAMI_FORCE_STATE.statusTimer = null;
+          forceSetStatus('Admin non disponibile. Puoi lasciare un messaggio vocale.', 'ok');
+          return;
+        }
+
+        if (data.status === 'closed') {
+          clearInterval(window.CITOFONAMI_FORCE_STATE.statusTimer);
+          window.CITOFONAMI_FORCE_STATE.statusTimer = null;
+          forceSetStatus('Chiamata chiusa dall’admin.', 'ko');
+          return;
+        }
+
+        if (data.status === 'blocked') {
+          clearInterval(window.CITOFONAMI_FORCE_STATE.statusTimer);
+          window.CITOFONAMI_FORCE_STATE.statusTimer = null;
+          forceSetStatus('Sei stato bloccato dal sistema.', 'ko');
+          return;
+        }
+      } catch (error) {
+        console.warn('forcePollAnsweredStatus error:', error);
+      }
+    }
+
+    async function forceParlaOra() {
+      const callId = window.CITOFONAMI_FORCE_STATE.callId || sessionStorage.getItem('citofonami_active_call_id');
+
+      if (!callId) {
+        forceSetStatus('Chiamata non trovata. Riprova a citofonare.', 'ko');
+        return;
+      }
+
+      window.CITOFONAMI_FORCE_STATE.callId = callId;
+
+      if (typeof startUserWebrtcAudio === 'function') {
+        await startUserWebrtcAudio();
+        return;
+      }
+
+      forceSetStatus('Modulo audio non ancora disponibile.', 'ko');
+    }
+
+    function forceWireUserButtons() {
+      const callButton = document.getElementById('callButton');
+      const talkNowButton = document.getElementById('talkNowButton');
+
+      if (callButton) {
+        callButton.onclick = forceCitofona;
+      }
+
+      if (talkNowButton) {
+        talkNowButton.onclick = forceParlaOra;
+      }
+    }
+
+    async function forceBootUserDemo() {
+      await forceLoadUserConfig();
+      forceWireUserButtons();
+
+      setTimeout(forceLoadUserConfig, 600);
+      setTimeout(forceWireUserButtons, 700);
+      setTimeout(forceLoadUserConfig, 1500);
+      setTimeout(forceWireUserButtons, 1600);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', forceBootUserDemo);
+    } else {
+      forceBootUserDemo();
+    }
+
   </script>
 </body>
 </html>
