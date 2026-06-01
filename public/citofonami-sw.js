@@ -1,3 +1,4 @@
+/* CITOFONAMI_SW_TARGET_ADMIN_CLEAN_FIXED_20260601 */
 const CITOFONAMI_CACHE = 'citofonami-cache-v2';
 
 self.addEventListener('install', (event) => {
@@ -52,7 +53,7 @@ self.addEventListener('push', (event) => {
     tag: data.tag || 'citofonami-ring',
     requireInteraction: true,
     data: {
-      url: data.url || '/citofonami-admin'
+      url: data.url || '/citofonami-admin-clean'
     },
     actions: [
       {
@@ -70,7 +71,7 @@ self.addEventListener('notificationclick', (event) => {
 
   const url = event.notification.data && event.notification.data.url
     ? event.notification.data.url
-    : '/citofonami-admin';
+    : '/citofonami-admin-clean';
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
