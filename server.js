@@ -20491,6 +20491,25 @@ app.get('/api/citofonami/:code/calls/pending', (req, res) => {
   });
 });
 
+
+app.get('/api/citofonami/:code/calls/:callId', (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const callId = String(req.params.callId || '');
+
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+  const event = getCitofonamiEvent(db, code, callId);
+
+  if (!event) {
+    return res.status(404).json({ ok: false, error: 'Chiamata non trovata' });
+  }
+
+  res.json({
+    ok: true,
+    code,
+    call: event
+  });
+});
+
 app.get('/api/citofonami/:code/calls/:callId/status', (req, res) => {
   const code = normalizeCitofonamiCode(req.params.code);
   const callId = String(req.params.callId || '');
