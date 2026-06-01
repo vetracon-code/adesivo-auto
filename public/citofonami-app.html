@@ -5473,7 +5473,11 @@ body.citofonami-final-ui-ready [id*="grille"] {
         if (data.call.status === "answered") {
           clearInterval(finalAnsweredTimer);
           finalAnsweredTimer = null;
+          if (window.citofonamiEnsureTalkNowButton) {
+          window.citofonamiEnsureTalkNowButton(currentCallId);
+        } else {
           ensureTalkNowButton(currentCallId);
+        }
         }
 
         if (data.call.status === "closed") {
@@ -5521,6 +5525,362 @@ body.citofonami-final-ui-ready [id*="grille"] {
 
   window.citofonamiFinalRingV2 = finalRingV2;
   window.citofonamiEnsureTalkNowButton = ensureTalkNowButton;
+})();
+</script>
+
+
+<script>
+/* CITOFONAMI_USER_FINAL_ANDROID_TALK_NOW_20260601 */
+(function () {
+  let userPeer = null;
+  let userStream = null;
+  let userIceTimer = null;
+  const userSeenIce = new Set();
+
+  function code() {
+    const parts = window.location.pathname.split("/").filter(Boolean);
+    return String(parts[parts.length - 1] || "DEMO").trim().toUpperCase();
+  }
+
+  function activeCallId() {
+    return (
+      sessionStorage.getItem("citofonami_active_call_id") ||
+      (window.CITOFONAMI_FORCE_STATE && window.CITOFONAMI_FORCE_STATE.callId) ||
+      window.citofonamiLiveCallId ||
+      ""
+    );
+  }
+
+  function setStatus(text) {
+    const el = document.getElementById("citofonamiFinalStatus");
+    if (el) el.textContent = text || "";
+  }
+
+  function stopUserAudio() {
+    try {
+      if (userIceTimer) clearInterval(userIceTimer);
+      userIceTimer = null;
+    } catch(e) {}
+
+    try {
+      if (userPeer) {
+        userPeer.close();
+        userPeer = null;
+      }
+    } catch(e) {}
+
+    try {
+      if (userStream) {
+        userStream.getTracks().forEach(track => {
+          try { track.stop(); } catch(e) {}
+        });
+        userStream = null;
+      }
+    } catch(e) {}
+
+    try {
+      document.querySelectorAll("audio,video").forEach(el => {
+        try {
+          if (el.srcObject && el.srcObject.getTracks) {
+            el.srcObject.getTracks().forEach(t => t.stop());
+          }
+          el.pause && el.pause();
+          el.srcObject = null;
+          el.removeAttribute("src");
+        } catch(e) {}
+      });
+    } catch(e) {}
+  }
+
+  function ensureRemoteAudio() {
+    let audio = document.getElementById("citofonamiUserRemoteAudio");
+
+    if (!audio) {
+      audio = document.createElement("audio");
+      audio.id = "citofonamiUserRemoteAudio";
+      audio.autoplay = true;
+      audio.playsInline = true;
+      audio.controls = false;
+      audio.style.cssText = "position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;";
+      document.body.appendChild(audio);
+    }
+
+    audio.autoplay = true;
+    audio.playsInline = true;
+    audio.controls = false;
+    audio.muted = false;
+    audio.volume = 1;
+
+    return audio;
+  }
+
+  async function waitOffer(callId) {
+    for (let i = 0; i < 30; i++) {
+      const data = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/webrtc/offer?t=${Date.now()}`, {
+        cache: "no-store"
+      }).then(r => r.json()).catch(() => null);
+
+      if (data && data.ok && data.offer) return data.offer;
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    throw new Error("Offerta audio admin non disponibile");
+  }
+
+  async function pollAdminIce(callId) {
+    if (!userPeer) return;
+
+    try {
+      const data = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/webrtc/ice?role=user&t=${Date.now()}`, {
+        cache: "no-store"
+      }).then(r => r.json());
+
+      if (!data.ok || !Array.isArray(data.candidates)) return;
+
+      for (const candidate of data.candidates) {
+        const key = JSON.stringify(candidate);
+        if (userSeenIce.has(key)) continue;
+        userSeenIce.add(key);
+
+        try {
+          await userPeer.addIceCandidate(candidate);
+        } catch(e) {}
+      }
+    } catch(e) {}
+  }
+
+  async function startUserAnswerFromTalkNow(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    }
+
+    const callId = activeCallId();
+
+    if (!callId) {
+      setStatus("Chiamata non trovata. Riprova.");
+      return;
+    }
+
+    const talkBtn = document.getElementById("citofonamiFinalTalkNowButton");
+    if (talkBtn) {
+      talkBtn.disabled = true;
+      talkBtn.textContent = "Attivo microfono…";
+    }
+
+    try {
+      setStatus("Autorizza il microfono…");
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Microfono non supportato");
+      }
+
+      // Questo deve partire dal tocco reale su Android.
+      userStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        },
+        video: false
+      });
+
+      setStatus("Microfono attivo. Collegamento…");
+
+      const offer = await waitOffer(callId);
+
+      userPeer = new RTCPeerConnection({
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" }
+        ]
+      });
+
+      userStream.getTracks().forEach(track => userPeer.addTrack(track, userStream));
+
+      const remoteAudio = ensureRemoteAudio();
+
+      userPeer.ontrack = (event) => {
+        const stream = event.streams && event.streams[0];
+        if (!stream) return;
+
+        remoteAudio.srcObject = stream;
+        remoteAudio.muted = false;
+        remoteAudio.volume = 1;
+        remoteAudio.play().catch(() => null);
+
+        setStatus("Audio collegato.");
+      };
+
+      userPeer.onicecandidate = (event) => {
+        if (!event.candidate) return;
+
+        fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/webrtc/ice`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+          body: JSON.stringify({
+            role: "user",
+            candidate: event.candidate
+          })
+        }).catch(() => null);
+      };
+
+      userPeer.onconnectionstatechange = () => {
+        const state = userPeer ? userPeer.connectionState : "";
+
+        if (state === "connected") {
+          setStatus("Collegato. Puoi parlare.");
+          if (talkBtn) {
+            talkBtn.textContent = "Collegato";
+          }
+        }
+
+        if (state === "failed" || state === "disconnected") {
+          setStatus("Connessione audio instabile.");
+          if (talkBtn) {
+            talkBtn.disabled = false;
+            talkBtn.textContent = "Riprova";
+          }
+        }
+      };
+
+      await userPeer.setRemoteDescription(offer);
+
+      const answer = await userPeer.createAnswer();
+      await userPeer.setLocalDescription(answer);
+
+      const saved = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/webrtc/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          answer: userPeer.localDescription
+        })
+      }).then(r => r.json());
+
+      if (!saved.ok) {
+        throw new Error(saved.error || "Answer non salvata");
+      }
+
+      userIceTimer = setInterval(() => pollAdminIce(callId), 700);
+      pollAdminIce(callId);
+
+      setStatus("Collegamento audio in corso…");
+
+      if (talkBtn) {
+        talkBtn.textContent = "Parla";
+      }
+
+      // Se esistono vecchie funzioni funzionanti, le lasciamo stare: non le richiamiamo più qui.
+    } catch (error) {
+      console.error("startUserAnswerFromTalkNow error:", error);
+      setStatus("Microfono/audio non attivo: " + (error.message || error));
+
+      if (talkBtn) {
+        talkBtn.disabled = false;
+        talkBtn.textContent = "Parla ora";
+      }
+    }
+  }
+
+  function ensureTalkNowButtonDirect(callId) {
+    let panel = document.getElementById("citofonamiExternalAnswerPanel");
+
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.id = "citofonamiExternalAnswerPanel";
+      panel.style.cssText = [
+        "position:fixed",
+        "left:12px",
+        "right:12px",
+        "bottom:12px",
+        "z-index:1000300",
+        "padding:16px",
+        "border-radius:24px",
+        "background:rgba(8,10,14,.97)",
+        "border:1px solid rgba(215,180,106,.35)",
+        "box-shadow:0 22px 70px rgba(0,0,0,.60)",
+        "color:white",
+        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+        "text-align:center"
+      ].join(";");
+
+      panel.innerHTML = `
+        <div style="font-size:22px;font-weight:950;letter-spacing:-.05em;margin-bottom:6px;">Admin ha risposto</div>
+        <div style="font-size:13px;line-height:1.35;color:rgba(255,255,255,.70);margin-bottom:12px;">Tocca per attivare il microfono e parlare.</div>
+        <button id="citofonamiFinalTalkNowButton" type="button" style="
+          width:100%;
+          min-height:58px;
+          border:0;
+          border-radius:18px;
+          background:linear-gradient(135deg,#d7ffe7,#39d77b);
+          color:#06170d;
+          font-size:17px;
+          font-weight:950;
+          text-transform:uppercase;
+          letter-spacing:.05em;
+        ">Parla ora</button>
+      `;
+
+      document.body.appendChild(panel);
+    }
+
+    panel.style.display = "block";
+
+    const btn = document.getElementById("citofonamiFinalTalkNowButton");
+
+    if (btn && btn.dataset.finalAndroidTalkNow !== "1") {
+      btn.dataset.finalAndroidTalkNow = "1";
+
+      btn.addEventListener("pointerdown", startUserAnswerFromTalkNow, true);
+      btn.addEventListener("touchstart", startUserAnswerFromTalkNow, true);
+      btn.addEventListener("click", startUserAnswerFromTalkNow, true);
+    }
+
+    setStatus("Admin ha risposto. Tocca Parla ora.");
+  }
+
+  // Sovrascrive la funzione creata nella patch precedente.
+  window.citofonamiEnsureTalkNowButton = ensureTalkNowButtonDirect;
+  window.citofonamiStartUserAnswerFromTalkNow = startUserAnswerFromTalkNow;
+  window.citofonamiStopUserAudio = stopUserAudio;
+
+  // Se la chiamata è già answered, recupera e mostra Parla ora.
+  async function recoverAnswered() {
+    try {
+      const callId = activeCallId();
+      if (callId) {
+        const data = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}?t=${Date.now()}`, {
+          cache: "no-store"
+        }).then(r => r.json());
+
+        if (data && data.ok && data.call && data.call.status === "answered") {
+          ensureTalkNowButtonDirect(callId);
+          return;
+        }
+      }
+
+      const latest = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls-list/latest?t=${Date.now()}`, {
+        cache: "no-store"
+      }).then(r => r.json());
+
+      if (latest && latest.ok && Array.isArray(latest.calls) && latest.calls[0]) {
+        const call = latest.calls[0];
+
+        if (call.status === "answered") {
+          sessionStorage.setItem("citofonami_active_call_id", call.id);
+          ensureTalkNowButtonDirect(call.id);
+        }
+      }
+    } catch(e) {}
+  }
+
+  setInterval(recoverAnswered, 900);
+
+  window.addEventListener("beforeunload", stopUserAudio);
 })();
 </script>
 
