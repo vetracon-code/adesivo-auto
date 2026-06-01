@@ -1665,9 +1665,165 @@ body.citofonami-call-active {
 }
 </style>
 
+
+<style>
+/* CITOFONAMI_IPHONE_SETUP_FIX_20260601 */
+.citofonami-iphone-setup {
+  display: none;
+  margin: 12px 0 16px;
+  padding: 14px;
+  border-radius: 22px;
+  background: rgba(255,255,255,.065);
+  border: 1px solid rgba(215,180,106,.25);
+  box-shadow: 0 16px 46px rgba(0,0,0,.22);
+}
+
+.citofonami-iphone-setup.show {
+  display: block;
+}
+
+.citofonami-iphone-setup-title {
+  font-size: 17px;
+  font-weight: 950;
+  letter-spacing: -.035em;
+  margin-bottom: 4px;
+}
+
+.citofonami-iphone-setup-sub {
+  color: var(--muted, rgba(255,255,255,.62));
+  font-size: 13px;
+  line-height: 1.35;
+  margin-bottom: 12px;
+}
+
+.citofonami-iphone-step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+
+.citofonami-iphone-step:first-of-type {
+  border-top: 0;
+}
+
+.citofonami-iphone-step strong {
+  display: block;
+  font-size: 14px;
+}
+
+.citofonami-iphone-step span {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted, rgba(255,255,255,.58));
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.citofonami-iphone-pill {
+  min-width: 74px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  background: rgba(255,95,95,.14);
+  color: #ff8b8b;
+  border: 1px solid rgba(255,95,95,.28);
+}
+
+.citofonami-iphone-pill.ok {
+  background: rgba(57,215,123,.14);
+  color: #39d77b;
+  border-color: rgba(57,215,123,.28);
+}
+
+.citofonami-iphone-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.citofonami-iphone-actions button {
+  min-height: 46px;
+  border: 0;
+  border-radius: 15px;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.citofonami-iphone-actions .primary {
+  background: linear-gradient(135deg,#d7ffe7,#39d77b);
+  color: #06170d;
+}
+
+.citofonami-iphone-actions .secondary {
+  background: rgba(255,255,255,.09);
+  color: white;
+  border: 1px solid rgba(255,255,255,.12);
+}
+
+.citofonami-iphone-note {
+  display: none;
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(215,180,106,.10);
+  color: rgba(255,255,255,.78);
+  font-size: 12px;
+  line-height: 1.35;
+}
+</style>
+
 </head>
 
 <body>
+
+<div class="citofonami-iphone-setup" id="citofonamiIphoneSetup">
+  <div class="citofonami-iphone-setup-title">Attiva il tuo citofono digitale</div>
+  <div class="citofonami-iphone-setup-sub">Completa i campi ed attivalo subito.</div>
+
+  <div class="citofonami-iphone-step">
+    <div>
+      <strong>App</strong>
+      <span>Salvala nella schermata Home.</span>
+    </div>
+    <div class="citofonami-iphone-pill" id="iphoneAppPill">No</div>
+  </div>
+
+  <div class="citofonami-iphone-step">
+    <div>
+      <strong>Notifiche</strong>
+      <span>Disponibili solo dall’App salvata.</span>
+    </div>
+    <div class="citofonami-iphone-pill" id="iphonePushPill">No</div>
+  </div>
+
+  <div class="citofonami-iphone-step">
+    <div>
+      <strong>Microfono</strong>
+      <span>Serve per rispondere.</span>
+    </div>
+    <div class="citofonami-iphone-pill" id="iphoneMicPill">No</div>
+  </div>
+
+  <div class="citofonami-iphone-actions">
+    <button class="primary" id="iphoneMicButton" type="button">Attiva microfono</button>
+    <button class="secondary" id="iphonePushButton" type="button">Attiva notifiche</button>
+    <button class="secondary" id="iphoneInstallHelpButton" type="button">Come salvare l’App</button>
+  </div>
+
+  <div class="citofonami-iphone-note" id="iphoneInstallNote">
+    Su iPhone: tocca Condividi → Aggiungi a Home. Poi apri Citofonami dall’icona appena creata e attiva le notifiche.
+  </div>
+</div>
+
+
   <main class="page">
 
     <div class="admin-setup-bar" id="adminSetupBar">
@@ -5516,6 +5672,193 @@ body.citofonami-call-active {
   window.citofonamiShowTopCloseButton = showTopCloseButton;
   window.citofonamiHideTopCloseButton = hideTopCloseButton;
   window.citofonamiReleaseAdminAfterClose = releaseAdminAfterClose;
+})();
+</script>
+
+
+<script>
+/* CITOFONAMI_IPHONE_SETUP_FIX_20260601 */
+(function () {
+  let iphoneMicStream = null;
+
+  function isIphoneSafariLike() {
+    const ua = navigator.userAgent || "";
+    const platform = navigator.platform || "";
+    return /iPhone|iPad|iPod/i.test(ua) || (platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  }
+
+  function isStandalone() {
+    return window.navigator.standalone === true ||
+      window.matchMedia("(display-mode: standalone)").matches;
+  }
+
+  function setPill(id, ok) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = ok ? "Ok" : "No";
+    el.classList.toggle("ok", !!ok);
+  }
+
+  async function hasMicPermissionSoft() {
+    try {
+      if (!navigator.permissions || !navigator.permissions.query) return false;
+      const result = await navigator.permissions.query({ name: "microphone" });
+      return result.state === "granted";
+    } catch (e) {
+      return !!iphoneMicStream;
+    }
+  }
+
+  function renderIphoneSetup() {
+    const box = document.getElementById("citofonamiIphoneSetup");
+    if (!box) return;
+
+    if (!isIphoneSafariLike()) {
+      box.classList.remove("show");
+      return;
+    }
+
+    box.classList.add("show");
+
+    setPill("iphoneAppPill", isStandalone());
+    setPill("iphonePushPill", Notification && Notification.permission === "granted");
+    setPill("iphoneMicPill", !!iphoneMicStream || localStorage.getItem("citofonami_admin_mic_ready") === "1");
+
+    const pushBtn = document.getElementById("iphonePushButton");
+    if (pushBtn) {
+      pushBtn.disabled = !isStandalone();
+      pushBtn.textContent = isStandalone() ? "Attiva notifiche" : "Salva prima l’App";
+    }
+  }
+
+  async function requestIphoneMicrophone() {
+    const btn = document.getElementById("iphoneMicButton");
+    try {
+      if (btn) btn.textContent = "Attivo…";
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Microfono non supportato.");
+      }
+
+      iphoneMicStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        },
+        video: false
+      });
+
+      try {
+        window.citofonamiAdminMicStream = iphoneMicStream;
+        window.citofonamiAdminMicReady = true;
+        localStorage.setItem("citofonami_admin_mic_ready", "1");
+      } catch (e) {}
+
+      if (btn) btn.textContent = "Microfono attivo";
+
+      renderIphoneSetup();
+
+      if (typeof setState === "function") {
+        setState("Microfono attivo.", true);
+      }
+    } catch (error) {
+      if (btn) btn.textContent = "Attiva microfono";
+      if (typeof setState === "function") {
+        setState("Microfono non attivo: " + (error.message || error), false);
+      }
+    }
+  }
+
+  async function requestIphonePush() {
+    const btn = document.getElementById("iphonePushButton");
+
+    try {
+      if (!isStandalone()) {
+        document.getElementById("iphoneInstallNote").style.display = "block";
+        return;
+      }
+
+      if (btn) btn.textContent = "Attivo…";
+
+      if (typeof Notification === "undefined") {
+        throw new Error("Notifiche non supportate.");
+      }
+
+      const permission = await Notification.requestPermission();
+
+      if (permission !== "granted") {
+        throw new Error("Notifiche non autorizzate.");
+      }
+
+      // Prova a riusare la funzione esistente, se presente.
+      try {
+        if (typeof subscribeAdminPush === "function") {
+          await subscribeAdminPush();
+        } else if (typeof enableNotifications === "function") {
+          await enableNotifications();
+        } else if (typeof finalEnableNotifications === "function") {
+          await finalEnableNotifications();
+        }
+      } catch (e) {
+        console.warn("Funzione push esistente non completata:", e);
+      }
+
+      if (btn) btn.textContent = "Notifiche attive";
+
+      renderIphoneSetup();
+
+      if (typeof setState === "function") {
+        setState("Notifiche attive.", true);
+      }
+    } catch (error) {
+      if (btn) btn.textContent = "Attiva notifiche";
+      if (typeof setState === "function") {
+        setState("Notifiche non attive: " + (error.message || error), false);
+      }
+    }
+  }
+
+  function wireIphoneSetup() {
+    const mic = document.getElementById("iphoneMicButton");
+    const push = document.getElementById("iphonePushButton");
+    const help = document.getElementById("iphoneInstallHelpButton");
+    const note = document.getElementById("iphoneInstallNote");
+
+    if (mic && mic.dataset.wired !== "1") {
+      mic.dataset.wired = "1";
+      mic.addEventListener("click", requestIphoneMicrophone, true);
+      mic.addEventListener("pointerdown", function(){}, true);
+    }
+
+    if (push && push.dataset.wired !== "1") {
+      push.dataset.wired = "1";
+      push.addEventListener("click", requestIphonePush, true);
+    }
+
+    if (help && help.dataset.wired !== "1") {
+      help.dataset.wired = "1";
+      help.addEventListener("click", function () {
+        if (note) note.style.display = note.style.display === "block" ? "none" : "block";
+      });
+    }
+
+    renderIphoneSetup();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", wireIphoneSetup);
+  } else {
+    wireIphoneSetup();
+  }
+
+  setTimeout(wireIphoneSetup, 500);
+  setTimeout(wireIphoneSetup, 1500);
+  setInterval(renderIphoneSetup, 3000);
+
+  window.citofonamiRequestIphoneMicrophone = requestIphoneMicrophone;
+  window.citofonamiRequestIphonePush = requestIphonePush;
+  window.citofonamiRenderIphoneSetup = renderIphoneSetup;
 })();
 </script>
 
