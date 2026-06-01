@@ -19917,10 +19917,6 @@ app.get('/citofonami', (req, res) => {
   res.redirect('/citofonami/DEMO');
 });
 
-
-
-// ==============================
-// CITOFONAMI - CONTACTS AND VOICEMAIL V1
 // ==============================
 function ensureCitofonamiDbShape(db) {
   db.configs = db.configs || {};
@@ -20242,6 +20238,479 @@ app.get('/api/citofonami/:code/voicemails/:fileName', (req, res) => {
   }
 
   res.sendFile(filePath);
+});
+
+
+
+// ==============================
+// CITOFONAMI - CALL CONTROL V2 RESTORE
+// ==============================
+function normalizeCitofonamiCallerId(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+    .slice(0, 120);
+}
+
+function ensureCitofonamiDbShape(db) {
+  db.configs = db.configs || {};
+  db.subscriptions = db.subscriptions || {};
+  db.events = Array.isArray(db.events) ? db.events : [];
+  db.blocked = db.blocked || {};
+  db.contacts = db.contacts || {};
+  db.voicemails = db.voicemails || {};
+  return db;
+}
+
+function getCitofonamiBlockedList(db, code) {
+  ensureCitofonamiDbShape(db);
+  db.blocked[code] = db.blocked[code] || [];
+  return db.blocked[code];
+}
+
+function getCitofonamiContacts(db, code) {
+  ensureCitofonamiDbShape(db);
+  db.contacts[code] = db.contacts[code] || {};
+  return db.contacts[code];
+}
+
+function getCitofonamiContact(db, code, callerId) {
+  const contacts = getCitofonamiContacts(db, code);
+  return contacts[callerId] || null;
+}
+
+function upsertCitofonamiContact(db, code, callerId, patch) {
+  const contacts = getCitofonamiContacts(db, code);
+  const now = new Date().toISOString();
+
+  const existing = contacts[callerId] || {
+    callerId,
+    displayName: '',
+    firstSeenAt: now,
+    lastSeenAt: now,
+    callCount: 0,
+    blocked: false,
+    notes: ''
+  };
+
+  contacts[callerId] = {
+    ...existing,
+    ...patch,
+    callerId,
+    updatedAt: now
+  };
+
+  return contacts[callerId];
+}
+
+function isCitofonamiCallerBlocked(db, code, callerId) {
+  if (!callerId) return false;
+
+  const contact = getCitofonamiContact(db, code, callerId);
+  if (contact && contact.blocked) return true;
+
+  const list = getCitofonamiBlockedList(db, code);
+  return list.some((item) => item.callerId === callerId);
+}
+
+function sortCitofonamiContacts(list) {
+  return list.sort((a, b) => {
+    const ca = Number(a.callCount || 0);
+    const cb = Number(b.callCount || 0);
+    if (cb !== ca) return cb - ca;
+    return String(b.lastSeenAt || '').localeCompare(String(a.lastSeenAt || ''));
+  });
+}
+
+function getCitofonamiVoicemails(db, code) {
+  ensureCitofonamiDbShape(db);
+  db.voicemails[code] = db.voicemails[code] || [];
+  return db.voicemails[code];
+}
+
+function getCitofonamiEvent(db, code, callId) {
+  return (db.events || []).find((item) => item.code === code && item.id === callId);
+}
+
+function safeCitofonamiFileName(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .slice(0, 120);
+}
+
+app.post('/api/citofonami/:code/ring-v2', express.json({ limit: '1mb' }), async (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+  const config = db.configs[code] || defaultCitofonamiConfig(code);
+  const body = req.body || {};
+
+  const callerId = normalizeCitofonamiCallerId(body.callerId);
+
+  if (!callerId) {
+    return res.status(400).json({ ok: false, error: 'Dispositivo non identificato' });
+  }
+
+  const existingContact = getCitofonamiContact(db, code, callerId);
+
+  if (isCitofonamiCallerBlocked(db, code, callerId)) {
+    return res.status(403).json({
+      ok: false,
+      blocked: true,
+      error: 'Sei stato bloccato dal sistema.'
+    });
+  }
+
+  if (config.enabled === false) {
+    return res.status(403).json({ ok: false, error: 'Citofono disattivato' });
+  }
+
+  const adminRequiresLocation = config.requireLocation !== false;
+  const previousCallCount = Number((existingContact && existingContact.callCount) || 0);
+
+  // Regola richiesta: se admin abilita geolocalizzazione,
+  // la prima chiamata dello stesso dispositivo passa senza posizione;
+  // dalla seconda in poi chiede posizione.
+  const requireLocation = adminRequiresLocation && previousCallCount >= 1;
+
+  let distance = null;
+  let allowed = true;
+  let lat = body.lat === null || body.lat === undefined ? null : Number(body.lat);
+  let lng = body.lng === null || body.lng === undefined ? null : Number(body.lng);
+
+  if (requireLocation) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Posizione richiesta',
+        requireLocation: true,
+        previousCallCount
+      });
+    }
+
+    const configuredLat = Number(config.latitude);
+    const configuredLng = Number(config.longitude);
+    const radius = Number(config.radius || 50);
+
+    if (Number.isFinite(configuredLat) && Number.isFinite(configuredLng) && configuredLat !== 0 && configuredLng !== 0) {
+      distance = distanceMeters(lat, lng, configuredLat, configuredLng);
+      allowed = distance <= radius;
+    }
+  }
+
+  if (!allowed) {
+    return res.json({
+      ok: true,
+      allowed: false,
+      distance,
+      radius: Number(config.radius || 50)
+    });
+  }
+
+  const owner = `${config.firstName || ''} ${config.lastName || ''}`.trim() || 'proprietario';
+  const defaultDoorName = config.buttonLabel || owner || 'Citofonami';
+  const contact = upsertCitofonamiContact(db, code, callerId, {
+    lastSeenAt: new Date().toISOString(),
+    callCount: previousCallCount + 1,
+    lastUserAgent: req.headers['user-agent'] || body.userAgent || '',
+    lastIp: req.headers['x-forwarded-for'] || req.socket.remoteAddress || ''
+  });
+
+  const displayDoorName = contact.displayName || defaultDoorName;
+  const callId = 'call_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+
+  const event = {
+    id: callId,
+    type: 'call',
+    status: 'ringing',
+    code,
+    callerId,
+    contactName: contact.displayName || '',
+    callCount: Number(contact.callCount || 0),
+    door: body.door || { name: displayDoorName, description: 'Citofono principale' },
+    lat,
+    lng,
+    accuracy: body.accuracy || null,
+    distance,
+    allowed: true,
+    requireLocation,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    userAgent: req.headers['user-agent'] || body.userAgent || '',
+    ip: req.headers['x-forwarded-for'] || req.socket.remoteAddress || ''
+  };
+
+  db.events.unshift(event);
+  db.events = db.events.slice(0, 500);
+  writeCitofonamiDb(db);
+
+  const subscriptions = (db.subscriptions[code] || []).filter((item) => item.role === 'admin');
+
+  const payload = {
+    title: 'Citofonami',
+    body: `${displayDoorName}: qualcuno sta suonando.`,
+    tag: 'citofonami-ring-' + code,
+    url: `/citofonami-admin?code=${encodeURIComponent(code)}&call=${encodeURIComponent(callId)}`
+  };
+
+  const pushResults = [];
+
+  if (config.pushEnabled !== false) {
+    for (const item of subscriptions) {
+      const result = await sendCitofonamiPush(item.subscription, payload);
+      pushResults.push(result);
+    }
+  }
+
+  res.json({
+    ok: true,
+    allowed: true,
+    callId,
+    status: 'ringing',
+    requireLocation,
+    firstCallFree: adminRequiresLocation && previousCallCount === 0,
+    previousCallCount,
+    currentCallCount: Number(contact.callCount || 0),
+    pushed: pushResults.filter(r => r.ok).length,
+    subscriptions: subscriptions.length
+  });
+});
+
+app.get('/api/citofonami/:code/calls/pending', (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+
+  const calls = (db.events || [])
+    .filter((event) => event.code === code && event.type === 'call' && event.status === 'ringing')
+    .slice(0, 10);
+
+  res.json({
+    ok: true,
+    code,
+    calls
+  });
+});
+
+app.get('/api/citofonami/:code/calls/:callId/status', (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const callId = String(req.params.callId || '');
+  const callerId = normalizeCitofonamiCallerId(req.query.callerId || '');
+
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+  const event = getCitofonamiEvent(db, code, callId);
+
+  if (!event) {
+    return res.status(404).json({ ok: false, error: 'Chiamata non trovata' });
+  }
+
+  if (event.callerId && callerId && event.callerId !== callerId) {
+    return res.status(403).json({ ok: false, error: 'Chiamata non autorizzata' });
+  }
+
+  res.json({
+    ok: true,
+    code,
+    callId,
+    status: event.status,
+    blocked: isCitofonamiCallerBlocked(db, code, event.callerId),
+    updatedAt: event.updatedAt
+  });
+});
+
+app.post('/api/citofonami/:code/calls/:callId/action', express.json({ limit: '1mb' }), (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const callId = String(req.params.callId || '');
+  const action = String((req.body || {}).action || '').trim();
+
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+  const event = getCitofonamiEvent(db, code, callId);
+
+  if (!event) {
+    return res.status(404).json({ ok: false, error: 'Chiamata non trovata' });
+  }
+
+  if (!['answer', 'close', 'block', 'voicemail'].includes(action)) {
+    return res.status(400).json({ ok: false, error: 'Azione non valida' });
+  }
+
+  if (action === 'answer') {
+    event.status = 'answered';
+  }
+
+  if (action === 'voicemail') {
+    event.status = 'voicemail_requested';
+  }
+
+  if (action === 'close') {
+    event.status = 'closed';
+  }
+
+  if (action === 'block') {
+    event.status = 'blocked';
+
+    if (event.callerId) {
+      upsertCitofonamiContact(db, code, event.callerId, {
+        blocked: true,
+        blockedAt: new Date().toISOString()
+      });
+    }
+
+    const list = getCitofonamiBlockedList(db, code);
+    const alreadyBlocked = list.some((item) => item.callerId === event.callerId);
+
+    if (!alreadyBlocked && event.callerId) {
+      list.push({
+        callerId: event.callerId,
+        createdAt: new Date().toISOString(),
+        userAgent: event.userAgent || '',
+        ip: event.ip || '',
+        reason: 'Bloccato da admin'
+      });
+    }
+  }
+
+  event.updatedAt = new Date().toISOString();
+  writeCitofonamiDb(db);
+
+  res.json({
+    ok: true,
+    code,
+    callId,
+    status: event.status
+  });
+});
+
+app.get('/api/citofonami/:code/blocked', (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+
+  res.json({
+    ok: true,
+    code,
+    blocked: getCitofonamiBlockedList(db, code)
+  });
+});
+
+app.get('/api/citofonami/:code/contacts', (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+  const contacts = Object.values(getCitofonamiContacts(db, code));
+
+  const active = sortCitofonamiContacts(contacts.filter((item) => !item.blocked));
+  const blocked = sortCitofonamiContacts(contacts.filter((item) => item.blocked));
+
+  res.json({
+    ok: true,
+    code,
+    active,
+    blocked
+  });
+});
+
+app.post('/api/citofonami/:code/contacts/:callerId', express.json({ limit: '1mb' }), (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const callerId = normalizeCitofonamiCallerId(req.params.callerId);
+
+  if (!callerId) {
+    return res.status(400).json({ ok: false, error: 'callerId mancante' });
+  }
+
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+  const body = req.body || {};
+
+  const contact = upsertCitofonamiContact(db, code, callerId, {
+    displayName: String(body.displayName || '').slice(0, 100),
+    notes: String(body.notes || '').slice(0, 500)
+  });
+
+  writeCitofonamiDb(db);
+
+  res.json({
+    ok: true,
+    code,
+    contact
+  });
+});
+
+app.post('/api/citofonami/:code/contacts/:callerId/block', express.json({ limit: '1mb' }), (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const callerId = normalizeCitofonamiCallerId(req.params.callerId);
+
+  if (!callerId) {
+    return res.status(400).json({ ok: false, error: 'callerId mancante' });
+  }
+
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+
+  const contact = upsertCitofonamiContact(db, code, callerId, {
+    blocked: true,
+    blockedAt: new Date().toISOString()
+  });
+
+  const list = getCitofonamiBlockedList(db, code);
+  const already = list.some((item) => item.callerId === callerId);
+
+  if (!already) {
+    list.push({
+      callerId,
+      createdAt: new Date().toISOString(),
+      reason: 'Bloccato da rubrica admin'
+    });
+  }
+
+  writeCitofonamiDb(db);
+
+  res.json({
+    ok: true,
+    code,
+    contact
+  });
+});
+
+app.post('/api/citofonami/:code/contacts/:callerId/unblock', express.json({ limit: '1mb' }), (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const callerId = normalizeCitofonamiCallerId(req.params.callerId);
+
+  if (!callerId) {
+    return res.status(400).json({ ok: false, error: 'callerId mancante' });
+  }
+
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+
+  const contact = upsertCitofonamiContact(db, code, callerId, {
+    blocked: false,
+    blockedAt: null
+  });
+
+  db.blocked[code] = (db.blocked[code] || []).filter((item) => item.callerId !== callerId);
+
+  writeCitofonamiDb(db);
+
+  res.json({
+    ok: true,
+    code,
+    contact
+  });
+});
+
+app.delete('/api/citofonami/:code/contacts/:callerId', (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const callerId = normalizeCitofonamiCallerId(req.params.callerId);
+
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+  const contacts = getCitofonamiContacts(db, code);
+
+  delete contacts[callerId];
+
+  db.blocked[code] = (db.blocked[code] || []).filter((item) => item.callerId !== callerId);
+
+  writeCitofonamiDb(db);
+
+  res.json({
+    ok: true,
+    code,
+    deleted: callerId
+  });
 });
 
 app.listen(PORT, () => {
