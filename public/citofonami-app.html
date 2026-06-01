@@ -2266,5 +2266,232 @@
     setInterval(hardBypassWireCleanButtons, 4000);
 
   </script>
+
+<script>
+/* CITOFONAMI_EXTERNAL_USER_ANSWER_PANEL_20260601 */
+(function () {
+  const state = {
+    active: false,
+    pageOpenedAt: Date.now(),
+    callStartedAt: 0,
+    callId: "",
+    lastStatus: "",
+    timer: null
+  };
+
+  function code() {
+    const parts = window.location.pathname.split("/").filter(Boolean);
+    return String(parts[parts.length - 1] || "DEMO").trim().toUpperCase();
+  }
+
+  function ensurePanel() {
+    let panel = document.getElementById("citofonamiExternalAnswerPanel");
+
+    if (panel) return panel;
+
+    panel = document.createElement("div");
+    panel.id = "citofonamiExternalAnswerPanel";
+    panel.style.cssText = [
+      "display:none",
+      "position:fixed",
+      "left:12px",
+      "right:12px",
+      "bottom:14px",
+      "z-index:999999",
+      "padding:16px",
+      "border-radius:24px",
+      "background:linear-gradient(145deg, rgba(20,24,32,.98), rgba(8,10,14,.98))",
+      "border:1px solid rgba(215,180,106,.38)",
+      "box-shadow:0 24px 70px rgba(0,0,0,.55)",
+      "color:white",
+      "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+      "text-align:center"
+    ].join(";");
+
+    panel.innerHTML = `
+      <div id="citofonamiExternalTitle" style="font-size:22px;font-weight:950;letter-spacing:-.04em;margin-bottom:6px;">
+        Admin ha risposto
+      </div>
+      <div id="citofonamiExternalText" style="font-size:14px;line-height:1.35;color:rgba(255,255,255,.72);margin-bottom:12px;">
+        Tocca “Parla ora” e avvicinati al telefono.
+      </div>
+      <button id="citofonamiExternalTalkButton" type="button" style="
+        width:100%;
+        min-height:62px;
+        border:0;
+        border-radius:19px;
+        background:linear-gradient(135deg,#d7ffe7,#39d77b);
+        color:#06170d;
+        font-size:18px;
+        font-weight:950;
+        letter-spacing:.06em;
+        text-transform:uppercase;
+      ">Parla ora</button>
+      <div id="citofonamiExternalDebug" style="margin-top:9px;font-size:11px;color:rgba(255,255,255,.45);overflow-wrap:anywhere;"></div>
+    `;
+
+    document.body.appendChild(panel);
+
+    document.getElementById("citofonamiExternalTalkButton").addEventListener("click", async function () {
+      const debug = document.getElementById("citofonamiExternalDebug");
+
+      try {
+        if (state.callId) {
+          try {
+            sessionStorage.setItem("citofonami_active_call_id", state.callId);
+          } catch (e) {}
+
+          if (window.CITOFONAMI_FORCE_STATE) {
+            window.CITOFONAMI_FORCE_STATE.callId = state.callId;
+          }
+
+          if (typeof citofonamiLiveCallId !== "undefined") {
+            citofonamiLiveCallId = state.callId;
+          }
+        }
+
+        if (typeof startUserWebrtcAudio === "function") {
+          debug.textContent = "Avvio audio WebRTC… callId: " + state.callId;
+          await startUserWebrtcAudio();
+          return;
+        }
+
+        if (typeof userStartTalkingFinal === "function") {
+          debug.textContent = "Avvio microfono… callId: " + state.callId;
+          await userStartTalkingFinal();
+          return;
+        }
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("Microfono non supportato da questo browser.");
+        }
+
+        await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        debug.textContent = "Microfono attivo, ma modulo WebRTC non trovato.";
+      } catch (error) {
+        debug.textContent = "Errore audio: " + (error && error.message ? error.message : error);
+      }
+    });
+
+    return panel;
+  }
+
+  function showPanel(call) {
+    const panel = ensurePanel();
+    const debug = document.getElementById("citofonamiExternalDebug");
+
+    state.callId = call.id;
+    state.lastStatus = call.status;
+
+    panel.style.display = "block";
+    debug.textContent = "callId: " + call.id + " · stato: " + call.status;
+  }
+
+  function markCallStarted() {
+    state.active = true;
+    state.callStartedAt = Date.now();
+
+    if (!state.timer) {
+      state.timer = setInterval(pollLatest, 900);
+    }
+
+    pollLatest();
+  }
+
+  async function pollLatest() {
+    try {
+      const res = await fetch("/api/citofonami/" + encodeURIComponent(code()) + "/calls-list/latest?external=" + Date.now(), {
+        cache: "no-store"
+      });
+
+      const data = await res.json();
+
+      if (!data || !data.ok || !Array.isArray(data.calls) || !data.calls.length) return;
+
+      const minTime = state.callStartedAt || state.pageOpenedAt;
+
+      const recent = data.calls.find(function (call) {
+        const created = call.createdAt ? new Date(call.createdAt).getTime() : 0;
+        return created >= (minTime - 20000);
+      }) || data.calls[0];
+
+      if (!recent) return;
+
+      const debug = document.getElementById("citofonamiExternalDebug");
+      if (debug) {
+        debug.textContent = "callId: " + recent.id + " · stato: " + recent.status;
+      }
+
+      if (recent.status === "answered") {
+        showPanel(recent);
+
+        try {
+          const status = document.getElementById("statusBox");
+          if (status) {
+            status.textContent = "Admin ha risposto. Tocca “Parla ora” e avvicinati al telefono.";
+            status.className = "status ok";
+          }
+        } catch (e) {}
+
+        return;
+      }
+
+      if (recent.status === "closed" || recent.status === "blocked" || recent.status === "voicemail_requested") {
+        state.active = false;
+      }
+    } catch (error) {
+      const debug = document.getElementById("citofonamiExternalDebug");
+      if (debug) {
+        debug.textContent = "Errore controllo risposta: " + (error && error.message ? error.message : error);
+      }
+    }
+  }
+
+  function wireCallDetection() {
+    const btn = document.getElementById("callButton");
+
+    if (btn && !btn.dataset.externalAnswerPanelWired) {
+      btn.dataset.externalAnswerPanelWired = "1";
+      btn.addEventListener("click", function () {
+        markCallStarted();
+      }, true);
+    }
+
+    const status = document.getElementById("statusBox");
+
+    if (status && !status.dataset.externalAnswerObserver) {
+      status.dataset.externalAnswerObserver = "1";
+
+      const observer = new MutationObserver(function () {
+        const text = (status.textContent || "").toLowerCase();
+
+        if (text.includes("chiamata inviata") || text.includes("attendi la risposta")) {
+          markCallStarted();
+        }
+      });
+
+      observer.observe(status, {
+        childList: true,
+        characterData: true,
+        subtree: true
+      });
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", wireCallDetection);
+  } else {
+    wireCallDetection();
+  }
+
+  setTimeout(wireCallDetection, 500);
+  setTimeout(wireCallDetection, 1500);
+  setInterval(wireCallDetection, 3000);
+  setInterval(function () {
+    if (state.active) pollLatest();
+  }, 1200);
+})();
+</script>
+
 </body>
 </html>
