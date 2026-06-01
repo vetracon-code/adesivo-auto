@@ -19671,10 +19671,24 @@ app.get('/api/citofonami/vapid-public-key', (req, res) => {
     '';
 
   if (!publicKey) {
-    return res.json({ ok: false, error: 'VAPID public key non configurata' });
+    return res.json({
+      ok: false,
+      error: 'VAPID public key non configurata',
+      hint: 'Imposta VAPID_PUBLIC_KEY su Render con la chiave pubblica web-push corretta.'
+    });
   }
 
-  res.json({ ok: true, publicKey });
+  const cleaned = String(publicKey).trim();
+
+  if (!/^[A-Za-z0-9_-]+$/.test(cleaned) || cleaned.length < 60) {
+    return res.json({
+      ok: false,
+      error: 'VAPID public key presente ma non valida',
+      hint: 'La chiave deve essere base64url, senza spazi, senza virgolette e senza prefissi.'
+    });
+  }
+
+  res.json({ ok: true, publicKey: cleaned });
 });
 
 app.get('/api/citofonami/:code/config', (req, res) => {

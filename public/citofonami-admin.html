@@ -1020,13 +1020,27 @@
     }
 
     function urlBase64ToUint8Array(base64String) {
-      const padding = '='.repeat((4 - base64String.length % 4) % 4);
-      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const cleaned = String(base64String || '').trim();
+
+      if (!cleaned) {
+        throw new Error('Chiave VAPID pubblica assente.');
+      }
+
+      if (!/^[A-Za-z0-9_-]+$/.test(cleaned)) {
+        throw new Error('Chiave VAPID pubblica non valida: contiene caratteri non ammessi.');
+      }
+
+      const padding = '='.repeat((4 - cleaned.length % 4) % 4);
+      const base64 = (cleaned + padding).replace(/-/g, '+').replace(/_/g, '/');
       const rawData = window.atob(base64);
       const outputArray = new Uint8Array(rawData.length);
 
       for (let i = 0; i < rawData.length; ++i) {
         outputArray[i] = rawData.charCodeAt(i);
+      }
+
+      if (outputArray.length < 60) {
+        throw new Error('Chiave VAPID pubblica troppo corta o non corretta.');
       }
 
       return outputArray;
@@ -1071,10 +1085,30 @@
           return;
         }
 
-        const subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(keyData.publicKey)
-        });
+        let applicationServerKey;
+
+        try {
+          applicationServerKey = urlBase64ToUint8Array(keyData.publicKey);
+        } catch (keyError) {
+          pushState.innerHTML = '<span class="ko">Chiave notifiche non valida.</span>';
+          setState('Salvataggio ok. Le notifiche non sono attivabili finché la VAPID_PUBLIC_KEY su Render non è corretta: ' + keyError.message, false);
+          return;
+        }
+
+        let subscription = await registration.pushManager.getSubscription();
+
+        if (!subscription) {
+          try {
+            subscription = await registration.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey
+            });
+          } catch (subscribeError) {
+            pushState.innerHTML = '<span class="ko">Sottoscrizione notifiche non riuscita.</span>';
+            setState('Salvataggio ok. Errore notifiche: ' + subscribeError.message, false);
+            return;
+          }
+        }
 
         const res = await fetch(`/api/citofonami/${encodeURIComponent(code)}/subscribe`, {
           method: 'POST',
