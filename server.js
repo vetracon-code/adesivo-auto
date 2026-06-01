@@ -3643,8 +3643,7 @@ app.post('/api/log-contact-message', async (req, res) => {
         const unreadCount = unreadRes.rows[0]?.unread_count || 0;
 
         for (const sub of subs.rows) {
-          // CITOFONAMI_SERVER_PUSH_TARGET_ADMIN_CLEAN_20260601
-const payload = JSON.stringify({
+          const payload = JSON.stringify({
             title,
             body,
             url: targetUrl,
@@ -12182,7 +12181,7 @@ app.get('/fm/document-closed', (req, res) => {
 <body>
   <section class="card">
     <div class="line"></div>
-    <h1>Collegamento chiuso</h1>
+    <h1>Grazie</h1>
     <p>Il documento è stato chiuso correttamente.</p>
     <div class="saluto">A presto</div>
   </section>
@@ -12403,7 +12402,7 @@ app.get('/fm/document/closed', (req, res) => {
 <body>
   <section class="card">
     <div class="line"></div>
-    <h1>Collegamento chiuso</h1>
+    <h1>Grazie</h1>
     <p>Il documento è stato chiuso correttamente.</p>
     <div class="saluto">A presto</div>
   </section>
@@ -12686,7 +12685,7 @@ app.get('/fm/document/closed', (req, res) => {
 <body>
   <section class="card">
     <div class="line"></div>
-    <h1>Collegamento chiuso</h1>
+    <h1>Grazie</h1>
     <p>Il documento è stato chiuso. Puoi tornare alla pagina precedente o continuare la navigazione dal tuo dispositivo.</p>
     <div class="silver">A presto</div>
   </section>
@@ -19628,14 +19627,6 @@ function normalizeCitofonamiCode(code) {
   return String(code || 'DEMO').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '') || 'DEMO';
 }
 
-
-// CITOFONAMI_REQUIRE_LOCATION_DEFAULT_OFF_NORMALIZER
-function normalizeCitofonamiRequireLocation(config) {
-  const next = config || {};
-  next.requireLocation = next.requireLocation === true || next.requireLocation === 'true';
-  return next;
-}
-
 function defaultCitofonamiConfig(code) {
   return {
     firstName: 'Mario',
@@ -19653,7 +19644,7 @@ function defaultCitofonamiConfig(code) {
     enabled: true,
     pushEnabled: true,
     fallbackEnabled: true,
-    requireLocation: false,
+    requireLocation: true,
     doors: [
       { name: 'Mario Rossi', description: 'Citofono principale' }
     ],
@@ -19727,7 +19718,7 @@ app.get('/api/citofonami/:code/config', (req, res) => {
   res.json({
     ok: true,
     code,
-    config: normalizeCitofonamiRequireLocation(config)
+    config
   });
 });
 
@@ -19777,7 +19768,7 @@ app.post('/api/citofonami/:code/config', express.json({ limit: '1mb' }), (req, r
   res.json({
     ok: true,
     code,
-    config: normalizeCitofonamiRequireLocation(config)
+    config
   });
 });
 
@@ -19847,7 +19838,7 @@ app.post('/api/citofonami/:code/ring', express.json({ limit: '1mb' }), async (re
       return res.status(400).json({
         ok: false,
         error: 'Posizione richiesta',
-        requireLocation: false,
+        requireLocation: true,
         firstCallFree: false,
         previousCallCount
       });
@@ -19903,7 +19894,7 @@ app.post('/api/citofonami/:code/ring', express.json({ limit: '1mb' }), async (re
     title: 'Citofonami',
     body: `${doorName}: qualcuno sta suonando.`,
     tag: 'citofonami-ring-' + code,
-    url: '/citofonami-admin-clean'
+    url: '/citofonami-admin'
   };
 
   const pushResults = [];
@@ -19929,11 +19920,17 @@ app.post('/api/citofonami/:code/ring', express.json({ limit: '1mb' }), async (re
 // ==============================
 // CITOFONAMI - ADMIN
 // ==============================
-app.get('/citofonami-admin', (req, res) => {
+
+// CITOFONAMI_STABLE_NO_CACHE_20260601
+function setCitofonamiNoCache(res) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   res.setHeader('Surrogate-Control', 'no-store');
+}
+
+app.get('/citofonami-admin', (req, res) => {
+  setCitofonamiNoCache(res);
   res.sendFile(path.join(__dirname, 'public', 'citofonami-admin.html'));
 });
 
@@ -20491,7 +20488,7 @@ app.post('/api/citofonami/:code/ring-v2', express.json({ limit: '1mb' }), async 
       return res.status(400).json({
         ok: false,
         error: 'Posizione richiesta',
-        requireLocation: false,
+        requireLocation: true,
         previousCallCount
       });
     }
@@ -20558,7 +20555,7 @@ app.post('/api/citofonami/:code/ring-v2', express.json({ limit: '1mb' }), async 
     title: 'Citofonami',
     body: `${displayDoorName}: qualcuno sta suonando.`,
     tag: 'citofonami-ring-' + code,
-    url: `/citofonami-admin-clean?code=${encodeURIComponent(code)}&call=${encodeURIComponent(callId)}`
+    url: `/citofonami-admin?code=${encodeURIComponent(code)}&call=${encodeURIComponent(callId)}`
   };
 
   const pushResults = [];
@@ -21092,123 +21089,6 @@ app.get('/api/citofonami/:code/calls/latest', (req, res) => {
     code,
     calls
   });
-});
-
-
-
-
-// ==============================
-// CITOFONAMI - CLOSED THANK YOU PAGE
-// ==============================
-app.get('/citofonami-closed', (req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-
-  res.type('html').send(`<!doctype html>
-<html lang="it">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>Collegamento chiuso</title>
-  <style>
-    html,body{
-      margin:0;
-      min-height:100%;
-      background:#080a0e;
-      color:#fff;
-      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-    }
-    body{
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      padding:24px;
-      text-align:center;
-    }
-    .card{
-      width:min(430px,100%);
-      border:1px solid rgba(215,180,106,.35);
-      border-radius:30px;
-      padding:26px 22px;
-      background:rgba(255,255,255,.06);
-      box-shadow:0 24px 80px rgba(0,0,0,.55);
-    }
-    h1{
-      margin:0 0 8px;
-      font-size:32px;
-      letter-spacing:-.06em;
-      line-height:1;
-    }
-    p{
-      margin:0 0 18px;
-      color:rgba(255,255,255,.74);
-      font-size:15px;
-      line-height:1.45;
-    }
-    button{
-      width:100%;
-      min-height:54px;
-      border:0;
-      border-radius:18px;
-      background:linear-gradient(135deg,#d7ffe7,#39d77b);
-      color:#06170d;
-      font-size:16px;
-      font-weight:950;
-      text-transform:uppercase;
-      letter-spacing:.05em;
-    }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>Collegamento chiuso</h1>
-    <p>Collegamento chiuso.<br>Grazie. Audio e microfono sono stati disattivati.</p>
-    <button onclick="try{window.close()}catch(e){};try{history.back()}catch(e){}">Chiudi pagina</button>
-  </div>
-  <script>
-    try {
-      sessionStorage.clear();
-    } catch(e) {}
-
-    try {
-      if ('caches' in window) {
-        caches.keys().then(keys => keys.forEach(k => {
-          if (String(k).toLowerCase().includes('citofonami')) caches.delete(k);
-        })).catch(()=>null);
-      }
-    } catch(e) {}
-  </script>
-</body>
-</html>`);
-});
-
-
-
-
-// ==============================
-// CITOFONAMI ADMIN CLEAN
-// ==============================
-app.get('/citofonami-admin-clean', (req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-  res.setHeader('Surrogate-Control', 'no-store');
-  res.sendFile(path.join(__dirname, 'public', 'citofonami-admin-clean.html'));
-});
-
-
-
-
-// ==============================
-// CITOFONAMI ADMIN CLEAN MANIFEST
-// ==============================
-app.get('/citofonami-admin-clean-manifest.json', (req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-  res.type('application/manifest+json');
-  res.sendFile(path.join(__dirname, 'public', 'citofonami-admin-clean-manifest.json'));
 });
 
 
