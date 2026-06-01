@@ -408,6 +408,38 @@
       statusBox.className = 'status-box' + (type ? ' ' + type : '');
     }
 
+
+    function cleanCitofonamiError(error, fallback) {
+      const raw = error && error.message ? String(error.message) : String(error || '');
+
+      if (
+        raw.includes('The string did not match the expected pattern') ||
+        raw.includes('expected pattern')
+      ) {
+        return fallback || 'Il browser ha bloccato un passaggio tecnico della chiamata. Riprova o usa un altro browser.';
+      }
+
+      if (raw.includes('Permission denied') || raw.includes('NotAllowedError')) {
+        return 'Permesso non concesso.';
+      }
+
+      if (raw.includes('NotFoundError')) {
+        return 'Microfono non trovato.';
+      }
+
+      if (raw.includes('NotReadableError')) {
+        return 'Microfono già in uso da un’altra app.';
+      }
+
+      return raw || (fallback || 'Operazione non riuscita.');
+    }
+
+    function logCitofonamiStep(step, extra) {
+      try {
+        console.log('[Citofonami]', step, extra || '');
+      } catch (error) {}
+    }
+
     async function loadConfig() {
       try {
         const res = await fetch(`/api/citofonami/${encodeURIComponent(code)}/config`);
@@ -503,15 +535,29 @@
 
     async function openMicrophone() {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('Microfono non disponibile');
+        return {
+          ok: false,
+          error: 'Microfono non disponibile'
+        };
       }
 
-      localStream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: false
-      });
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: false
+        });
 
-      return true;
+        return {
+          ok: true
+        };
+      } catch (error) {
+        console.warn('Citofonami microfono non attivo:', error);
+
+        return {
+          ok: false,
+          error: cleanCitofonamiError(error, 'Microfono non attivato.')
+        };
+      }
     }
 
     async function ring() {
@@ -528,12 +574,16 @@
         }
 
         setStatus('Attivo il microfono…');
+        logCitofonamiStep('microphone_start');
 
-        try {
-          await openMicrophone();
-        } catch (micError) {
-          console.warn(micError);
+        const micResult = await openMicrophone();
+
+        if (!micResult.ok) {
+          logCitofonamiStep('microphone_optional_failed', micResult.error);
+          setStatus('Microfono non attivo, invio comunque la chiamata…');
         }
+
+        logCitofonamiStep('server_ring_start');
 
         const payload = {
           door: {
@@ -574,15 +624,23 @@
 
         setStatus('Chiamata inviata. Attendi la risposta…', 'ok');
       } catch (error) {
-        console.error(error);
-        setStatus(error.message || 'Non è stato possibile chiamare.', 'ko');
+        console.error('Citofonami ring error:', error);
+
+        const message = cleanCitofonamiError(
+          error,
+          'Non è stato possibile avviare la chiamata. Riprova.'
+        );
+
+        setStatus(message, 'ko');
       }
     }
 
     callButton.addEventListener('click', ring);
 
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/citofonami-sw.js').catch(() => null);
+      navigator.serviceWorker.register('/citofonami-sw.js').catch((error) => {
+        console.warn('Citofonami service worker non registrato:', error);
+      });
     }
 
     loadConfig();
