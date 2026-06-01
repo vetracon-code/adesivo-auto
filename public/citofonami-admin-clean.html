@@ -1474,6 +1474,8 @@ textarea {
       iceTimer = setInterval(() => pollUserIce(callId), 800);
     }
 
+    window.createAdminOffer = createAdminOffer;
+
     async function pollAnswer(callId) {
       if (!adminPeer || adminPeer.remoteDescription) return;
 
@@ -2013,6 +2015,136 @@ textarea {
   }, true);
 
   window.citofonamiAdminCleanShowMiniAudioButton = showMiniAudioButton;
+})();
+</script>
+
+
+<script>
+/* CITOFONAMI_ADMIN_CLEAN_FORCE_OFFER_ON_ANSWER_20260601 */
+(function () {
+  let forceOfferLock = false;
+
+  function adminCode() {
+    return "DEMO";
+  }
+
+  async function latestCallId() {
+    const fromUrl = new URLSearchParams(location.search).get("call");
+    if (fromUrl) return fromUrl;
+
+    try {
+      if (window.currentCall && window.currentCall.id) return window.currentCall.id;
+    } catch(e) {}
+
+    try {
+      if (typeof currentCall !== "undefined" && currentCall && currentCall.id) {
+        return currentCall.id;
+      }
+    } catch(e) {}
+
+    const data = await fetch(`/api/citofonami/${encodeURIComponent(adminCode())}/calls-list/latest?t=${Date.now()}`, {
+      cache: "no-store"
+    }).then(r => r.json());
+
+    if (data && data.ok && Array.isArray(data.calls) && data.calls[0]) {
+      return data.calls[0].id;
+    }
+
+    return "";
+  }
+
+  function setText(title, sub) {
+    const t = document.getElementById("callTitle");
+    const s = document.getElementById("callSub");
+    const meter = document.getElementById("adminAudioMeterSub");
+
+    if (t && title) t.textContent = title;
+    if (s && sub) s.textContent = sub;
+    if (meter && sub) meter.textContent = sub;
+  }
+
+  async function forceAnswerAndOffer(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    }
+
+    if (forceOfferLock) return;
+    forceOfferLock = true;
+
+    const btn = document.getElementById("answerButton");
+
+    try {
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Collego…";
+      }
+
+      setText("Collegamento…", "Attivo microfono admin…");
+
+      const callId = await latestCallId();
+      if (!callId) throw new Error("Chiamata non trovata");
+
+      try {
+        window.currentCall = window.currentCall || {};
+        window.currentCall.id = callId;
+      } catch(e) {}
+
+      await fetch(`/api/citofonami/${encodeURIComponent(adminCode())}/calls/${encodeURIComponent(callId)}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ action: "answer" })
+      });
+
+      if (typeof window.createAdminOffer === "function") {
+        await window.createAdminOffer(callId);
+      } else if (typeof createAdminOffer === "function") {
+        await createAdminOffer(callId);
+      } else {
+        throw new Error("createAdminOffer non disponibile");
+      }
+
+      setText("Chiamata accettata", "Offerta audio inviata. Attendo utente.");
+      if (btn) btn.textContent = "In attesa";
+    } catch (error) {
+      console.error("forceAnswerAndOffer error:", error);
+      setText("Errore risposta", String(error.message || error));
+
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Rispondi";
+      }
+
+      forceOfferLock = false;
+    }
+  }
+
+  function wire() {
+    const btn = document.getElementById("answerButton");
+    if (!btn || btn.dataset.forceOfferWired === "1") return;
+
+    const clone = btn.cloneNode(true);
+    clone.id = "answerButton";
+    clone.dataset.forceOfferWired = "1";
+    btn.parentNode.replaceChild(clone, btn);
+
+    clone.addEventListener("click", forceAnswerAndOffer, true);
+    clone.addEventListener("pointerdown", function () {}, true);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", wire);
+  } else {
+    wire();
+  }
+
+  setTimeout(wire, 300);
+  setTimeout(wire, 1000);
+  setTimeout(wire, 2000);
+
+  window.citofonamiAdminCleanForceAnswerOffer = forceAnswerAndOffer;
 })();
 </script>
 
