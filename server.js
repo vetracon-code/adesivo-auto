@@ -19635,7 +19635,7 @@ function defaultCitofonamiConfig(code) {
     publicText: 'Premi il pulsante per parlare con il proprietario. Nessun numero telefonico verrà mostrato.',
     qrCode: normalizeCitofonamiCode(code),
     buttonLabel: 'Mario Rossi',
-    address: 'Monza, Italia',
+    address: 'Via Roma, 1 20100 Milano',
     radius: 50,
     radiusPreset: '50',
     hours: '08:00 - 20:00',
@@ -19644,7 +19644,7 @@ function defaultCitofonamiConfig(code) {
     enabled: true,
     pushEnabled: true,
     fallbackEnabled: true,
-    requireLocation: true,
+    requireLocation: false,
     doors: [
       { name: 'Mario Rossi', description: 'Citofono principale' }
     ],
@@ -19838,7 +19838,7 @@ app.post('/api/citofonami/:code/ring', express.json({ limit: '1mb' }), async (re
       return res.status(400).json({
         ok: false,
         error: 'Posizione richiesta',
-        requireLocation: true,
+        requireLocation: false,
         firstCallFree: false,
         previousCallCount
       });
@@ -20501,7 +20501,7 @@ app.post('/api/citofonami/:code/ring-v2', express.json({ limit: '1mb' }), async 
       return res.status(400).json({
         ok: false,
         error: 'Posizione richiesta',
-        requireLocation: true,
+        requireLocation: false,
         previousCallCount
       });
     }

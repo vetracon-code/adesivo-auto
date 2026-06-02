@@ -4904,5 +4904,262 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_ADMIN_TOP_CLOSE_AND_CLEAN_EXIT_20260602 */
+(function () {
+  function code() {
+    try {
+      return (new URL(location.href).searchParams.get("code") || localStorage.getItem("citofonami_admin_code") || "DEMO").trim().toUpperCase();
+    } catch(e) {
+      return "DEMO";
+    }
+  }
+
+  function currentCallId() {
+    try {
+      const url = new URL(location.href);
+      const fromUrl = url.searchParams.get("call");
+      if (fromUrl) return fromUrl;
+    } catch(e) {}
+
+    try {
+      if (window.currentCall && window.currentCall.id) return window.currentCall.id;
+    } catch(e) {}
+
+    try {
+      if (typeof currentCall !== "undefined" && currentCall && currentCall.id) return currentCall.id;
+    } catch(e) {}
+
+    return "";
+  }
+
+  async function latestCallId() {
+    const direct = currentCallId();
+    if (direct) return direct;
+
+    try {
+      const data = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls-list/latest?t=${Date.now()}`, {
+        cache: "no-store"
+      }).then(r => r.json());
+
+      if (data && data.ok && Array.isArray(data.calls) && data.calls[0] && data.calls[0].id) {
+        return data.calls[0].id;
+      }
+    } catch(e) {}
+
+    return "";
+  }
+
+  function stopEveryAudioAndPeer() {
+    const peerNames = [
+      "adminPeer",
+      "adminPc",
+      "adminConnection",
+      "citofonamiAdminPeer",
+      "citofonamiAdminPc",
+      "directPeer"
+    ];
+
+    for (const name of peerNames) {
+      try {
+        const pc = window[name];
+        if (pc && typeof pc.close === "function") pc.close();
+        window[name] = null;
+      } catch(e) {}
+    }
+
+    const streamNames = [
+      "adminStream",
+      "localStream",
+      "citofonamiAdminStream",
+      "directStream"
+    ];
+
+    for (const name of streamNames) {
+      try {
+        const stream = window[name];
+        if (stream && stream.getTracks) {
+          stream.getTracks().forEach(track => {
+            try { track.stop(); } catch(e) {}
+          });
+        }
+        window[name] = null;
+      } catch(e) {}
+    }
+
+    try {
+      document.querySelectorAll("audio, video").forEach(el => {
+        try { el.pause(); } catch(e) {}
+        try { el.srcObject = null; } catch(e) {}
+        try { el.removeAttribute("src"); } catch(e) {}
+        try { el.load(); } catch(e) {}
+      });
+    } catch(e) {}
+  }
+
+  async function clearCitofonamiCaches() {
+    try {
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(
+          keys
+            .filter(key => String(key || "").toLowerCase().includes("citofonami"))
+            .map(key => caches.delete(key))
+        );
+      }
+    } catch(e) {}
+
+    try {
+      sessionStorage.removeItem("citofonami_active_call_id");
+      sessionStorage.removeItem("citofonami_live_call_id");
+      sessionStorage.removeItem("citofonami_last_call_id");
+    } catch(e) {}
+  }
+
+  function showClosedThanks() {
+    document.documentElement.style.background = "#080a0e";
+    document.body.innerHTML = `
+      <div style="
+        min-height:100vh;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:24px;
+        background:
+          radial-gradient(circle at 20% 0%, rgba(215,180,106,.18), transparent 34%),
+          radial-gradient(circle at 90% 10%, rgba(57,215,123,.10), transparent 28%),
+          #080a0e;
+        color:white;
+        font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+        text-align:center;
+      ">
+        <div style="
+          width:min(420px,100%);
+          border:1px solid rgba(255,255,255,.12);
+          background:rgba(255,255,255,.06);
+          border-radius:28px;
+          padding:28px 22px;
+          box-shadow:0 24px 80px rgba(0,0,0,.45);
+        ">
+          <div style="font-size:15px;color:rgba(255,255,255,.62);margin-bottom:8px;">Citofonami</div>
+          <div style="font-size:28px;font-weight:950;letter-spacing:-.05em;margin-bottom:10px;">Collegamento chiuso</div>
+          <div style="font-size:15px;line-height:1.45;color:rgba(255,255,255,.72);">
+            Conversazione terminata correttamente.<br>
+            Grazie per la chiamata.
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  async function closeFromTop(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    }
+
+    const btn = document.getElementById("citofonamiTopCloseButton");
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Chiudo…";
+    }
+
+    const callId = await latestCallId();
+
+    try {
+      if (callId) {
+        await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/action`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+          body: JSON.stringify({ action: "close" })
+        });
+      }
+    } catch(e) {}
+
+    try {
+      if (callId) {
+        await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/webrtc`, {
+          method: "DELETE",
+          cache: "no-store"
+        });
+      }
+    } catch(e) {}
+
+    stopEveryAudioAndPeer();
+    await clearCitofonamiCaches();
+    showClosedThanks();
+
+    setTimeout(function () {
+      try { window.close(); } catch(e) {}
+    }, 800);
+
+    setTimeout(function () {
+      try {
+        if (history.length > 1) {
+          history.back();
+        }
+      } catch(e) {}
+    }, 1400);
+  }
+
+  function ensureTopCloseButton() {
+    let btn = document.getElementById("citofonamiTopCloseButton");
+
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.id = "citofonamiTopCloseButton";
+      btn.type = "button";
+      btn.textContent = "Chiudi";
+      btn.style.cssText = [
+        "position:fixed",
+        "top:calc(10px + env(safe-area-inset-top,0px))",
+        "right:12px",
+        "z-index:2147483647",
+        "min-width:92px",
+        "height:44px",
+        "border:0",
+        "border-radius:999px",
+        "background:linear-gradient(135deg,#ffe1e1,#ff7676)",
+        "color:#2b0505",
+        "font-size:15px",
+        "font-weight:950",
+        "box-shadow:0 14px 38px rgba(255,118,118,.28)"
+      ].join(";");
+
+      document.body.appendChild(btn);
+    }
+
+    if (btn.dataset.wired !== "1") {
+      btn.dataset.wired = "1";
+      btn.addEventListener("click", closeFromTop, true);
+      btn.addEventListener("pointerdown", function (event) {
+        event.stopPropagation();
+      }, true);
+    }
+
+    const visible =
+      document.body.textContent.includes("Rispondi") ||
+      document.body.textContent.includes("Parla ora") ||
+      document.body.textContent.includes("Chiamata") ||
+      currentCallId();
+
+    btn.style.display = visible ? "block" : "none";
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", ensureTopCloseButton);
+  } else {
+    ensureTopCloseButton();
+  }
+
+  setInterval(ensureTopCloseButton, 700);
+
+  window.citofonamiAdminTopCloseConversation = closeFromTop;
+})();
+</script>
+
 </body>
 </html>
