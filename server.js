@@ -19930,9 +19930,14 @@ function setCitofonamiNoCache(res) {
 }
 
 
+
+
 // CITOFONAMI_REDIRECT_ADMIN_CLEAN_TO_STABLE_20260602
 app.get('/citofonami-admin-clean', (req, res) => {
-  setCitofonamiNoCache(res);
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
   const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
   res.redirect(302, '/citofonami-admin' + qs);
 });
