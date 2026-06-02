@@ -4770,10 +4770,137 @@
     if (!answer) return;
 
     setTimeout(forceCreateAdminOffer, 250);
-    setTimeout(forceCreateAdminOffer, 1400);
+    // disabled second forceCreateAdminOffer to avoid stale WebRTC mismatch
   }, true);
 
   window.citofonamiForceCreateAdminOffer = forceCreateAdminOffer;
+})();
+</script>
+
+
+<script>
+/* CITOFONAMI_ADMIN_FORCE_OFFER_ON_ANSWERED_SINGLE_20260602 */
+(function () {
+  const doneByCall = new Set();
+  let running = false;
+
+  function code() {
+    try {
+      return (new URL(location.href).searchParams.get("code") || localStorage.getItem("citofonami_admin_code") || "DEMO").trim().toUpperCase();
+    } catch(e) {
+      return "DEMO";
+    }
+  }
+
+  async function latestCall() {
+    const data = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls-list/latest?t=${Date.now()}`, {
+      cache: "no-store"
+    }).then(r => r.json());
+
+    if (data && data.ok && Array.isArray(data.calls) && data.calls[0]) {
+      return data.calls[0];
+    }
+
+    return null;
+  }
+
+  async function currentOffer(callId) {
+    try {
+      const data = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/webrtc/offer?t=${Date.now()}`, {
+        cache: "no-store"
+      }).then(r => r.json());
+
+      return data && data.ok ? data.offer : null;
+    } catch(e) {
+      return null;
+    }
+  }
+
+  function setMsg(text, ok) {
+    try {
+      if (typeof setAdminAudioState === "function") {
+        setAdminAudioState(text, ok !== false);
+      }
+    } catch(e) {}
+
+    try {
+      const el = document.getElementById("finalCallSubtitle");
+      if (el) el.textContent = text;
+    } catch(e) {}
+  }
+
+  async function createOfferOnce(reason) {
+    if (running) return;
+
+    const call = await latestCall();
+    if (!call || !call.id) return;
+
+    const callId = call.id;
+
+    if (call.status !== "answered") return;
+    if (doneByCall.has(callId)) return;
+
+    const existing = await currentOffer(callId);
+    if (existing) {
+      doneByCall.add(callId);
+      setMsg("Offerta audio già presente. Attendo Parla ora dall’utente.", true);
+      return;
+    }
+
+    running = true;
+    doneByCall.add(callId);
+
+    try {
+      setMsg("Creo audio admin…", true);
+
+      if (typeof window.citofonamiForceCreateAdminOffer === "function") {
+        await window.citofonamiForceCreateAdminOffer();
+      } else if (typeof forceCreateAdminOffer === "function") {
+        await forceCreateAdminOffer();
+      } else {
+        throw new Error("forceCreateAdminOffer non disponibile");
+      }
+
+      setTimeout(async function () {
+        const after = await currentOffer(callId);
+        if (after) {
+          setMsg("Offerta audio creata. Attendo Parla ora dall’utente.", true);
+        } else {
+          setMsg("Chiamata accettata, ma offerta audio non creata.", false);
+          doneByCall.delete(callId);
+        }
+      }, 900);
+    } catch (error) {
+      console.error("createOfferOnce error:", error);
+      doneByCall.delete(callId);
+      setMsg("Errore creazione audio admin: " + (error.message || error), false);
+    } finally {
+      running = false;
+    }
+  }
+
+  function watchAnswered() {
+    createOfferOnce("watch");
+  }
+
+  setInterval(watchAnswered, 900);
+
+  document.addEventListener("click", function (event) {
+    const target = event.target;
+    if (!target || !target.closest) return;
+
+    if (
+      target.closest("#finalAnswerButton") ||
+      target.closest("#answerButton") ||
+      String(target.textContent || "").toLowerCase().includes("rispondi")
+    ) {
+      setTimeout(function () {
+        createOfferOnce("answer-click");
+      }, 350);
+    }
+  }, true);
+
+  window.citofonamiAdminCreateOfferOnceOnAnswered = createOfferOnce;
 })();
 </script>
 
