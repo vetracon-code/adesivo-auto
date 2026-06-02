@@ -1,37 +1,57 @@
-/* CITOFONAMI_SW_TARGET_ADMIN_CLEAN_FIXED_20260601 */
-const CITOFONAMI_CACHE = 'citofonami-cache-v2';
+/* CITOFONAMI_SW_TARGET_STABLE_ADMIN_20260602 */
+const CITOFONAMI_CACHE = 'citofonami-cache-stable-admin-v1';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil((async () => {
+    try {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys
+          .filter((key) => String(key || '').toLowerCase().includes('citofonami'))
+          .map((key) => caches.delete(key))
+      );
+    } catch (error) {}
+
+    await self.clients.claim();
+  })());
 });
 
-/* CITOFONAMI_IMPORTANT_NOTIFICATION_DEFAULTS */
+function stableAdminUrl(rawUrl) {
+  let next = '/citofonami-admin';
 
-function enhanceCitofonamiNotificationOptions(options) {
-  const next = Object.assign({}, options || {});
-
-  next.tag = next.tag || 'citofonami-important';
-  next.renotify = true;
-  next.requireInteraction = true;
-  next.silent = false;
-
-  if (!next.vibrate) {
-    next.vibrate = [250, 110, 250, 110, 500];
+  try {
+    next = String(rawUrl || '').trim() || '/citofonami-admin';
+  } catch (error) {
+    next = '/citofonami-admin';
   }
 
-  next.data = Object.assign({}, next.data || {}, {
-    important: true,
-    receivedAt: Date.now(),
-    url: next.url || (next.data && next.data.url) || '/'
-  });
+  if (next === '/' || next === 'about:blank') {
+    next = '/citofonami-admin';
+  }
 
-  return next;
+  // Correzione fondamentale: ogni vecchio puntamento admin-clean torna alla admin stabile.
+  next = next.replace('/citofonami-admin-clean', '/citofonami-admin');
+
+  try {
+    const parsed = new URL(next, self.location.origin);
+
+    if (parsed.origin !== self.location.origin) {
+      return '/citofonami-admin';
+    }
+
+    if (parsed.pathname === '/citofonami-admin-clean') {
+      parsed.pathname = '/citofonami-admin';
+    }
+
+    return parsed.pathname + parsed.search + parsed.hash;
+  } catch (error) {
+    return '/citofonami-admin';
+  }
 }
-
 
 self.addEventListener('push', (event) => {
   let data = {};
@@ -45,15 +65,27 @@ self.addEventListener('push', (event) => {
     };
   }
 
+  const targetUrl = stableAdminUrl(
+    data.url ||
+    (data.data && data.data.url) ||
+    '/citofonami-admin'
+  );
+
   const title = data.title || 'Citofonami';
   const options = {
     body: data.body || 'Qualcuno sta suonando il tuo citofono digitale.',
     icon: data.icon || '/icons/icon-192.png',
     badge: data.badge || '/icons/icon-192.png',
     tag: data.tag || 'citofonami-ring',
+    renotify: true,
     requireInteraction: true,
+    silent: false,
+    vibrate: data.vibrate || [250, 110, 250, 110, 500],
     data: {
-      url: forceCitofonamiAdminCleanUrl(data.url || '/citofonami-admin-clean')
+      ...(data.data || {}),
+      url: targetUrl,
+      stableAdmin: true,
+      receivedAt: Date.now()
     },
     actions: [
       {
@@ -63,58 +95,45 @@ self.addEventListener('push', (event) => {
     ]
   };
 
-  event.waitUntil(self.registration.showNotification(title, enhanceCitofonamiNotificationOptions(options)));
+  event.waitUntil(self.registration.showNotification(title, options));
 });
-
-// CITOFONAMI_SW_FORCE_ADMIN_CLEAN_URL_20260601
-function forceCitofonamiAdminCleanUrl(url) {
-  let next = String(url || '/citofonami-admin-clean');
-
-  if (next.includes('/citofonami-admin') && !next.includes('/citofonami-admin-clean')) {
-    next = next.replace('/citofonami-admin', '/citofonami-admin-clean');
-  }
-
-  if (next === '/citofonami-admin') {
-    next = '/citofonami-admin-clean';
-  }
-
-  return next;
-}
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  const url = forceCitofonamiAdminCleanUrl(event.notification.data && event.notification.data.url ? event.notification.data.url : '/citofonami-admin-clean');
-
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if ('focus' in client) {
-          client.navigate(url);
-          return client.focus();
-        }
-      }
-
-      if (clients.openWindow) {
-        return clients.openWindow(url);
-      }
-    })
+  const targetUrl = stableAdminUrl(
+    event.notification &&
+    event.notification.data &&
+    event.notification.data.url
   );
+
+  event.waitUntil((async () => {
+    const allClients = await clients.matchAll({
+      type: 'window',
+      includeUncontrolled: true
+    });
+
+    for (const client of allClients) {
+      try {
+        const clientUrl = new URL(client.url);
+
+        if (
+          clientUrl.origin === self.location.origin &&
+          clientUrl.pathname === '/citofonami-admin'
+        ) {
+          await client.focus();
+
+          if (client.navigate) {
+            return client.navigate(targetUrl);
+          }
+
+          return;
+        }
+      } catch (error) {}
+    }
+
+    if (clients.openWindow) {
+      return clients.openWindow(targetUrl);
+    }
+  })());
 });
-
-
-// CITOFONAMI_SW_NO_CACHE_NAVIGATION
-self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-
-  if (
-    url.pathname.startsWith('/citofonami/') ||
-    url.pathname.startsWith('/api/citofonami/')
-  ) {
-    event.respondWith(
-      fetch(event.request, { cache: 'no-store' }).catch(() => fetch(event.request))
-    );
-    return;
-  }
-});
-
