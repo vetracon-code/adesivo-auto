@@ -1635,6 +1635,33 @@
     }
 
   </style>
+
+<script>
+/* CITOFONAMI_DYNAMIC_ICE_CONFIG_ADMIN_20260602 */
+(function () {
+  window.citofonamiDefaultIceServers = [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" }
+  ];
+
+  window.citofonamiLoadIceServers = async function () {
+    try {
+      const data = await fetch("/api/citofonami/ice-config?t=" + Date.now(), {
+        cache: "no-store"
+      }).then(r => r.json());
+
+      if (data && data.ok && Array.isArray(data.iceServers) && data.iceServers.length) {
+        return data.iceServers;
+      }
+    } catch (e) {
+      console.warn("ICE config fallback STUN:", e);
+    }
+
+    return window.citofonamiDefaultIceServers;
+  };
+})();
+</script>
+
 </head>
 
 <body>
@@ -4184,10 +4211,7 @@
         if (typeof forceRenderSetupState === 'function') forceRenderSetupState();
 
         adminRtcPeer = new RTCPeerConnection({
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-          ]
+          iceServers: await window.citofonamiLoadIceServers()
         });
 
         adminRtcStream.getTracks().forEach(track => {
@@ -4696,10 +4720,7 @@
       } catch (e) {}
 
       peer = new RTCPeerConnection({
-        iceServers: [
-          { urls: "stun:stun.l.google.com:19302" },
-          { urls: "stun:stun1.l.google.com:19302" }
-        ]
+        iceServers: await window.citofonamiLoadIceServers()
       });
 
       stream.getTracks().forEach((track) => peer.addTrack(track, stream));

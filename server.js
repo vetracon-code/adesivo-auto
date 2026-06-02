@@ -19681,6 +19681,51 @@ async function sendCitofonamiPush(subscription, payload) {
   }
 }
 
+
+// CITOFONAMI_ICE_CONFIG_ENDPOINT_20260602
+app.get('/api/citofonami/ice-config', (req, res) => {
+  try {
+    const stunServers = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ];
+
+    const turnUrl = process.env.CITOFONAMI_TURN_URL || '';
+    const turnUsername = process.env.CITOFONAMI_TURN_USERNAME || '';
+    const turnCredential = process.env.CITOFONAMI_TURN_CREDENTIAL || '';
+
+    const iceServers = [...stunServers];
+
+    if (turnUrl && turnUsername && turnCredential) {
+      iceServers.push({
+        urls: turnUrl,
+        username: turnUsername,
+        credential: turnCredential
+      });
+    }
+
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
+    return res.json({
+      ok: true,
+      hasTurn: !!(turnUrl && turnUsername && turnCredential),
+      iceServers
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || String(error),
+      hasTurn: false,
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
+    });
+  }
+});
+
 app.get('/api/citofonami/vapid-public-key', (req, res) => {
   const publicKey =
     process.env.VAPID_PUBLIC_KEY ||
