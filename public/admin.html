@@ -3994,7 +3994,35 @@ function setDeadlineCleanupFlag(enabled){
         return;
       }
 
-      box.innerHTML = rows.map(projectCard).join("");
+      const sortedRows = rows.slice().sort(function(a,b){
+        const da = new Date(a.updated_at || a.last_scan_at || a.created_at || 0).getTime() || 0;
+        const db = new Date(b.updated_at || b.last_scan_at || b.created_at || 0).getTime() || 0;
+        return db - da;
+      });
+
+      const latest = sortedRows[0];
+      const others = sortedRows.slice(1);
+
+      function projectNameOnly(p){
+        const code = p.code || p.public_id || "";
+        const label = p.label || "FollowMe QR";
+        return ''
+          + '<button type="button" class="fm-admin-project-name-only" data-fm-load-single="' + esc(code) + '" '
+          + 'style="width:100%;text-align:left;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.10);color:#fff;box-shadow:none;cursor:pointer;">'
+          + '  <strong style="display:block;font-size:15px;font-weight:950;">' + esc(code || "QR senza codice") + '</strong>'
+          + '  <span style="display:block;margin-top:4px;color:rgba(255,255,255,.58);font-size:12px;font-weight:750;">' + esc(label) + ' · clicca per caricare</span>'
+          + '</button>';
+      }
+
+      box.innerHTML =
+        '<div style="padding:10px 0 2px;color:#c8ff2e;font-size:12px;font-weight:950;text-transform:uppercase;letter-spacing:.08em;">Ultimo progetto caricato</div>'
+        + projectCard(latest)
+        + (others.length
+          ? '<div style="padding:16px 0 4px;color:rgba(255,255,255,.62);font-size:12px;font-weight:950;text-transform:uppercase;letter-spacing:.08em;">Altri progetti</div>'
+            + others.map(projectNameOnly).join("")
+          : "");
+
+      box.__followMeProjectsCache = sortedRows;
 
     }catch(err){
       box.innerHTML = '<div style="padding:14px;border-radius:18px;background:rgba(255,90,111,.12);border:1px solid rgba(255,90,111,.26);color:#ffb4bf;font-size:13px;font-weight:800;">' + esc(err.message || "Errore caricamento progetti FollowMe.") + '</div>';
@@ -4018,10 +4046,29 @@ function setDeadlineCleanupFlag(enabled){
 
   window.adminFollowMeLoadProjects20260525 = loadProjects;
 
+  document.addEventListener("click", function(ev){
+    const singleBtn = ev.target && ev.target.closest ? ev.target.closest("[data-fm-load-single]") : null;
+    if(!singleBtn) return;
+
+    const box = document.getElementById("adminFollowMeProjects20260525");
+    if(!box || !box.__followMeProjectsCache) return;
+
+    const code = singleBtn.getAttribute("data-fm-load-single") || "";
+    const project = box.__followMeProjectsCache.find(function(p){
+      return String(p.code || p.public_id || "") === String(code);
+    });
+
+    if(!project) return;
+
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = projectCard(project);
+    singleBtn.replaceWith(wrapper.firstElementChild);
+  });
+
   document.addEventListener("DOMContentLoaded", function(){
-    const frame = document.getElementById("adminFollowMeFrame20260525");
-    if(frame){
-      setTimeout(loadProjects, 600);
+    const box = document.getElementById("adminFollowMeProjects20260525");
+    if(box){
+      box.innerHTML = '<div style="padding:14px;border-radius:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.72);font-size:13px;font-weight:750;">Premi “Carica richieste” per visualizzare solo l’ultimo progetto FollowMe. Gli altri resteranno come nomi e si apriranno solo al click.</div>';
     }
   });
 })();
