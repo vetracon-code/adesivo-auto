@@ -19929,6 +19929,14 @@ function setCitofonamiNoCache(res) {
   res.setHeader('Surrogate-Control', 'no-store');
 }
 
+
+// CITOFONAMI_REDIRECT_ADMIN_CLEAN_TO_STABLE_20260602
+app.get('/citofonami-admin-clean', (req, res) => {
+  setCitofonamiNoCache(res);
+  const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+  res.redirect(302, '/citofonami-admin' + qs);
+});
+
 app.get('/citofonami-admin', (req, res) => {
   setCitofonamiNoCache(res);
   res.sendFile(path.join(__dirname, 'public', 'citofonami-admin.html'));
