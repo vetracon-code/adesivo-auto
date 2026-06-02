@@ -3665,7 +3665,7 @@
 
 
 <script>
-/* CITOFONAMI_USER_CLOSE_WHEN_ADMIN_CLOSES_20260602 */
+/* CITOFONAMI_USER_CLOSE_WHEN_ADMIN_CLOSES_20260602_DISABLED_BY_CURRENT_CALL_FIX */
 (function () {
   let closedHandled = false;
 
@@ -3853,10 +3853,291 @@
     } catch(e) {}
   }
 
-  setInterval(pollClosed, 900);
-  setTimeout(pollClosed, 500);
+  // disabled old pollClosed: it used latest closed call and closed page too early
+  // disabled old pollClosed startup
 
   window.citofonamiUserHandleClosedByAdmin = handleClosedByAdmin;
+})();
+</script>
+
+
+<script>
+/* CITOFONAMI_USER_CLOSE_ONLY_CURRENT_CALL_20260602 */
+(function () {
+  const pageOpenedAt = Date.now();
+  let handled = false;
+
+  function code() {
+    try {
+      const parts = location.pathname.split("/").filter(Boolean);
+      return String(parts[parts.length - 1] || "DEMO").trim().toUpperCase();
+    } catch(e) {
+      return "DEMO";
+    }
+  }
+
+  function clearOldCallReferencesOnOpen() {
+    try {
+      sessionStorage.removeItem("citofonami_active_call_id");
+      sessionStorage.removeItem("citofonami_live_call_id");
+      sessionStorage.removeItem("citofonami_last_call_id");
+      sessionStorage.removeItem("citofonami_current_call_id");
+      sessionStorage.removeItem("citofonami_closed_call_id");
+    } catch(e) {}
+
+    try {
+      localStorage.removeItem("citofonami_current_call_id");
+      localStorage.removeItem("citofonami_live_call_id");
+      localStorage.removeItem("citofonami_last_call_id");
+      localStorage.removeItem("citofonami_closed_call_id");
+    } catch(e) {}
+
+    try {
+      if (window.CITOFONAMI_FORCE_STATE) window.CITOFONAMI_FORCE_STATE.callId = "";
+      window.citofonamiCurrentCallId = "";
+      window.citofonamiLiveCallId = "";
+    } catch(e) {}
+  }
+
+  async function clearCitofonamiBrowserCache() {
+    try {
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(
+          keys
+            .filter(key => String(key || "").toLowerCase().includes("citofonami"))
+            .map(key => caches.delete(key))
+        );
+      }
+    } catch(e) {}
+  }
+
+  function getSessionCallId() {
+    try {
+      return (
+        sessionStorage.getItem("citofonami_active_call_id") ||
+        sessionStorage.getItem("citofonami_live_call_id") ||
+        sessionStorage.getItem("citofonami_current_call_id") ||
+        localStorage.getItem("citofonami_current_call_id") ||
+        (window.CITOFONAMI_FORCE_STATE && window.CITOFONAMI_FORCE_STATE.callId) ||
+        window.citofonamiLiveCallId ||
+        window.citofonamiCurrentCallId ||
+        ""
+      );
+    } catch(e) {
+      return "";
+    }
+  }
+
+  function rememberCallId(callId) {
+    if (!callId) return;
+
+    try {
+      sessionStorage.setItem("citofonami_active_call_id", callId);
+      sessionStorage.setItem("citofonami_live_call_id", callId);
+      sessionStorage.setItem("citofonami_current_call_id", callId);
+
+      // localStorage serve solo come appoggio nella stessa sessione pratica,
+      // viene comunque svuotato a ogni nuova apertura QR.
+      localStorage.setItem("citofonami_current_call_id", callId);
+
+      window.citofonamiCurrentCallId = callId;
+      window.citofonamiLiveCallId = callId;
+
+      if (!window.CITOFONAMI_FORCE_STATE) window.CITOFONAMI_FORCE_STATE = {};
+      window.CITOFONAMI_FORCE_STATE.callId = callId;
+    } catch(e) {}
+  }
+
+  function patchFetchForCallId() {
+    if (window.__citofonamiFetchCurrentCallPatched) return;
+    window.__citofonamiFetchCurrentCallPatched = true;
+
+    const originalFetch = window.fetch;
+
+    window.fetch = async function () {
+      const response = await originalFetch.apply(this, arguments);
+
+      try {
+        const url = String(arguments[0] || "");
+        if (url.includes("/api/citofonami/") && url.includes("/ring-v2")) {
+          response.clone().json().then(data => {
+            if (data && data.ok && data.callId) {
+              rememberCallId(data.callId);
+            }
+          }).catch(() => {});
+        }
+      } catch(e) {}
+
+      return response;
+    };
+  }
+
+  function stopUserAudio() {
+    const peerNames = [
+      "userPeer",
+      "userPc",
+      "userConnection",
+      "citofonamiUserPeer",
+      "citofonamiUserPc",
+      "pc"
+    ];
+
+    for (const name of peerNames) {
+      try {
+        const pc = window[name];
+        if (pc && typeof pc.close === "function") pc.close();
+        window[name] = null;
+      } catch(e) {}
+    }
+
+    const streamNames = [
+      "userStream",
+      "localStream",
+      "citofonamiUserStream",
+      "forcedUserStream",
+      "diagnosticStream"
+    ];
+
+    for (const name of streamNames) {
+      try {
+        const stream = window[name];
+        if (stream && stream.getTracks) {
+          stream.getTracks().forEach(track => {
+            try { track.stop(); } catch(e) {}
+          });
+        }
+        window[name] = null;
+      } catch(e) {}
+    }
+
+    try {
+      document.querySelectorAll("audio, video").forEach(el => {
+        try { el.pause(); } catch(e) {}
+        try { el.srcObject = null; } catch(e) {}
+        try { el.removeAttribute("src"); } catch(e) {}
+        try { el.load(); } catch(e) {}
+      });
+    } catch(e) {}
+  }
+
+  async function clearUserAfterClose() {
+    try {
+      sessionStorage.removeItem("citofonami_active_call_id");
+      sessionStorage.removeItem("citofonami_live_call_id");
+      sessionStorage.removeItem("citofonami_last_call_id");
+      sessionStorage.removeItem("citofonami_current_call_id");
+      sessionStorage.removeItem("citofonami_closed_call_id");
+    } catch(e) {}
+
+    try {
+      localStorage.removeItem("citofonami_current_call_id");
+      localStorage.removeItem("citofonami_live_call_id");
+      localStorage.removeItem("citofonami_last_call_id");
+      localStorage.removeItem("citofonami_closed_call_id");
+    } catch(e) {}
+
+    try {
+      if (window.CITOFONAMI_FORCE_STATE) window.CITOFONAMI_FORCE_STATE.callId = "";
+      window.citofonamiCurrentCallId = "";
+      window.citofonamiLiveCallId = "";
+    } catch(e) {}
+
+    await clearCitofonamiBrowserCache();
+  }
+
+  function showThanks() {
+    document.documentElement.style.background = "#080a0e";
+    document.body.innerHTML = `
+      <div style="
+        min-height:100vh;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:24px;
+        background:
+          radial-gradient(circle at 20% 0%, rgba(215,180,106,.18), transparent 34%),
+          radial-gradient(circle at 90% 10%, rgba(57,215,123,.10), transparent 28%),
+          #080a0e;
+        color:white;
+        font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+        text-align:center;
+      ">
+        <div style="
+          width:min(420px,100%);
+          border:1px solid rgba(255,255,255,.12);
+          background:rgba(255,255,255,.06);
+          border-radius:28px;
+          padding:28px 22px;
+          box-shadow:0 24px 80px rgba(0,0,0,.45);
+        ">
+          <div style="font-size:15px;color:rgba(255,255,255,.62);margin-bottom:8px;">Citofonami</div>
+          <div style="font-size:28px;font-weight:950;letter-spacing:-.05em;margin-bottom:10px;">Collegamento chiuso</div>
+          <div style="font-size:15px;line-height:1.45;color:rgba(255,255,255,.72);">
+            Grazie per la chiamata.<br>
+            Puoi chiudere questa pagina.
+          </div>
+        </div>
+      </div>
+    `;
+
+    setTimeout(function () {
+      try { window.close(); } catch(e) {}
+    }, 900);
+
+    setTimeout(function () {
+      try {
+        if (history.length > 1) history.back();
+      } catch(e) {}
+    }, 1600);
+  }
+
+  async function handleClosed() {
+    if (handled) return;
+    handled = true;
+
+    stopUserAudio();
+    await clearUserAfterClose();
+    showThanks();
+  }
+
+  async function pollOnlyCurrentCall() {
+    if (handled) return;
+
+    const callId = getSessionCallId();
+
+    // Fondamentale: se questa pagina non ha generato una chiamata, non controlla latest.
+    if (!callId) return;
+
+    try {
+      const data = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}?t=${Date.now()}`, {
+        cache: "no-store"
+      }).then(r => r.json());
+
+      if (!data || !data.ok || !data.call) return;
+
+      // Evita chiusure su chiamate vecchie precedenti all'apertura pagina.
+      const createdAt = data.call.createdAt ? new Date(data.call.createdAt).getTime() : 0;
+      if (createdAt && createdAt < pageOpenedAt - 15000) return;
+
+      if (data.call.status === "closed") {
+        await handleClosed();
+      }
+    } catch(e) {}
+  }
+
+  // Pulizia iniziale: elimina richiami a qualsiasi chiamata precedente.
+  clearOldCallReferencesOnOpen();
+
+  // Pulizia cache non bloccante: aiuta a evitare asset/route Citofonami vecchi.
+  clearCitofonamiBrowserCache();
+
+  patchFetchForCallId();
+
+  setInterval(pollOnlyCurrentCall, 900);
+
+  window.citofonamiUserCloseOnlyCurrentCall = pollOnlyCurrentCall;
+  window.citofonamiUserClearOldCallReferences = clearOldCallReferencesOnOpen;
 })();
 </script>
 
