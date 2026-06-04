@@ -5976,5 +5976,314 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_ADMIN_CONSUME_ANSWER_AND_HARD_CLOSE_20260604 */
+(function () {
+  const seenIceByCall = new Map();
+  const answerAppliedByCall = new Set();
+
+  function code() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get("code");
+      const input = document.getElementById("qrCode");
+      return String(fromUrl || (input && input.value) || "DEMO").trim().toUpperCase();
+    } catch (e) {
+      return "DEMO";
+    }
+  }
+
+  function currentCallId() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get("call");
+      if (fromUrl) return String(fromUrl).trim();
+
+      if (window.finalCurrentCall && window.finalCurrentCall.id) {
+        return String(window.finalCurrentCall.id).trim();
+      }
+
+      const overlay = document.getElementById("finalCallOverlay");
+      if (overlay && overlay.dataset && overlay.dataset.callId) {
+        return String(overlay.dataset.callId).trim();
+      }
+    } catch (e) {}
+
+    return "";
+  }
+
+  function currentPeer() {
+    return (
+      window.citofonamiImmediateAdminPeer ||
+      window.citofonamiAdminDirectPeer ||
+      window.citofonamiAdminForcePeer ||
+      window.adminRtcPeer ||
+      null
+    );
+  }
+
+  function setAdminMsg(text, ok) {
+    try {
+      const subtitle = document.getElementById("finalCallSubtitle");
+      if (subtitle) subtitle.textContent = text;
+    } catch (e) {}
+
+    try {
+      const state = document.getElementById("adminConnectedState");
+      if (state) {
+        state.style.display = "block";
+        state.textContent = text;
+      }
+    } catch (e) {}
+
+    try {
+      const dbg = document.getElementById("adminWebrtcDebugLine");
+      if (dbg) {
+        dbg.style.display = "block";
+        dbg.textContent = text;
+      }
+    } catch (e) {}
+
+    try {
+      if (typeof window.setState === "function") {
+        window.setState(text, ok !== false);
+      }
+    } catch (e) {}
+
+    console.log("Citofonami admin:", text);
+  }
+
+  async function pollAnswerAndIceOnce() {
+    const callId = currentCallId();
+    const peer = currentPeer();
+
+    if (!callId || !peer) return;
+
+    const c = code();
+
+    try {
+      if (!answerAppliedByCall.has(callId) && !peer.remoteDescription) {
+        const res = await fetch(`/api/citofonami/${encodeURIComponent(c)}/calls/${encodeURIComponent(callId)}/webrtc/answer?t=${Date.now()}`, {
+          cache: "no-store"
+        });
+
+        const data = await res.json();
+
+        if (data && data.ok && data.answer) {
+          await peer.setRemoteDescription(data.answer);
+          answerAppliedByCall.add(callId);
+          setAdminMsg("Answer ricevuta. Collegamento audio in corso…", true);
+        }
+      }
+    } catch (e) {
+      console.warn("Admin consume answer error:", e);
+      setAdminMsg("Answer ricevuta ma non applicata: " + (e.message || e), false);
+    }
+
+    try {
+      const res = await fetch(`/api/citofonami/${encodeURIComponent(c)}/calls/${encodeURIComponent(callId)}/webrtc/ice?role=user&t=${Date.now()}`, {
+        cache: "no-store"
+      });
+
+      const data = await res.json();
+
+      if (!data || !data.ok || !Array.isArray(data.candidates)) return;
+
+      if (!seenIceByCall.has(callId)) seenIceByCall.set(callId, new Set());
+      const seen = seenIceByCall.get(callId);
+
+      for (const candidate of data.candidates) {
+        const key = JSON.stringify(candidate);
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        try {
+          await peer.addIceCandidate(candidate);
+          setAdminMsg("ICE utente applicato. Stato: " + (peer.connectionState || "in corso"), true);
+        } catch (e) {
+          console.warn("Admin add user ICE error:", e);
+        }
+      }
+    } catch (e) {
+      console.warn("Admin consume ICE error:", e);
+    }
+
+    try {
+      const state = peer.connectionState || "";
+      const iceState = peer.iceConnectionState || "";
+
+      if (state === "connected" || iceState === "connected" || iceState === "completed") {
+        setAdminMsg("Audio collegato. Puoi parlare con l’utente.", true);
+      } else if (state === "failed" || iceState === "failed") {
+        setAdminMsg("Audio non collegato. Stato WebRTC: " + state + " / ICE: " + iceState, false);
+      } else {
+        setAdminMsg("Collegamento audio in corso… WebRTC: " + state + " / ICE: " + iceState, true);
+      }
+    } catch (e) {}
+  }
+
+  function startAdminConsumeLoop() {
+    if (window.citofonamiAdminConsumeAnswerTimer) {
+      clearInterval(window.citofonamiAdminConsumeAnswerTimer);
+    }
+
+    window.citofonamiAdminConsumeAnswerTimer = setInterval(pollAnswerAndIceOnce, 700);
+
+    setTimeout(pollAnswerAndIceOnce, 200);
+    setTimeout(pollAnswerAndIceOnce, 900);
+    setTimeout(pollAnswerAndIceOnce, 1800);
+    setTimeout(pollAnswerAndIceOnce, 3200);
+  }
+
+  function hardStopLocal() {
+    try {
+      if (window.citofonamiAdminConsumeAnswerTimer) {
+        clearInterval(window.citofonamiAdminConsumeAnswerTimer);
+        window.citofonamiAdminConsumeAnswerTimer = null;
+      }
+    } catch (e) {}
+
+    try {
+      if (typeof window.stopEveryCitofonamiRingSound === "function") {
+        window.stopEveryCitofonamiRingSound();
+      }
+    } catch (e) {}
+
+    [
+      "citofonamiImmediateAdminPeer",
+      "citofonamiAdminDirectPeer",
+      "citofonamiAdminForcePeer",
+      "adminRtcPeer"
+    ].forEach((name) => {
+      try {
+        const peer = window[name];
+        if (peer && typeof peer.close === "function") peer.close();
+        window[name] = null;
+      } catch (e) {}
+    });
+
+    [
+      "citofonamiImmediateAdminStream",
+      "citofonamiAdminMicStream",
+      "adminRtcStream"
+    ].forEach((name) => {
+      try {
+        const stream = window[name];
+        if (stream && stream.getTracks) {
+          stream.getTracks().forEach(track => {
+            try { track.stop(); } catch (e) {}
+          });
+        }
+        window[name] = null;
+      } catch (e) {}
+    });
+
+    try {
+      document.querySelectorAll("audio, video").forEach((el) => {
+        try {
+          el.pause();
+          el.currentTime = 0;
+          if (el.srcObject && el.srcObject.getTracks) {
+            el.srcObject.getTracks().forEach(track => {
+              try { track.stop(); } catch (e) {}
+            });
+          }
+          el.srcObject = null;
+        } catch (e) {}
+      });
+    } catch (e) {}
+  }
+
+  async function hardClose(event) {
+    try {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+      }
+    } catch (e) {}
+
+    const c = code();
+    const callId = currentCallId();
+
+    hardStopLocal();
+
+    try {
+      if (callId) {
+        await fetch(`/api/citofonami/${encodeURIComponent(c)}/calls/${encodeURIComponent(callId)}/action`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "close" }),
+          cache: "no-store"
+        });
+      }
+    } catch (e) {}
+
+    try {
+      await fetch(`/api/citofonami/${encodeURIComponent(c)}/calls/close-open`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ exceptCallId: "" }),
+        cache: "no-store"
+      });
+    } catch (e) {}
+
+    hardStopLocal();
+
+    try {
+      const overlay = document.getElementById("finalCallOverlay");
+      if (overlay) {
+        overlay.classList.remove("show");
+        overlay.classList.remove("temporarily-hidden");
+        overlay.style.display = "none";
+        if (overlay.dataset) overlay.dataset.callId = "";
+      }
+    } catch (e) {}
+
+    try {
+      const hidden = document.getElementById("openHiddenCallButton");
+      if (hidden) hidden.classList.remove("show");
+    } catch (e) {}
+
+    try {
+      const topClose = document.getElementById("citofonamiTopCloseButton");
+      if (topClose) topClose.remove();
+    } catch (e) {}
+
+    try {
+      window.finalCurrentCall = null;
+    } catch (e) {}
+
+    setAdminMsg("Conversazione chiusa. Puoi ricevere una nuova chiamata.", true);
+  }
+
+  document.addEventListener("click", function (event) {
+    const btn = event.target && event.target.closest ? event.target.closest("button") : null;
+    if (!btn) return;
+
+    const id = String(btn.id || "");
+    const text = String(btn.textContent || "").trim().toLowerCase();
+
+    if (id === "finalAnswerButton" || text.includes("rispondi")) {
+      setTimeout(startAdminConsumeLoop, 500);
+      setTimeout(startAdminConsumeLoop, 1600);
+    }
+
+    if (
+      id === "finalCloseButton" ||
+      id === "citofonamiTopCloseButton" ||
+      text === "chiudi" ||
+      text.includes("chiudi")
+    ) {
+      hardClose(event);
+    }
+  }, true);
+
+  window.citofonamiAdminStartConsumeAnswerLoop = startAdminConsumeLoop;
+  window.citofonamiAdminHardCloseConversation = hardClose;
+})();
+</script>
+
 </body>
 </html>
