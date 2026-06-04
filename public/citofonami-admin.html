@@ -1644,20 +1644,31 @@
     { urls: "stun:stun1.l.google.com:19302" }
   ];
 
-  window.citofonamiLoadIceServers = async function () {
+  window.citofonamiLoadIceConfig = async function () {
     try {
       const data = await fetch("/api/citofonami/ice-config?t=" + Date.now(), {
         cache: "no-store"
       }).then(r => r.json());
 
       if (data && data.ok && Array.isArray(data.iceServers) && data.iceServers.length) {
-        return data.iceServers;
+        return {
+          iceServers: data.iceServers,
+          iceTransportPolicy: data.iceTransportPolicy === "relay" ? "relay" : "all"
+        };
       }
     } catch (e) {
       console.warn("ICE config fallback STUN:", e);
     }
 
-    return window.citofonamiDefaultIceServers;
+    return {
+      iceServers: window.citofonamiDefaultIceServers,
+      iceTransportPolicy: "all"
+    };
+  };
+
+  window.citofonamiLoadIceServers = async function () {
+    const cfg = await window.citofonamiLoadIceConfig();
+    return cfg.iceServers;
   };
 })();
 </script>
@@ -4210,9 +4221,7 @@
         if (typeof forceRefreshAdminSetupUi === 'function') forceRefreshAdminSetupUi();
         if (typeof forceRenderSetupState === 'function') forceRenderSetupState();
 
-        adminRtcPeer = new RTCPeerConnection({
-          iceServers: await window.citofonamiLoadIceServers()
-        });
+        adminRtcPeer = new RTCPeerConnection(await window.citofonamiLoadIceConfig());
 
         adminRtcStream.getTracks().forEach(track => {
           adminRtcPeer.addTrack(track, adminRtcStream);
@@ -4719,9 +4728,7 @@
         localStorage.setItem("citofonami_admin_mic_ready", "1");
       } catch (e) {}
 
-      peer = new RTCPeerConnection({
-        iceServers: await window.citofonamiLoadIceServers()
-      });
+      peer = new RTCPeerConnection(await window.citofonamiLoadIceConfig());
 
       stream.getTracks().forEach((track) => peer.addTrack(track, stream));
 

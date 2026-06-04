@@ -19682,7 +19682,8 @@ async function sendCitofonamiPush(subscription, payload) {
 }
 
 
-// CITOFONAMI_ICE_CONFIG_ENDPOINT_20260602
+
+// CITOFONAMI_ICE_CONFIG_ENDPOINT_20260604_MULTI_TURN_POLICY
 app.get('/api/citofonami/ice-config', (req, res) => {
   try {
     const stunServers = [
@@ -19690,15 +19691,27 @@ app.get('/api/citofonami/ice-config', (req, res) => {
       { urls: 'stun:stun1.l.google.com:19302' }
     ];
 
-    const turnUrl = process.env.CITOFONAMI_TURN_URL || '';
+    const turnUrlsRaw =
+      process.env.CITOFONAMI_TURN_URLS ||
+      process.env.CITOFONAMI_TURN_URL ||
+      '';
+
+    const turnUrls = String(turnUrlsRaw || '')
+      .split(',')
+      .map(v => v.trim())
+      .filter(Boolean);
+
     const turnUsername = process.env.CITOFONAMI_TURN_USERNAME || '';
     const turnCredential = process.env.CITOFONAMI_TURN_CREDENTIAL || '';
 
+    const policyRaw = String(process.env.CITOFONAMI_ICE_TRANSPORT_POLICY || 'all').trim().toLowerCase();
+    const iceTransportPolicy = policyRaw === 'relay' ? 'relay' : 'all';
+
     const iceServers = [...stunServers];
 
-    if (turnUrl && turnUsername && turnCredential) {
+    if (turnUrls.length && turnUsername && turnCredential) {
       iceServers.push({
-        urls: turnUrl,
+        urls: turnUrls.length === 1 ? turnUrls[0] : turnUrls,
         username: turnUsername,
         credential: turnCredential
       });
@@ -19710,7 +19723,8 @@ app.get('/api/citofonami/ice-config', (req, res) => {
 
     return res.json({
       ok: true,
-      hasTurn: !!(turnUrl && turnUsername && turnCredential),
+      hasTurn: !!(turnUrls.length && turnUsername && turnCredential),
+      iceTransportPolicy,
       iceServers
     });
   } catch (error) {
@@ -19718,6 +19732,7 @@ app.get('/api/citofonami/ice-config', (req, res) => {
       ok: false,
       error: error.message || String(error),
       hasTurn: false,
+      iceTransportPolicy: 'all',
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' }
@@ -19725,6 +19740,7 @@ app.get('/api/citofonami/ice-config', (req, res) => {
     });
   }
 });
+
 
 app.get('/api/citofonami/vapid-public-key', (req, res) => {
   const publicKey =

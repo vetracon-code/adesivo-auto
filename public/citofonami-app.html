@@ -425,20 +425,31 @@
     { urls: "stun:stun1.l.google.com:19302" }
   ];
 
-  window.citofonamiLoadIceServers = async function () {
+  window.citofonamiLoadIceConfig = async function () {
     try {
       const data = await fetch("/api/citofonami/ice-config?t=" + Date.now(), {
         cache: "no-store"
       }).then(r => r.json());
 
       if (data && data.ok && Array.isArray(data.iceServers) && data.iceServers.length) {
-        return data.iceServers;
+        return {
+          iceServers: data.iceServers,
+          iceTransportPolicy: data.iceTransportPolicy === "relay" ? "relay" : "all"
+        };
       }
     } catch (e) {
       console.warn("ICE config fallback STUN:", e);
     }
 
-    return window.citofonamiDefaultIceServers;
+    return {
+      iceServers: window.citofonamiDefaultIceServers,
+      iceTransportPolicy: "all"
+    };
+  };
+
+  window.citofonamiLoadIceServers = async function () {
+    const cfg = await window.citofonamiLoadIceConfig();
+    return cfg.iceServers;
   };
 })();
 </script>
@@ -1468,9 +1479,7 @@
 
         const offer = await waitForAdminOffer(code, callId);
 
-        userRtcPeer = new RTCPeerConnection({
-          iceServers: await window.citofonamiLoadIceServers()
-        });
+        userRtcPeer = new RTCPeerConnection(await window.citofonamiLoadIceConfig());
 
         userRtcStream.getTracks().forEach(track => {
           userRtcPeer.addTrack(track, userRtcStream);
@@ -3185,9 +3194,7 @@
         }
       } catch (e) {}
 
-      peer = new RTCPeerConnection({
-        iceServers: await window.citofonamiLoadIceServers()
-      });
+      peer = new RTCPeerConnection(await window.citofonamiLoadIceConfig());
 
       stream.getTracks().forEach(track => peer.addTrack(track, stream));
 
@@ -3504,9 +3511,7 @@
         }
       } catch (e) {}
 
-      peer = new RTCPeerConnection({
-        iceServers: await window.citofonamiLoadIceServers()
-      });
+      peer = new RTCPeerConnection(await window.citofonamiLoadIceConfig());
 
       stream.getTracks().forEach(track => peer.addTrack(track, stream));
 
