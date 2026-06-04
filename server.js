@@ -20003,6 +20003,14 @@ app.get('/citofonami-admin-clean', (req, res) => {
   res.redirect(302, '/citofonami-admin' + qs);
 });
 
+
+// CITOFONAMI_ADMIN_MANIFEST_ROUTE_20260604
+app.get('/citofonami-admin-manifest.json', (req, res) => {
+  setCitofonamiNoCache(res);
+  res.type('application/manifest+json');
+  res.sendFile(path.join(__dirname, 'public', 'citofonami-admin-manifest.json'));
+});
+
 app.get('/citofonami-admin', (req, res) => {
   setCitofonamiNoCache(res);
   res.sendFile(path.join(__dirname, 'public', 'citofonami-admin.html'));
