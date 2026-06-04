@@ -19635,7 +19635,7 @@ function defaultCitofonamiConfig(code) {
     publicText: 'Premi il pulsante per parlare con il proprietario. Nessun numero telefonico verrà mostrato.',
     qrCode: normalizeCitofonamiCode(code),
     buttonLabel: 'Mario Rossi',
-    address: 'Via Roma, 1 20100 Milano',
+    address: 'Monza, Italia',
     radius: 50,
     radiusPreset: '50',
     hours: '08:00 - 20:00',
@@ -19644,7 +19644,7 @@ function defaultCitofonamiConfig(code) {
     enabled: true,
     pushEnabled: true,
     fallbackEnabled: true,
-    requireLocation: false,
+    requireLocation: true,
     doors: [
       { name: 'Mario Rossi', description: 'Citofono principale' }
     ],
@@ -19680,67 +19680,6 @@ async function sendCitofonamiPush(subscription, payload) {
     return { ok: false, error: error.message };
   }
 }
-
-
-
-// CITOFONAMI_ICE_CONFIG_ENDPOINT_20260604_MULTI_TURN_POLICY
-app.get('/api/citofonami/ice-config', (req, res) => {
-  try {
-    const stunServers = [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
-    ];
-
-    const turnUrlsRaw =
-      process.env.CITOFONAMI_TURN_URLS ||
-      process.env.CITOFONAMI_TURN_URL ||
-      '';
-
-    const turnUrls = String(turnUrlsRaw || '')
-      .split(',')
-      .map(v => v.trim())
-      .filter(Boolean);
-
-    const turnUsername = process.env.CITOFONAMI_TURN_USERNAME || '';
-    const turnCredential = process.env.CITOFONAMI_TURN_CREDENTIAL || '';
-
-    const policyRaw = String(process.env.CITOFONAMI_ICE_TRANSPORT_POLICY || 'all').trim().toLowerCase();
-    const iceTransportPolicy = policyRaw === 'relay' ? 'relay' : 'all';
-
-    const iceServers = [...stunServers];
-
-    if (turnUrls.length && turnUsername && turnCredential) {
-      iceServers.push({
-        urls: turnUrls.length === 1 ? turnUrls[0] : turnUrls,
-        username: turnUsername,
-        credential: turnCredential
-      });
-    }
-
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-
-    return res.json({
-      ok: true,
-      hasTurn: !!(turnUrls.length && turnUsername && turnCredential),
-      iceTransportPolicy,
-      iceServers
-    });
-  } catch (error) {
-    return res.status(500).json({
-      ok: false,
-      error: error.message || String(error),
-      hasTurn: false,
-      iceTransportPolicy: 'all',
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
-    });
-  }
-});
-
 
 app.get('/api/citofonami/vapid-public-key', (req, res) => {
   const publicKey =
@@ -19899,7 +19838,7 @@ app.post('/api/citofonami/:code/ring', express.json({ limit: '1mb' }), async (re
       return res.status(400).json({
         ok: false,
         error: 'Posizione richiesta',
-        requireLocation: false,
+        requireLocation: true,
         firstCallFree: false,
         previousCallCount
       });
@@ -19981,38 +19920,7 @@ app.post('/api/citofonami/:code/ring', express.json({ limit: '1mb' }), async (re
 // ==============================
 // CITOFONAMI - ADMIN
 // ==============================
-
-// CITOFONAMI_STABLE_NO_CACHE_20260601
-function setCitofonamiNoCache(res) {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-  res.setHeader('Surrogate-Control', 'no-store');
-}
-
-
-
-
-// CITOFONAMI_REDIRECT_ADMIN_CLEAN_TO_STABLE_20260602
-app.get('/citofonami-admin-clean', (req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-  res.setHeader('Surrogate-Control', 'no-store');
-  const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
-  res.redirect(302, '/citofonami-admin' + qs);
-});
-
-
-// CITOFONAMI_ADMIN_MANIFEST_ROUTE_20260604
-app.get('/citofonami-admin-manifest.json', (req, res) => {
-  setCitofonamiNoCache(res);
-  res.type('application/manifest+json');
-  res.sendFile(path.join(__dirname, 'public', 'citofonami-admin-manifest.json'));
-});
-
 app.get('/citofonami-admin', (req, res) => {
-  setCitofonamiNoCache(res);
   res.sendFile(path.join(__dirname, 'public', 'citofonami-admin.html'));
 });
 
@@ -20570,7 +20478,7 @@ app.post('/api/citofonami/:code/ring-v2', express.json({ limit: '1mb' }), async 
       return res.status(400).json({
         ok: false,
         error: 'Posizione richiesta',
-        requireLocation: false,
+        requireLocation: true,
         previousCallCount
       });
     }
@@ -20662,45 +20570,6 @@ app.post('/api/citofonami/:code/ring-v2', express.json({ limit: '1mb' }), async 
     subscriptions: subscriptions.length
   });
 });
-
-
-// CITOFONAMI_CLOSE_OPEN_CALLS_ENDPOINT_20260604
-app.post('/api/citofonami/:code/calls/close-open', express.json({ limit: '1mb' }), (req, res) => {
-  const code = normalizeCitofonamiCode(req.params.code);
-  const db = ensureCitofonamiDbShape(readCitofonamiDb());
-  const body = req.body || {};
-  const exceptCallId = String(body.exceptCallId || '').trim();
-  const now = new Date().toISOString();
-
-  let closed = 0;
-
-  db.events = (db.events || []).map((event) => {
-    if (!event || event.code !== code || event.type !== 'call') return event;
-    if (exceptCallId && event.id === exceptCallId) return event;
-
-    if (event.status === 'ringing' || event.status === 'answered' || event.status === 'voicemail_requested') {
-      closed += 1;
-      return {
-        ...event,
-        status: 'closed',
-        updatedAt: now,
-        closedBy: 'admin-clean-close-final'
-      };
-    }
-
-    return event;
-  });
-
-  if (closed > 0) writeCitofonamiDb(db);
-
-  res.json({
-    ok: true,
-    code,
-    closed,
-    exceptCallId: exceptCallId || null
-  });
-});
-
 
 app.get('/api/citofonami/:code/calls/pending', (req, res) => {
   const code = normalizeCitofonamiCode(req.params.code);
@@ -21038,37 +20907,6 @@ function normalizeCitofonamiWebrtcRole(value) {
   return role === 'admin' ? 'admin' : 'user';
 }
 
-
-// CITOFONAMI_AUTO_ANSWER_WHEN_WEBRTC_OFFER_20260604
-app.post('/api/citofonami/:code/calls/:callId/webrtc/offer', (req, res, next) => {
-  try {
-    const code = normalizeCitofonamiCode(req.params.code);
-    const callId = String(req.params.callId || '').trim();
-
-    if (code && callId) {
-      const db = ensureCitofonamiDbShape(readCitofonamiDb());
-      const event = (db.events || []).find((item) =>
-        item &&
-        item.code === code &&
-        item.id === callId &&
-        item.type === 'call'
-      );
-
-      if (event && event.status === 'ringing') {
-        event.status = 'answered';
-        event.updatedAt = new Date().toISOString();
-        event.answeredBy = 'webrtc-offer';
-        writeCitofonamiDb(db);
-      }
-    }
-  } catch (error) {
-    console.warn('Citofonami auto-answer on offer error:', error);
-  }
-
-  next();
-});
-
-
 app.post('/api/citofonami/:code/calls/:callId/webrtc/offer', express.json({ limit: '2mb' }), (req, res) => {
   const code = normalizeCitofonamiCode(req.params.code);
   const callId = String(req.params.callId || '');
@@ -21148,53 +20986,6 @@ app.get('/api/citofonami/:code/calls/:callId/webrtc/answer', (req, res) => {
     answer: session.answer || null
   });
 });
-
-
-// CITOFONAMI_MIRROR_WEBRTC_ICE_BOTH_ROLES_20260604
-app.post('/api/citofonami/:code/calls/:callId/webrtc/ice-mirror', express.json({ limit: '1mb' }), (req, res) => {
-  const code = normalizeCitofonamiCode(req.params.code);
-  const callId = String(req.params.callId || '').trim();
-  const db = ensureCitofonamiDbShape(readCitofonamiDb());
-  const body = req.body || {};
-  const candidate = body.candidate || null;
-
-  if (!callId || !candidate) {
-    return res.status(400).json({ ok: false, error: 'callId/candidate mancanti' });
-  }
-
-  db.webrtc = db.webrtc || {};
-  db.webrtc[code] = db.webrtc[code] || {};
-  db.webrtc[code][callId] = db.webrtc[code][callId] || {};
-  db.webrtc[code][callId].ice = db.webrtc[code][callId].ice || {};
-  db.webrtc[code][callId].ice.admin = db.webrtc[code][callId].ice.admin || [];
-  db.webrtc[code][callId].ice.user = db.webrtc[code][callId].ice.user || [];
-
-  const key = JSON.stringify(candidate);
-
-  const addUnique = (arr) => {
-    if (!arr.some((item) => JSON.stringify(item) === key)) {
-      arr.push(candidate);
-    }
-  };
-
-  addUnique(db.webrtc[code][callId].ice.admin);
-  addUnique(db.webrtc[code][callId].ice.user);
-
-  db.webrtc[code][callId].ice.admin = db.webrtc[code][callId].ice.admin.slice(-80);
-  db.webrtc[code][callId].ice.user = db.webrtc[code][callId].ice.user.slice(-80);
-
-  writeCitofonamiDb(db);
-
-  res.json({
-    ok: true,
-    code,
-    callId,
-    mirrored: true,
-    adminCount: db.webrtc[code][callId].ice.admin.length,
-    userCount: db.webrtc[code][callId].ice.user.length
-  });
-});
-
 
 app.post('/api/citofonami/:code/calls/:callId/webrtc/ice', express.json({ limit: '2mb' }), (req, res) => {
   const code = normalizeCitofonamiCode(req.params.code);
