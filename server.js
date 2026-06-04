@@ -19917,6 +19917,29 @@ app.post('/api/citofonami/:code/ring', express.json({ limit: '1mb' }), async (re
   });
 });
 
+
+
+// CITOFONAMI_MODERN_USER_ROUTE_20260604
+// Pagina utente alternativa moderna. Non sostituisce /citofonami/:code.
+app.get('/citofonami-modern/:code', (req, res) => {
+  try {
+    if (typeof setCitofonamiNoCache === 'function') {
+      setCitofonamiNoCache(res);
+    } else {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      res.setHeader('Surrogate-Control', 'no-store');
+    }
+  } catch (error) {}
+
+  res.sendFile(path.join(__dirname, 'public', 'citofonami-app-modern.html'));
+});
+
+app.get('/citofonami-modern', (req, res) => {
+  res.redirect(302, '/citofonami-modern/DEMO');
+});
+
 // ==============================
 // CITOFONAMI - ADMIN
 // ==============================
