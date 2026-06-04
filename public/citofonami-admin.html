@@ -4777,5 +4777,153 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_ADMIN_END_AND_RELOAD_ONLY_20260604 */
+(function () {
+  let busy = false;
+
+  function getCode() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get("code");
+      if (fromUrl) return String(fromUrl).trim().toUpperCase();
+    } catch (e) {}
+
+    try {
+      const input = document.getElementById("qrCode");
+      if (input && input.value) return String(input.value).trim().toUpperCase();
+    } catch (e) {}
+
+    return "DEMO";
+  }
+
+  function knownCallId() {
+    try {
+      if (window.finalCurrentCall && window.finalCurrentCall.id) {
+        return String(window.finalCurrentCall.id);
+      }
+    } catch (e) {}
+
+    try {
+      const overlay = document.getElementById("finalCallOverlay");
+      if (overlay && overlay.dataset && overlay.dataset.callId) {
+        return String(overlay.dataset.callId);
+      }
+    } catch (e) {}
+
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get("call");
+      if (fromUrl) return String(fromUrl);
+    } catch (e) {}
+
+    return "";
+  }
+
+  async function latestCallId() {
+    const known = knownCallId();
+    if (known) return known;
+
+    try {
+      const r = await fetch(`/api/citofonami/${encodeURIComponent(getCode())}/calls/pending?t=${Date.now()}`, {
+        cache: "no-store"
+      });
+      const d = await r.json();
+
+      if (d && d.ok && Array.isArray(d.calls) && d.calls.length && d.calls[0].id) {
+        return String(d.calls[0].id);
+      }
+    } catch (e) {}
+
+    try {
+      const r = await fetch(`/api/citofonami/${encodeURIComponent(getCode())}/calls-list/latest?t=${Date.now()}`, {
+        cache: "no-store"
+      });
+      const d = await r.json();
+
+      if (d && d.ok && Array.isArray(d.calls) && d.calls.length && d.calls[0].id) {
+        return String(d.calls[0].id);
+      }
+    } catch (e) {}
+
+    return "";
+  }
+
+  function ensureButton() {
+    if (document.getElementById("citofonamiEndReloadButton")) return;
+
+    const btn = document.createElement("button");
+    btn.id = "citofonamiEndReloadButton";
+    btn.type = "button";
+    btn.textContent = "Termina";
+    btn.setAttribute("aria-label", "Termina chiamata e torna alla home");
+
+    btn.style.cssText = [
+      "position:fixed",
+      "top:calc(12px + env(safe-area-inset-top,0px))",
+      "left:12px",
+      "z-index:2147483647",
+      "height:42px",
+      "min-width:92px",
+      "padding:0 16px",
+      "border:1px solid rgba(255,255,255,.20)",
+      "border-radius:999px",
+      "background:rgba(18,18,20,.86)",
+      "color:#fff",
+      "font-size:15px",
+      "font-weight:850",
+      "box-shadow:0 12px 34px rgba(0,0,0,.28)",
+      "-webkit-backdrop-filter:blur(14px)",
+      "backdrop-filter:blur(14px)"
+    ].join(";");
+
+    btn.addEventListener("click", async function (event) {
+      try {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+      } catch (e) {}
+
+      if (busy) return;
+      busy = true;
+
+      btn.disabled = true;
+      btn.textContent = "Termino…";
+
+      try {
+        const callId = await latestCallId();
+
+        if (callId) {
+          await fetch(`/api/citofonami/${encodeURIComponent(getCode())}/calls/${encodeURIComponent(callId)}/action`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            cache: "no-store",
+            body: JSON.stringify({ action: "close" })
+          });
+        }
+      } catch (e) {}
+
+      btn.textContent = "Chiusa";
+
+      setTimeout(function () {
+        const url = `/citofonami-admin?code=${encodeURIComponent(getCode())}&ended=${Date.now()}`;
+        try {
+          window.location.replace(url);
+        } catch (e) {
+          window.location.href = url;
+        }
+      }, 350);
+    }, true);
+
+    document.body.appendChild(btn);
+  }
+
+  setTimeout(ensureButton, 300);
+  setTimeout(ensureButton, 1200);
+  setTimeout(ensureButton, 2600);
+})();
+</script>
+
 </body>
 </html>
