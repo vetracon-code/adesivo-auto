@@ -7212,5 +7212,598 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_ADMIN_IOS_SINGLE_AUDIO_ENGINE_20260604 */
+(function () {
+  let peer = null;
+  let localStream = null;
+  let remoteStream = null;
+  let answerTimer = null;
+  let iceTimer = null;
+  let seenIce = new Set();
+  let activeCallId = "";
+
+  function profile() {
+    return window.citofonamiAdminDeviceProfile || window.citofonamiDeviceProfile || {};
+  }
+
+  function isIOS() {
+    const p = profile();
+    return !!(p.isIOS || p.isIPhone || p.isIPad || p.isSafari);
+  }
+
+  function code() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get("code");
+      const input = document.getElementById("qrCode");
+      return String(fromUrl || (input && input.value) || "DEMO").trim().toUpperCase();
+    } catch (e) {
+      return "DEMO";
+    }
+  }
+
+  function setMsg(text, ok) {
+    try {
+      const subtitle = document.getElementById("finalCallSubtitle");
+      if (subtitle) subtitle.textContent = text;
+    } catch (e) {}
+
+    try {
+      const state = document.getElementById("adminConnectedState");
+      if (state) {
+        state.style.display = "block";
+        state.textContent = text;
+      }
+    } catch (e) {}
+
+    try {
+      const dbg = document.getElementById("adminWebrtcDebugLine");
+      if (dbg) {
+        dbg.style.display = "block";
+        dbg.textContent = text;
+      }
+    } catch (e) {}
+
+    try {
+      if (typeof window.setState === "function") {
+        window.setState(text, ok !== false);
+      }
+    } catch (e) {}
+
+    console.log("Citofonami iOS single engine:", text);
+  }
+
+  function ensureAudio() {
+    let audio = document.getElementById("citofonamiIOSSingleRemoteAudio");
+
+    if (!audio) {
+      audio = document.createElement("audio");
+      audio.id = "citofonamiIOSSingleRemoteAudio";
+      audio.autoplay = false;
+      audio.controls = true;
+      audio.playsInline = true;
+      audio.setAttribute("playsinline", "");
+      audio.muted = false;
+      audio.volume = 1;
+      audio.style.display = "none";
+      audio.style.width = "100%";
+      audio.style.marginTop = "10px";
+
+      const box = document.getElementById("finalCallOverlay") || document.body;
+      box.appendChild(audio);
+    }
+
+    return audio;
+  }
+
+  function ensureAudioButton() {
+    let btn = document.getElementById("citofonamiIOSSingleAudioButton");
+
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.id = "citofonamiIOSSingleAudioButton";
+      btn.type = "button";
+      btn.textContent = "Attiva audio";
+      btn.style.display = "none";
+      btn.style.width = "100%";
+      btn.style.marginTop = "10px";
+      btn.style.padding = "15px 16px";
+      btn.style.borderRadius = "16px";
+      btn.style.border = "1px solid rgba(215,180,106,.50)";
+      btn.style.background = "rgba(215,180,106,.20)";
+      btn.style.color = "#fff";
+      btn.style.fontWeight = "800";
+
+      const box = document.getElementById("finalCallOverlay") || document.body;
+      box.appendChild(btn);
+
+      btn.addEventListener("pointerdown", function (event) {
+        try {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+        } catch (e) {}
+        playRemote(true);
+      }, true);
+
+      btn.addEventListener("click", function (event) {
+        try {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+        } catch (e) {}
+        playRemote(true);
+      }, true);
+    }
+
+    return btn;
+  }
+
+  async function playRemote(fromGesture) {
+    if (!isIOS()) return false;
+
+    const audio = ensureAudio();
+    const btn = ensureAudioButton();
+
+    if (remoteStream) {
+      audio.srcObject = remoteStream;
+    }
+
+    audio.muted = false;
+    audio.volume = 1;
+    audio.style.display = "block";
+
+    try {
+      const r = audio.play();
+      if (r && r.catch) await r;
+
+      btn.style.display = "none";
+      setMsg("Audio iPhone attivo. Parla ora.", true);
+      return true;
+    } catch (e) {
+      btn.style.display = "block";
+      setMsg(fromGesture ? "iPhone blocca ancora l’audio. Tocca di nuovo Attiva audio." : "Audio ricevuto. Tocca Attiva audio.", false);
+      console.warn("iOS single play blocked:", e);
+      return false;
+    }
+  }
+
+  function stopStream(stream) {
+    try {
+      if (stream && stream.getTracks) {
+        stream.getTracks().forEach(track => {
+          try {
+            track.stop();
+          } catch (e) {}
+        });
+      }
+    } catch (e) {}
+  }
+
+  function stopEverythingLocal() {
+    try {
+      if (answerTimer) clearInterval(answerTimer);
+      if (iceTimer) clearInterval(iceTimer);
+      answerTimer = null;
+      iceTimer = null;
+    } catch (e) {}
+
+    try {
+      if (window.citofonamiAdminConsumeAnswerTimer) {
+        clearInterval(window.citofonamiAdminConsumeAnswerTimer);
+        window.citofonamiAdminConsumeAnswerTimer = null;
+      }
+    } catch (e) {}
+
+    try {
+      if (peer && typeof peer.close === "function") peer.close();
+    } catch (e) {}
+
+    peer = null;
+    seenIce = new Set();
+
+    stopStream(localStream);
+    stopStream(remoteStream);
+    localStream = null;
+    remoteStream = null;
+
+    [
+      "citofonamiImmediateAdminStream",
+      "citofonamiAdminMicStream",
+      "adminRtcStream",
+      "citofonamiImmediateAdminPeer",
+      "citofonamiAdminDirectPeer",
+      "citofonamiAdminForcePeer",
+      "adminRtcPeer"
+    ].forEach(name => {
+      try {
+        const obj = window[name];
+        if (obj && typeof obj.close === "function") obj.close();
+        if (obj && obj.getTracks) stopStream(obj);
+        window[name] = null;
+      } catch (e) {}
+    });
+
+    try {
+      document.querySelectorAll("audio, video").forEach(el => {
+        try {
+          el.pause();
+          el.currentTime = 0;
+          if (el.srcObject && el.srcObject.getTracks) {
+            el.srcObject.getTracks().forEach(track => {
+              try { track.stop(); } catch (e) {}
+            });
+          }
+          el.srcObject = null;
+        } catch (e) {}
+      });
+    } catch (e) {}
+  }
+
+  function resetUiClosed() {
+    try {
+      const overlay = document.getElementById("finalCallOverlay");
+      if (overlay) {
+        overlay.classList.remove("show");
+        overlay.classList.remove("temporarily-hidden");
+        overlay.style.display = "none";
+        if (overlay.dataset) overlay.dataset.callId = "";
+      }
+    } catch (e) {}
+
+    try {
+      const hidden = document.getElementById("openHiddenCallButton");
+      if (hidden) hidden.classList.remove("show");
+    } catch (e) {}
+
+    try {
+      const topClose = document.getElementById("citofonamiTopCloseButton");
+      if (topClose) topClose.remove();
+    } catch (e) {}
+
+    try {
+      const audio = document.getElementById("citofonamiIOSSingleRemoteAudio");
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.srcObject = null;
+        audio.style.display = "none";
+      }
+    } catch (e) {}
+
+    try {
+      const btn = document.getElementById("citofonamiIOSSingleAudioButton");
+      if (btn) btn.style.display = "none";
+    } catch (e) {}
+
+    try {
+      window.finalCurrentCall = null;
+      activeCallId = "";
+    } catch (e) {}
+
+    setMsg("Microfono spento. Conversazione chiusa. App pronta.", true);
+  }
+
+  async function closeServer(callId) {
+    const c = code();
+
+    try {
+      if (callId) {
+        await fetch(`/api/citofonami/${encodeURIComponent(c)}/calls/${encodeURIComponent(callId)}/action`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "close" }),
+          cache: "no-store"
+        });
+      }
+    } catch (e) {}
+
+    try {
+      await fetch(`/api/citofonami/${encodeURIComponent(c)}/calls/close-open`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ exceptCallId: "" }),
+        cache: "no-store"
+      });
+    } catch (e) {}
+  }
+
+  async function postOffer(callId, offer) {
+    const res = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/webrtc/offer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ offer }),
+      cache: "no-store"
+    });
+
+    return res.json().catch(() => null);
+  }
+
+  async function postIce(callId, candidate) {
+    try {
+      await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/webrtc/ice-mirror`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidate }),
+        cache: "no-store"
+      });
+    } catch (e) {}
+  }
+
+  async function pollAnswer(callId) {
+    if (!peer || !callId) return;
+
+    try {
+      if (!peer.remoteDescription) {
+        const res = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/webrtc/answer?t=${Date.now()}`, {
+          cache: "no-store"
+        });
+
+        const data = await res.json();
+
+        if (data && data.ok && data.answer) {
+          await peer.setRemoteDescription(data.answer);
+          setMsg("Answer ricevuta. Collegamento audio in corso…", true);
+        }
+      }
+    } catch (e) {
+      console.warn("iOS single poll answer error:", e);
+    }
+  }
+
+  async function pollIce(callId) {
+    if (!peer || !callId) return;
+
+    try {
+      const res = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/webrtc/ice?role=user&t=${Date.now()}`, {
+        cache: "no-store"
+      });
+
+      const data = await res.json();
+      if (!data || !data.ok || !Array.isArray(data.candidates)) return;
+
+      for (const candidate of data.candidates) {
+        const key = JSON.stringify(candidate);
+        if (seenIce.has(key)) continue;
+        seenIce.add(key);
+
+        try {
+          await peer.addIceCandidate(candidate);
+        } catch (e) {
+          console.warn("iOS single add ICE error:", e);
+        }
+      }
+    } catch (e) {
+      console.warn("iOS single poll ICE error:", e);
+    }
+  }
+
+  function getCallFromUi() {
+    try {
+      if (window.finalCurrentCall && window.finalCurrentCall.id) return window.finalCurrentCall;
+    } catch (e) {}
+
+    try {
+      const overlay = document.getElementById("finalCallOverlay");
+      if (overlay && overlay.dataset && overlay.dataset.callId) {
+        return { id: overlay.dataset.callId };
+      }
+    } catch (e) {}
+
+    return null;
+  }
+
+  async function answerIOSCall(event) {
+    if (!isIOS()) return false;
+
+    try {
+      event && event.preventDefault && event.preventDefault();
+      event && event.stopPropagation && event.stopPropagation();
+      event && event.stopImmediatePropagation && event.stopImmediatePropagation();
+    } catch (e) {}
+
+    const call = getCallFromUi();
+
+    if (!call || !call.id) {
+      setMsg("Chiamata non trovata. Riprova.", false);
+      return true;
+    }
+
+    const callId = call.id;
+    activeCallId = callId;
+
+    try {
+      stopEverythingLocal();
+
+      setMsg("iPhone: attivo microfono per la chiamata…", true);
+
+      await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "answer" }),
+        cache: "no-store"
+      });
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Microfono non disponibile su questo dispositivo.");
+      }
+
+      localStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        },
+        video: false
+      });
+
+      let iceConfig = {
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" }
+        ],
+        iceTransportPolicy: "all"
+      };
+
+      try {
+        if (typeof window.citofonamiLoadIceConfig === "function") {
+          iceConfig = await window.citofonamiLoadIceConfig();
+        }
+      } catch (e) {}
+
+      peer = new RTCPeerConnection(iceConfig);
+
+      window.citofonamiIOSSingleAdminPeer = peer;
+      window.citofonamiIOSSingleAdminStream = localStream;
+
+      localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
+
+      peer.ontrack = function (ev) {
+        try {
+          remoteStream = ev.streams && ev.streams[0] ? ev.streams[0] : null;
+
+          if (remoteStream) {
+            const audio = ensureAudio();
+            audio.srcObject = remoteStream;
+            ensureAudioButton().style.display = "block";
+            setMsg("Audio utente ricevuto. Tocca Attiva audio.", true);
+            playRemote(false);
+          } else {
+            setMsg("Traccia audio ricevuta senza stream.", false);
+          }
+        } catch (e) {
+          console.warn("iOS single ontrack error:", e);
+        }
+      };
+
+      peer.onicecandidate = function (ev) {
+        if (ev.candidate) postIce(callId, ev.candidate);
+      };
+
+      peer.onconnectionstatechange = function () {
+        try {
+          const txt = "iPhone WebRTC: " + peer.connectionState + " / ICE: " + peer.iceConnectionState;
+          setMsg(txt, peer.connectionState !== "failed");
+        } catch (e) {}
+      };
+
+      peer.oniceconnectionstatechange = function () {
+        try {
+          const txt = "iPhone ICE: " + peer.iceConnectionState + " / WebRTC: " + peer.connectionState;
+          setMsg(txt, peer.iceConnectionState !== "failed");
+        } catch (e) {}
+      };
+
+      const offer = await peer.createOffer({ offerToReceiveAudio: true });
+      await peer.setLocalDescription(offer);
+
+      const saved = await postOffer(callId, peer.localDescription);
+
+      if (!saved || !saved.ok) {
+        throw new Error((saved && saved.error) || "Offer non salvata.");
+      }
+
+      setMsg("Offerta audio iPhone creata. Attendo Parla ora dall’utente.", true);
+
+      answerTimer = setInterval(() => pollAnswer(callId), 700);
+      iceTimer = setInterval(() => pollIce(callId), 700);
+
+      setTimeout(() => pollAnswer(callId), 300);
+      setTimeout(() => pollIce(callId), 900);
+      setTimeout(() => ensureAudioButton().style.display = "block", 1300);
+
+      return true;
+    } catch (e) {
+      console.error("iOS single answer error:", e);
+      setMsg("Errore audio iPhone: " + (e.message || e), false);
+      stopEverythingLocal();
+      return true;
+    }
+  }
+
+  async function closeIOSCall(event) {
+    if (!isIOS()) return false;
+
+    try {
+      event && event.preventDefault && event.preventDefault();
+      event && event.stopPropagation && event.stopPropagation();
+      event && event.stopImmediatePropagation && event.stopImmediatePropagation();
+    } catch (e) {}
+
+    const callId = activeCallId || (window.finalCurrentCall && window.finalCurrentCall.id) || "";
+
+    stopEverythingLocal();
+    await closeServer(callId);
+    stopEverythingLocal();
+    resetUiClosed();
+
+    setTimeout(() => {
+      stopEverythingLocal();
+      resetUiClosed();
+    }, 500);
+
+    setTimeout(() => {
+      stopEverythingLocal();
+      resetUiClosed();
+    }, 1500);
+
+    return true;
+  }
+
+  document.addEventListener("click", function (event) {
+    if (!isIOS()) return;
+
+    const btn = event.target && event.target.closest ? event.target.closest("button") : null;
+    if (!btn) return;
+
+    const id = String(btn.id || "");
+    const text = String(btn.textContent || "").trim().toLowerCase();
+
+    if (id === "finalAnswerButton" || text.includes("rispondi")) {
+      answerIOSCall(event);
+      return;
+    }
+
+    if (
+      id === "finalCloseButton" ||
+      id === "citofonamiTopCloseButton" ||
+      text === "chiudi" ||
+      text.includes("chiudi")
+    ) {
+      closeIOSCall(event);
+      return;
+    }
+  }, true);
+
+  document.addEventListener("pointerdown", function (event) {
+    if (!isIOS()) return;
+
+    const btn = event.target && event.target.closest ? event.target.closest("button") : null;
+    if (!btn) return;
+
+    const id = String(btn.id || "");
+    const text = String(btn.textContent || "").trim().toLowerCase();
+
+    if (
+      id === "citofonamiIOSSingleAudioButton" ||
+      text.includes("attiva audio")
+    ) {
+      try {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+      } catch (e) {}
+      playRemote(true);
+    }
+  }, true);
+
+  window.citofonamiIOSSingleAnswerCall = answerIOSCall;
+  window.citofonamiIOSSingleCloseCall = closeIOSCall;
+  window.citofonamiIOSSingleStopEverything = stopEverythingLocal;
+})();
+</script>
+
 </body>
 </html>
