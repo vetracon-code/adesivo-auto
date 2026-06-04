@@ -8561,5 +8561,212 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_IOS_PENDING_CALL_RESOLVER_20260604 */
+(function () {
+  let lastPendingCall = null;
+  let ringtoneAlreadyStartedFor = "";
+
+  function profile() {
+    return window.citofonamiAdminDeviceProfile || window.citofonamiDeviceProfile || {};
+  }
+
+  function isIOS() {
+    const p = profile();
+    return !!(p.isIOS || p.isIPhone || p.isIPad || p.isSafari);
+  }
+
+  function code() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get("code");
+      const input = document.getElementById("qrCode");
+      return String(fromUrl || (input && input.value) || "DEMO").trim().toUpperCase();
+    } catch (e) {
+      return "DEMO";
+    }
+  }
+
+  function msg(text, ok) {
+    try {
+      const subtitle = document.getElementById("finalCallSubtitle");
+      if (subtitle) subtitle.textContent = text;
+    } catch (e) {}
+
+    try {
+      const state = document.getElementById("adminConnectedState");
+      if (state) {
+        state.style.display = "block";
+        state.textContent = text;
+      }
+    } catch (e) {}
+
+    try {
+      const dbg = document.getElementById("adminWebrtcDebugLine");
+      if (dbg) {
+        dbg.style.display = "block";
+        dbg.textContent = text;
+      }
+    } catch (e) {}
+
+    console.log("Citofonami iOS pending resolver:", text);
+  }
+
+  function exposeCallToUi(call) {
+    if (!call || !call.id) return;
+
+    lastPendingCall = call;
+
+    try {
+      window.finalCurrentCall = call;
+    } catch (e) {}
+
+    try {
+      const overlay = document.getElementById("finalCallOverlay");
+      if (overlay) {
+        overlay.dataset.callId = call.id;
+        overlay.classList.add("active");
+        overlay.classList.add("force-visible");
+        overlay.classList.remove("temporarily-hidden");
+        overlay.style.display = "";
+      }
+    } catch (e) {}
+
+    try {
+      const title = document.getElementById("finalCallTitle");
+      if (title) title.textContent = "Qualcuno sta citofonando";
+    } catch (e) {}
+
+    try {
+      const subtitle = document.getElementById("finalCallSubtitle");
+      if (subtitle) subtitle.textContent = "Chiamata in arrivo. Puoi rispondere.";
+    } catch (e) {}
+  }
+
+  async function fetchLatestPendingCall() {
+    if (!isIOS()) return null;
+
+    try {
+      const res = await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/pending?t=${Date.now()}`, {
+        cache: "no-store"
+      });
+
+      const data = await res.json();
+
+      if (data && data.ok && Array.isArray(data.calls) && data.calls.length) {
+        const call = data.calls[0];
+        exposeCallToUi(call);
+
+        if (call.id && ringtoneAlreadyStartedFor !== call.id) {
+          ringtoneAlreadyStartedFor = call.id;
+
+          try {
+            if (typeof window.citofonamiIOSPlayRingtone === "function") {
+              window.citofonamiIOSPlayRingtone();
+            } else if (typeof window.playCitofonamiDoorbell === "function") {
+              window.playCitofonamiDoorbell();
+            }
+          } catch (e) {}
+        }
+
+        return call;
+      }
+    } catch (e) {
+      console.warn("iOS fetch pending call error:", e);
+    }
+
+    return null;
+  }
+
+  async function resolveCallForIOS() {
+    if (!isIOS()) return null;
+
+    try {
+      if (window.finalCurrentCall && window.finalCurrentCall.id) {
+        return window.finalCurrentCall;
+      }
+    } catch (e) {}
+
+    try {
+      const overlay = document.getElementById("finalCallOverlay");
+      if (overlay && overlay.dataset && overlay.dataset.callId) {
+        return { id: overlay.dataset.callId };
+      }
+    } catch (e) {}
+
+    if (lastPendingCall && lastPendingCall.id) {
+      return lastPendingCall;
+    }
+
+    return await fetchLatestPendingCall();
+  }
+
+  async function answerResolvedIOSCall(event) {
+    if (!isIOS()) return;
+
+    const btn = event && event.target && event.target.closest
+      ? event.target.closest("button")
+      : null;
+
+    if (!btn) return;
+
+    const id = String(btn.id || "");
+    const text = String(btn.textContent || "").trim().toLowerCase();
+
+    if (!(id === "finalAnswerButton" || text.includes("rispondi"))) return;
+
+    const call = await resolveCallForIOS();
+
+    if (!call || !call.id) {
+      msg("Chiamata non trovata. Attendi un secondo e riprova.", false);
+      return;
+    }
+
+    exposeCallToUi(call);
+
+    try {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+      }
+    } catch (e) {}
+
+    msg("Chiamata trovata. Avvio risposta iPhone…", true);
+
+    try {
+      if (typeof window.citofonamiIOSSingleAnswerCall === "function") {
+        await window.citofonamiIOSSingleAnswerCall(event);
+      }
+    } catch (e) {
+      console.warn("iOS resolved answer error:", e);
+      msg("Errore risposta iPhone: " + (e.message || e), false);
+    }
+  }
+
+  setInterval(fetchLatestPendingCall, 1200);
+  setTimeout(fetchLatestPendingCall, 400);
+  setTimeout(fetchLatestPendingCall, 1500);
+  setTimeout(fetchLatestPendingCall, 3000);
+
+  document.addEventListener("click", answerResolvedIOSCall, true);
+  document.addEventListener("pointerdown", function (event) {
+    const btn = event.target && event.target.closest ? event.target.closest("button") : null;
+    if (!btn) return;
+
+    const id = String(btn.id || "");
+    const text = String(btn.textContent || "").trim().toLowerCase();
+
+    if (id === "finalAnswerButton" || text.includes("rispondi")) {
+      fetchLatestPendingCall();
+    }
+  }, true);
+
+  window.citofonamiIOSFetchLatestPendingCall = fetchLatestPendingCall;
+  window.citofonamiIOSResolveCallForAnswer = resolveCallForIOS;
+})();
+</script>
+
 </body>
 </html>
