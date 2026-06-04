@@ -4242,6 +4242,7 @@
         adminRtcPeer.onicecandidate = (event) => {
           if (event.candidate) {
             postAdminIceCandidate(code, callId, event.candidate);
+            try { window.citofonamiAdminMirrorIceCandidate && window.citofonamiAdminMirrorIceCandidate(callId, event.candidate); } catch (e) {}
           }
         };
 
@@ -4747,6 +4748,7 @@
       peer.onicecandidate = function (event) {
         if (event.candidate) {
           postIce(callId, event.candidate);
+          try { window.citofonamiAdminMirrorIceCandidate && window.citofonamiAdminMirrorIceCandidate(callId, event.candidate); } catch (e) {}
         }
       };
 
@@ -5945,6 +5947,32 @@
 
   window.citofonamiAdminFinalCleanClose = cleanClose;
   window.citofonamiAdminStopEverythingLocal = stopEverythingLocal;
+})();
+</script>
+
+
+<script>
+/* CITOFONAMI_ADMIN_POST_ICE_MIRROR_20260604 */
+(function () {
+  async function mirrorCandidate(callId, candidate) {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get("code");
+      const input = document.getElementById("qrCode");
+      const code = String(fromUrl || (input && input.value) || "DEMO").trim().toUpperCase();
+
+      await fetch(`/api/citofonami/${encodeURIComponent(code)}/calls/${encodeURIComponent(callId)}/webrtc/ice-mirror`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidate }),
+        cache: "no-store"
+      });
+    } catch (e) {
+      console.warn("Admin ICE mirror error:", e);
+    }
+  }
+
+  window.citofonamiAdminMirrorIceCandidate = mirrorCandidate;
 })();
 </script>
 

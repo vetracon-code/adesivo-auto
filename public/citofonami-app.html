@@ -1494,6 +1494,7 @@
         userRtcPeer.onicecandidate = (event) => {
           if (event.candidate) {
             postUserIceCandidate(code, callId, event.candidate);
+            try { window.citofonamiUserMirrorIceCandidate && window.citofonamiUserMirrorIceCandidate(callId, event.candidate); } catch (e) {}
           }
         };
 
@@ -3207,6 +3208,7 @@
       peer.onicecandidate = function (event) {
         if (event.candidate) {
           postIce(callId, event.candidate);
+          try { window.citofonamiUserMirrorIceCandidate && window.citofonamiUserMirrorIceCandidate(callId, event.candidate); } catch (e) {}
         }
       };
 
@@ -3524,6 +3526,7 @@
       peer.onicecandidate = function (event) {
         if (event.candidate) {
           postIce(callId, event.candidate);
+          try { window.citofonamiUserMirrorIceCandidate && window.citofonamiUserMirrorIceCandidate(callId, event.candidate); } catch (e) {}
         }
       };
 
@@ -4386,6 +4389,7 @@
       peer.onicecandidate = function (event) {
         if (event.candidate) {
           postIce(callId, event.candidate);
+          try { window.citofonamiUserMirrorIceCandidate && window.citofonamiUserMirrorIceCandidate(callId, event.candidate); } catch (e) {}
         }
       };
 
@@ -4500,6 +4504,36 @@
   }, true);
 
   window.citofonamiUserCreateImmediateAnswerFromTalkNow = createImmediateAnswerFromTalkNow;
+})();
+</script>
+
+
+<script>
+/* CITOFONAMI_USER_POST_ICE_MIRROR_20260604 */
+(function () {
+  function code() {
+    try {
+      const fromPath = window.location.pathname.split("/").filter(Boolean).pop();
+      return String(fromPath || "DEMO").trim().toUpperCase();
+    } catch (e) {
+      return "DEMO";
+    }
+  }
+
+  async function mirrorCandidate(callId, candidate) {
+    try {
+      await fetch(`/api/citofonami/${encodeURIComponent(code())}/calls/${encodeURIComponent(callId)}/webrtc/ice-mirror`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidate }),
+        cache: "no-store"
+      });
+    } catch (e) {
+      console.warn("User ICE mirror error:", e);
+    }
+  }
+
+  window.citofonamiUserMirrorIceCandidate = mirrorCandidate;
 })();
 </script>
 

@@ -21118,6 +21118,53 @@ app.get('/api/citofonami/:code/calls/:callId/webrtc/answer', (req, res) => {
   });
 });
 
+
+// CITOFONAMI_MIRROR_WEBRTC_ICE_BOTH_ROLES_20260604
+app.post('/api/citofonami/:code/calls/:callId/webrtc/ice-mirror', express.json({ limit: '1mb' }), (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const callId = String(req.params.callId || '').trim();
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+  const body = req.body || {};
+  const candidate = body.candidate || null;
+
+  if (!callId || !candidate) {
+    return res.status(400).json({ ok: false, error: 'callId/candidate mancanti' });
+  }
+
+  db.webrtc = db.webrtc || {};
+  db.webrtc[code] = db.webrtc[code] || {};
+  db.webrtc[code][callId] = db.webrtc[code][callId] || {};
+  db.webrtc[code][callId].ice = db.webrtc[code][callId].ice || {};
+  db.webrtc[code][callId].ice.admin = db.webrtc[code][callId].ice.admin || [];
+  db.webrtc[code][callId].ice.user = db.webrtc[code][callId].ice.user || [];
+
+  const key = JSON.stringify(candidate);
+
+  const addUnique = (arr) => {
+    if (!arr.some((item) => JSON.stringify(item) === key)) {
+      arr.push(candidate);
+    }
+  };
+
+  addUnique(db.webrtc[code][callId].ice.admin);
+  addUnique(db.webrtc[code][callId].ice.user);
+
+  db.webrtc[code][callId].ice.admin = db.webrtc[code][callId].ice.admin.slice(-80);
+  db.webrtc[code][callId].ice.user = db.webrtc[code][callId].ice.user.slice(-80);
+
+  writeCitofonamiDb(db);
+
+  res.json({
+    ok: true,
+    code,
+    callId,
+    mirrored: true,
+    adminCount: db.webrtc[code][callId].ice.admin.length,
+    userCount: db.webrtc[code][callId].ice.user.length
+  });
+});
+
+
 app.post('/api/citofonami/:code/calls/:callId/webrtc/ice', express.json({ limit: '2mb' }), (req, res) => {
   const code = normalizeCitofonamiCode(req.params.code);
   const callId = String(req.params.callId || '');
