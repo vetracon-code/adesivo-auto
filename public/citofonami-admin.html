@@ -4777,5 +4777,203 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_ADMIN_MINIMAL_SERVER_CLOSE_BUTTON_20260604 */
+(function () {
+  /*
+    Pulsante minimale e isolato.
+    Fa solo action=close sul server.
+    Non tocca WebRTC, audio, stream, peer, microfono, cache o DOM chiamata.
+  */
+
+  let busy = false;
+
+  function getCode() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get("code");
+      if (fromUrl) return String(fromUrl).trim().toUpperCase();
+    } catch (e) {}
+
+    try {
+      const input = document.getElementById("qrCode");
+      if (input && input.value) return String(input.value).trim().toUpperCase();
+    } catch (e) {}
+
+    return "DEMO";
+  }
+
+  function getKnownCallId() {
+    try {
+      if (window.finalCurrentCall && window.finalCurrentCall.id) {
+        return String(window.finalCurrentCall.id);
+      }
+    } catch (e) {}
+
+    try {
+      const overlay = document.getElementById("finalCallOverlay");
+      if (overlay && overlay.dataset && overlay.dataset.callId) {
+        return String(overlay.dataset.callId);
+      }
+    } catch (e) {}
+
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const callFromUrl = params.get("call");
+      if (callFromUrl) return String(callFromUrl);
+    } catch (e) {}
+
+    return "";
+  }
+
+  async function getLatestUsefulCallId() {
+    const known = getKnownCallId();
+    if (known) return known;
+
+    try {
+      const res = await fetch(`/api/citofonami/${encodeURIComponent(getCode())}/calls/pending?t=${Date.now()}`, {
+        cache: "no-store"
+      });
+
+      const data = await res.json();
+
+      if (data && data.ok && Array.isArray(data.calls) && data.calls.length && data.calls[0].id) {
+        return String(data.calls[0].id);
+      }
+    } catch (e) {}
+
+    try {
+      const res = await fetch(`/api/citofonami/${encodeURIComponent(getCode())}/calls-list/latest?t=${Date.now()}`, {
+        cache: "no-store"
+      });
+
+      const data = await res.json();
+
+      if (data && data.ok && Array.isArray(data.calls) && data.calls.length && data.calls[0].id) {
+        return String(data.calls[0].id);
+      }
+    } catch (e) {}
+
+    return "";
+  }
+
+  function ensureButton() {
+    if (document.getElementById("citofonamiMinimalEndCallButton")) return;
+
+    const btn = document.createElement("button");
+    btn.id = "citofonamiMinimalEndCallButton";
+    btn.type = "button";
+    btn.textContent = "Termina";
+    btn.setAttribute("aria-label", "Termina chiamata");
+
+    btn.style.cssText = [
+      "position:fixed",
+      "top:calc(12px + env(safe-area-inset-top,0px))",
+      "left:12px",
+      "z-index:2147483647",
+      "height:42px",
+      "min-width:92px",
+      "padding:0 16px",
+      "border:1px solid rgba(255,255,255,.20)",
+      "border-radius:999px",
+      "background:rgba(18,18,20,.82)",
+      "color:#fff",
+      "font-size:15px",
+      "font-weight:850",
+      "box-shadow:0 12px 34px rgba(0,0,0,.28)",
+      "-webkit-backdrop-filter:blur(14px)",
+      "backdrop-filter:blur(14px)"
+    ].join(";");
+
+    btn.addEventListener("click", async function (event) {
+      try {
+        event.preventDefault();
+        event.stopPropagation();
+      } catch (e) {}
+
+      if (busy) return;
+      busy = true;
+
+      const oldText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Termino…";
+
+      try {
+        const callId = await getLatestUsefulCallId();
+
+        if (!callId) {
+          btn.textContent = "Nessuna call";
+          setTimeout(function () {
+            btn.textContent = oldText;
+            btn.disabled = false;
+            busy = false;
+          }, 1300);
+          return;
+        }
+
+        const res = await fetch(`/api/citofonami/${encodeURIComponent(getCode())}/calls/${encodeURIComponent(callId)}/action`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+          body: JSON.stringify({ action: "close" })
+        });
+
+        let ok = res.ok;
+
+        try {
+          const data = await res.json();
+          ok = ok && !!data.ok;
+        } catch (e) {}
+
+        btn.textContent = ok ? "Terminata" : "Errore";
+
+        try {
+          if (typeof window.setState === "function") {
+            window.setState(ok ? "Chiamata terminata lato server." : "Errore chiusura chiamata.", ok);
+          }
+        } catch (e) {}
+
+      } catch (e) {
+        btn.textContent = "Errore";
+      }
+
+      setTimeout(function () {
+        btn.textContent = oldText;
+        btn.disabled = false;
+        busy = false;
+      }, 1600);
+    }, true);
+
+    document.body.appendChild(btn);
+  }
+
+  setTimeout(ensureButton, 300);
+  setTimeout(ensureButton, 1000);
+  setTimeout(ensureButton, 2500);
+
+  window.citofonamiAdminMinimalServerClose = async function () {
+    const callId = await getLatestUsefulCallId();
+
+    if (!callId) {
+      return { ok: false, error: "no_call" };
+    }
+
+    const res = await fetch(`/api/citofonami/${encodeURIComponent(getCode())}/calls/${encodeURIComponent(callId)}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({ action: "close" })
+    });
+
+    try {
+      return await res.json();
+    } catch (e) {
+      return { ok: res.ok };
+    }
+  };
+})();
+</script>
+
 </body>
 </html>
