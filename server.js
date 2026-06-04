@@ -21038,6 +21038,37 @@ function normalizeCitofonamiWebrtcRole(value) {
   return role === 'admin' ? 'admin' : 'user';
 }
 
+
+// CITOFONAMI_AUTO_ANSWER_WHEN_WEBRTC_OFFER_20260604
+app.post('/api/citofonami/:code/calls/:callId/webrtc/offer', (req, res, next) => {
+  try {
+    const code = normalizeCitofonamiCode(req.params.code);
+    const callId = String(req.params.callId || '').trim();
+
+    if (code && callId) {
+      const db = ensureCitofonamiDbShape(readCitofonamiDb());
+      const event = (db.events || []).find((item) =>
+        item &&
+        item.code === code &&
+        item.id === callId &&
+        item.type === 'call'
+      );
+
+      if (event && event.status === 'ringing') {
+        event.status = 'answered';
+        event.updatedAt = new Date().toISOString();
+        event.answeredBy = 'webrtc-offer';
+        writeCitofonamiDb(db);
+      }
+    }
+  } catch (error) {
+    console.warn('Citofonami auto-answer on offer error:', error);
+  }
+
+  next();
+});
+
+
 app.post('/api/citofonami/:code/calls/:callId/webrtc/offer', express.json({ limit: '2mb' }), (req, res) => {
   const code = normalizeCitofonamiCode(req.params.code);
   const callId = String(req.params.callId || '');
