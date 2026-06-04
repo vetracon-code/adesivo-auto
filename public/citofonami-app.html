@@ -3590,5 +3590,151 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_USER_CLOSE_CALL_AND_RELOAD_ONLY_20260604 */
+(function () {
+  /*
+    Pulsante utente minimale:
+    - chiude lato server se trova la call
+    - ricarica la pagina utente
+    - non tocca WebRTC, stream, peer, audio, microfono, offer, answer, ICE
+  */
+
+  let busy = false;
+
+  function getCode() {
+    try {
+      const parts = window.location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("citofonami");
+      if (idx >= 0 && parts[idx + 1]) {
+        return String(parts[idx + 1]).trim().toUpperCase();
+      }
+    } catch (e) {}
+
+    return "DEMO";
+  }
+
+  function knownCallId() {
+    try {
+      if (window.citofonamiCurrentCallId) return String(window.citofonamiCurrentCallId);
+    } catch (e) {}
+
+    try {
+      if (window.currentCallId) return String(window.currentCallId);
+    } catch (e) {}
+
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get("call");
+      if (fromUrl) return String(fromUrl);
+    } catch (e) {}
+
+    try {
+      const stored =
+        sessionStorage.getItem("citofonamiCurrentCallId") ||
+        sessionStorage.getItem("citofonami_call_id") ||
+        localStorage.getItem("citofonamiCurrentCallId") ||
+        localStorage.getItem("citofonami_call_id");
+
+      if (stored) return String(stored);
+    } catch (e) {}
+
+    return "";
+  }
+
+  async function latestCallId() {
+    const known = knownCallId();
+    if (known) return known;
+
+    try {
+      const r = await fetch(`/api/citofonami/${encodeURIComponent(getCode())}/calls-list/latest?t=${Date.now()}`, {
+        cache: "no-store"
+      });
+
+      const d = await r.json();
+
+      if (d && d.ok && Array.isArray(d.calls) && d.calls.length && d.calls[0].id) {
+        return String(d.calls[0].id);
+      }
+    } catch (e) {}
+
+    return "";
+  }
+
+  function ensureButton() {
+    if (document.getElementById("citofonamiUserCloseCallReloadButton")) return;
+
+    const btn = document.createElement("button");
+    btn.id = "citofonamiUserCloseCallReloadButton";
+    btn.type = "button";
+    btn.textContent = "Chiudi chiamata";
+    btn.setAttribute("aria-label", "Chiudi chiamata");
+
+    btn.style.cssText = [
+      "position:fixed",
+      "top:calc(12px + env(safe-area-inset-top,0px))",
+      "right:12px",
+      "z-index:2147483647",
+      "height:42px",
+      "min-width:132px",
+      "padding:0 15px",
+      "border:1px solid rgba(255,255,255,.22)",
+      "border-radius:999px",
+      "background:rgba(18,18,20,.86)",
+      "color:#fff",
+      "font-size:15px",
+      "font-weight:850",
+      "box-shadow:0 12px 34px rgba(0,0,0,.28)",
+      "-webkit-backdrop-filter:blur(14px)",
+      "backdrop-filter:blur(14px)"
+    ].join(";");
+
+    btn.addEventListener("click", async function (event) {
+      try {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+      } catch (e) {}
+
+      if (busy) return;
+      busy = true;
+
+      btn.disabled = true;
+      btn.textContent = "Chiudo…";
+
+      try {
+        const callId = await latestCallId();
+
+        if (callId) {
+          await fetch(`/api/citofonami/${encodeURIComponent(getCode())}/calls/${encodeURIComponent(callId)}/action`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            cache: "no-store",
+            body: JSON.stringify({ action: "close" })
+          });
+        }
+      } catch (e) {}
+
+      setTimeout(function () {
+        const url = `/citofonami/${encodeURIComponent(getCode())}?ended=${Date.now()}`;
+        try {
+          window.location.replace(url);
+        } catch (e) {
+          window.location.href = url;
+        }
+      }, 250);
+    }, true);
+
+    document.body.appendChild(btn);
+  }
+
+  setTimeout(ensureButton, 400);
+  setTimeout(ensureButton, 1300);
+  setTimeout(ensureButton, 2600);
+  setInterval(ensureButton, 3000);
+})();
+</script>
+
 </body>
 </html>
