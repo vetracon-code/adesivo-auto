@@ -6285,5 +6285,332 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_ADMIN_IOS_AUDIO_PLAYBACK_AND_RESET_20260604 */
+(function () {
+  let lastRemoteStream = null;
+
+  function msg(text, ok) {
+    try {
+      const subtitle = document.getElementById("finalCallSubtitle");
+      if (subtitle) subtitle.textContent = text;
+    } catch (e) {}
+
+    try {
+      const state = document.getElementById("adminConnectedState");
+      if (state) {
+        state.style.display = "block";
+        state.textContent = text;
+      }
+    } catch (e) {}
+
+    try {
+      const dbg = document.getElementById("adminWebrtcDebugLine");
+      if (dbg) {
+        dbg.style.display = "block";
+        dbg.textContent = text;
+      }
+    } catch (e) {}
+
+    try {
+      if (typeof window.setState === "function") {
+        window.setState(text, ok !== false);
+      }
+    } catch (e) {}
+
+    console.log("Citofonami admin audio:", text);
+  }
+
+  function ensureRemoteAudio() {
+    let audio = document.getElementById("citofonamiAdminStableRemoteAudio");
+
+    if (!audio) {
+      audio = document.createElement("audio");
+      audio.id = "citofonamiAdminStableRemoteAudio";
+      audio.autoplay = true;
+      audio.playsInline = true;
+      audio.setAttribute("playsinline", "");
+      audio.controls = true;
+      audio.style.width = "100%";
+      audio.style.marginTop = "10px";
+      audio.style.display = "none";
+
+      const overlay =
+        document.getElementById("finalCallOverlay") ||
+        document.body;
+
+      overlay.appendChild(audio);
+    }
+
+    return audio;
+  }
+
+  function ensureActivateAudioButton() {
+    let btn = document.getElementById("citofonamiAdminActivateAudioButton");
+
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.id = "citofonamiAdminActivateAudioButton";
+      btn.type = "button";
+      btn.textContent = "Attiva audio";
+      btn.style.width = "100%";
+      btn.style.marginTop = "10px";
+      btn.style.padding = "14px 16px";
+      btn.style.borderRadius = "14px";
+      btn.style.border = "1px solid rgba(215,180,106,.45)";
+      btn.style.background = "rgba(215,180,106,.16)";
+      btn.style.color = "#fff";
+      btn.style.fontWeight = "700";
+      btn.style.display = "none";
+
+      const overlay =
+        document.getElementById("finalCallOverlay") ||
+        document.body;
+
+      overlay.appendChild(btn);
+
+      btn.addEventListener("click", function () {
+        forcePlayRemoteAudio(true);
+      }, true);
+
+      btn.addEventListener("pointerdown", function () {
+        forcePlayRemoteAudio(true);
+      }, true);
+    }
+
+    return btn;
+  }
+
+  async function forcePlayRemoteAudio(fromGesture) {
+    const audio = ensureRemoteAudio();
+
+    if (lastRemoteStream) {
+      audio.srcObject = lastRemoteStream;
+    }
+
+    audio.muted = false;
+    audio.volume = 1;
+    audio.style.display = "block";
+
+    try {
+      const play = audio.play();
+      if (play && play.catch) await play;
+
+      const btn = ensureActivateAudioButton();
+      btn.style.display = "none";
+
+      msg("Audio remoto attivo. Puoi parlare con l’utente.", true);
+      return true;
+    } catch (e) {
+      const btn = ensureActivateAudioButton();
+      btn.style.display = "block";
+
+      msg(
+        fromGesture
+          ? "Audio ancora bloccato dal dispositivo. Tocca di nuovo Attiva audio."
+          : "Audio ricevuto, ma iPhone richiede un tocco su Attiva audio.",
+        false
+      );
+
+      console.warn("Citofonami admin audio play blocked:", e);
+      return false;
+    }
+  }
+
+  function attachRemoteStream(stream) {
+    if (!stream) return;
+
+    lastRemoteStream = stream;
+
+    const audio = ensureRemoteAudio();
+    audio.srcObject = stream;
+
+    const btn = ensureActivateAudioButton();
+    btn.style.display = "block";
+
+    msg("Audio utente ricevuto. Tocca Attiva audio se non senti.", true);
+
+    setTimeout(function () {
+      forcePlayRemoteAudio(false);
+    }, 120);
+
+    setTimeout(function () {
+      forcePlayRemoteAudio(false);
+    }, 900);
+  }
+
+  function patchPeerOnTrack(peerName) {
+    try {
+      const peer = window[peerName];
+      if (!peer || peer.__citofonamiStableAudioPatched) return;
+
+      peer.__citofonamiStableAudioPatched = true;
+
+      const oldOnTrack = peer.ontrack;
+
+      peer.ontrack = function (event) {
+        try {
+          if (typeof oldOnTrack === "function") {
+            oldOnTrack.call(peer, event);
+          }
+        } catch (e) {}
+
+        try {
+          const stream =
+            event.streams && event.streams[0]
+              ? event.streams[0]
+              : null;
+
+          attachRemoteStream(stream);
+        } catch (e) {
+          console.warn("Citofonami patched ontrack error:", e);
+        }
+      };
+
+      peer.addEventListener && peer.addEventListener("track", function (event) {
+        try {
+          const stream =
+            event.streams && event.streams[0]
+              ? event.streams[0]
+              : null;
+
+          attachRemoteStream(stream);
+        } catch (e) {}
+      });
+
+      peer.addEventListener && peer.addEventListener("connectionstatechange", function () {
+        try {
+          msg("WebRTC: " + peer.connectionState + " / ICE: " + peer.iceConnectionState, peer.connectionState !== "failed");
+        } catch (e) {}
+      });
+
+      peer.addEventListener && peer.addEventListener("iceconnectionstatechange", function () {
+        try {
+          msg("ICE: " + peer.iceConnectionState + " / WebRTC: " + peer.connectionState, peer.iceConnectionState !== "failed");
+        } catch (e) {}
+      });
+
+    } catch (e) {}
+  }
+
+  function patchAllPeers() {
+    [
+      "citofonamiImmediateAdminPeer",
+      "citofonamiAdminDirectPeer",
+      "citofonamiAdminForcePeer",
+      "adminRtcPeer"
+    ].forEach(patchPeerOnTrack);
+  }
+
+  function showAudioButtonDuringCall() {
+    try {
+      const overlay = document.getElementById("finalCallOverlay");
+      const isVisible =
+        overlay &&
+        (
+          overlay.classList.contains("show") ||
+          overlay.style.display !== "none"
+        );
+
+      if (isVisible) {
+        ensureActivateAudioButton().style.display = "block";
+      }
+    } catch (e) {}
+  }
+
+  function hardResetAdminUiAfterClose() {
+    try {
+      lastRemoteStream = null;
+    } catch (e) {}
+
+    try {
+      const audio = document.getElementById("citofonamiAdminStableRemoteAudio");
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+        if (audio.srcObject && audio.srcObject.getTracks) {
+          audio.srcObject.getTracks().forEach(track => {
+            try { track.stop(); } catch (e) {}
+          });
+        }
+        audio.srcObject = null;
+        audio.style.display = "none";
+      }
+    } catch (e) {}
+
+    try {
+      const btn = document.getElementById("citofonamiAdminActivateAudioButton");
+      if (btn) btn.style.display = "none";
+    } catch (e) {}
+
+    try {
+      const overlay = document.getElementById("finalCallOverlay");
+      if (overlay) {
+        overlay.classList.remove("show");
+        overlay.classList.remove("temporarily-hidden");
+        overlay.style.display = "none";
+        if (overlay.dataset) overlay.dataset.callId = "";
+      }
+    } catch (e) {}
+
+    try {
+      const hidden = document.getElementById("openHiddenCallButton");
+      if (hidden) hidden.classList.remove("show");
+    } catch (e) {}
+
+    try {
+      const topClose = document.getElementById("citofonamiTopCloseButton");
+      if (topClose) topClose.remove();
+    } catch (e) {}
+
+    try {
+      const answerBtn = document.getElementById("finalAnswerButton");
+      if (answerBtn) {
+        answerBtn.disabled = false;
+        answerBtn.textContent = "Rispondi";
+      }
+    } catch (e) {}
+
+    try {
+      window.finalCurrentCall = null;
+    } catch (e) {}
+
+    msg("Conversazione chiusa. App pronta per una nuova chiamata.", true);
+  }
+
+  document.addEventListener("click", function (event) {
+    const btn = event.target && event.target.closest ? event.target.closest("button") : null;
+    if (!btn) return;
+
+    const id = String(btn.id || "");
+    const text = String(btn.textContent || "").trim().toLowerCase();
+
+    if (id === "finalAnswerButton" || text.includes("rispondi")) {
+      setTimeout(patchAllPeers, 200);
+      setTimeout(patchAllPeers, 900);
+      setTimeout(showAudioButtonDuringCall, 1200);
+    }
+
+    if (
+      id === "finalCloseButton" ||
+      id === "citofonamiTopCloseButton" ||
+      text === "chiudi" ||
+      text.includes("chiudi")
+    ) {
+      setTimeout(hardResetAdminUiAfterClose, 250);
+      setTimeout(hardResetAdminUiAfterClose, 900);
+      setTimeout(hardResetAdminUiAfterClose, 1800);
+    }
+  }, true);
+
+  setInterval(patchAllPeers, 1000);
+
+  window.citofonamiAdminAttachRemoteStream = attachRemoteStream;
+  window.citofonamiAdminForcePlayRemoteAudio = forcePlayRemoteAudio;
+  window.citofonamiAdminHardResetUiAfterClose = hardResetAdminUiAfterClose;
+})();
+</script>
+
 </body>
 </html>
