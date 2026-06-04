@@ -1762,6 +1762,160 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_ADMIN_MEDIA_STREAM_REGISTRY_20260604 */
+(function () {
+  const registry = window.citofonamiAdminMediaRegistry || {
+    streams: [],
+    tracks: [],
+    patched: false
+  };
+
+  window.citofonamiAdminMediaRegistry = registry;
+
+  function rememberStream(stream, source) {
+    try {
+      if (!stream || !stream.getTracks) return stream;
+
+      if (!registry.streams.includes(stream)) {
+        registry.streams.push(stream);
+      }
+
+      stream.getTracks().forEach(function (track) {
+        try {
+          if (!registry.tracks.includes(track)) {
+            registry.tracks.push(track);
+          }
+
+          try {
+            track.__citofonamiSource = source || "unknown";
+          } catch (e) {}
+        } catch (e) {}
+      });
+    } catch (e) {}
+
+    return stream;
+  }
+
+  function stopTrack(track) {
+    try { track.enabled = false; } catch (e) {}
+    try { track.stop(); } catch (e) {}
+  }
+
+  function stopStream(stream) {
+    try {
+      if (stream && stream.getTracks) {
+        stream.getTracks().forEach(stopTrack);
+      }
+    } catch (e) {}
+  }
+
+  function stopAll(reason) {
+    try {
+      registry.tracks.forEach(stopTrack);
+    } catch (e) {}
+
+    try {
+      registry.streams.forEach(stopStream);
+    } catch (e) {}
+
+    try {
+      document.querySelectorAll("audio, video").forEach(function (el) {
+        try {
+          el.pause();
+          el.currentTime = 0;
+
+          if (el.srcObject && el.srcObject.getTracks) {
+            el.srcObject.getTracks().forEach(stopTrack);
+          }
+
+          el.srcObject = null;
+          el.removeAttribute("src");
+          if (typeof el.load === "function") el.load();
+        } catch (e) {}
+      });
+    } catch (e) {}
+
+    [
+      "citofonamiIOSSingleAdminStream",
+      "citofonamiImmediateAdminStream",
+      "citofonamiAdminMicStream",
+      "adminRtcStream",
+      "citofonamiIOSSingleAdminPeer",
+      "citofonamiImmediateAdminPeer",
+      "citofonamiAdminDirectPeer",
+      "citofonamiAdminForcePeer",
+      "adminRtcPeer"
+    ].forEach(function (name) {
+      try {
+        const obj = window[name];
+
+        if (obj && obj.getTracks) {
+          stopStream(obj);
+        }
+
+        if (obj && typeof obj.getSenders === "function") {
+          obj.getSenders().forEach(function (sender) {
+            try {
+              if (sender.track) stopTrack(sender.track);
+            } catch (e) {}
+          });
+        }
+
+        if (obj && typeof obj.close === "function") {
+          obj.close();
+        }
+
+        window[name] = null;
+      } catch (e) {}
+    });
+
+    registry.streams = [];
+    registry.tracks = [];
+
+    try {
+      const state = document.getElementById("adminConnectedState");
+      if (state) {
+        state.style.display = "block";
+        state.textContent = "Microfono spento. Conversazione chiusa.";
+      }
+    } catch (e) {}
+
+    console.log("Citofonami media registry stopped:", reason || "");
+  }
+
+  if (
+    navigator.mediaDevices &&
+    typeof navigator.mediaDevices.getUserMedia === "function" &&
+    !registry.patched
+  ) {
+    const originalGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+
+    navigator.mediaDevices.getUserMedia = async function (constraints) {
+      const stream = await originalGetUserMedia(constraints);
+
+      try {
+        const wantsAudio =
+          constraints === true ||
+          (constraints && constraints.audio);
+
+        if (wantsAudio) {
+          rememberStream(stream, "getUserMedia");
+        }
+      } catch (e) {}
+
+      return stream;
+    };
+
+    registry.patched = true;
+  }
+
+  window.citofonamiAdminRememberMediaStream = rememberStream;
+  window.citofonamiAdminStopAllMediaStreams = stopAll;
+})();
+</script>
+
 </head>
 
 <body>
@@ -8052,6 +8206,7 @@
     }
 
     hardStopIOSMediaOnly();
+    try { window.citofonamiAdminStopAllMediaStreams && window.citofonamiAdminStopAllMediaStreams("ios dedicated close"); } catch (e) {}
 
     try {
       if (typeof window.citofonamiIOSSingleCloseCall === "function") {
@@ -8064,7 +8219,9 @@
     }
 
     hardStopIOSMediaOnly();
+    try { window.citofonamiAdminStopAllMediaStreams && window.citofonamiAdminStopAllMediaStreams("ios dedicated close"); } catch (e) {}
     resetIOSCallUi();
+    try { window.citofonamiAdminStopAllMediaStreams && window.citofonamiAdminStopAllMediaStreams("ios ui reset"); } catch (e) {}
 
     setTimeout(hardStopIOSMediaOnly, 300);
     setTimeout(resetIOSCallUi, 350);
