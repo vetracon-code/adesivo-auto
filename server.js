@@ -20663,6 +20663,45 @@ app.post('/api/citofonami/:code/ring-v2', express.json({ limit: '1mb' }), async 
   });
 });
 
+
+// CITOFONAMI_CLOSE_OPEN_CALLS_ENDPOINT_20260604
+app.post('/api/citofonami/:code/calls/close-open', express.json({ limit: '1mb' }), (req, res) => {
+  const code = normalizeCitofonamiCode(req.params.code);
+  const db = ensureCitofonamiDbShape(readCitofonamiDb());
+  const body = req.body || {};
+  const exceptCallId = String(body.exceptCallId || '').trim();
+  const now = new Date().toISOString();
+
+  let closed = 0;
+
+  db.events = (db.events || []).map((event) => {
+    if (!event || event.code !== code || event.type !== 'call') return event;
+    if (exceptCallId && event.id === exceptCallId) return event;
+
+    if (event.status === 'ringing' || event.status === 'answered' || event.status === 'voicemail_requested') {
+      closed += 1;
+      return {
+        ...event,
+        status: 'closed',
+        updatedAt: now,
+        closedBy: 'admin-clean-close-final'
+      };
+    }
+
+    return event;
+  });
+
+  if (closed > 0) writeCitofonamiDb(db);
+
+  res.json({
+    ok: true,
+    code,
+    closed,
+    exceptCallId: exceptCallId || null
+  });
+});
+
+
 app.get('/api/citofonami/:code/calls/pending', (req, res) => {
   const code = normalizeCitofonamiCode(req.params.code);
   const db = ensureCitofonamiDbShape(readCitofonamiDb());

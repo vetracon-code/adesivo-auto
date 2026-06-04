@@ -5736,5 +5736,217 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_ADMIN_FINAL_CLEAN_CLOSE_NO_WINDOW_CLOSE_20260604 */
+(function () {
+  function code() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get("code");
+      const input = document.getElementById("qrCode");
+      return String(fromUrl || (input && input.value) || "DEMO").trim().toUpperCase();
+    } catch (e) {
+      return "DEMO";
+    }
+  }
+
+  function currentCallId() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get("call");
+      if (fromUrl) return String(fromUrl).trim();
+
+      if (window.finalCurrentCall && window.finalCurrentCall.id) {
+        return String(window.finalCurrentCall.id).trim();
+      }
+
+      const overlay = document.getElementById("finalCallOverlay");
+      if (overlay && overlay.dataset && overlay.dataset.callId) {
+        return String(overlay.dataset.callId).trim();
+      }
+    } catch (e) {}
+
+    return "";
+  }
+
+  async function closeServerCalls() {
+    const c = code();
+    const callId = currentCallId();
+
+    try {
+      if (callId) {
+        await fetch(`/api/citofonami/${encodeURIComponent(c)}/calls/${encodeURIComponent(callId)}/action`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "close" }),
+          cache: "no-store"
+        });
+      }
+    } catch (e) {
+      console.warn("close current call error:", e);
+    }
+
+    try {
+      await fetch(`/api/citofonami/${encodeURIComponent(c)}/calls/close-open`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ exceptCallId: "" }),
+        cache: "no-store"
+      });
+    } catch (e) {
+      console.warn("close open calls error:", e);
+    }
+  }
+
+  function stopEverythingLocal() {
+    try {
+      if (typeof window.stopEveryCitofonamiRingSound === "function") {
+        window.stopEveryCitofonamiRingSound();
+      }
+    } catch (e) {}
+
+    try {
+      [
+        "citofonamiImmediateAdminPeer",
+        "citofonamiAdminDirectPeer",
+        "citofonamiAdminForcePeer",
+        "adminRtcPeer"
+      ].forEach((name) => {
+        try {
+          const peer = window[name];
+          if (peer && typeof peer.close === "function") peer.close();
+          window[name] = null;
+        } catch (x) {}
+      });
+    } catch (e) {}
+
+    try {
+      [
+        "citofonamiImmediateAdminStream",
+        "citofonamiAdminMicStream",
+        "adminRtcStream"
+      ].forEach((name) => {
+        try {
+          const stream = window[name];
+          if (stream && stream.getTracks) {
+            stream.getTracks().forEach((track) => {
+              try { track.stop(); } catch (x) {}
+            });
+          }
+          window[name] = null;
+        } catch (x) {}
+      });
+    } catch (e) {}
+
+    try {
+      document.querySelectorAll("audio, video").forEach((el) => {
+        try {
+          el.pause();
+          el.currentTime = 0;
+          if (el.srcObject && el.srcObject.getTracks) {
+            el.srcObject.getTracks().forEach((track) => {
+              try { track.stop(); } catch (x) {}
+            });
+          }
+          el.srcObject = null;
+        } catch (x) {}
+      });
+    } catch (e) {}
+
+    try {
+      [
+        "citofonami_current_call",
+        "citofonami_active_call",
+        "citofonami_last_call",
+        "citofonami_pending_call",
+        "citofonami_admin_current_call"
+      ].forEach((key) => {
+        try { localStorage.removeItem(key); } catch (x) {}
+        try { sessionStorage.removeItem(key); } catch (x) {}
+      });
+    } catch (e) {}
+  }
+
+  function resetUi() {
+    try {
+      const overlay = document.getElementById("finalCallOverlay");
+      if (overlay) {
+        overlay.classList.remove("show");
+        overlay.style.display = "none";
+        if (overlay.dataset) overlay.dataset.callId = "";
+      }
+    } catch (e) {}
+
+    try {
+      const hiddenBtn = document.getElementById("openHiddenCallButton");
+      if (hiddenBtn) hiddenBtn.classList.remove("show");
+    } catch (e) {}
+
+    try {
+      const topClose = document.getElementById("citofonamiTopCloseButton");
+      if (topClose) topClose.remove();
+    } catch (e) {}
+
+    try {
+      const state = document.getElementById("adminConnectedState");
+      if (state) {
+        state.style.display = "block";
+        state.textContent = "Conversazione chiusa. Grazie per la chiamata.";
+      }
+    } catch (e) {}
+
+    try {
+      const subtitle = document.getElementById("finalCallSubtitle");
+      if (subtitle) subtitle.textContent = "Conversazione chiusa. Puoi ricevere una nuova chiamata.";
+    } catch (e) {}
+
+    try {
+      if (typeof window.setState === "function") {
+        window.setState("Conversazione chiusa. Puoi ricevere una nuova chiamata.", true);
+      }
+    } catch (e) {}
+  }
+
+  async function cleanClose(event) {
+    try {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+      }
+    } catch (e) {}
+
+    stopEverythingLocal();
+    await closeServerCalls();
+    stopEverythingLocal();
+    resetUi();
+
+    setTimeout(stopEverythingLocal, 400);
+    setTimeout(resetUi, 700);
+  }
+
+  document.addEventListener("click", function (event) {
+    const btn = event.target && event.target.closest ? event.target.closest("button") : null;
+    if (!btn) return;
+
+    const id = String(btn.id || "");
+    const text = String(btn.textContent || "").trim().toLowerCase();
+
+    if (
+      id === "finalCloseButton" ||
+      id === "citofonamiTopCloseButton" ||
+      text === "chiudi" ||
+      text.includes("chiudi")
+    ) {
+      cleanClose(event);
+    }
+  }, true);
+
+  window.citofonamiAdminFinalCleanClose = cleanClose;
+  window.citofonamiAdminStopEverythingLocal = stopEverythingLocal;
+})();
+</script>
+
 </body>
 </html>
