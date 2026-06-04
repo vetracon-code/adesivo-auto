@@ -8287,5 +8287,279 @@
 })();
 </script>
 
+
+<script>
+/* CITOFONAMI_IOS_RINGTONE_WITHOUT_MIC_20260604 */
+(function () {
+  let audioCtx = null;
+  let ringtoneUnlocked = false;
+  let ringOscillator = null;
+  let ringGain = null;
+  let ringTimer = null;
+
+  function profile() {
+    return window.citofonamiAdminDeviceProfile || window.citofonamiDeviceProfile || {};
+  }
+
+  function isIOS() {
+    const p = profile();
+    return !!(p.isIOS || p.isIPhone || p.isIPad || p.isSafari);
+  }
+
+  function msg(text) {
+    try {
+      const box = document.getElementById("deviceGuidanceBox");
+      const title = document.getElementById("deviceGuidanceTitle");
+      const body = document.getElementById("deviceGuidanceText");
+
+      if (box && title && body) {
+        box.classList.add("show");
+        title.textContent = "Suoneria";
+        body.textContent = text;
+      }
+    } catch (e) {}
+
+    console.log("Citofonami iOS ringtone:", text);
+  }
+
+  function ensureButton() {
+    if (!isIOS()) return null;
+
+    let btn = document.getElementById("citofonamiIOSRingtoneButton");
+
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.id = "citofonamiIOSRingtoneButton";
+      btn.type = "button";
+      btn.textContent = "Attiva suoneria";
+      btn.style.width = "100%";
+      btn.style.marginTop = "10px";
+      btn.style.padding = "14px 16px";
+      btn.style.borderRadius = "16px";
+      btn.style.border = "1px solid rgba(215,180,106,.42)";
+      btn.style.background = "rgba(215,180,106,.16)";
+      btn.style.color = "#fff";
+      btn.style.fontWeight = "800";
+
+      const setup = document.getElementById("setupNeededAction");
+      const grid = document.querySelector(".setup-grid");
+      const target = setup || grid || document.body;
+
+      target.appendChild(btn);
+
+      btn.addEventListener("click", unlockRingtone, true);
+      btn.addEventListener("pointerdown", unlockRingtone, true);
+      btn.addEventListener("touchstart", unlockRingtone, true);
+    }
+
+    try {
+      if (localStorage.getItem("citofonami_ios_ringtone_ready") === "1") {
+        btn.textContent = "Suoneria attiva";
+        btn.style.display = "none";
+        ringtoneUnlocked = true;
+      }
+    } catch (e) {}
+
+    return btn;
+  }
+
+  function createAudioContext() {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+
+    if (!audioCtx) {
+      audioCtx = new Ctx();
+    }
+
+    return audioCtx;
+  }
+
+  async function unlockRingtone(event) {
+    if (!isIOS()) return;
+
+    try {
+      if (event) {
+        event.stopPropagation();
+      }
+    } catch (e) {}
+
+    try {
+      const ctx = createAudioContext();
+
+      if (!ctx) {
+        msg("Suoneria non supportata da questo browser.");
+        return;
+      }
+
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
+
+      // Micro-beep quasi muto solo per sbloccare il canale audio.
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      gain.gain.value = 0.001;
+      osc.frequency.value = 880;
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(ctx.currentTime + 0.05);
+
+      ringtoneUnlocked = true;
+
+      try {
+        localStorage.setItem("citofonami_ios_ringtone_ready", "1");
+      } catch (e) {}
+
+      const btn = ensureButton();
+      if (btn) {
+        btn.textContent = "Suoneria attiva";
+        btn.style.display = "none";
+      }
+
+      msg("Suoneria attiva. Il citofono può suonare senza usare il microfono.");
+    } catch (e) {
+      console.warn("iOS ringtone unlock error:", e);
+      msg("Tocca di nuovo Attiva suoneria.");
+    }
+  }
+
+  function stopIOSRingtone() {
+    try {
+      if (ringTimer) {
+        clearInterval(ringTimer);
+        ringTimer = null;
+      }
+    } catch (e) {}
+
+    try {
+      if (ringOscillator) {
+        ringOscillator.stop();
+        ringOscillator.disconnect();
+      }
+    } catch (e) {}
+
+    try {
+      if (ringGain) {
+        ringGain.disconnect();
+      }
+    } catch (e) {}
+
+    ringOscillator = null;
+    ringGain = null;
+  }
+
+  function playOneRingPulse() {
+    if (!isIOS()) return;
+    if (!ringtoneUnlocked) return;
+
+    try {
+      const ctx = createAudioContext();
+      if (!ctx) return;
+
+      if (ctx.state === "suspended") {
+        ctx.resume().catch(() => null);
+      }
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.value = 880;
+
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.22, ctx.currentTime + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.5);
+    } catch (e) {
+      console.warn("iOS ring pulse error:", e);
+    }
+  }
+
+  function playIOSRingtone() {
+    if (!isIOS()) return false;
+
+    if (!ringtoneUnlocked) {
+      ensureButton();
+      msg("Tocca Attiva suoneria per far suonare il citofono su iPhone.");
+      return false;
+    }
+
+    stopIOSRingtone();
+
+    playOneRingPulse();
+
+    ringTimer = setInterval(function () {
+      playOneRingPulse();
+    }, 1200);
+
+    return true;
+  }
+
+  // Estendo il vecchio campanello: su iOS uso la suoneria indipendente dal microfono.
+  const oldDoorbell = window.playCitofonamiDoorbell;
+
+  window.playCitofonamiDoorbell = function () {
+    if (isIOS()) {
+      const ok = playIOSRingtone();
+
+      if (ok) return;
+
+      // Se non è sbloccata, non chiedo microfono: mostro solo il pulsante.
+      return;
+    }
+
+    if (typeof oldDoorbell === "function") {
+      return oldDoorbell.apply(this, arguments);
+    }
+  };
+
+  const oldStop = window.stopEveryCitofonamiRingSound;
+
+  window.stopEveryCitofonamiRingSound = function () {
+    stopIOSRingtone();
+
+    if (typeof oldStop === "function") {
+      return oldStop.apply(this, arguments);
+    }
+  };
+
+  document.addEventListener("click", function (event) {
+    const btn = event.target && event.target.closest ? event.target.closest("button") : null;
+    if (!btn) return;
+
+    const text = String(btn.textContent || "").trim().toLowerCase();
+    const id = String(btn.id || "");
+
+    if (
+      id === "finalAnswerButton" ||
+      id === "finalCloseButton" ||
+      id === "citofonamiTopCloseButton" ||
+      id === "citofonamiIOSDedicatedCloseButton" ||
+      text.includes("rispondi") ||
+      text.includes("chiudi")
+    ) {
+      stopIOSRingtone();
+    }
+  }, true);
+
+  setTimeout(ensureButton, 500);
+  setTimeout(ensureButton, 1500);
+  setTimeout(ensureButton, 3000);
+
+  window.citofonamiIOSUnlockRingtone = unlockRingtone;
+  window.citofonamiIOSPlayRingtone = playIOSRingtone;
+  window.citofonamiIOSStopRingtone = stopIOSRingtone;
+})();
+</script>
+
 </body>
 </html>
