@@ -7626,6 +7626,13 @@
         cache: "no-store"
       });
 
+      if (typeof window.citofonamiIOSForceAnsweredBeforeOffer === "function") {
+        const answeredOk = await window.citofonamiIOSForceAnsweredBeforeOffer(callId);
+        if (!answeredOk) {
+          throw new Error("Chiamata non passata ad answered.");
+        }
+      }
+
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error("Microfono non disponibile su questo dispositivo.");
       }
@@ -7802,6 +7809,99 @@
   window.citofonamiIOSSingleAnswerCall = answerIOSCall;
   window.citofonamiIOSSingleCloseCall = closeIOSCall;
   window.citofonamiIOSSingleStopEverything = stopEverythingLocal;
+})();
+</script>
+
+
+<script>
+/* CITOFONAMI_IOS_FORCE_ANSWER_STATUS_BEFORE_OFFER_20260604 */
+(function () {
+  function profile() {
+    return window.citofonamiAdminDeviceProfile || window.citofonamiDeviceProfile || {};
+  }
+
+  function isIOS() {
+    const p = profile();
+    return !!(p.isIOS || p.isIPhone || p.isIPad || p.isSafari);
+  }
+
+  function code() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get("code");
+      const input = document.getElementById("qrCode");
+      return String(fromUrl || (input && input.value) || "DEMO").trim().toUpperCase();
+    } catch (e) {
+      return "DEMO";
+    }
+  }
+
+  function msg(text, ok) {
+    try {
+      const subtitle = document.getElementById("finalCallSubtitle");
+      if (subtitle) subtitle.textContent = text;
+    } catch (e) {}
+
+    try {
+      const state = document.getElementById("adminConnectedState");
+      if (state) {
+        state.style.display = "block";
+        state.textContent = text;
+      }
+    } catch (e) {}
+
+    try {
+      const dbg = document.getElementById("adminWebrtcDebugLine");
+      if (dbg) {
+        dbg.style.display = "block";
+        dbg.textContent = text;
+      }
+    } catch (e) {}
+
+    console.log("Citofonami iOS answer status:", text);
+  }
+
+  async function forceAnswered(callId) {
+    if (!isIOS() || !callId) return false;
+
+    const c = code();
+
+    try {
+      const r = await fetch(`/api/citofonami/${encodeURIComponent(c)}/calls/${encodeURIComponent(callId)}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "answer" }),
+        cache: "no-store"
+      });
+
+      const data = await r.json().catch(() => null);
+
+      if (!r.ok || !data || !data.ok) {
+        msg("iPhone: risposta server non confermata.", false);
+        return false;
+      }
+
+      const check = await fetch(`/api/citofonami/${encodeURIComponent(c)}/calls/${encodeURIComponent(callId)}?t=${Date.now()}`, {
+        cache: "no-store"
+      });
+
+      const checked = await check.json().catch(() => null);
+      const status = checked && checked.call && checked.call.status;
+
+      if (status !== "answered") {
+        msg("iPhone: chiamata ancora " + status + ". Non creo audio.", false);
+        return false;
+      }
+
+      msg("iPhone: chiamata accettata. Creo collegamento audio…", true);
+      return true;
+    } catch (e) {
+      msg("Errore risposta iPhone: " + (e.message || e), false);
+      return false;
+    }
+  }
+
+  window.citofonamiIOSForceAnsweredBeforeOffer = forceAnswered;
 })();
 </script>
 
