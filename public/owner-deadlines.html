@@ -6143,5 +6143,126 @@ init();
 })();
 </script>
 
+
+<script id="import-active-server-deadlines-20260606">
+(function(){
+  function normStatus(v){
+    return String(v || "").trim().toLowerCase();
+  }
+
+  function normalizeServerDeadlineItem(item){
+    if(!item) return null;
+
+    var payload = item.payload && typeof item.payload === "object" ? item.payload : null;
+
+    /*
+      Alcune API status-list restituiscono solo local_id/status/name.
+      Quando il payload completo esiste, usiamo quello perché contiene date, time,
+      categoria, tipo, profilo, avvisi e riferimenti.
+    */
+    var d = payload ? Object.assign({}, payload) : {};
+
+    d.id = d.id || item.local_id || item.id || Date.now();
+    d.name = d.name || item.name || "Scadenza";
+    d.status = normStatus(item.status || d.status || "active") || "active";
+
+    if(!d.date && item.date) d.date = item.date;
+    if(!d.time && item.time) d.time = item.time;
+    if(!d.category && item.category) d.category = item.category;
+    if(!d.type && item.type) d.type = item.type;
+    if(!d.owner && item.owner) d.owner = item.owner;
+
+    d.category = d.category || "Altro";
+    d.type = d.type || d.name || "Altro";
+    d.owner = d.owner || "";
+    d.time = d.time || "09:00";
+    d.profile = d.profile || "standard";
+    d.alerts = Array.isArray(d.alerts) ? d.alerts : ["30 giorni prima","7 giorni prima","1 giorno prima","giorno stesso"];
+    d.extra = d.extra && typeof d.extra === "object" ? d.extra : {};
+    d.createdAt = d.createdAt || new Date().toISOString();
+
+    return d;
+  }
+
+  async function importActiveServerDeadlines(){
+    try{
+      if(typeof deadlines === "undefined" || !Array.isArray(deadlines)) return;
+
+      var params = new URLSearchParams(window.location.search || "");
+      var codeValue = params.get("code") || "";
+      var plateValue = params.get("plate") || "";
+
+      try {
+        if(!codeValue && typeof code !== "undefined") codeValue = code;
+        if(!plateValue && typeof plate !== "undefined") plateValue = plate;
+      } catch(e) {}
+
+      try {
+        if(!codeValue) codeValue = localStorage.getItem("owner_deadlines_code") || localStorage.getItem("owner_saved_code") || "";
+        if(!plateValue) plateValue = localStorage.getItem("owner_deadlines_plate") || localStorage.getItem("owner_saved_plate") || "";
+      } catch(e) {}
+
+      codeValue = String(codeValue || "").trim().toUpperCase();
+      plateValue = String(plateValue || "").trim().toUpperCase().replace(/\s+/g, "");
+
+      if(!plateValue) return;
+
+      var res = await fetch("/api/owner-deadlines/status-list", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ code: codeValue, plate: plateValue })
+      });
+
+      var out = await res.json().catch(function(){ return null; });
+      if(!out || !out.success || !Array.isArray(out.items)) return;
+
+      var existing = new Set(
+        deadlines
+          .filter(Boolean)
+          .map(function(d){ return String(d.id || "").trim(); })
+          .filter(Boolean)
+      );
+
+      var added = 0;
+
+      out.items.forEach(function(item){
+        var status = normStatus(item.status);
+        if(status !== "active") return;
+
+        var localId = String(item.local_id || item.id || "").trim();
+        if(!localId) return;
+        if(existing.has(localId)) return;
+
+        var d = normalizeServerDeadlineItem(item);
+        if(!d) return;
+
+        d.id = localId;
+        d.status = "active";
+
+        deadlines.push(d);
+        existing.add(localId);
+        added++;
+      });
+
+      if(added > 0){
+        try { localStorage.setItem(key, JSON.stringify(deadlines)); } catch(e) {}
+        try { renderList(); } catch(e) {}
+        try { syncDeadlinesToServer(); } catch(e) {}
+        console.log("Scadenze attive importate dal server:", added);
+      }
+    }catch(e){
+      console.warn("importActiveServerDeadlines error:", e);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    setTimeout(importActiveServerDeadlines, 350);
+    setTimeout(importActiveServerDeadlines, 1500);
+  });
+
+  window.importActiveServerDeadlines = importActiveServerDeadlines;
+})();
+</script>
+
 </body>
 </html>
