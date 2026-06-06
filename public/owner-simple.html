@@ -13657,5 +13657,597 @@ document.addEventListener('DOMContentLoaded', function () {
 })();
 </script>
 
+
+<style id="contatto-veicolo-real-message-buttons-style">
+  .owner-real-message-select-row{
+    display:none;
+    align-items:center;
+    gap:9px;
+    margin:10px 0 8px;
+    padding:9px 11px;
+    border-radius:13px;
+    background:#ffffff !important;
+    border:1px solid rgba(17,24,39,.12) !important;
+    color:#111827 !important;
+    font-size:.84rem;
+    font-weight:850;
+    box-shadow:0 1px 2px rgba(0,0,0,.06);
+  }
+
+  body.owner-messages-selection-active .owner-real-message-select-row{
+    display:flex !important;
+  }
+
+  .owner-real-message-checkbox{
+    width:21px !important;
+    height:21px !important;
+    min-width:21px !important;
+    accent-color:#16a34a !important;
+  }
+
+  .owner-real-message-delete-btn{
+    display:inline-flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    width:auto !important;
+    min-width:0 !important;
+    min-height:34px !important;
+    margin-top:10px !important;
+    padding:8px 13px !important;
+    border-radius:999px !important;
+    border:1px solid rgba(220,38,38,.35) !important;
+    background:#fef2f2 !important;
+    color:#991b1b !important;
+    font-weight:850 !important;
+    font-size:.82rem !important;
+    line-height:1.1 !important;
+    cursor:pointer !important;
+    pointer-events:auto !important;
+    opacity:1 !important;
+    visibility:visible !important;
+  }
+
+  #messagesSelectBtn,
+  #messagesSelectAllBtn,
+  #messagesMarkReadBtn,
+  #messagesDeleteBtn{
+    pointer-events:auto !important;
+    opacity:1 !important;
+    visibility:visible !important;
+  }
+
+  #messagesSelectBtn{
+    display:inline-flex !important;
+  }
+
+  body.owner-messages-selection-active #messagesSelectAllBtn,
+  body.owner-messages-selection-active #messagesMarkReadBtn,
+  body.owner-messages-selection-active #messagesDeleteBtn{
+    display:inline-flex !important;
+  }
+
+  #messagesList .owner-real-message-enhanced{
+    outline:0 !important;
+  }
+</style>
+
+
+<script id="contatto-veicolo-real-message-buttons-script">
+(function(){
+  if(window.__CONTATTO_VEICOLO_REAL_MESSAGE_BUTTONS__) return;
+  window.__CONTATTO_VEICOLO_REAL_MESSAGE_BUTTONS__ = true;
+
+  var state = {
+    messages: [],
+    selected: new Set(),
+    selectionMode: false
+  };
+
+  function qs(id){ return document.getElementById(id); }
+
+  function normCode(v){
+    return String(v || "").trim().toUpperCase();
+  }
+
+  function normPlate(v){
+    return String(v || "").trim().toUpperCase().replace(/\s+/g, "");
+  }
+
+  function getContext(){
+    var out = { code:"", plate:"" };
+
+    try{
+      var p = new URLSearchParams(location.search || "");
+      out.code = p.get("code") || "";
+      out.plate = p.get("plate") || "";
+    }catch(e){}
+
+    try{
+      var m = location.pathname.match(/\/owner-app\/([^\/?#]+)\/([^\/?#]+)/i);
+      if(m){
+        out.code = out.code || decodeURIComponent(m[1] || "");
+        out.plate = out.plate || decodeURIComponent(m[2] || "");
+      }
+    }catch(e){}
+
+    out.code = out.code || window.__OWNER_CODE__ || "";
+    out.plate = out.plate || window.__OWNER_PLATE__ || "";
+
+    if(document.body && document.body.dataset){
+      out.code = out.code || document.body.dataset.ownerCode || "";
+      out.plate = out.plate || document.body.dataset.ownerPlate || "";
+    }
+
+    try{
+      out.code = out.code || localStorage.getItem("owner_saved_code") || localStorage.getItem("owner_code") || "";
+      out.plate = out.plate || localStorage.getItem("owner_saved_plate") || localStorage.getItem("ownerPlate") || localStorage.getItem("owner_plate") || "";
+    }catch(e){}
+
+    var first = (state.messages || []).find(function(m){ return m && m.code && m.plate; });
+    if(first){
+      out.code = out.code || first.code || "";
+      out.plate = out.plate || first.plate || "";
+    }
+
+    out.code = normCode(out.code);
+    out.plate = normPlate(out.plate);
+
+    if(out.code){
+      window.__OWNER_CODE__ = out.code;
+      if(document.body) document.body.dataset.ownerCode = out.code;
+      try{ localStorage.setItem("owner_saved_code", out.code); }catch(e){}
+    }
+
+    if(out.plate){
+      window.__OWNER_PLATE__ = out.plate;
+      if(document.body) document.body.dataset.ownerPlate = out.plate;
+      try{ localStorage.setItem("owner_saved_plate", out.plate); }catch(e){}
+    }
+
+    return out;
+  }
+
+  async function loadRealMessages(){
+    var ctx = getContext();
+    if(!ctx.code || !ctx.plate) return [];
+
+    var res = await fetch("/api/owner-messages", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ code:ctx.code, plate:ctx.plate }),
+      cache:"no-store"
+    });
+
+    var data = await res.json().catch(function(){ return null; });
+    if(!res.ok || !data || !data.success) return [];
+
+    state.messages = Array.isArray(data.items) ? data.items : [];
+    window.__OWNER_MESSAGES_CORE__ = state.messages;
+    window.ownerMessages = state.messages;
+
+    return state.messages;
+  }
+
+  function messageTextFingerprint(m){
+    return [
+      m && m.reason ? String(m.reason) : "",
+      m && m.message_text ? String(m.message_text).slice(0, 90) : "",
+      m && m.created_at ? String(m.created_at).slice(0, 10) : ""
+    ].join(" ").replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
+  function findBestMessageForCard(card, index){
+    if(!card) return null;
+
+    var existingId =
+      card.getAttribute("data-message-id") ||
+      card.dataset.messageId ||
+      card.dataset.ownerMessageId ||
+      "";
+
+    if(existingId){
+      var byId = state.messages.find(function(m){ return Number(m.id) === Number(existingId); });
+      if(byId) return byId;
+    }
+
+    var txt = String(card.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+
+    if(txt){
+      for(var i=0; i<state.messages.length; i++){
+        var m = state.messages[i];
+        var reason = String(m.reason || "").toLowerCase();
+        var body = String(m.message_text || "").replace(/\s+/g, " ").trim().toLowerCase();
+        var bodyShort = body.slice(0, 45);
+
+        if(reason && txt.indexOf(reason) >= 0 && bodyShort && txt.indexOf(bodyShort.slice(0, 22)) >= 0){
+          return m;
+        }
+
+        var parts = body.split(/\n| categoria:| tipo:| avviso programmato:/i)
+          .map(function(x){ return String(x || "").trim().toLowerCase(); })
+          .filter(Boolean);
+
+        for(var j=0; j<parts.length; j++){
+          if(parts[j].length >= 5 && txt.indexOf(parts[j].slice(0, 32)) >= 0){
+            return m;
+          }
+        }
+      }
+    }
+
+    if(state.messages[index]) return state.messages[index];
+
+    return null;
+  }
+
+  function getMessageCards(){
+    var list = qs("messagesList");
+    if(!list) return [];
+
+    var candidates = Array.from(list.querySelectorAll("[data-message-id], .timeline-card, .message-card, .card, article, li, div"));
+
+    candidates = candidates.filter(function(el){
+      if(!el || el === list) return false;
+      if(el.closest(".owner-real-message-select-row")) return false;
+      if(el.classList.contains("owner-real-message-select-row")) return false;
+      if(el.classList.contains("owner-real-message-delete-btn")) return false;
+
+      var txt = String(el.textContent || "").trim();
+      if(txt.length < 12) return false;
+
+      var hasMsg =
+        txt.indexOf("AVVISO SCADENZA") >= 0 ||
+        txt.indexOf("QR Visualizzato") >= 0 ||
+        txt.indexOf("Segnalazione") >= 0 ||
+        txt.indexOf("Data e ora") >= 0 ||
+        txt.indexOf("Comandi disponibili") >= 0 ||
+        el.hasAttribute("data-message-id");
+
+      if(!hasMsg) return false;
+
+      /* evita di prendere contenitori troppo grandi che includono tutta la lista */
+      var rect = el.getBoundingClientRect();
+      if(rect.height > window.innerHeight * 0.85) return false;
+
+      /* preferisce il blocco più interno */
+      var childMsg = Array.from(el.children || []).some(function(ch){
+        var t = String(ch.textContent || "");
+        return (
+          t.indexOf("AVVISO SCADENZA") >= 0 ||
+          t.indexOf("QR Visualizzato") >= 0 ||
+          t.indexOf("Comandi disponibili") >= 0
+        ) && t.length > 20;
+      });
+
+      if(childMsg && !el.hasAttribute("data-message-id") && !el.classList.contains("timeline-card")) {
+        return false;
+      }
+
+      return true;
+    });
+
+    /* deduplica: se un candidato contiene un altro candidato, tiene quello più piccolo */
+    candidates = candidates.filter(function(el){
+      return !candidates.some(function(other){
+        return other !== el && el.contains(other) && String(other.textContent || "").trim().length >= 12;
+      });
+    });
+
+    return candidates;
+  }
+
+  function setSelectionMode(on){
+    state.selectionMode = !!on;
+    document.body.classList.toggle("owner-messages-selection-active", state.selectionMode);
+
+    var selectBtn = qs("messagesSelectBtn");
+    var selectAllBtn = qs("messagesSelectAllBtn");
+    var readBtn = qs("messagesMarkReadBtn");
+    var deleteBtn = qs("messagesDeleteBtn");
+
+    if(selectBtn) selectBtn.textContent = state.selectionMode ? "Annulla" : "Seleziona";
+    if(selectAllBtn) selectAllBtn.style.display = state.selectionMode ? "inline-flex" : "none";
+    if(readBtn) readBtn.style.display = state.selectionMode ? "inline-flex" : "none";
+    if(deleteBtn) deleteBtn.style.display = state.selectionMode ? "inline-flex" : "none";
+
+    if(!state.selectionMode){
+      state.selected.clear();
+      document.querySelectorAll(".owner-real-message-checkbox").forEach(function(cb){
+        cb.checked = false;
+      });
+    }
+  }
+
+  function syncSelectedFromDom(){
+    state.selected.clear();
+
+    document.querySelectorAll(".owner-real-message-checkbox:checked").forEach(function(cb){
+      var id = Number(cb.value || 0);
+      if(Number.isFinite(id) && id > 0) state.selected.add(id);
+    });
+
+    return Array.from(state.selected);
+  }
+
+  async function deleteOne(id){
+    var msg = state.messages.find(function(m){ return Number(m.id) === Number(id); }) || null;
+    var ctx = getContext();
+
+    var code = normCode((msg && msg.code) || ctx.code);
+    var plate = normPlate((msg && msg.plate) || ctx.plate);
+    var cleanId = Number(id || 0);
+
+    if(!code || !plate || !cleanId){
+      alert("Dati messaggio non pronti. Premi Aggiorna App e riprova.");
+      return;
+    }
+
+    var isDeadline = msg && String(msg.reason || "").toUpperCase().indexOf("SCADENZA") >= 0;
+
+    if(isDeadline){
+      var all = confirm(
+        "Questo messaggio è collegato a una scadenza.\n\n" +
+        "OK = cancella tutti i messaggi collegati e disattiva questa scadenza.\n" +
+        "Annulla = cancella solo questo messaggio."
+      );
+
+      if(all){
+        var r1 = await fetch("/api/owner-deadlines/disable-from-message", {
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body:JSON.stringify({ code:code, plate:plate, messageId:cleanId })
+        });
+
+        var d1 = await r1.json().catch(function(){ return null; });
+        if(!r1.ok || !d1 || !d1.success){
+          alert((d1 && d1.error) || "Errore cancellazione scadenza collegata.");
+          return;
+        }
+
+        alert("Scadenza chiusa. Messaggi collegati cancellati.");
+        await reloadEverything();
+        return;
+      }
+    }
+
+    if(!confirm("Vuoi cancellare solo questo messaggio?")) return;
+
+    var r2 = await fetch("/api/owner-messages/delete", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ code:code, plate:plate, id:cleanId })
+    });
+
+    var d2 = await r2.json().catch(function(){ return null; });
+    if(!r2.ok || !d2 || !d2.success){
+      alert((d2 && d2.error) || "Errore eliminazione messaggio.");
+      return;
+    }
+
+    await reloadEverything();
+  }
+
+  async function deleteSelected(){
+    var ids = syncSelectedFromDom();
+
+    if(!ids.length){
+      alert("Seleziona almeno un messaggio da eliminare.");
+      return;
+    }
+
+    if(!confirm("Vuoi eliminare i messaggi selezionati?")) return;
+
+    var ctx = getContext();
+    var first = ids.map(function(id){
+      return state.messages.find(function(m){ return Number(m.id) === Number(id); });
+    }).find(Boolean);
+
+    var code = normCode((first && first.code) || ctx.code);
+    var plate = normPlate((first && first.plate) || ctx.plate);
+
+    if(!code || !plate){
+      alert("Dati messaggi non pronti. Premi Aggiorna App e riprova.");
+      return;
+    }
+
+    var r = await fetch("/api/owner-messages/delete-many", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ code:code, plate:plate, ids:ids })
+    });
+
+    var d = await r.json().catch(function(){ return null; });
+    if(!r.ok || !d || !d.success){
+      alert((d && d.error) || "Errore eliminazione messaggi selezionati.");
+      return;
+    }
+
+    alert("Messaggi eliminati: " + (d.deleted_count || ids.length));
+    setSelectionMode(false);
+    await reloadEverything();
+  }
+
+  async function markSelectedRead(){
+    var ids = syncSelectedFromDom();
+
+    if(!ids.length){
+      alert("Seleziona almeno un messaggio.");
+      return;
+    }
+
+    var r = await fetch("/api/owner-messages/read-many", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ ids:ids })
+    });
+
+    var d = await r.json().catch(function(){ return null; });
+    if(!r.ok || !d || !d.success){
+      alert((d && d.error) || "Errore aggiornamento messaggi.");
+      return;
+    }
+
+    setSelectionMode(false);
+    await reloadEverything();
+  }
+
+  function enhanceCards(){
+    var cards = getMessageCards();
+
+    cards.forEach(function(card, index){
+      var msg = findBestMessageForCard(card, index);
+      if(!msg || !msg.id) return;
+
+      var id = Number(msg.id);
+      card.setAttribute("data-message-id", String(id));
+      card.classList.add("owner-real-message-enhanced");
+
+      if(!card.querySelector(".owner-real-message-select-row")){
+        var row = document.createElement("label");
+        row.className = "owner-real-message-select-row";
+        row.innerHTML =
+          '<input class="owner-real-message-checkbox" type="checkbox" value="' + id + '">' +
+          '<span>Seleziona questo messaggio</span>';
+
+        card.insertBefore(row, card.firstChild);
+
+        var cb = row.querySelector("input");
+        cb.addEventListener("click", function(ev){
+          ev.stopPropagation();
+        }, true);
+        cb.addEventListener("change", function(){
+          if(cb.checked) state.selected.add(id);
+          else state.selected.delete(id);
+        });
+      }
+
+      if(!card.querySelector(".owner-real-message-delete-btn")){
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "owner-real-message-delete-btn";
+        btn.textContent = "Elimina messaggio";
+        btn.addEventListener("click", function(ev){
+          ev.preventDefault();
+          ev.stopPropagation();
+          ev.stopImmediatePropagation();
+          deleteOne(id);
+        }, true);
+
+        card.appendChild(btn);
+      }
+    });
+  }
+
+  function bindTopButtons(){
+    var selectBtn = qs("messagesSelectBtn");
+    var selectAllBtn = qs("messagesSelectAllBtn");
+    var readBtn = qs("messagesMarkReadBtn");
+    var deleteBtn = qs("messagesDeleteBtn");
+
+    if(selectBtn && selectBtn.dataset.realMessageButtonsBound !== "1"){
+      selectBtn.dataset.realMessageButtonsBound = "1";
+      selectBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        setSelectionMode(!state.selectionMode);
+        enhanceCards();
+      }, true);
+    }
+
+    if(selectAllBtn && selectAllBtn.dataset.realMessageButtonsBound !== "1"){
+      selectAllBtn.dataset.realMessageButtonsBound = "1";
+      selectAllBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+
+        var boxes = Array.from(document.querySelectorAll(".owner-real-message-checkbox"));
+        var all = boxes.length && boxes.every(function(cb){ return cb.checked; });
+
+        boxes.forEach(function(cb){
+          cb.checked = !all;
+          var id = Number(cb.value || 0);
+          if(cb.checked) state.selected.add(id);
+          else state.selected.delete(id);
+        });
+
+        selectAllBtn.textContent = all ? "Seleziona tutti" : "Deseleziona tutti";
+      }, true);
+    }
+
+    if(readBtn && readBtn.dataset.realMessageButtonsBound !== "1"){
+      readBtn.dataset.realMessageButtonsBound = "1";
+      readBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        markSelectedRead();
+      }, true);
+    }
+
+    if(deleteBtn && deleteBtn.dataset.realMessageButtonsBound !== "1"){
+      deleteBtn.dataset.realMessageButtonsBound = "1";
+      deleteBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        deleteSelected();
+      }, true);
+    }
+  }
+
+  async function reloadEverything(){
+    try{ await loadRealMessages(); }catch(e){}
+
+    if(typeof window.loadOwnerMessages === "function"){
+      try{ await window.loadOwnerMessages(); }catch(e){}
+    }
+
+    setTimeout(enhanceCards, 250);
+    setTimeout(enhanceCards, 800);
+    setTimeout(enhanceCards, 1500);
+  }
+
+  async function boot(){
+    bindTopButtons();
+    await loadRealMessages();
+    enhanceCards();
+    setTimeout(enhanceCards, 300);
+    setTimeout(enhanceCards, 1000);
+    setTimeout(enhanceCards, 2200);
+  }
+
+  window.contattoVeicoloEnhanceMessageButtons = enhanceCards;
+  window.contattoVeicoloReloadMessageButtons = reloadEverything;
+  window.deleteMessage = deleteOne;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 300);
+  });
+
+  var obs;
+  try{
+    obs = new MutationObserver(function(){
+      clearTimeout(window.__cvMsgEnhanceTimer);
+      window.__cvMsgEnhanceTimer = setTimeout(enhanceCards, 120);
+    });
+
+    obs.observe(document.documentElement, { childList:true, subtree:true });
+  }catch(e){}
+
+  setInterval(function(){
+    bindTopButtons();
+    enhanceCards();
+  }, 1200);
+})();
+</script>
+
 </body>
 </html>
