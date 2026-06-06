@@ -13115,5 +13115,547 @@ document.addEventListener('DOMContentLoaded', function () {
 })();
 </script>
 
+
+<style id="contatto-veicolo-core-controls-repair-style">
+  /* Ripristino chirurgico comandi principali Contatto Veicolo */
+  #printStickerBtn,
+  #previewStickerBtn,
+  #ownerDeadlinesBottomBtn,
+  #messagesSelectBtn,
+  #messagesSelectAllBtn,
+  #messagesMarkReadBtn,
+  #messagesDeleteBtn{
+    visibility:visible !important;
+    opacity:1 !important;
+    pointer-events:auto !important;
+  }
+
+  #printStickerBtn,
+  #previewStickerBtn,
+  #ownerDeadlinesBottomBtn,
+  #messagesSelectBtn{
+    display:inline-flex !important;
+  }
+
+  body.owner-messages-selection-active #messagesSelectAllBtn,
+  body.owner-messages-selection-active #messagesMarkReadBtn,
+  body.owner-messages-selection-active #messagesDeleteBtn{
+    display:inline-flex !important;
+  }
+
+  #messagesList [data-message-id]{
+    position:relative !important;
+  }
+
+  .owner-core-delete-message-btn{
+    display:inline-flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    min-height:34px !important;
+    padding:8px 12px !important;
+    border-radius:999px !important;
+    border:1px solid rgba(220,38,38,.35) !important;
+    background:rgba(254,242,242,.96) !important;
+    color:#991b1b !important;
+    font-weight:800 !important;
+    font-size:.82rem !important;
+    margin-top:8px !important;
+    cursor:pointer !important;
+  }
+
+  .owner-core-select-row{
+    display:none;
+    align-items:center;
+    gap:8px;
+    margin:8px 0 4px;
+    padding:8px 10px;
+    border-radius:12px;
+    background:rgba(255,255,255,.9);
+    color:#111827;
+    font-size:.82rem;
+    font-weight:800;
+  }
+
+  body.owner-messages-selection-active .owner-core-select-row{
+    display:flex !important;
+  }
+
+  .owner-core-select-checkbox{
+    width:20px !important;
+    height:20px !important;
+    accent-color:#16a34a !important;
+  }
+
+  .owner-core-repair-note{
+    display:none;
+    margin:8px 0;
+    padding:8px 10px;
+    border-radius:12px;
+    background:#ecfdf5;
+    color:#065f46;
+    border:1px solid rgba(16,185,129,.25);
+    font-size:.82rem;
+    font-weight:800;
+  }
+
+  body.owner-core-repair-active .owner-core-repair-note{
+    display:block;
+  }
+</style>
+
+
+<script id="contatto-veicolo-core-controls-repair-script">
+(function(){
+  if(window.__CONTATTO_VEICOLO_CORE_REPAIR_ACTIVE__) return;
+  window.__CONTATTO_VEICOLO_CORE_REPAIR_ACTIVE__ = true;
+
+  var state = {
+    messages: [],
+    selectionMode: false,
+    selected: new Set()
+  };
+
+  function normCode(v){
+    return String(v || "").trim().toUpperCase();
+  }
+
+  function normPlate(v){
+    return String(v || "").trim().toUpperCase().replace(/\s+/g, "");
+  }
+
+  function displayPlate(v){
+    var raw = String(v || "").trim().toUpperCase();
+    if(raw) return raw;
+    var n = normPlate(v);
+    if(n.length === 7) return n.slice(0,2) + " " + n.slice(2,5) + " " + n.slice(5);
+    return n;
+  }
+
+  function qs(id){
+    return document.getElementById(id);
+  }
+
+  function getContext(){
+    var out = { code:"", plate:"" };
+
+    try{
+      var p = new URLSearchParams(location.search || "");
+      out.code = p.get("code") || "";
+      out.plate = p.get("plate") || "";
+    }catch(e){}
+
+    try{
+      var m = location.pathname.match(/\/owner-app\/([^\/?#]+)\/([^\/?#]+)/i);
+      if(m){
+        if(!out.code) out.code = decodeURIComponent(m[1] || "");
+        if(!out.plate) out.plate = decodeURIComponent(m[2] || "");
+      }
+    }catch(e){}
+
+    out.code = out.code || window.__OWNER_CODE__ || "";
+    out.plate = out.plate || window.__OWNER_PLATE__ || "";
+
+    if(document.body && document.body.dataset){
+      out.code = out.code || document.body.dataset.ownerCode || "";
+      out.plate = out.plate || document.body.dataset.ownerPlate || "";
+    }
+
+    try{
+      out.code = out.code || localStorage.getItem("owner_saved_code") || localStorage.getItem("owner_code") || "";
+      out.plate = out.plate || localStorage.getItem("owner_saved_plate") || localStorage.getItem("ownerPlate") || localStorage.getItem("owner_plate") || "";
+    }catch(e){}
+
+    if(state.messages && state.messages.length){
+      var first = state.messages.find(function(x){ return x && x.code && x.plate; });
+      if(first){
+        out.code = out.code || first.code || "";
+        out.plate = out.plate || first.plate || "";
+      }
+    }
+
+    out.code = normCode(out.code);
+    out.plate = normPlate(out.plate);
+
+    if(out.code){
+      window.__OWNER_CODE__ = out.code;
+      try{ localStorage.setItem("owner_saved_code", out.code); }catch(e){}
+      if(document.body) document.body.dataset.ownerCode = out.code;
+    }
+
+    if(out.plate){
+      window.__OWNER_PLATE__ = out.plate;
+      try{ localStorage.setItem("owner_saved_plate", out.plate); }catch(e){}
+      if(document.body) document.body.dataset.ownerPlate = out.plate;
+    }
+
+    return out;
+  }
+
+  async function apiOwnerMessages(){
+    var ctx = getContext();
+
+    if(!ctx.code || !ctx.plate) return null;
+
+    var res = await fetch("/api/owner-messages", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ code:ctx.code, plate:ctx.plate }),
+      cache:"no-store"
+    });
+
+    var data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || !data.success) return null;
+
+    state.messages = Array.isArray(data.items) ? data.items : [];
+    window.__OWNER_MESSAGES_CORE__ = state.messages;
+
+    return data;
+  }
+
+  function findMessage(id){
+    var n = Number(id || 0);
+    return (state.messages || []).find(function(m){ return Number(m.id) === n; }) || null;
+  }
+
+  function setSelectionMode(on){
+    state.selectionMode = !!on;
+    document.body.classList.toggle("owner-messages-selection-active", state.selectionMode);
+
+    var selectBtn = qs("messagesSelectBtn");
+    var selectAllBtn = qs("messagesSelectAllBtn");
+    var readBtn = qs("messagesMarkReadBtn");
+    var deleteBtn = qs("messagesDeleteBtn");
+
+    if(selectBtn) selectBtn.textContent = state.selectionMode ? "Annulla" : "Seleziona";
+    if(selectAllBtn) selectAllBtn.style.display = state.selectionMode ? "inline-flex" : "none";
+    if(readBtn) readBtn.style.display = state.selectionMode ? "inline-flex" : "none";
+    if(deleteBtn) deleteBtn.style.display = state.selectionMode ? "inline-flex" : "none";
+
+    if(!state.selectionMode){
+      state.selected.clear();
+      document.querySelectorAll(".owner-core-select-checkbox").forEach(function(cb){
+        cb.checked = false;
+      });
+    }
+  }
+
+  function selectedIdsFromDom(){
+    var ids = [];
+    document.querySelectorAll(".owner-core-select-checkbox:checked").forEach(function(cb){
+      var row = cb.closest("[data-message-id]");
+      var id = row ? Number(row.getAttribute("data-message-id")) : Number(cb.value);
+      if(Number.isFinite(id) && id > 0) ids.push(id);
+    });
+
+    if(!ids.length && state.selected.size){
+      ids = Array.from(state.selected).map(Number).filter(function(x){ return Number.isFinite(x) && x > 0; });
+    }
+
+    return Array.from(new Set(ids));
+  }
+
+  async function deleteSingleMessage(id){
+    var msg = findMessage(id);
+    var ctx = getContext();
+
+    var code = normCode((msg && msg.code) || ctx.code);
+    var plate = normPlate((msg && msg.plate) || ctx.plate);
+    var cleanId = Number(id || 0);
+
+    if(!code || !plate || !cleanId){
+      alert("Dati messaggio non pronti. Premi Aggiorna App e riprova.");
+      return;
+    }
+
+    var isDeadline = msg && String(msg.reason || "").toUpperCase().includes("SCADENZA");
+
+    if(isDeadline){
+      var all = confirm(
+        "Questo messaggio è collegato a un avviso/scadenza.\n\n" +
+        "OK = cancella tutti i messaggi collegati e disattiva questa scadenza.\n" +
+        "Annulla = cancella solo questo messaggio."
+      );
+
+      if(all){
+        var allRes = await fetch("/api/owner-deadlines/disable-from-message", {
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body:JSON.stringify({ code:code, plate:plate, messageId:cleanId })
+        });
+
+        var allData = await allRes.json().catch(function(){ return null; });
+
+        if(!allRes.ok || !allData || !allData.success){
+          alert((allData && allData.error) || "Errore cancellazione avviso collegato.");
+          return;
+        }
+
+        alert("Avviso chiuso. Messaggi collegati cancellati.");
+        await reloadMessagesAndRefresh();
+        return;
+      }
+    }
+
+    if(!confirm("Vuoi cancellare solo questo messaggio?")) return;
+
+    var res = await fetch("/api/owner-messages/delete", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ code:code, plate:plate, id:cleanId })
+    });
+
+    var data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || !data.success){
+      alert((data && data.error) || "Errore eliminazione messaggio.");
+      return;
+    }
+
+    await reloadMessagesAndRefresh();
+  }
+
+  async function deleteSelectedMessages(){
+    var ids = selectedIdsFromDom();
+
+    if(!ids.length){
+      alert("Seleziona almeno un messaggio da eliminare.");
+      return;
+    }
+
+    if(!confirm("Vuoi eliminare i messaggi selezionati?")) return;
+
+    var firstMsg = ids.map(findMessage).find(function(x){ return x && x.code && x.plate; });
+    var ctx = getContext();
+
+    var code = normCode((firstMsg && firstMsg.code) || ctx.code);
+    var plate = normPlate((firstMsg && firstMsg.plate) || ctx.plate);
+
+    if(!code || !plate){
+      alert("Dati messaggi non pronti. Premi Aggiorna App e riprova.");
+      return;
+    }
+
+    var res = await fetch("/api/owner-messages/delete-many", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ code:code, plate:plate, ids:ids })
+    });
+
+    var data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || !data.success){
+      alert((data && data.error) || "Errore eliminazione messaggi selezionati.");
+      return;
+    }
+
+    alert("Messaggi eliminati: " + (data.deleted_count || ids.length));
+    setSelectionMode(false);
+    await reloadMessagesAndRefresh();
+  }
+
+  async function markSelectedRead(){
+    var ids = selectedIdsFromDom();
+
+    if(!ids.length){
+      alert("Seleziona almeno un messaggio.");
+      return;
+    }
+
+    var res = await fetch("/api/owner-messages/read-many", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ ids:ids })
+    });
+
+    var data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || !data.success){
+      alert((data && data.error) || "Errore aggiornamento messaggi.");
+      return;
+    }
+
+    setSelectionMode(false);
+    await reloadMessagesAndRefresh();
+  }
+
+  function enhanceMessageRows(){
+    var list = qs("messagesList");
+    if(!list) return;
+
+    list.querySelectorAll("[data-message-id]").forEach(function(row){
+      var id = Number(row.getAttribute("data-message-id") || 0);
+      if(!id) return;
+
+      if(!row.querySelector(".owner-core-select-row")){
+        var sel = document.createElement("label");
+        sel.className = "owner-core-select-row";
+        sel.innerHTML = '<input type="checkbox" class="owner-core-select-checkbox" value="' + id + '"> <span>Seleziona questo messaggio</span>';
+        row.insertBefore(sel, row.firstChild);
+
+        var cb = sel.querySelector("input");
+        cb.addEventListener("change", function(){
+          if(cb.checked) state.selected.add(id);
+          else state.selected.delete(id);
+        });
+      }
+
+      if(!row.querySelector(".owner-core-delete-message-btn")){
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "owner-core-delete-message-btn";
+        btn.textContent = "Elimina messaggio";
+        btn.addEventListener("click", function(ev){
+          ev.preventDefault();
+          ev.stopPropagation();
+          deleteSingleMessage(id);
+        }, true);
+
+        row.appendChild(btn);
+      }
+    });
+  }
+
+  async function reloadMessagesAndRefresh(){
+    await apiOwnerMessages();
+
+    if(typeof window.loadOwnerMessages === "function"){
+      try{ await window.loadOwnerMessages(); }catch(e){}
+    }
+
+    setTimeout(enhanceMessageRows, 300);
+    setTimeout(enhanceMessageRows, 900);
+  }
+
+  function repairMainButtons(){
+    var ctx = getContext();
+
+    document.body.classList.add("owner-core-repair-active");
+
+    var printBtn = qs("printStickerBtn");
+    if(printBtn && printBtn.dataset.coreRepairBound !== "1"){
+      printBtn.dataset.coreRepairBound = "1";
+      printBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+
+        var c = getContext();
+        if(!c.code || !c.plate){
+          alert("Dati QR non ancora disponibili. Premi Aggiorna App e riprova.");
+          return;
+        }
+
+        window.location.href = "/owner-print-kit.html?code=" + encodeURIComponent(c.code) + "&plate=" + encodeURIComponent(c.plate);
+      }, true);
+    }
+
+    var deadlinesBtn = qs("ownerDeadlinesBottomBtn");
+    if(deadlinesBtn && deadlinesBtn.dataset.coreRepairBound !== "1"){
+      deadlinesBtn.dataset.coreRepairBound = "1";
+      deadlinesBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+
+        var c = getContext();
+        if(!c.code || !c.plate){
+          alert("Dati veicolo non ancora disponibili. Premi Aggiorna App e riprova.");
+          return;
+        }
+
+        window.location.href = "/owner-deadlines.html?code=" + encodeURIComponent(c.code) + "&plate=" + encodeURIComponent(c.plate);
+      }, true);
+    }
+
+    var selectBtn = qs("messagesSelectBtn");
+    if(selectBtn && selectBtn.dataset.coreRepairBound !== "1"){
+      selectBtn.dataset.coreRepairBound = "1";
+      selectBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        setSelectionMode(!state.selectionMode);
+        enhanceMessageRows();
+      }, true);
+    }
+
+    var selectAllBtn = qs("messagesSelectAllBtn");
+    if(selectAllBtn && selectAllBtn.dataset.coreRepairBound !== "1"){
+      selectAllBtn.dataset.coreRepairBound = "1";
+      selectAllBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+
+        var boxes = Array.from(document.querySelectorAll(".owner-core-select-checkbox"));
+        var allChecked = boxes.length && boxes.every(function(cb){ return cb.checked; });
+
+        boxes.forEach(function(cb){
+          cb.checked = !allChecked;
+          var id = Number(cb.value || 0);
+          if(cb.checked) state.selected.add(id);
+          else state.selected.delete(id);
+        });
+
+        selectAllBtn.textContent = allChecked ? "Seleziona tutti" : "Deseleziona tutti";
+      }, true);
+    }
+
+    var readBtn = qs("messagesMarkReadBtn");
+    if(readBtn && readBtn.dataset.coreRepairBound !== "1"){
+      readBtn.dataset.coreRepairBound = "1";
+      readBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        markSelectedRead();
+      }, true);
+    }
+
+    var deleteBtn = qs("messagesDeleteBtn");
+    if(deleteBtn && deleteBtn.dataset.coreRepairBound !== "1"){
+      deleteBtn.dataset.coreRepairBound = "1";
+      deleteBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        deleteSelectedMessages();
+      }, true);
+    }
+  }
+
+  window.ownerCoreRepairGetContext = getContext;
+  window.ownerCoreRepairReloadMessages = reloadMessagesAndRefresh;
+  window.deleteMessage = deleteSingleMessage;
+
+  async function boot(){
+    getContext();
+    repairMainButtons();
+
+    try{ await apiOwnerMessages(); }catch(e){}
+
+    enhanceMessageRows();
+    setTimeout(enhanceMessageRows, 500);
+    setTimeout(enhanceMessageRows, 1500);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(boot, 250);
+  });
+
+  setInterval(function(){
+    repairMainButtons();
+    enhanceMessageRows();
+  }, 1500);
+})();
+</script>
+
 </body>
 </html>
