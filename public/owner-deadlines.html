@@ -6843,5 +6843,179 @@ init();
 })();
 </script>
 
+
+<script id="owner-deadlines-main-delete-to-trash-fix-20260606">
+(function(){
+  var pendingDeleteDeadlineId = null;
+
+  function normId(v){
+    return String(v || "").trim();
+  }
+
+  function getArr(){
+    try {
+      if (typeof deadlines !== "undefined" && Array.isArray(deadlines)) return deadlines;
+    } catch(e) {}
+    return [];
+  }
+
+  function setConfirmText(){
+    try {
+      var box = document.getElementById("confirmDeleteBox");
+      if (!box) return;
+
+      box.innerHTML =
+        '<strong>Vuoi spostare questa scadenza nel Cestino?</strong>' +
+        '<p style="margin:8px 0 12px;color:#475467;font-size:.92rem;line-height:1.35;">Potrai recuperarla, modificarla o cancellarla definitivamente dal Cestino.</p>' +
+        '<div class="actions">' +
+          '<button type="button" class="secondary" onclick="cancelDelete()">Annulla</button>' +
+          '<button type="button" class="primary delete" onclick="deleteFromModal()">Sposta nel Cestino</button>' +
+        '</div>';
+    } catch(e) {
+      console.warn("setConfirmText error:", e);
+    }
+  }
+
+  window.askDeleteFromModal = function(id){
+    try {
+      if (id !== undefined && id !== null && String(id).trim()) {
+        pendingDeleteDeadlineId = normId(id);
+      } else {
+        try {
+          if (typeof currentModalId !== "undefined" && currentModalId !== null) {
+            pendingDeleteDeadlineId = normId(currentModalId);
+          }
+        } catch(e) {}
+      }
+
+      setConfirmText();
+
+      try {
+        if (typeof moveConfirmDeleteBoxToBody === "function") {
+          moveConfirmDeleteBoxToBody();
+        }
+      } catch(e) {}
+
+      var box = document.getElementById("confirmDeleteBox");
+      if (box) box.style.display = "block";
+
+      try { document.body.classList.add("delete-confirm-active"); } catch(e) {}
+    } catch(e) {
+      console.error("askDeleteFromModal patched error:", e);
+      alert("Non riesco ad aprire la conferma. Premi Aggiorna App e riprova.");
+    }
+  };
+
+  window.cancelDelete = function(){
+    try {
+      var box = document.getElementById("confirmDeleteBox");
+      if (box) box.style.display = "none";
+      document.body.classList.remove("delete-confirm-active");
+      if (typeof restoreConfirmDeleteBoxPosition === "function") {
+        restoreConfirmDeleteBoxPosition();
+      }
+    } catch(e) {}
+  };
+
+  window.deleteFromModal = function(){
+    try {
+      var id = pendingDeleteDeadlineId;
+
+      if (!id) {
+        try {
+          if (typeof currentModalId !== "undefined" && currentModalId !== null) {
+            id = normId(currentModalId);
+          }
+        } catch(e) {}
+      }
+
+      if (!id) {
+        alert("Non trovo la scadenza da spostare nel Cestino. Chiudi e riapri la scadenza.");
+        return;
+      }
+
+      var found = false;
+
+      deadlines = getArr().map(function(d){
+        if (String(d && d.id) === String(id)) {
+          found = true;
+          return Object.assign({}, d, {
+            status: "deleted",
+            deletedAt: new Date().toISOString(),
+            movedToTrashAt: new Date().toISOString()
+          });
+        }
+        return d;
+      });
+
+      if (!found) {
+        alert("Scadenza non trovata. Premi Aggiorna App e riprova.");
+        return;
+      }
+
+      try {
+        if (typeof persist === "function") {
+          persist();
+        } else if (typeof key !== "undefined") {
+          localStorage.setItem(key, JSON.stringify(deadlines));
+        }
+      } catch(e) {}
+
+      try { if (typeof renderList === "function") renderList(); } catch(e) {}
+      try { if (typeof updateTrashBadge === "function") updateTrashBadge(); } catch(e) {}
+      try { if (typeof renderTrashList === "function") renderTrashList(); } catch(e) {}
+
+      try {
+        if (typeof syncSingleDeadlineStatusToServer === "function") {
+          syncSingleDeadlineStatusToServer(id, "deleted");
+        }
+      } catch(e) {
+        console.warn("sync delete to trash error:", e);
+      }
+
+      pendingDeleteDeadlineId = null;
+
+      try {
+        if (typeof closeModal === "function") {
+          closeModal();
+        } else {
+          var modal = document.getElementById("messageModal");
+          if (modal) modal.style.display = "none";
+        }
+      } catch(e) {}
+
+      try {
+        var box = document.getElementById("confirmDeleteBox");
+        if (box) box.style.display = "none";
+        document.body.classList.remove("delete-confirm-active");
+      } catch(e) {}
+
+      alert("Scadenza spostata nel Cestino.");
+    } catch(e) {
+      console.error("deleteFromModal patched error:", e);
+      alert("Non riesco a spostare la scadenza nel Cestino. Premi Aggiorna App e riprova.");
+    }
+  };
+
+  document.addEventListener("click", function(e){
+    var btn = e.target && e.target.closest ? e.target.closest("button") : null;
+    if (!btn) return;
+
+    var txt = String(btn.textContent || "").trim().toLowerCase();
+    if (txt !== "cancella") return;
+
+    var card = btn.closest ? btn.closest(".deadline") : null;
+    if (!card || !card.id || !card.id.startsWith("d-")) return;
+
+    var id = card.id.replace(/^d-/, "");
+    if (!id) return;
+
+    pendingDeleteDeadlineId = id;
+  }, true);
+
+  setConfirmText();
+})();
+</script>
+
 </body>
 </html>
