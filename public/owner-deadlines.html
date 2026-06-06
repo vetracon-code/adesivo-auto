@@ -2015,6 +2015,136 @@
   }
 </style>
 
+
+<style id="owner-deadlines-trash-feature-20260606-style">
+  .owner-trash-kpi{
+    cursor:pointer;
+    user-select:none;
+    border-color:rgba(217,45,32,.35) !important;
+    background:linear-gradient(180deg,#fff,#fff7f5) !important;
+  }
+  .owner-trash-kpi:active{
+    transform:scale(.985);
+  }
+  .owner-trash-kpi strong{
+    color:#b42318;
+  }
+  .owner-trash-panel{
+    margin-top:18px;
+    padding:16px;
+    border:1px solid rgba(217,45,32,.22);
+    border-radius:18px;
+    background:#fff;
+    box-shadow:0 14px 35px rgba(16,24,40,.08);
+  }
+  .owner-trash-panel[hidden]{
+    display:none !important;
+  }
+  .owner-trash-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:12px;
+    flex-wrap:wrap;
+    margin-bottom:12px;
+  }
+  .owner-trash-title{
+    margin:0;
+    font-size:1.05rem;
+    font-weight:800;
+    color:#111827;
+  }
+  .owner-trash-copy{
+    margin:4px 0 0;
+    color:#667085;
+    font-size:.9rem;
+    line-height:1.4;
+  }
+  .owner-trash-close{
+    border:0;
+    border-radius:999px;
+    padding:9px 12px;
+    background:#f2f4f7;
+    color:#344054;
+    font-weight:800;
+    cursor:pointer;
+  }
+  .owner-trash-list{
+    display:grid;
+    gap:10px;
+  }
+  .owner-trash-item{
+    border:1px solid rgba(15,23,42,.10);
+    border-radius:16px;
+    padding:13px;
+    background:#fffafa;
+  }
+  .owner-trash-item h3{
+    margin:0 0 5px;
+    font-size:1rem;
+    color:#111827;
+  }
+  .owner-trash-meta{
+    color:#667085;
+    font-size:.86rem;
+    line-height:1.38;
+  }
+  .owner-trash-actions{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    margin-top:12px;
+  }
+  .owner-trash-actions button{
+    border:0;
+    border-radius:999px;
+    padding:10px 12px;
+    font-weight:800;
+    cursor:pointer;
+    font-size:.86rem;
+  }
+  .owner-trash-actions .restore{
+    background:#ecfdf3;
+    color:#027a48;
+  }
+  .owner-trash-actions .edit{
+    background:#eff8ff;
+    color:#175cd3;
+  }
+  .owner-trash-actions .hard-delete{
+    background:#fef3f2;
+    color:#b42318;
+  }
+  .owner-trash-empty{
+    padding:14px;
+    border-radius:14px;
+    background:#f9fafb;
+    color:#667085;
+    font-size:.92rem;
+  }
+  @media (max-width: 640px){
+    .owner-trash-panel{
+      padding:14px;
+      border-radius:16px;
+    }
+    .owner-trash-head{
+      gap:8px;
+    }
+    .owner-trash-close{
+      width:100%;
+      justify-content:center;
+    }
+    .owner-trash-actions{
+      display:grid;
+      grid-template-columns:1fr;
+    }
+    .owner-trash-actions button{
+      width:100%;
+      min-height:42px;
+    }
+  }
+</style>
+
 </head>
 <body>
 
@@ -2450,6 +2580,9 @@
       <div class="kpi"><strong id="kpi7">0</strong><span>Entro 7 giorni</span></div>
       <div class="kpi"><strong id="kpi30">0</strong><span>Entro 30 giorni</span></div>
       <div class="kpi"><strong id="kpiExpired">0</strong><span>Scadute</span></div>
+      <div class="kpi owner-trash-kpi" id="ownerTrashKpi" role="button" tabindex="0" aria-label="Apri cestino scadenze">
+        <strong id="kpiTrash">0</strong><span>Cestino</span>
+      </div>
     </section>
 
     <section class="grid">
@@ -6261,6 +6394,273 @@ init();
   });
 
   window.importActiveServerDeadlines = importActiveServerDeadlines;
+})();
+</script>
+
+
+<script id="owner-deadlines-trash-feature-20260606">
+(function(){
+  function byId(id){ return document.getElementById(id); }
+
+  function cleanStatus(v){
+    return String(v || '').trim().toLowerCase();
+  }
+
+  function isTrashDeadline(d){
+    return d && cleanStatus(d.status) === 'deleted';
+  }
+
+  function trashItems(){
+    try{
+      if(typeof deadlines === 'undefined' || !Array.isArray(deadlines)) return [];
+      return deadlines.filter(isTrashDeadline).sort(function(a,b){
+        return String(b.deletedAt || b.updatedAt || b.createdAt || '').localeCompare(String(a.deletedAt || a.updatedAt || a.createdAt || ''));
+      });
+    }catch(e){
+      return [];
+    }
+  }
+
+  function ensureTrashPanel(){
+    var panel = byId('ownerTrashPanel');
+    if(panel) return panel;
+
+    var list = byId('deadlineList');
+    var anchor = list && list.parentNode ? list.parentNode : byId('app');
+    if(!anchor) return null;
+
+    panel = document.createElement('section');
+    panel.id = 'ownerTrashPanel';
+    panel.className = 'owner-trash-panel';
+    panel.hidden = true;
+    panel.innerHTML =
+      '<div class="owner-trash-head">' +
+        '<div>' +
+          '<h2 class="owner-trash-title">Cestino scadenze</h2>' +
+          '<p class="owner-trash-copy">Qui trovi solo le scadenze cancellate da “Le mie scadenze”. Non vengono mostrati messaggi ricevuti, QR visualizzati o segnalazioni utenti.</p>' +
+        '</div>' +
+        '<button class="owner-trash-close" type="button" id="ownerTrashCloseBtn">Chiudi</button>' +
+      '</div>' +
+      '<div class="owner-trash-list" id="ownerTrashList"></div>';
+
+    anchor.appendChild(panel);
+
+    var closeBtn = byId('ownerTrashCloseBtn');
+    if(closeBtn){
+      closeBtn.addEventListener('click', function(){
+        panel.hidden = true;
+      });
+    }
+
+    return panel;
+  }
+
+  function fmtDate(v){
+    try{
+      if(!v) return 'data non indicata';
+      var d = new Date(String(v) + 'T00:00:00');
+      if(isNaN(d.getTime())) return String(v);
+      return d.toLocaleDateString('it-IT');
+    }catch(e){
+      return String(v || '');
+    }
+  }
+
+  function escLocal(v){
+    try{
+      if(typeof esc === 'function') return esc(v);
+    }catch(e){}
+    return String(v || '')
+      .replaceAll('&','&amp;')
+      .replaceAll('<','&lt;')
+      .replaceAll('>','&gt;')
+      .replaceAll('"','&quot;')
+      .replaceAll("'","&#039;");
+  }
+
+  function updateTrashKpi(){
+    var badge = byId('kpiTrash');
+    if(!badge) return;
+    badge.textContent = String(trashItems().length);
+  }
+
+  function renderTrashPanel(){
+    var panel = ensureTrashPanel();
+    var list = byId('ownerTrashList');
+    if(!panel || !list) return;
+
+    var items = trashItems();
+    updateTrashKpi();
+
+    if(!items.length){
+      list.innerHTML = '<div class="owner-trash-empty">Il cestino è vuoto.</div>';
+      return;
+    }
+
+    list.innerHTML = items.map(function(d){
+      var id = String(d.id || '');
+      return '' +
+        '<article class="owner-trash-item" id="trash-d-' + escLocal(id) + '">' +
+          '<h3>' + escLocal(d.name || 'Scadenza senza nome') + '</h3>' +
+          '<div class="owner-trash-meta">' +
+            escLocal(d.category || 'Categoria non indicata') +
+            ' · ' + escLocal(d.type || 'Tipo non indicato') +
+            ' · ' + escLocal(fmtDate(d.date)) +
+            (d.time ? ' alle ' + escLocal(d.time) : '') +
+          '</div>' +
+          '<div class="owner-trash-actions">' +
+            '<button class="restore" type="button" onclick="restoreDeadlineFromTrash(' + JSON.stringify(id) + ')">Ripristina</button>' +
+            '<button class="edit" type="button" onclick="editDeadlineFromTrash(' + JSON.stringify(id) + ')">Modifica e riprogramma</button>' +
+            '<button class="hard-delete" type="button" onclick="hardDeleteDeadlineFromTrash(' + JSON.stringify(id) + ')">Elimina definitivamente</button>' +
+          '</div>' +
+        '</article>';
+    }).join('');
+  }
+
+  window.openDeadlinesTrash = function(){
+    var panel = ensureTrashPanel();
+    if(!panel) return;
+    renderTrashPanel();
+    panel.hidden = false;
+    setTimeout(function(){
+      try{ panel.scrollIntoView({behavior:'smooth', block:'start'}); }catch(e){}
+    }, 60);
+  };
+
+  window.restoreDeadlineFromTrash = function(id){
+    try{
+      if(typeof deadlines === 'undefined' || !Array.isArray(deadlines)) return;
+
+      deadlines = deadlines.map(function(d){
+        if(String(d.id) !== String(id)) return d;
+        var copy = Object.assign({}, d);
+        copy.status = 'active';
+        copy.restoredAt = new Date().toISOString();
+        delete copy.deletedAt;
+        return copy;
+      });
+
+      if(typeof persist === 'function') persist();
+      else if(typeof key !== 'undefined') localStorage.setItem(key, JSON.stringify(deadlines));
+
+      if(typeof syncSingleDeadlineStatusToServer === 'function'){
+        syncSingleDeadlineStatusToServer(id, 'active');
+      }
+
+      if(typeof renderList === 'function') renderList();
+      renderTrashPanel();
+    }catch(e){
+      alert('Non riesco a ripristinare questa scadenza. Riprova dopo Aggiorna App.');
+      console.warn('restoreDeadlineFromTrash error:', e);
+    }
+  };
+
+  window.editDeadlineFromTrash = function(id){
+    try{
+      if(typeof deadlines === 'undefined' || !Array.isArray(deadlines)) return;
+
+      deadlines = deadlines.map(function(d){
+        if(String(d.id) !== String(id)) return d;
+        var copy = Object.assign({}, d);
+        copy.status = 'active';
+        copy.restoredAt = new Date().toISOString();
+        delete copy.deletedAt;
+        return copy;
+      });
+
+      if(typeof persist === 'function') persist();
+      else if(typeof key !== 'undefined') localStorage.setItem(key, JSON.stringify(deadlines));
+
+      if(typeof syncSingleDeadlineStatusToServer === 'function'){
+        syncSingleDeadlineStatusToServer(id, 'active');
+      }
+
+      if(typeof renderList === 'function') renderList();
+      renderTrashPanel();
+
+      var panel = byId('ownerTrashPanel');
+      if(panel) panel.hidden = true;
+
+      setTimeout(function(){
+        if(typeof editDeadline === 'function') editDeadline(Number(id));
+      }, 120);
+    }catch(e){
+      alert('Non riesco ad aprire la modifica. Riprova dopo Aggiorna App.');
+      console.warn('editDeadlineFromTrash error:', e);
+    }
+  };
+
+  window.hardDeleteDeadlineFromTrash = function(id){
+    try{
+      if(!confirm('Vuoi eliminare definitivamente questa scadenza dal dispositivo?')) return;
+      if(!confirm('Conferma definitiva: questa scadenza non comparirà più nel Cestino locale.')) return;
+
+      if(typeof deadlines === 'undefined' || !Array.isArray(deadlines)) return;
+
+      deadlines = deadlines.filter(function(d){
+        return String(d.id) !== String(id);
+      });
+
+      if(typeof persist === 'function') persist();
+      else if(typeof key !== 'undefined') localStorage.setItem(key, JSON.stringify(deadlines));
+
+      if(typeof syncSingleDeadlineStatusToServer === 'function'){
+        syncSingleDeadlineStatusToServer(id, 'deleted');
+      }
+
+      if(typeof renderList === 'function') renderList();
+      renderTrashPanel();
+    }catch(e){
+      alert('Non riesco a cancellare definitivamente questa scadenza. Riprova dopo Aggiorna App.');
+      console.warn('hardDeleteDeadlineFromTrash error:', e);
+    }
+  };
+
+  function wireTrashCard(){
+    var card = byId('ownerTrashKpi');
+    if(!card || card.dataset.trashWired === '1') return;
+    card.dataset.trashWired = '1';
+
+    card.addEventListener('click', function(){
+      window.openDeadlinesTrash();
+    });
+
+    card.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' || e.key === ' '){
+        e.preventDefault();
+        window.openDeadlinesTrash();
+      }
+    });
+  }
+
+  var originalRenderList = window.renderList;
+  if(typeof originalRenderList === 'function' && !window.__OWNER_TRASH_RENDER_WRAPPED__){
+    window.__OWNER_TRASH_RENDER_WRAPPED__ = true;
+    window.renderList = function(){
+      var out = originalRenderList.apply(this, arguments);
+      try{ updateTrashKpi(); }catch(e){}
+      try{
+        var panel = byId('ownerTrashPanel');
+        if(panel && !panel.hidden) renderTrashPanel();
+      }catch(e){}
+      return out;
+    };
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    wireTrashCard();
+    updateTrashKpi();
+  });
+
+  setTimeout(function(){
+    wireTrashCard();
+    updateTrashKpi();
+  }, 500);
+
+  setTimeout(function(){
+    wireTrashCard();
+    updateTrashKpi();
+  }, 1800);
 })();
 </script>
 
