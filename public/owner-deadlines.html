@@ -6664,5 +6664,184 @@ init();
 })();
 </script>
 
+
+<script id="owner-deadlines-trash-buttons-fix-20260606">
+(function(){
+  function normId(v){
+    return String(v || "").trim();
+  }
+
+  function getDeadlinesArray(){
+    try {
+      if (typeof deadlines !== "undefined" && Array.isArray(deadlines)) return deadlines;
+    } catch(e) {}
+    return [];
+  }
+
+  function saveAndRefresh(){
+    try {
+      if (typeof persist === "function") {
+        persist();
+      } else {
+        try {
+          if (typeof key !== "undefined") {
+            localStorage.setItem(key, JSON.stringify(getDeadlinesArray()));
+          }
+        } catch(e) {}
+      }
+    } catch(e) {}
+
+    try { if (typeof renderList === "function") renderList(); } catch(e) {}
+    try { if (typeof updateTrashBadge === "function") updateTrashBadge(); } catch(e) {}
+    try { if (typeof renderTrashList === "function") renderTrashList(); } catch(e) {}
+  }
+
+  function syncStatus(id, status){
+    try {
+      if (typeof syncSingleDeadlineStatusToServer === "function") {
+        syncSingleDeadlineStatusToServer(id, status);
+      }
+    } catch(e) {
+      console.warn("trash syncStatus error:", e);
+    }
+  }
+
+  window.restoreDeadlineFromTrash = function(id){
+    try {
+      id = normId(id);
+      if (!id) return;
+
+      let arr = getDeadlinesArray();
+      let found = false;
+
+      deadlines = arr.map(function(d){
+        if (String(d && d.id) === id) {
+          found = true;
+          return Object.assign({}, d, {
+            status: "active",
+            restoredAt: new Date().toISOString(),
+            deletedAt: null,
+            completedAt: null,
+            disabledAt: null
+          });
+        }
+        return d;
+      });
+
+      if (!found) {
+        alert("Non trovo questa scadenza nel Cestino. Premi Aggiorna App e riprova.");
+        return;
+      }
+
+      saveAndRefresh();
+      syncStatus(id, "active");
+      alert("Scadenza ripristinata.");
+    } catch(e) {
+      console.error("restoreDeadlineFromTrash error:", e);
+      alert("Non riesco a ripristinare questa scadenza. Riprova dopo Aggiorna App.");
+    }
+  };
+
+  window.hardDeleteDeadlineFromTrash = function(id){
+    try {
+      id = normId(id);
+      if (!id) return;
+
+      if (!confirm("Vuoi eliminare definitivamente questa scadenza dal Cestino?")) return;
+      if (!confirm("Conferma definitiva: questa scadenza non sarà più recuperabile dal dispositivo.")) return;
+
+      let arr = getDeadlinesArray();
+      let before = arr.length;
+
+      deadlines = arr.filter(function(d){
+        return String(d && d.id) !== id;
+      });
+
+      if (deadlines.length === before) {
+        alert("Non trovo questa scadenza nel Cestino. Premi Aggiorna App e riprova.");
+        return;
+      }
+
+      saveAndRefresh();
+
+      /*
+        Non cancelliamo fisicamente dal server perché il backend attuale gestisce stati,
+        non hard delete delle scadenze. La rimozione definitiva qui è locale/dispositivo.
+      */
+      syncStatus(id, "deleted");
+
+      alert("Scadenza eliminata definitivamente dal Cestino locale.");
+    } catch(e) {
+      console.error("hardDeleteDeadlineFromTrash error:", e);
+      alert("Non riesco a cancellare definitivamente questa scadenza. Riprova dopo Aggiorna App.");
+    }
+  };
+
+  window.editDeadlineFromTrash = function(id){
+    try {
+      id = normId(id);
+      if (!id) return;
+
+      let arr = getDeadlinesArray();
+      let d = arr.find(function(x){ return String(x && x.id) === id; });
+
+      if (!d) {
+        alert("Non trovo questa scadenza nel Cestino. Premi Aggiorna App e riprova.");
+        return;
+      }
+
+      /*
+        Prima la ripristiniamo come attiva, poi apriamo la modifica esistente.
+        Così la pagina la mostra nella lista principale e può essere riprogrammata.
+      */
+      deadlines = arr.map(function(x){
+        if (String(x && x.id) === id) {
+          return Object.assign({}, x, {
+            status: "active",
+            restoredForEditAt: new Date().toISOString(),
+            deletedAt: null,
+            completedAt: null,
+            disabledAt: null
+          });
+        }
+        return x;
+      });
+
+      saveAndRefresh();
+      syncStatus(id, "active");
+
+      setTimeout(function(){
+        try {
+          if (typeof editDeadline === "function") {
+            editDeadline(Number(id));
+          } else {
+            alert("Scadenza ripristinata. Ora puoi modificarla dalla lista principale.");
+          }
+        } catch(e) {
+          console.warn("editDeadlineFromTrash edit error:", e);
+          alert("Scadenza ripristinata. Ora puoi modificarla dalla lista principale.");
+        }
+      }, 250);
+
+    } catch(e) {
+      console.error("editDeadlineFromTrash error:", e);
+      alert("Non riesco ad aprire la modifica. Riprova dopo Aggiorna App.");
+    }
+  };
+
+  document.addEventListener("click", function(e){
+    var btn = e.target && e.target.closest ? e.target.closest("[data-trash-action]") : null;
+    if (!btn) return;
+
+    var id = btn.getAttribute("data-trash-id") || "";
+    var action = btn.getAttribute("data-trash-action") || "";
+
+    if (action === "restore") return window.restoreDeadlineFromTrash(id);
+    if (action === "edit") return window.editDeadlineFromTrash(id);
+    if (action === "hard-delete") return window.hardDeleteDeadlineFromTrash(id);
+  }, true);
+})();
+</script>
+
 </body>
 </html>
