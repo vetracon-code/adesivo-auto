@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Il mio citofono</title>
+  <link rel="icon" href="/icons/il-mio-citofono.svg">
+  <meta name="theme-color" content="#f8fafc">
+  <style>
+    :root{--ink:#0f172a;--muted:#64748b;--line:#e2e8f0;--blue:#2563eb;--sky:#0ea5e9;--shadow:0 22px 60px rgba(15,23,42,.12)}
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:radial-gradient(circle at top,#eff6ff 0,#f8fafc 48%,#f8fafc 100%);color:var(--ink)}
+    body{display:grid;place-items:center;padding:18px}
+    .phone{width:100%;max-width:420px;min-height:720px;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:38px;box-shadow:var(--shadow);padding:34px 22px;text-align:center;display:flex;flex-direction:column;justify-content:center}
+    .brand{font-size:15px;font-weight:950;letter-spacing:.12em;color:#2563eb;text-transform:uppercase;margin-bottom:24px}
+    .speaker{width:240px;height:240px;border-radius:50%;border:1.5px solid var(--blue);margin:0 auto 34px;display:grid;place-items:center;background:radial-gradient(circle,#fff,#f8fafc);position:relative}
+    .speaker.active{box-shadow:0 0 0 8px rgba(37,99,235,.06),0 0 38px rgba(37,99,235,.18)}
+    .speaker.active:after{content:"";position:absolute;inset:18px;border-radius:50%;border:2px solid rgba(56,189,248,.35);animation:pulse 1.45s ease-in-out infinite}
+    .holes{width:130px;height:130px;border-radius:50%;background-image:radial-gradient(circle,#0f172a 3px,transparent 3.5px);background-size:17px 17px}
+    .name{font-size:32px;line-height:1.08;font-weight:950;margin:0 0 10px}
+    .address{font-size:17px;color:var(--muted);margin-bottom:36px}
+    .ring{width:88%;max-width:330px;margin:0 auto;border:0;border-radius:20px;background:linear-gradient(135deg,var(--blue),var(--sky));color:#fff;padding:20px;font-size:23px;font-weight:950;box-shadow:0 15px 34px rgba(37,99,235,.28);cursor:pointer}
+    .ring:active{transform:scale(.985)}
+    .hint{min-height:22px;font-size:15px;color:var(--muted);margin-top:22px}
+    .closed{display:none;margin-top:18px;padding:14px;border-radius:18px;background:#ecfdf5;color:#166534;font-weight:850}
+    @keyframes pulse{0%,100%{transform:scale(.94);opacity:.45}50%{transform:scale(1.05);opacity:1}}
+    @media(max-width:430px){.phone{min-height:calc(100vh - 24px);border-radius:32px}.speaker{width:220px;height:220px}.name{font-size:29px}}
+  </style>
+</head>
+<body>
+  <main class="phone">
+    <div class="brand">Citofonami</div>
+    <div id="speaker" class="speaker"><div class="holes"></div></div>
+    <h1 class="name" id="name">Casa Rossi</h1>
+    <div class="address" id="address">Via Roma 123, Milano</div>
+    <button class="ring" id="ringBtn">🔔 SUONA</button>
+    <div class="hint" id="hint">Premi per citofonare.</div>
+    <div class="closed" id="closed">Conversazione chiusa. Grazie.</div>
+  </main>
+
+  <script>
+    const $ = id => document.getElementById(id);
+
+    function loadSettings(){
+      const name = localStorage.getItem("ilMioCitofono.name") || "Casa Rossi";
+      const address = localStorage.getItem("ilMioCitofono.address") || "Via Roma 123, Milano";
+      $("name").textContent = name;
+      if(address){ $("address").textContent = address; $("address").style.display = "block"; }
+      else{ $("address").style.display = "none"; }
+    }
+
+    async function requestMic(){
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        $("hint").textContent = "Microfono non disponibile su questo browser.";
+        return null;
+      }
+      try{ return await navigator.mediaDevices.getUserMedia({ audio:true, video:false }); }
+      catch(e){ $("hint").textContent = "Microfono non autorizzato."; return null; }
+    }
+
+    function stopStream(stream){
+      if(stream){ stream.getTracks().forEach(t => { try{ t.stop(); }catch(e){} }); }
+    }
+
+    $("ringBtn").addEventListener("click", async () => {
+      $("ringBtn").disabled = true;
+      $("hint").textContent = "Attivo il microfono...";
+      const stream = await requestMic();
+      if(!stream){ $("ringBtn").disabled = false; return; }
+      $("speaker").classList.add("active");
+      $("hint").textContent = "Chiamata inviata. Attendi la risposta...";
+      $("ringBtn").textContent = "CHIAMATA IN CORSO";
+      window.__IL_MIO_CITOFONO_STREAM__ = stream;
+    });
+
+    window.addEventListener("beforeunload", () => stopStream(window.__IL_MIO_CITOFONO_STREAM__));
+    loadSettings();
+  </script>
+</body>
+</html>
