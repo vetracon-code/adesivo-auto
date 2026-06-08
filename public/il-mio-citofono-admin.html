@@ -78,6 +78,50 @@
     .qr-box{width:204px;height:204px;border-radius:18px;background:#fff;display:grid;place-items:center;overflow:hidden}
     .qr-box img{width:190px;height:190px;display:block}
     .qr-url{margin:12px auto 0;max-width:330px;font-size:13px;line-height:1.35;color:#64748b;word-break:break-all}
+    
+    .incoming-panel{
+      display:none;
+      margin:16px 0;
+      padding:18px;
+      border-radius:26px;
+      background:linear-gradient(135deg,#eff6ff,#ffffff);
+      border:1px solid #bfdbfe;
+      box-shadow:0 18px 44px rgba(37,99,235,.12);
+      text-align:center;
+    }
+    .incoming-panel.show{display:block}
+    .incoming-title{
+      font-size:23px;
+      font-weight:950;
+      color:#0f172a;
+      margin:0 0 8px;
+    }
+    .incoming-sub{
+      font-size:15px;
+      color:#64748b;
+      margin:0 0 16px;
+    }
+    .incoming-actions{
+      display:flex;
+      gap:10px;
+      justify-content:center;
+      flex-wrap:wrap;
+    }
+    .btn.green{
+      background:linear-gradient(135deg,#22c55e,#16a34a);
+      color:#fff;
+    }
+    .btn.red{
+      background:linear-gradient(135deg,#ef4444,#dc2626);
+      color:#fff;
+    }
+    .rtc-state{
+      margin-top:12px;
+      font-size:13px;
+      color:#64748b;
+      line-height:1.35;
+    }
+
     .hidden{display:none}
     @keyframes pulse{0%,100%{filter:drop-shadow(0 0 2px rgba(56,189,248,.6))}50%{filter:drop-shadow(0 0 18px rgba(56,189,248,.95))}}
     @media(max-width:430px){body{padding:12px}.card{padding:15px;border-radius:24px}.speaker-wrap{width:220px;height:220px}.speaker{width:162px;height:162px}.user-speaker{width:190px;height:190px}}
@@ -144,6 +188,16 @@
       <p class="notice">Sotto vedi la preview realistica del citofono utente e il QR da esporre.</p>
     </section>
 
+    <section class="incoming-panel" id="incomingPanel">
+      <div class="incoming-title">Chiamata in arrivo</div>
+      <p class="incoming-sub" id="incomingSub">Qualcuno sta suonando il tuo citofono.</p>
+      <div class="incoming-actions">
+        <button class="btn green" id="answerIncomingBtn" type="button">Rispondi</button>
+        <button class="btn red" id="rejectIncomingBtn" type="button">Rifiuta</button>
+      </div>
+      <div class="rtc-state" id="adminRtcState">In attesa chiamata.</div>
+    </section>
+
     <section class="intercom" id="adminIntercom">
       <div class="intercom-title">Il mio citofono</div>
       <div class="speaker-wrap">
@@ -188,132 +242,376 @@
     </section>
   </div>
 
-  <script>
-    const $ = id => document.getElementById(id);
-    let deferredPrompt = null;
-    let seconds = 0;
-    let timerHandle = null;
+  
+<script>
+  const $ = id => document.getElementById(id);
 
-    function buildLights(){
-      const holder = $("lights");
-      holder.innerHTML = "";
-      const total = 24;
-      for(let i=0;i<total;i++){
-        const dot = document.createElement("i");
-        const angle = (i / total) * Math.PI * 2;
-        const r = 106;
-        dot.style.transform = `translate(${Math.cos(angle)*r}px, ${Math.sin(angle)*r}px)`;
-        dot.style.animationDelay = `${i * 0.035}s`;
-        holder.appendChild(dot);
+  const CODE = new URLSearchParams(location.search).get("code") || "DEMO";
+  let deferredPrompt = null;
+  let seconds = 0;
+  let timerHandle = null;
+  let pendingTimer = null;
+  let answerTimer = null;
+  let iceTimer = null;
+  let currentCall = null;
+  let adminPeer = null;
+  let adminStream = null;
+  let remoteAudio = null;
+  const seenUserIce = new Set();
+
+  function api(path){
+    return `/api/citofonami/${encodeURIComponent(CODE)}${path}`;
+  }
+
+  function setAdminState(text){
+    const el = $("adminRtcState");
+    if(el) el.textContent = text;
+  }
+
+  function buildLights(){
+    const holder = $("lights");
+    if(!holder) return;
+    holder.innerHTML = "";
+    const total = 24;
+    for(let i=0;i<total;i++){
+      const dot = document.createElement("i");
+      const angle = (i / total) * Math.PI * 2;
+      const r = 106;
+      dot.style.transform = `translate(${Math.cos(angle)*r}px, ${Math.sin(angle)*r}px)`;
+      dot.style.animationDelay = `${i * 0.035}s`;
+      holder.appendChild(dot);
+    }
+  }
+
+  function tick(){
+    seconds++;
+    const h = String(Math.floor(seconds/3600)).padStart(2,"0");
+    const m = String(Math.floor((seconds%3600)/60)).padStart(2,"0");
+    const s = String(seconds%60).padStart(2,"0");
+    $("timer").textContent = `${h}:${m}:${s}`;
+  }
+
+  function startTimer(){
+    clearInterval(timerHandle);
+    seconds = 0;
+    $("timer").textContent = "00:00:00";
+    timerHandle = setInterval(tick,1000);
+  }
+
+  function stopTimer(){
+    clearInterval(timerHandle);
+    seconds = 0;
+    $("timer").textContent = "00:00:00";
+  }
+
+  function stopAdminMedia(){
+    clearInterval(answerTimer);
+    clearInterval(iceTimer);
+    answerTimer = null;
+    iceTimer = null;
+
+    if(adminPeer){
+      try{ adminPeer.close(); }catch(e){}
+      adminPeer = null;
+    }
+
+    if(adminStream){
+      adminStream.getTracks().forEach(t => {
+        try{ t.stop(); }catch(e){}
+      });
+      adminStream = null;
+    }
+
+    if(remoteAudio){
+      try{ remoteAudio.pause(); remoteAudio.srcObject = null; }catch(e){}
+      remoteAudio = null;
+    }
+
+    seenUserIce.clear();
+  }
+
+  async function closeConversation(){
+    try{
+      if(currentCall && currentCall.id){
+        await fetch(api(`/calls/${encodeURIComponent(currentCall.id)}/action`), {
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body:JSON.stringify({ action:"close", closedBy:"admin" })
+        });
       }
-    }
+    }catch(e){}
 
-    function tick(){
-      seconds++;
-      const h = String(Math.floor(seconds/3600)).padStart(2,"0");
-      const m = String(Math.floor((seconds%3600)/60)).padStart(2,"0");
-      const s = String(seconds%60).padStart(2,"0");
-      $("timer").textContent = `${h}:${m}:${s}`;
-    }
+    stopAdminMedia();
+    stopTimer();
+    currentCall = null;
+    $("incomingPanel").classList.remove("show");
+    setAdminState("Conversazione chiusa. Pronto per nuova chiamata.");
+  }
 
-    function startTimer(){
-      clearInterval(timerHandle);
-      seconds = 0;
-      $("timer").textContent = "00:00:00";
-      timerHandle = setInterval(tick,1000);
-    }
+  function getPublicUserUrl(){
+    return window.location.origin + "/il-mio-citofono.html?code=" + encodeURIComponent(CODE);
+  }
 
-    function closeConversation(){
-      clearInterval(timerHandle);
-      seconds = 0;
-      $("timer").textContent = "00:00:00";
-      alert("Conversazione chiusa. La prossima chiamata ripartirà da zero.");
-    }
+  function updateQr(){
+    const url = getPublicUserUrl();
+    const qrSrc = "https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=18&data=" + encodeURIComponent(url);
+    $("qrImg").src = qrSrc;
+    $("qrUrlText").textContent = url;
+    $("publicUserUrl").textContent = url;
+  }
 
-    function getPublicUserUrl(){
-      return window.location.origin + "/il-mio-citofono.html";
-    }
+  async function saveSettings(){
+    const name = $("doorName").value.trim() || "Il mio citofono";
+    const address = $("doorAddress").value.trim();
 
-    function updateQr(){
-      const url = getPublicUserUrl();
-      const qrSrc = "https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=18&data=" + encodeURIComponent(url);
-      $("qrImg").src = qrSrc;
-      $("qrUrlText").textContent = url;
-      $("publicUserUrl").textContent = url;
-    }
+    localStorage.setItem("ilMioCitofono.name", name);
+    localStorage.setItem("ilMioCitofono.address", address);
 
-    function saveSettings(){
-      const name = $("doorName").value.trim() || "Il mio citofono";
-      const address = $("doorAddress").value.trim();
+    applySettings();
+
+    try{
+      await fetch(api("/config"), {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({
+          name,
+          displayName:name,
+          doorName:name,
+          address,
+          pushEnabled:true,
+          geofenceEnabled:false
+        })
+      });
+    }catch(e){
+      console.warn("Config server non salvata:", e);
+    }
+  }
+
+  async function loadServerConfig(){
+    try{
+      const res = await fetch(api("/config?t=" + Date.now()), { cache:"no-store" });
+      const data = await res.json();
+      const c = data.config || data || {};
+      const name = c.name || c.displayName || c.doorName || localStorage.getItem("ilMioCitofono.name") || "Casa Rossi";
+      const address = c.address || localStorage.getItem("ilMioCitofono.address") || "";
       localStorage.setItem("ilMioCitofono.name", name);
       localStorage.setItem("ilMioCitofono.address", address);
-      applySettings();
-    }
+    }catch(e){}
+  }
 
-    function applySettings(){
-      const name = localStorage.getItem("ilMioCitofono.name") || $("doorName").value || "Casa Rossi";
-      const address = localStorage.getItem("ilMioCitofono.address") || $("doorAddress").value || "";
-      $("doorName").value = name;
-      $("doorAddress").value = address;
-      $("previewName").textContent = name;
-      $("previewAddress").textContent = address || "Indirizzo non indicato";
-      $("previewAddress").style.display = address ? "block" : "none";
-      const q = encodeURIComponent(address);
-      $("mapLink").href = address ? `https://www.google.com/maps/search/?api=1&query=${q}` : "https://www.google.com/maps";
-      updateQr();
-    }
+  function applySettings(){
+    const name = localStorage.getItem("ilMioCitofono.name") || $("doorName").value || "Casa Rossi";
+    const address = localStorage.getItem("ilMioCitofono.address") || $("doorAddress").value || "";
+    $("doorName").value = name;
+    $("doorAddress").value = address;
+    $("previewName").textContent = name;
+    $("previewAddress").textContent = address || "Indirizzo non indicato";
+    $("previewAddress").style.display = address ? "block" : "none";
+    const q = encodeURIComponent(address);
+    $("mapLink").href = address ? `https://www.google.com/maps/search/?api=1&query=${q}` : "https://www.google.com/maps";
+    updateQr();
+  }
 
-    function openUserPage(){
-      saveSettings();
-      window.open(getPublicUserUrl(),"_blank");
-    }
+  function openUserPage(){
+    saveSettings();
+    window.open(getPublicUserUrl(),"_blank");
+  }
 
-    function dismissInstall(){
-      $("installCard").classList.add("hidden");
-      localStorage.setItem("ilMioCitofono.installDismissed","1");
-    }
+  function dismissInstall(){
+    $("installCard").classList.add("hidden");
+    localStorage.setItem("ilMioCitofono.installDismissed","1");
+  }
 
-    window.addEventListener("beforeinstallprompt", event => {
-      event.preventDefault();
-      deferredPrompt = event;
-      $("installBtn").disabled = false;
-      $("installBtn").textContent = "Installa Web App";
-    });
+  async function pollPending(){
+    try{
+      const res = await fetch(api("/calls/pending?t=" + Date.now()), { cache:"no-store" });
+      const data = await res.json();
+      const call = data.call || (Array.isArray(data.calls) ? data.calls[0] : null) || data.pending || null;
 
-    $("installBtn").addEventListener("click", async () => {
-      if(!deferredPrompt){
-        alert("Se il telefono non mostra l’installazione automatica, usa le istruzioni Apple/Android indicate sopra.");
-        return;
+      if(call && call.id && (!currentCall || currentCall.id !== call.id)){
+        currentCall = call;
+        $("incomingPanel").classList.add("show");
+        $("incomingSub").textContent = "Qualcuno sta suonando il tuo citofono.";
+        setAdminState("Chiamata ricevuta. Premi Rispondi per collegare l'audio.");
       }
-      deferredPrompt.prompt();
-      await deferredPrompt.userChoice.catch(()=>null);
-      deferredPrompt = null;
-    });
+    }catch(e){
+      console.warn("pollPending error:", e);
+    }
+  }
 
-    $("notifyBtn").addEventListener("click", async () => {
-      if(!("Notification" in window)){
-        $("notifyStatus").textContent = "Stato notifiche: non supportate da questo browser.";
-        return;
+  async function rejectIncoming(){
+    if(!currentCall || !currentCall.id) return;
+    try{
+      await fetch(api(`/calls/${encodeURIComponent(currentCall.id)}/action`), {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ action:"close", closedBy:"admin" })
+      });
+    }catch(e){}
+    currentCall = null;
+    $("incomingPanel").classList.remove("show");
+    setAdminState("Chiamata rifiutata.");
+  }
+
+  async function answerIncoming(){
+    if(!currentCall || !currentCall.id){
+      setAdminState("Nessuna chiamata da rispondere.");
+      return;
+    }
+
+    const callId = currentCall.id;
+    $("answerIncomingBtn").disabled = true;
+    $("answerIncomingBtn").textContent = "Collego…";
+    setAdminState("Attivo microfono e vivavoce...");
+
+    try{
+      await fetch(api(`/calls/${encodeURIComponent(callId)}/action`), {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ action:"answer" })
+      });
+
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        throw new Error("Microfono non disponibile.");
       }
-      try{
-        const permission = await Notification.requestPermission();
-        $("notifyStatus").textContent = "Stato notifiche: " + permission;
-        if(permission === "granted"){
-          new Notification("Il mio citofono", { body:"Notifiche attive.", icon:"/icons/il-mio-citofono.svg" });
+
+      adminStream = await navigator.mediaDevices.getUserMedia({
+        audio:{
+          echoCancellation:true,
+          noiseSuppression:true,
+          autoGainControl:true
+        },
+        video:false
+      });
+
+      remoteAudio = new Audio();
+      remoteAudio.autoplay = true;
+      remoteAudio.playsInline = true;
+      remoteAudio.controls = false;
+      document.body.appendChild(remoteAudio);
+
+      adminPeer = new RTCPeerConnection({
+        iceServers:[{ urls:["stun:stun.l.google.com:19302"] }]
+      });
+
+      adminStream.getTracks().forEach(track => adminPeer.addTrack(track, adminStream));
+
+      adminPeer.ontrack = event => {
+        const stream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream([event.track]);
+        remoteAudio.srcObject = stream;
+        remoteAudio.play().catch(()=>{});
+        setAdminState("Audio collegato. Vivavoce attivo.");
+      };
+
+      adminPeer.onicecandidate = event => {
+        if(event.candidate){
+          fetch(api(`/calls/${encodeURIComponent(callId)}/webrtc/ice`), {
+            method:"POST",
+            headers:{ "Content-Type":"application/json" },
+            body:JSON.stringify({ role:"admin", candidate:event.candidate })
+          }).catch(()=>{});
         }
-      }catch(e){
-        $("notifyStatus").textContent = "Stato notifiche: da attivare dopo installazione Web App.";
-      }
-    });
+      };
 
-    if("serviceWorker" in navigator){
-      navigator.serviceWorker.register("/il-mio-citofono-sw.js").catch(()=>null);
+      const offer = await adminPeer.createOffer({ offerToReceiveAudio:true, offerToReceiveVideo:false });
+      await adminPeer.setLocalDescription(offer);
+
+      await fetch(api(`/calls/${encodeURIComponent(callId)}/webrtc/offer`), {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ offer:adminPeer.localDescription })
+      });
+
+      $("incomingPanel").classList.add("show");
+      $("answerIncomingBtn").textContent = "Collegato";
+      setAdminState("Offer creata. Attendo risposta audio utente...");
+      startTimer();
+
+      answerTimer = setInterval(() => pollAnswer(callId), 800);
+      iceTimer = setInterval(() => pollUserIce(callId), 800);
+
+    }catch(e){
+      console.error(e);
+      setAdminState("Errore risposta: " + (e.message || e));
+      $("answerIncomingBtn").disabled = false;
+      $("answerIncomingBtn").textContent = "Rispondi";
     }
+  }
 
-    $("doorName").addEventListener("input", saveSettings);
-    $("doorAddress").addEventListener("input", saveSettings);
+  async function pollAnswer(callId){
+    if(!adminPeer) return;
+    try{
+      const res = await fetch(api(`/calls/${encodeURIComponent(callId)}/webrtc/answer?t=${Date.now()}`), { cache:"no-store" });
+      const data = await res.json();
+      if(data.ok && data.answer && !adminPeer.currentRemoteDescription){
+        await adminPeer.setRemoteDescription(data.answer);
+        setAdminState("Answer ricevuta. Connessione audio in corso...");
+        clearInterval(answerTimer);
+        answerTimer = null;
+      }
+    }catch(e){}
+  }
 
+  async function pollUserIce(callId){
+    if(!adminPeer) return;
+    try{
+      const res = await fetch(api(`/calls/${encodeURIComponent(callId)}/webrtc/ice?role=admin&t=${Date.now()}`), { cache:"no-store" });
+      const data = await res.json();
+      const candidates = data.candidates || data.ice || [];
+      for(const item of candidates){
+        const candidate = item.candidate || item;
+        const key = JSON.stringify(candidate);
+        if(seenUserIce.has(key)) continue;
+        seenUserIce.add(key);
+        try{ await adminPeer.addIceCandidate(candidate); }catch(e){}
+      }
+    }catch(e){}
+  }
+
+  window.addEventListener("beforeinstallprompt", event => {
+    event.preventDefault();
+    deferredPrompt = event;
+    $("installBtn").disabled = false;
+    $("installBtn").textContent = "Installa Web App";
+  });
+
+  $("installBtn").addEventListener("click", async () => {
+    if(!deferredPrompt){
+      alert("Se il telefono non mostra l’installazione automatica, usa le istruzioni Apple/Android indicate sopra.");
+      return;
+    }
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice.catch(()=>null);
+    deferredPrompt = null;
+  });
+
+  $("notifyBtn").addEventListener("click", async () => {
+    if(!("Notification" in window)){
+      $("notifyStatus").textContent = "Stato notifiche: non supportate da questo browser.";
+      return;
+    }
+    try{
+      if("serviceWorker" in navigator){
+        await navigator.serviceWorker.register("/citofonami-sw.js", { scope:"/" }).catch(()=>null);
+      }
+      const permission = await Notification.requestPermission();
+      $("notifyStatus").textContent = "Stato notifiche: " + permission;
+      if(permission === "granted"){
+        new Notification("Il mio citofono", { body:"Notifiche attive.", icon:"/icons/il-mio-citofono.svg" });
+      }
+    }catch(e){
+      $("notifyStatus").textContent = "Stato notifiche: da attivare dopo installazione Web App.";
+    }
+  });
+
+  $("doorName").addEventListener("input", saveSettings);
+  $("doorAddress").addEventListener("input", saveSettings);
+  $("answerIncomingBtn").addEventListener("click", answerIncoming);
+  $("rejectIncomingBtn").addEventListener("click", rejectIncoming);
+
+  (async function init(){
     buildLights();
+    await loadServerConfig();
     applySettings();
     updateQr();
     startTimer();
@@ -321,6 +619,11 @@
     if(localStorage.getItem("ilMioCitofono.installDismissed")==="1"){
       $("installCard").classList.add("hidden");
     }
-  </script>
+
+    pollPending();
+    pendingTimer = setInterval(pollPending, 1200);
+  })();
+</script>
+
 </body>
 </html>
