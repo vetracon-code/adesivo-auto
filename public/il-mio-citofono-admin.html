@@ -122,6 +122,23 @@
       line-height:1.35;
     }
 
+    
+    .device-only{display:none}
+    .device-only.show{display:block}
+    .device-detected{
+      margin-top:10px;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 11px;
+      border-radius:999px;
+      background:#f8fafc;
+      border:1px solid #e2e8f0;
+      color:#475569;
+      font-size:13px;
+      font-weight:850;
+    }
+
     .hidden{display:none}
     @keyframes pulse{0%,100%{filter:drop-shadow(0 0 2px rgba(56,189,248,.6))}50%{filter:drop-shadow(0 0 18px rgba(56,189,248,.95))}}
     @media(max-width:430px){body{padding:12px}.card{padding:15px;border-radius:24px}.speaker-wrap{width:220px;height:220px}.speaker{width:162px;height:162px}.user-speaker{width:190px;height:190px}}
@@ -148,25 +165,32 @@
       </div>
 
       <div class="steps">
-        <div class="stepbox">
-          <h3>Su iPhone / iPad</h3>
-          <div class="step"><span class="num">1</span><span>Apri questa pagina con Safari.</span></div>
-          <div class="step"><span class="num">2</span><span>Tocca il pulsante Condividi.</span></div>
-          <div class="step"><span class="num">3</span><span>Scegli “Aggiungi a Home”.</span></div>
-          <div class="step"><span class="num">4</span><span>Riapri la Web App dalla Home e abilita le notifiche.</span></div>
+        <div class="device-detected" id="deviceDetected">Dispositivo rilevato...</div>
+
+        <div class="stepbox device-only" id="iosInstallBox">
+          <h3>iPhone / iPad</h3>
+          <div class="step"><span class="num">1</span><span>Apri con Safari.</span></div>
+          <div class="step"><span class="num">2</span><span>Tocca Condividi.</span></div>
+          <div class="step"><span class="num">3</span><span>Aggiungi a Home.</span></div>
+          <div class="step"><span class="num">4</span><span>Riapri dalla Home e attiva le notifiche.</span></div>
         </div>
 
-        <div class="stepbox android">
-          <h3>Su Android / Chrome</h3>
-          <div class="step"><span class="num">1</span><span>Tocca il menu ⋮ in alto a destra.</span></div>
-          <div class="step"><span class="num">2</span><span>Scegli “Aggiungi a schermata Home”.</span></div>
-          <div class="step"><span class="num">3</span><span>Conferma “Aggiungi”.</span></div>
-          <div class="step"><span class="num">4</span><span>Se richiesto, abilita subito le notifiche.</span></div>
+        <div class="stepbox android device-only" id="androidInstallBox">
+          <h3>Android</h3>
+          <div class="step"><span class="num">1</span><span>Tocca Installa, se compare.</span></div>
+          <div class="step"><span class="num">2</span><span>Oppure menu ⋮ → Aggiungi a Home.</span></div>
+          <div class="step"><span class="num">3</span><span>Consenti le notifiche.</span></div>
+        </div>
+
+        <div class="stepbox device-only" id="desktopInstallBox">
+          <h3>Computer</h3>
+          <div class="step"><span class="num">1</span><span>Lascia questa pagina aperta per ricevere le chiamate.</span></div>
+          <div class="step"><span class="num">2</span><span>Consenti le notifiche del browser.</span></div>
         </div>
 
         <button class="btn full" id="installBtn">Installa se disponibile</button>
         <button class="btn secondary full" id="notifyBtn">Attiva notifiche</button>
-        <p class="notice" id="notifyStatus">Stato notifiche: non verificato.</p>
+        <p class="notice" id="notifyStatus">Stato notifiche: non verificate.</p>
       </div>
     </section>
 
@@ -262,6 +286,53 @@
   function api(path){
     return `/api/citofonami/${encodeURIComponent(CODE)}${path}`;
   }
+
+  function detectDevice(){
+    const ua = navigator.userAgent || "";
+    const platform = navigator.platform || "";
+    const maxTouch = navigator.maxTouchPoints || 0;
+
+    const isiPadOS = platform === "MacIntel" && maxTouch > 1;
+    const isIOS = /iPhone|iPad|iPod/i.test(ua) || isiPadOS;
+    const isAndroid = /Android/i.test(ua);
+    const isStandalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      window.navigator.standalone === true;
+
+    if(isIOS) return { key:"ios", label:isStandalone ? "iPhone App" : "iPhone / iPad" };
+    if(isAndroid) return { key:"android", label:isStandalone ? "Android App" : "Android" };
+    return { key:"desktop", label:"Computer" };
+  }
+
+  function renderDeviceInstall(){
+    const device = detectDevice();
+
+    const detected = $("deviceDetected");
+    if(detected) detected.textContent = "Rilevato: " + device.label;
+
+    const iosBox = $("iosInstallBox");
+    const androidBox = $("androidInstallBox");
+    const desktopBox = $("desktopInstallBox");
+
+    if(iosBox) iosBox.classList.toggle("show", device.key === "ios");
+    if(androidBox) androidBox.classList.toggle("show", device.key === "android");
+    if(desktopBox) desktopBox.classList.toggle("show", device.key === "desktop");
+
+    const installBtn = $("installBtn");
+    const notifyBtn = $("notifyBtn");
+
+    if(device.key === "ios"){
+      if(installBtn) installBtn.textContent = "Salva da Safari";
+      if(notifyBtn) notifyBtn.textContent = "Attiva notifiche dopo il salvataggio";
+    }else if(device.key === "android"){
+      if(installBtn) installBtn.textContent = "Installa App";
+      if(notifyBtn) notifyBtn.textContent = "Attiva notifiche";
+    }else{
+      if(installBtn) installBtn.textContent = "Installa se disponibile";
+      if(notifyBtn) notifyBtn.textContent = "Attiva notifiche";
+    }
+  }
+
 
   function setAdminState(text){
     const el = $("adminRtcState");
@@ -621,6 +692,7 @@
 
   (async function init(){
     buildLights();
+    renderDeviceInstall();
     await loadServerConfig();
     applySettings();
     updateQr();
