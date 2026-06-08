@@ -20435,6 +20435,34 @@ function safeCitofonamiFileName(value) {
 }
 
 app.post('/api/citofonami/:code/ring-v2', express.json({ limit: '1mb' }), async (req, res) => {
+
+  // CITOFONAMI_LIGHT_CLONE_NO_LOCATION_20260608
+  // Il clone leggero "Il mio citofono" non deve mai richiedere posizione:
+  // flusso utente = QR -> SUONA -> microfono -> chiamata.
+  try {
+    const body = req.body || {};
+    const ua = String(body.userAgent || req.headers['user-agent'] || '');
+    const isLightClone =
+      body.lightClone === true ||
+      body.source === 'il-mio-citofono' ||
+      ua.includes('IL_MIO_CITOFONO_LIGHT_CLONE');
+
+    if (isLightClone) {
+      body.locationEnabled = false;
+      body.geofenceEnabled = false;
+      body.requireLocation = false;
+      body.radiusDisabled = true;
+      body.radius = 0;
+      body.radiusPreset = '0';
+      body.lat = undefined;
+      body.lng = undefined;
+      body.accuracy = undefined;
+      req.body = body;
+    }
+  } catch (e) {
+    console.warn('CITOFONAMI_LIGHT_CLONE_NO_LOCATION_20260608 error:', e && e.message ? e.message : e);
+  }
+
   const code = normalizeCitofonamiCode(req.params.code);
   const db = ensureCitofonamiDbShape(readCitofonamiDb());
   const config = db.configs[code] || defaultCitofonamiConfig(code);
