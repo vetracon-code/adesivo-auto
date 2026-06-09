@@ -97,6 +97,65 @@
   function api(path){
     return `/api/citofonami/${encodeURIComponent(CODE)}${path}`;
   }
+  // CITOFONAMI_AUDIO_DIAG_20260609
+  function diagAudio(label, pc, localStream, remoteAudio){
+    try{
+      const localTracks = localStream ? localStream.getAudioTracks().map(t => ({
+        label:t.label,
+        enabled:t.enabled,
+        muted:t.muted,
+        readyState:t.readyState
+      })) : [];
+
+      const remoteTracks = remoteAudio && remoteAudio.srcObject && remoteAudio.srcObject.getAudioTracks
+        ? remoteAudio.srcObject.getAudioTracks().map(t => ({
+            label:t.label,
+            enabled:t.enabled,
+            muted:t.muted,
+            readyState:t.readyState
+          }))
+        : [];
+
+      const data = {
+        label,
+        pc: pc ? pc.connectionState : null,
+        ice: pc ? pc.iceConnectionState : null,
+        signaling: pc ? pc.signalingState : null,
+        localTracks,
+        remoteTracks,
+        remoteAudioPaused: remoteAudio ? remoteAudio.paused : null,
+        remoteAudioMuted: remoteAudio ? remoteAudio.muted : null,
+        remoteAudioVolume: remoteAudio ? remoteAudio.volume : null
+      };
+
+      console.log("[CITOFONAMI AUDIO DIAG]", data);
+
+      if(typeof setDebug === "function"){
+        setDebug(
+          label +
+          " · pc=" + data.pc +
+          " · ice=" + data.ice +
+          " · local=" + localTracks.length +
+          " · remote=" + remoteTracks.length +
+          " · paused=" + data.remoteAudioPaused
+        );
+      }
+
+      if(typeof setAdminState === "function"){
+        setAdminState(
+          label +
+          " · pc=" + data.pc +
+          " · ice=" + data.ice +
+          " · local=" + localTracks.length +
+          " · remote=" + remoteTracks.length
+        );
+      }
+    }catch(e){
+      console.warn("diagAudio error", e);
+    }
+  }
+
+
 
   function setHint(text){
     const el = $("hint");
@@ -468,6 +527,7 @@
       setHint("Audio remoto ricevuto. Parla ora.");
       setNote("Microfono e audio attivi. Parla ora.", true);
       setMode("connected");
+      diagAudio('USER ontrack remote audio', userPeer, userStream, remoteAudio);
     };
 
     userPeer.onconnectionstatechange = () => {
@@ -478,6 +538,7 @@
         setHint("Audio collegato. Parla ora.");
         setNote("Microfono e audio attivi. Parla ora.", true);
         setMode("connected");
+      diagAudio('USER ontrack remote audio', userPeer, userStream, remoteAudio);
       }
     };
 
@@ -517,9 +578,11 @@
     } catch(e) {}
 
     await userPeer.setRemoteDescription(new RTCSessionDescription(offer));
+    diagAudio('USER setRemoteDescription(offer)', userPeer, userStream, remoteAudio);
 
     const answer = await userPeer.createAnswer();
     await userPeer.setLocalDescription(answer);
+    diagAudio('USER setLocalDescription(answer)', userPeer, userStream, remoteAudio);
 
     await fetch(api(`/calls/${encodeURIComponent(callId)}/webrtc/answer`), {
       method:"POST",
