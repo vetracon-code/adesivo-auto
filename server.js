@@ -10868,6 +10868,26 @@ async function sendFollowMeScanPush(project) {
 }
 
 
+
+// FOLLOWME_PLACEHOLDER_MANIFEST_20260609
+app.get('/fm/manifest/placeholder.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/manifest+json');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  return res.json({
+    name:'FollowMe QR',
+    short_name:'FollowMe',
+    start_url:'/followme-app.html',
+    scope:'/',
+    display:'standalone',
+    background_color:'#0f172a',
+    theme_color:'#0f172a',
+    icons:[
+      { src:'/icons/icon-192.png', sizes:'192x192', type:'image/png' },
+      { src:'/icons/icon-512.png', sizes:'512x512', type:'image/png' }
+    ]
+  });
+});
+
 app.get('/fm/manifest/:code.json', async (req, res) => {
   try {
     const rawCode = String(req.params.code || 'FOLLOWME').trim();

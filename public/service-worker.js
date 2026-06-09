@@ -159,7 +159,7 @@ self.addEventListener('notificationclick', function(event) {
       data.targetUrl ||
       data.relativeTargetUrl ||
       (data.data && (data.data.url || data.data.targetUrl || data.data.relativeTargetUrl)) ||
-      '/fm/app/FMDEMO';
+      '/followme-app.html';
 
     if (n) n.close();
 
