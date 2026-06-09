@@ -4075,6 +4075,213 @@ function setDeadlineCleanupFlag(enabled){
 </script>
 
 
+
+<script id="admin-followme-isolated-create-qr-20260609">
+(function(){
+  function esc(v){
+    return String(v == null ? "" : v)
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
+  }
+
+  function absolute(path){
+    try { return new URL(path, location.origin).toString(); }
+    catch(e){ return path || ""; }
+  }
+
+  function copyText(txt){
+    txt = String(txt || "");
+    if(!txt) return Promise.resolve(false);
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      return navigator.clipboard.writeText(txt).then(function(){ return true; }).catch(function(){ return false; });
+    }
+    try{
+      var ta = document.createElement("textarea");
+      ta.value = txt;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      var ok = document.execCommand("copy");
+      ta.remove();
+      return Promise.resolve(ok);
+    }catch(e){
+      return Promise.resolve(false);
+    }
+  }
+
+  function ensureUi(){
+    var frame = document.getElementById("adminFollowMeFrame20260525");
+    if(!frame) return null;
+
+    if(!document.getElementById("adminFollowMeIsolatedCreateStyle20260609")){
+      var css = document.createElement("style");
+      css.id = "adminFollowMeIsolatedCreateStyle20260609";
+      css.textContent = ""
+        + "#adminFollowMeCreateIsolatedResult20260609{margin-top:12px;display:none;}"
+        + "#adminFollowMeCreateIsolatedResult20260609.show{display:block;}"
+        + ".fm-create-result-card{border-radius:22px;padding:16px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);box-shadow:0 18px 46px rgba(0,0,0,.22);color:#fff;}"
+        + ".fm-create-result-grid{display:grid;grid-template-columns:128px minmax(0,1fr);gap:14px;align-items:start;}"
+        + ".fm-create-result-qr{width:128px;height:128px;border-radius:18px;background:#fff;padding:8px;object-fit:contain;}"
+        + ".fm-create-result-title{font-size:17px;font-weight:950;letter-spacing:-.03em;margin-bottom:4px;}"
+        + ".fm-create-result-muted{color:rgba(255,255,255,.68);font-size:12px;font-weight:750;line-height:1.45;word-break:break-word;}"
+        + ".fm-create-result-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}"
+        + ".fm-create-result-actions a,.fm-create-result-actions button{border:0;border-radius:999px;padding:9px 12px;font-weight:900;font-size:12px;text-decoration:none;cursor:pointer;background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.14);}"
+        + ".fm-create-result-actions .primary{background:#3f79d8;color:#fff;border-color:#3f79d8;}"
+        + ".fm-create-result-actions .success{background:#19a974;color:#fff;border-color:#19a974;}"
+        + ".fm-create-result-pill{display:inline-flex;margin-top:8px;border-radius:999px;padding:5px 9px;background:rgba(25,169,116,.18);color:#bff7dc;font-size:11px;font-weight:950;border:1px solid rgba(25,169,116,.28)}"
+        + "@media(max-width:680px){.fm-create-result-grid{grid-template-columns:1fr}.fm-create-result-qr{width:150px;height:150px}}";
+      document.head.appendChild(css);
+    }
+
+    var loadBtn = document.getElementById("adminFollowMeLoadBtn20260525");
+    var actions = loadBtn && loadBtn.parentElement ? loadBtn.parentElement : null;
+
+    if(actions && !document.getElementById("adminFollowMeCreateIsolatedBtn20260609")){
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.id = "adminFollowMeCreateIsolatedBtn20260609";
+      btn.className = "fm-admin-btn primary";
+      btn.textContent = "+ Crea QR FollowMe";
+      actions.insertBefore(btn, loadBtn.nextSibling);
+    }
+
+    var projects = document.getElementById("adminFollowMeProjects20260525");
+    if(projects && !document.getElementById("adminFollowMeCreateIsolatedResult20260609")){
+      var result = document.createElement("div");
+      result.id = "adminFollowMeCreateIsolatedResult20260609";
+      projects.parentElement.insertBefore(result, projects);
+    }
+
+    return {
+      btn: document.getElementById("adminFollowMeCreateIsolatedBtn20260609"),
+      result: document.getElementById("adminFollowMeCreateIsolatedResult20260609"),
+      note: document.getElementById("adminFollowMeNote20260525")
+    };
+  }
+
+  function renderCreated(data){
+    var ui = ensureUi();
+    if(!ui || !ui.result) return;
+
+    var code = data.code || "";
+    var publicId = data.public_id || "";
+    var png = data.qr_png_url || "";
+    var svg = data.qr_svg_url || "";
+    var publicUrl = data.full_public_url || absolute(data.public_url || "");
+    var manageUrl = data.full_manage_url || absolute(data.manage_url || "");
+    var activationUrl = data.full_activation_url || absolute(data.activation_url || "");
+    var expiresAt = data.expires_at ? new Date(data.expires_at).toLocaleString("it-IT") : "-";
+    var storageKey = data.storage_key || "";
+
+    ui.result.className = "show";
+    ui.result.innerHTML =
+      '<div class="fm-create-result-card">'
+      + '  <div class="fm-create-result-grid">'
+      + '    <img class="fm-create-result-qr" src="' + esc(png) + '?v=' + Date.now() + '" alt="QR FollowMe creato">'
+      + '    <div>'
+      + '      <div class="fm-create-result-title">QR FollowMe creato e isolato</div>'
+      + '      <div class="fm-create-result-muted">'
+      + '        Codice: <strong style="color:#fff">' + esc(code) + '</strong><br>'
+      + '        Public ID: <strong style="color:#fff">' + esc(publicId) + '</strong><br>'
+      + '        Stato: <strong style="color:#fff">active</strong> · creato da admin<br>'
+      + '        Scadenza: ' + esc(expiresAt) + '<br>'
+      + '        Cartella: ' + esc(storageKey) + '<br>'
+      + '        Link pubblico: ' + esc(publicUrl) + '<br>'
+      + '        Gestione: ' + esc(manageUrl)
+      + '      </div>'
+      + '      <div class="fm-create-result-pill">Chat, voce, documenti e immagini predisposti in spazi separati</div>'
+      + '      <div class="fm-create-result-actions">'
+      + '        <a class="primary" href="' + esc(png) + '" download="followme-' + esc(publicId || code) + '-qr.png">Scarica PNG</a>'
+      + '        <a href="' + esc(svg) + '" download="followme-' + esc(publicId || code) + '-qr.svg">Scarica SVG</a>'
+      + '        <a class="success" href="' + esc(manageUrl) + '" target="_blank" rel="noopener">Apri gestione</a>'
+      + '        <a href="' + esc(publicUrl) + '" target="_blank" rel="noopener">Prova QR</a>'
+      + '        <button type="button" id="adminFollowMeCopyPublicUrl20260609">Copia link pubblico</button>'
+      + '        <button type="button" id="adminFollowMeCopyManageUrl20260609">Copia link gestione</button>'
+      + '        <button type="button" id="adminFollowMeCopyActivationUrl20260609">Copia link attivazione</button>'
+      + '      </div>'
+      + '    </div>'
+      + '  </div>'
+      + '</div>';
+
+    var cp = document.getElementById("adminFollowMeCopyPublicUrl20260609");
+    var cm = document.getElementById("adminFollowMeCopyManageUrl20260609");
+    var ca = document.getElementById("adminFollowMeCopyActivationUrl20260609");
+
+    if(cp) cp.addEventListener("click", function(){ copyText(publicUrl); cp.textContent = "Copiato"; setTimeout(function(){ cp.textContent = "Copia link pubblico"; }, 1300); });
+    if(cm) cm.addEventListener("click", function(){ copyText(manageUrl); cm.textContent = "Copiato"; setTimeout(function(){ cm.textContent = "Copia link gestione"; }, 1300); });
+    if(ca) ca.addEventListener("click", function(){ copyText(activationUrl); ca.textContent = "Copiato"; setTimeout(function(){ ca.textContent = "Copia link attivazione"; }, 1300); });
+  }
+
+  async function createQr(){
+    var ui = ensureUi();
+    if(!ui || !ui.btn) return;
+
+    var oldText = ui.btn.textContent;
+    ui.btn.disabled = true;
+    ui.btn.textContent = "Creo QR...";
+
+    if(ui.result){
+      ui.result.className = "show";
+      ui.result.innerHTML = '<div class="fm-create-result-card"><div class="fm-create-result-muted">Creo QR FollowMe con spazio disco, chat, voce, documenti e immagini separati...</div></div>';
+    }
+
+    try{
+      var res = await fetch("/api/admin/followme/create-blank", {
+        method:"POST",
+        credentials:"same-origin",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ valid_days:365 })
+      });
+
+      var data = await res.json().catch(function(){ return {}; });
+
+      if(!res.ok || !data.success){
+        throw new Error(data.error || data.detail || "Errore creazione QR FollowMe.");
+      }
+
+      renderCreated(data);
+
+      if(ui.note){
+        ui.note.textContent = "Nuovo QR FollowMe creato con struttura isolata e scadenza impostata. Puoi scaricarlo o provarlo subito.";
+      }
+
+      if(typeof window.adminFollowMeLoadProjects20260525 === "function"){
+        window.adminFollowMeLoadProjects20260525();
+      }
+    }catch(err){
+      if(ui.result){
+        ui.result.className = "show";
+        ui.result.innerHTML = '<div class="fm-create-result-card" style="border-color:rgba(255,90,111,.32);background:rgba(255,90,111,.12);"><div class="fm-create-result-title">Errore creazione QR</div><div class="fm-create-result-muted">' + esc(err.message || err) + '</div></div>';
+      }
+    }finally{
+      ui.btn.disabled = false;
+      ui.btn.textContent = oldText;
+    }
+  }
+
+  function bind(){
+    var ui = ensureUi();
+    if(!ui || !ui.btn || ui.btn.__followMeCreateIsolatedBound20260609) return;
+    ui.btn.__followMeCreateIsolatedBound20260609 = true;
+    ui.btn.addEventListener("click", createQr);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bind);
+  } else {
+    bind();
+  }
+  window.addEventListener("load", bind);
+  window.addEventListener("pageshow", bind);
+})();
+</script>
+
+
 <script id="admin-followme-trial-requests-ui-20260525">
 (function(){
   "use strict";

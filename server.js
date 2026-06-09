@@ -6512,6 +6512,425 @@ app.get('/api/admin/followme/projects', requireAdmin, async (req, res) => {
     });
   }
 });
+
+
+// start-admin-followme-isolated-provisioning-api-20260609
+function followMeSafeSlug20260609(value) {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, '');
+}
+
+function followMeRandomPart20260609(length) {
+  const crypto = require('crypto');
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = crypto.randomBytes(Math.max(16, length * 2));
+  let out = '';
+  for (let i = 0; i < bytes.length && out.length < length; i++) {
+    out += alphabet[bytes[i] % alphabet.length];
+  }
+  while (out.length < length) {
+    out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return out;
+}
+
+function makeFollowMeAdminRandomCode20260609() {
+  return 'FM-' + followMeRandomPart20260609(8);
+}
+
+function makeFollowMeAdminRandomPublicId20260609(code) {
+  const clean = followMeSafeSlug20260609(code).replace(/^FM-?/, '');
+  return 'FM' + clean + followMeRandomPart20260609(3);
+}
+
+function getFollowMeProvisioningRoot20260609() {
+  const path = require('path');
+  const root = process.env.FOLLOWME_STORAGE_DIR
+    ? path.resolve(process.env.FOLLOWME_STORAGE_DIR)
+    : path.join(__dirname, 'data');
+
+  return path.join(root, 'followme', 'projects');
+}
+
+function followMeProjectFolderName20260609(projectId, code) {
+  const safeId = String(projectId || '0').replace(/[^0-9]/g, '') || '0';
+  const safeCode = followMeSafeSlug20260609(code || 'FM');
+  return safeId + '-' + safeCode;
+}
+
+async function ensureFollowMeProvisioningColumns20260609() {
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`).catch(() => null);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS activation_token TEXT`).catch(() => null);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS activation_locked BOOLEAN DEFAULT FALSE`).catch(() => null);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS storage_path TEXT`).catch(() => null);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS storage_key TEXT`).catch(() => null);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS created_by_role TEXT`).catch(() => null);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS chat_mode_enabled BOOLEAN DEFAULT FALSE`).catch(() => null);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS chat_public_token TEXT`).catch(() => null);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS chat_token_rotated_at TIMESTAMPTZ`).catch(() => null);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS bot_enabled BOOLEAN DEFAULT FALSE`).catch(() => null);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS info_requests_enabled BOOLEAN DEFAULT FALSE`).catch(() => null);
+  await pool.query(`ALTER TABLE followme_projects ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`).catch(() => null);
+}
+
+function createFollowMeProvisioningFolders20260609(projectRoot) {
+  const fs = require('fs');
+  const path = require('path');
+
+  [
+    'qr',
+    'documents',
+    'documents/thumbs',
+    'images',
+    'images/original',
+    'images/preview',
+    'voice',
+    'voice/messages',
+    'voice/active',
+    'voice/archive',
+    'chat',
+    'chat/attachments',
+    'chat/voice',
+    'chat/exports',
+    'exports',
+    'logs'
+  ].forEach((dir) => {
+    fs.mkdirSync(path.join(projectRoot, dir), { recursive:true });
+  });
+}
+
+function followMeSimplePage20260609(title, heading, text, code, actionHtml) {
+  const esc = (v) => String(v || '').replace(/[&<>"']/g, (c) => ({
+    '&':'&amp;',
+    '<':'&lt;',
+    '>':'&gt;',
+    '"':'&quot;',
+    "'":'&#39;'
+  }[c]));
+
+  return `<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>${esc(title)}</title>
+  <style>
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f7fb;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;padding:22px}
+    .card{width:min(520px,100%);border-radius:28px;background:#fff;border:1px solid rgba(17,24,39,.08);box-shadow:0 24px 70px rgba(17,24,39,.12);padding:28px}
+    .kicker{font-size:12px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:#3f79d8;margin-bottom:10px}
+    h1{font-size:28px;line-height:1.04;margin:0 0 12px;letter-spacing:-.05em}
+    p{font-size:15px;line-height:1.55;color:#4b5563;margin:0 0 12px}
+    .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+    a{border-radius:999px;padding:12px 15px;background:#111827;color:#fff;text-decoration:none;font-weight:900;font-size:14px}
+    .secondary{background:#eef2ff;color:#233876}
+    .code{margin-top:14px;font-size:12px;font-weight:800;color:#6b7280;word-break:break-word}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="kicker">FollowMe QR</div>
+    <h1>${esc(heading)}</h1>
+    <p>${esc(text)}</p>
+    <div class="code">Codice QR: ${esc(code)}</div>
+    <div class="actions">${actionHtml || ''}</div>
+  </main>
+</body>
+</html>`;
+}
+
+app.get('/followme/qrs/:code/:filename', async (req, res) => {
+  try {
+    await ensureFollowMeProvisioningColumns20260609();
+
+    const code = followMeSafeSlug20260609(req.params.code || '');
+    const filename = String(req.params.filename || '').trim();
+
+    if (!code || !/^followme-[A-Z0-9_-]+-qr\.(png|svg)$/i.test(filename)) {
+      return res.status(400).send('QR non valido.');
+    }
+
+    const q = await pool.query(
+      `SELECT id, code, public_id, storage_path
+       FROM followme_projects
+       WHERE code = $1 OR public_id = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!q.rows.length || !q.rows[0].storage_path) {
+      return res.status(404).send('QR non trovato.');
+    }
+
+    const path = require('path');
+    const full = path.join(q.rows[0].storage_path, 'qr', filename);
+
+    if (!full.startsWith(path.join(q.rows[0].storage_path, 'qr'))) {
+      return res.status(400).send('Percorso non valido.');
+    }
+
+    return res.sendFile(full);
+  } catch (err) {
+    console.error('followme isolated qr file error:', err);
+    return res.status(500).send('Errore caricamento QR.');
+  }
+});
+
+app.get('/fm/expired/:public_id', async (req, res) => {
+  const publicId = String(req.params.public_id || '').trim().toUpperCase();
+  return res.status(402).send(followMeSimplePage20260609(
+    'FollowMe QR scaduto',
+    'QR non attivo',
+    'Questo FollowMe QR è scaduto o deve essere rinnovato. Per riattivarlo sarà necessario procedere con un rinnovo o un pagamento.',
+    publicId,
+    `<a href="/fm/renew/${encodeURIComponent(publicId)}">Procedi al rinnovo</a>`
+  ));
+});
+
+app.get('/fm/pending/:public_id', async (req, res) => {
+  const publicId = String(req.params.public_id || '').trim().toUpperCase();
+  return res.status(200).send(followMeSimplePage20260609(
+    'FollowMe QR in attesa',
+    'QR in attesa di attivazione',
+    'Questo QR è stato creato, ma deve ancora essere completato con i dati richiesti. La procedura di attivazione verrà abilitata nella fase successiva.',
+    publicId,
+    `<a class="secondary" href="/">Torna al sito</a>`
+  ));
+});
+
+app.get('/fm/not-configured/:public_id', async (req, res) => {
+  const publicId = String(req.params.public_id || '').trim().toUpperCase();
+  return res.status(200).send(followMeSimplePage20260609(
+    'FollowMe QR pronto',
+    'QR attivo, non ancora configurato',
+    'Questo QR FollowMe è già attivo, ma non trasmette ancora una destinazione. Apri l’area gestione per impostare link, documento, immagine, chat o messaggio vocale.',
+    publicId,
+    `<a class="secondary" href="/">Torna al sito</a>`
+  ));
+});
+
+app.get('/fm/renew/:public_id', async (req, res) => {
+  const publicId = String(req.params.public_id || '').trim().toUpperCase();
+  return res.status(200).send(followMeSimplePage20260609(
+    'Rinnova FollowMe QR',
+    'Rinnovo FollowMe QR',
+    'Questa è la pagina predisposta per rinnovo o pagamento. Il collegamento al sistema di pagamento verrà aggiunto nella fase successiva.',
+    publicId,
+    `<a class="secondary" href="/">Torna al sito</a>`
+  ));
+});
+
+app.post('/api/admin/followme/create-blank', requireAdmin, express.json({ limit:'32kb' }), async (req, res) => {
+  try {
+    if (typeof ensureFollowMeSchema === 'function') {
+      await ensureFollowMeSchema();
+    }
+
+    await ensureFollowMeProvisioningColumns20260609();
+
+    if (typeof ensureFollowMeChatV2Runtime === 'function') {
+      await ensureFollowMeChatV2Runtime();
+    } else if (typeof ensureFollowMeChatSchemaFast === 'function') {
+      await ensureFollowMeChatSchemaFast();
+    }
+
+    const path = require('path');
+    const fs = require('fs');
+    const crypto = require('crypto');
+    const QRCodeLib = QRCode || require('qrcode');
+
+    const baseUrl = `${req.protocol}://${req.get('host')}`.replace(/\/+$/, '');
+    const validDaysRaw = Number(req.body?.valid_days || 365);
+    const validDays = Number.isFinite(validDaysRaw) && validDaysRaw > 0 && validDaysRaw <= 3650 ? Math.floor(validDaysRaw) : 365;
+    const expiresAt = new Date(Date.now() + validDays * 24 * 60 * 60 * 1000);
+    const activationToken = crypto.randomBytes(24).toString('hex');
+
+    let created = null;
+    let lastErr = null;
+
+    for (let attempt = 0; attempt < 25; attempt++) {
+      try {
+        const code = makeFollowMeAdminRandomCode20260609();
+        const publicId = makeFollowMeAdminRandomPublicId20260609(code);
+        const label = String(req.body?.label || '').trim() || 'Nuovo FollowMe QR';
+
+        const chatToken = typeof makeFollowMeChatV2Token === 'function'
+          ? makeFollowMeChatV2Token()
+          : crypto.randomBytes(18).toString('hex').toUpperCase();
+
+        const ins = await pool.query(
+          `INSERT INTO followme_projects
+           (code, public_id, label, active_url, status, expires_at,
+            activation_token, activation_locked, created_by_role,
+            chat_mode_enabled, chat_public_token, chat_token_rotated_at,
+            bot_enabled, info_requests_enabled, created_at, updated_at)
+           VALUES
+           ($1, $2, $3, $4, $5, $6,
+            $7, $8, $9,
+            $10, $11, NOW(),
+            $12, $13, NOW(), NOW())
+           RETURNING id, code, public_id, label, active_url, status, expires_at,
+                     activation_token, activation_locked, storage_path, storage_key,
+                     chat_mode_enabled, chat_public_token, bot_enabled,
+                     info_requests_enabled, created_at, updated_at`,
+          [
+            code,
+            publicId,
+            label,
+            '',
+            'active',
+            expiresAt,
+            activationToken,
+            false,
+            'admin',
+            false,
+            chatToken,
+            false,
+            false
+          ]
+        );
+
+        const project = ins.rows[0];
+        const storageRoot = getFollowMeProvisioningRoot20260609();
+        const folderName = followMeProjectFolderName20260609(project.id, project.code);
+        const projectRoot = path.join(storageRoot, folderName);
+
+        createFollowMeProvisioningFolders20260609(projectRoot);
+
+        const safePublicId = followMeSafeSlug20260609(project.public_id);
+        const safeCode = followMeSafeSlug20260609(project.code);
+
+        const publicUrl = `/fm/u/${encodeURIComponent(project.public_id)}`;
+        const fullPublicUrl = `${baseUrl}${publicUrl}`;
+        const manageUrl = `/followme-app.html?code=${encodeURIComponent(project.code)}`;
+        const activationUrl = `/fm/activate/${encodeURIComponent(project.public_id)}?token=${encodeURIComponent(activationToken)}`;
+
+        const pngFile = `followme-${safePublicId}-qr.png`;
+        const svgFile = `followme-${safePublicId}-qr.svg`;
+        const pngPath = path.join(projectRoot, 'qr', pngFile);
+        const svgPath = path.join(projectRoot, 'qr', svgFile);
+
+        await QRCodeLib.toFile(pngPath, fullPublicUrl, {
+          type:'png',
+          width:1200,
+          margin:2,
+          errorCorrectionLevel:'H',
+          color:{ dark:'#111111', light:'#FFFFFF' }
+        });
+
+        await QRCodeLib.toFile(svgPath, fullPublicUrl, {
+          type:'svg',
+          margin:2,
+          errorCorrectionLevel:'H',
+          color:{ dark:'#111111', light:'#FFFFFF' }
+        });
+
+        const manifest = {
+          version:'followme-isolated-provisioning-20260609',
+          project_id:project.id,
+          code:project.code,
+          public_id:project.public_id,
+          status:'active',
+          created_by_role:'admin',
+          created_at:new Date().toISOString(),
+          expires_at:expiresAt.toISOString(),
+          public_url:fullPublicUrl,
+          manage_url:`${baseUrl}${manageUrl}`,
+          activation_url:`${baseUrl}${activationUrl}`,
+          storage_key:folderName,
+          folders:[
+            'qr',
+            'documents',
+            'documents/thumbs',
+            'images',
+            'images/original',
+            'images/preview',
+            'voice/messages',
+            'voice/active',
+            'voice/archive',
+            'chat/attachments',
+            'chat/voice',
+            'chat/exports',
+            'exports',
+            'logs'
+          ],
+          files:{
+            qr_png:path.join('qr', pngFile),
+            qr_svg:path.join('qr', svgFile)
+          }
+        };
+
+        fs.writeFileSync(path.join(projectRoot, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
+
+        await pool.query(
+          `UPDATE followme_projects
+           SET storage_path = $2,
+               storage_key = $3,
+               updated_at = NOW()
+           WHERE id = $1`,
+          [project.id, projectRoot, folderName]
+        );
+
+        created = {
+          project:{
+            ...project,
+            storage_path:projectRoot,
+            storage_key:folderName,
+            expires_at:expiresAt.toISOString()
+          },
+          code:project.code,
+          public_id:project.public_id,
+          status:'active',
+          expires_at:expiresAt.toISOString(),
+          valid_days:validDays,
+          public_url:publicUrl,
+          full_public_url:fullPublicUrl,
+          manage_url:manageUrl,
+          full_manage_url:`${baseUrl}${manageUrl}`,
+          activation_url:activationUrl,
+          full_activation_url:`${baseUrl}${activationUrl}`,
+          qr_png_url:`/followme/qrs/${encodeURIComponent(safeCode)}/${encodeURIComponent(pngFile)}`,
+          qr_svg_url:`/followme/qrs/${encodeURIComponent(safeCode)}/${encodeURIComponent(svgFile)}`,
+          storage_key:folderName,
+          storage_path:projectRoot,
+          chat_public_token:chatToken,
+          chat_ready:true,
+          chat_mode_enabled:false,
+          voice_ready:true,
+          documents_ready:true,
+          images_ready:true
+        };
+
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (err && err.code === '23505') continue;
+        throw err;
+      }
+    }
+
+    if (!created) {
+      console.error('admin followme isolated create duplicate attempts failed:', lastErr);
+      return res.status(500).json({
+        success:false,
+        error:'Non sono riuscito a generare un QR FollowMe casuale univoco.'
+      });
+    }
+
+    return res.json({ success:true, ...created });
+  } catch (err) {
+    console.error('admin followme isolated create error:', err);
+    return res.status(500).json({
+      success:false,
+      error:'Errore creazione QR FollowMe isolato.',
+      detail:String(err && err.message ? err.message : err)
+    });
+  }
+});
+// end-admin-followme-isolated-provisioning-api-20260609
+
+
 // end-admin-followme-projects-api-20260525
 
 // start-admin-followme-block-unblock-api-20260525
@@ -17426,6 +17845,73 @@ app.post('/api/followme/:code/voice-messages/:id/listened', express.json({ limit
   }
 });
 
+
+
+
+// FOLLOWME_PUBLIC_STATUS_EXPIRY_PENDING_GUARD_20260609
+// Ordine pubblico ufficiale:
+// 1) scaduto/bloccato -> pagina rinnovo
+// 2) pending -> pagina attesa attivazione
+// 3) active senza active_url -> pagina QR pronto/non configurato
+// poi prosegue verso chat/info/documenti/immagini/active_url.
+app.get('/fm/u/:public_id', async function followMePublicStatusExpiryPendingGuard20260609(req, res, next) {
+  try {
+    if (typeof ensureFollowMeProvisioningColumns20260609 === 'function') {
+      await ensureFollowMeProvisioningColumns20260609();
+    }
+
+    const rawPublicId = String(req.params.public_id || '').trim();
+    const publicId = typeof normalizeFollowMePublicId === 'function'
+      ? normalizeFollowMePublicId(rawPublicId)
+      : rawPublicId.toUpperCase();
+
+    if (!publicId) return next();
+
+    const q = await pool.query(
+      `SELECT id, code, public_id, status, active_url, expires_at, blocked_reason, blocked_at
+       FROM followme_projects
+       WHERE public_id = $1 OR code = $1
+       LIMIT 1`,
+      [publicId]
+    );
+
+    if (!q.rows.length) return next();
+
+    const p = q.rows[0];
+    const status = String(p.status || '').trim().toLowerCase();
+    const activeUrl = String(p.active_url || '').trim();
+
+    if (status === 'blocked' || status === 'expired' || p.blocked_at) {
+      return res.redirect(302, '/fm/expired/' + encodeURIComponent(p.public_id || p.code || publicId));
+    }
+
+    if (p.expires_at && new Date(p.expires_at).getTime() <= Date.now()) {
+      try {
+        await pool.query(
+          `UPDATE followme_projects
+           SET status = CASE WHEN LOWER(COALESCE(status,'')) = 'active' THEN 'expired' ELSE status END,
+               updated_at = NOW()
+           WHERE id = $1`,
+          [p.id]
+        );
+      } catch(e) {}
+      return res.redirect(302, '/fm/expired/' + encodeURIComponent(p.public_id || p.code || publicId));
+    }
+
+    if (status === 'pending') {
+      return res.redirect(302, '/fm/pending/' + encodeURIComponent(p.public_id || p.code || publicId));
+    }
+
+    if (status === 'active' && !activeUrl) {
+      return res.redirect(302, '/fm/not-configured/' + encodeURIComponent(p.public_id || p.code || publicId));
+    }
+
+    return next();
+  } catch (err) {
+    console.error('followme public status/expiry guard error:', err);
+    return next();
+  }
+});
 
 
 // FOLLOWME_PUBLIC_FM_U_CHAT_PRIORITY_RESTORE_20260530
