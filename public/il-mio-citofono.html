@@ -422,6 +422,138 @@
     window.addEventListener("beforeunload", stopAll);
     loadSettings();
     setMode("idle");
-  </script>
+  
+  // IL_MIO_CITOFONO_STATS_UTENTE_20260609
+  function ensureStatsBox(){
+    var box = document.getElementById("webrtcStatsBox");
+    if(box) return box;
+
+    box = document.createElement("pre");
+    box.id = "webrtcStatsBox";
+    box.style.whiteSpace = "pre-wrap";
+    box.style.fontSize = "12px";
+    box.style.lineHeight = "1.35";
+    box.style.margin = "14px auto";
+    box.style.maxWidth = "420px";
+    box.style.padding = "12px";
+    box.style.borderRadius = "14px";
+    box.style.background = "#020617";
+    box.style.color = "#dbeafe";
+    box.style.textAlign = "left";
+    box.textContent = "UTENTE WebRTC stats in attesa...";
+    document.body.appendChild(box);
+    return box;
+  }
+
+  async function updateWebrtcStats(){
+    var box = ensureStatsBox();
+    var pc = typeof userPeer !== "undefined" ? userPeer : null;
+    var localStream = typeof userStream !== "undefined" ? userStream : null;
+    var audioEl = typeof remoteAudio !== "undefined" ? remoteAudio : null;
+
+    var lines = [];
+    lines.push("UTENTE WEBRTC LIVE");
+    lines.push("time=" + new Date().toLocaleTimeString());
+
+    if(!pc){
+      lines.push("pc=null");
+      box.textContent = lines.join("\n");
+      return;
+    }
+
+    lines.push("pc.connectionState=" + pc.connectionState);
+    lines.push("pc.iceConnectionState=" + pc.iceConnectionState);
+    lines.push("pc.signalingState=" + pc.signalingState);
+
+    try{
+      var senders = pc.getSenders ? pc.getSenders() : [];
+      var receivers = pc.getReceivers ? pc.getReceivers() : [];
+      lines.push("senders=" + senders.length);
+      lines.push("receivers=" + receivers.length);
+
+      senders.forEach(function(sender, i){
+        var t = sender.track;
+        if(t){
+          lines.push("sender[" + i + "] kind=" + t.kind + " enabled=" + t.enabled + " muted=" + t.muted + " readyState=" + t.readyState);
+        }
+      });
+
+      receivers.forEach(function(receiver, i){
+        var t = receiver.track;
+        if(t){
+          lines.push("receiver[" + i + "] kind=" + t.kind + " enabled=" + t.enabled + " muted=" + t.muted + " readyState=" + t.readyState);
+        }
+      });
+    }catch(e){
+      lines.push("tracks error=" + (e.message || e));
+    }
+
+    try{
+      if(localStream){
+        var lt = localStream.getAudioTracks ? localStream.getAudioTracks() : [];
+        lines.push("localAudioTracks=" + lt.length);
+        lt.forEach(function(t, i){
+          lines.push("local[" + i + "] enabled=" + t.enabled + " muted=" + t.muted + " readyState=" + t.readyState + " label=" + (t.label || ""));
+        });
+      }else{
+        lines.push("localStream=null");
+      }
+    }catch(e){}
+
+    try{
+      if(audioEl){
+        lines.push("remoteAudio exists=true paused=" + audioEl.paused + " muted=" + audioEl.muted + " volume=" + audioEl.volume + " readyState=" + audioEl.readyState);
+        var rs = audioEl.srcObject;
+        if(rs && rs.getAudioTracks){
+          var rt = rs.getAudioTracks();
+          lines.push("remoteAudioTracks=" + rt.length);
+          rt.forEach(function(t, i){
+            lines.push("remote[" + i + "] enabled=" + t.enabled + " muted=" + t.muted + " readyState=" + t.readyState + " label=" + (t.label || ""));
+          });
+        }else{
+          lines.push("remoteAudio.srcObject=null");
+        }
+      }else{
+        lines.push("remoteAudio=null");
+      }
+    }catch(e){}
+
+    var bytesSent = 0;
+    var packetsSent = 0;
+    var bytesReceived = 0;
+    var packetsReceived = 0;
+    var audioReports = 0;
+
+    try{
+      var stats = await pc.getStats();
+      stats.forEach(function(report){
+        if(report.type === "outbound-rtp" && (report.kind === "audio" || report.mediaType === "audio")){
+          audioReports++;
+          bytesSent += report.bytesSent || 0;
+          packetsSent += report.packetsSent || 0;
+        }
+        if(report.type === "inbound-rtp" && (report.kind === "audio" || report.mediaType === "audio")){
+          audioReports++;
+          bytesReceived += report.bytesReceived || 0;
+          packetsReceived += report.packetsReceived || 0;
+        }
+      });
+    }catch(e){
+      lines.push("getStats error=" + (e.message || e));
+    }
+
+    lines.push("audioReports=" + audioReports);
+    lines.push("bytesSent=" + bytesSent);
+    lines.push("packetsSent=" + packetsSent);
+    lines.push("bytesReceived=" + bytesReceived);
+    lines.push("packetsReceived=" + packetsReceived);
+
+    box.textContent = lines.join("\n");
+  }
+
+  setInterval(updateWebrtcStats, 1000);
+  setTimeout(updateWebrtcStats, 1200);
+
+</script>
 </body>
 </html>
