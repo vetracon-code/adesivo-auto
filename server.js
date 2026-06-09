@@ -9026,6 +9026,52 @@ app.post('/api/admin/reactivate-code', requireAdmin, async (req, res) => {
   }
 });
 
+
+
+// CITOFONAMI_LATEST_ANSWERED_OPEN_FIX_20260609
+// Rende interrogabile l'ultima chiamata anche dopo che l'admin ha risposto.
+// Serve al clone leggero: la chiamata non deve sparire appena passa da pending ad answered.
+app.get('/api/citofonami/:code/calls/latest-open', (req, res) => {
+  try {
+    const code = String(req.params.code || '').trim().toUpperCase();
+
+    if (!global.citofonamiCalls) {
+      global.citofonamiCalls = {};
+    }
+
+    const all = Object.values(global.citofonamiCalls || {})
+      .filter(call => String(call.code || '').trim().toUpperCase() === code)
+      .filter(call => ['pending', 'answered', 'open', 'ringing'].includes(String(call.status || '').toLowerCase()))
+      .sort((a, b) => {
+        const ad = new Date(a.updatedAt || a.createdAt || 0).getTime();
+        const bd = new Date(b.updatedAt || b.createdAt || 0).getTime();
+        return bd - ad;
+      });
+
+    const call = all[0];
+
+    if (!call) {
+      return res.status(404).json({
+        ok: false,
+        error: 'Chiamata aperta non trovata'
+      });
+    }
+
+    return res.json({
+      ok: true,
+      code,
+      call
+    });
+  } catch (err) {
+    console.error('citofonami latest-open error:', err);
+    return res.status(500).json({
+      ok: false,
+      error: 'Errore lettura ultima chiamata aperta'
+    });
+  }
+});
+
+
 async function initDb() {
   try {
     await pool.query(`
