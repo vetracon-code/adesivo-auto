@@ -73,20 +73,24 @@
 
 
 
+
 <script>
   const $ = id => document.getElementById(id);
 
   const CODE = new URLSearchParams(location.search).get("code") || "DEMO";
 
+  let currentCallId = null;
+  let offerReceived = null;
+  let adminAnswered = false;
+
   let userPeer = null;
   let userStream = null;
   let remoteAudio = null;
+
   let statusTimer = null;
   let offerTimer = null;
   let iceTimer = null;
-  let currentCallId = null;
-  let adminAnswered = false;
-  let offerReceived = null;
+
   let mode = "idle";
   const seenAdminIce = new Set();
 
@@ -95,22 +99,66 @@
   }
 
   function setHint(text){
-    $("hint").textContent = text;
-    console.log("[IL-MIO-CITOFONO USER]", text);
+    const el = $("hint");
+    if(el) el.textContent = text;
+    console.log("[USER]", text);
   }
 
   function setNote(text, ok){
-    const n = $("audioNote");
-    if(!n) return;
-    n.textContent = text;
-    n.classList.add("show");
-    n.classList.toggle("ok", !!ok);
+    const el = $("audioNote");
+    if(!el) return;
+    el.textContent = text;
+    el.classList.add("show");
+    el.classList.toggle("ok", !!ok);
   }
 
   function setDebug(text){
     const el = $("audioDebug");
     if(el) el.textContent = text || "";
-    console.log("[IL-MIO-CITOFONO USER DEBUG]", text || "");
+    console.log("[USER DEBUG]", text || "");
+  }
+
+  function setButton(text, disabled){
+    const btn = $("ringBtn");
+    if(!btn) return;
+    btn.textContent = text;
+    btn.disabled = !!disabled;
+  }
+
+  function setMode(next){
+    mode = next;
+    const btn = $("ringBtn");
+    if(!btn) return;
+
+    if(next === "idle"){
+      btn.style.background = "";
+      setButton("🔔 SUONA", false);
+    }
+
+    if(next === "ringing"){
+      btn.style.background = "";
+      setButton("CHIAMATA IN CORSO", true);
+    }
+
+    if(next === "talk-ready"){
+      btn.style.background = "linear-gradient(135deg,#22c55e,#16a34a)";
+      setButton("🎙️ PARLA ORA", false);
+    }
+
+    if(next === "mic"){
+      btn.style.background = "linear-gradient(135deg,#f59e0b,#ea580c)";
+      setButton("AUTORIZZA MICROFONO", false);
+    }
+
+    if(next === "connecting"){
+      btn.style.background = "linear-gradient(135deg,#22c55e,#16a34a)";
+      setButton("COLLEGO AUDIO...", true);
+    }
+
+    if(next === "connected"){
+      btn.style.background = "linear-gradient(135deg,#22c55e,#16a34a)";
+      setButton("AUDIO ATTIVO", true);
+    }
   }
 
   function callerId(){
@@ -122,54 +170,12 @@
     return id;
   }
 
-  function setMainButton(text, disabled){
-    const btn = $("ringBtn");
-    if(!btn) return;
-    btn.textContent = text;
-    btn.disabled = !!disabled;
-  }
-
-  function setMode(nextMode){
-    mode = nextMode;
-    const btn = $("ringBtn");
-    if(!btn) return;
-
-    if(mode === "idle"){
-      btn.style.background = "";
-      setMainButton("🔔 SUONA", false);
-    }
-
-    if(mode === "ringing"){
-      btn.style.background = "";
-      setMainButton("CHIAMATA IN CORSO", true);
-    }
-
-    if(mode === "talk-ready"){
-      btn.style.background = "linear-gradient(135deg,#22c55e,#16a34a)";
-      setMainButton("🎙️ PARLA ORA", false);
-    }
-
-    if(mode === "mic-permission"){
-      btn.style.background = "linear-gradient(135deg,#f59e0b,#ea580c)";
-      setMainButton("AUTORIZZA MICROFONO", false);
-    }
-
-    if(mode === "connecting"){
-      btn.style.background = "linear-gradient(135deg,#22c55e,#16a34a)";
-      setMainButton("COLLEGO AUDIO...", true);
-    }
-
-    if(mode === "connected"){
-      btn.style.background = "linear-gradient(135deg,#22c55e,#16a34a)";
-      setMainButton("AUDIO ATTIVO", true);
-    }
-  }
-
   async function loadSettings(){
     try{
       const res = await fetch(api("/config?t=" + Date.now()), { cache:"no-store" });
       const data = await res.json();
       const c = data.config || data || {};
+
       const name = c.name || c.displayName || c.doorName || localStorage.getItem("ilMioCitofono.name") || "Casa Rossi";
       const address = c.address || localStorage.getItem("ilMioCitofono.address") || "Via Roma 123, Milano";
 
@@ -187,7 +193,7 @@
     }
   }
 
-  function createRemoteAudioShell(){
+  function makeRemoteAudio(){
     if(remoteAudio) return remoteAudio;
 
     remoteAudio = document.createElement("audio");
@@ -200,151 +206,67 @@
     remoteAudio.muted = false;
     remoteAudio.volume = 1;
     remoteAudio.style.position = "fixed";
-    remoteAudio.style.left = "-9999px";
+    remoteAudio.style.left = "0";
+    remoteAudio.style.bottom = "0";
     remoteAudio.style.width = "1px";
     remoteAudio.style.height = "1px";
+    remoteAudio.style.opacity = "0.01";
     document.body.appendChild(remoteAudio);
 
     return remoteAudio;
   }
 
-  async function checkMicPermissionState(){
-    try{
-      if(navigator.permissions && navigator.permissions.query){
-        const status = await navigator.permissions.query({ name:"microphone" });
-        setDebug("Permesso microfono browser: " + status.state);
-        return status.state;
-      }
-    }catch(e){}
-    return "unknown";
-  }
-
-  async function requestAndroidNativeMicrophonePrompt(){
+  async function openUserMicrophoneDirect(){
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-      throw new Error("Microfono non disponibile su questo browser.");
+      throw new Error("Microfono non supportato da questo browser.");
     }
 
-    const permissionState = await checkMicPermissionState();
-
-    if(permissionState === "denied"){
-      throw new Error("Microfono bloccato nel browser. Vai su Chrome > Impostazioni sito > Microfono e consenti questo sito.");
-    }
-
-    setHint("Android deve chiedere ora il microfono.");
-    setNote("Conferma il popup nativo di Android/Chrome per usare il microfono.", false);
-    setDebug("Chiamo ORA getUserMedia({ audio:true }) da click reale...");
+    setHint("Autorizza il microfono.");
+    setNote("Conferma il popup del telefono per usare il microfono.", false);
+    setDebug("getUserMedia({audio:true}) avviato dal click utente...");
 
     let stream;
 
     try{
-      /*
-        IMPORTANTE:
-        Questa chiamata è volutamente diretta e semplice.
-        Su Android/Chrome è quella che deve far comparire il frame nativo:
-        “Consenti a questo sito di usare il microfono?”
-      */
-      stream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false });
-    }catch(error){
-      const name = error && error.name ? error.name : "Errore";
-
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false
+      });
+    }catch(e){
+      const name = e && e.name ? e.name : "Errore";
       if(name === "NotAllowedError" || name === "PermissionDeniedError"){
-        throw new Error("Autorizzazione microfono negata o già bloccata. Riabilitala nelle impostazioni del sito.");
+        throw new Error("Microfono negato o bloccato. Apri le impostazioni del sito e consenti il microfono.");
       }
-
-      if(name === "NotFoundError" || name === "DevicesNotFoundError"){
-        throw new Error("Nessun microfono trovato sul dispositivo.");
+      if(name === "NotFoundError"){
+        throw new Error("Nessun microfono trovato.");
       }
-
-      if(name === "NotReadableError" || name === "TrackStartError"){
-        throw new Error("Microfono occupato da un’altra app o non avviabile.");
+      if(name === "NotReadableError"){
+        throw new Error("Microfono occupato o non avviabile.");
       }
-
-      throw new Error(name + ": " + (error.message || "microfono non attivato"));
+      throw new Error(name + ": " + (e.message || "microfono non attivato"));
     }
 
     const tracks = stream.getAudioTracks();
 
     if(!tracks || !tracks.length){
       try{ stream.getTracks().forEach(t => t.stop()); }catch(e){}
-      throw new Error("Android non ha restituito nessuna traccia microfono.");
+      throw new Error("Microfono non restituito dal dispositivo.");
     }
 
     const track = tracks[0];
-
-    // Forzo proprietà attive.
     track.enabled = true;
 
     if(track.readyState !== "live"){
       try{ stream.getTracks().forEach(t => t.stop()); }catch(e){}
-      throw new Error("Il microfono non è live dopo l’autorizzazione.");
+      throw new Error("Microfono non live.");
     }
 
     userStream = stream;
 
-    setDebug("Microfono LIVE: " + (track.label || "microfono") + " · enabled=" + track.enabled + " · muted=" + track.muted);
-    setHint("Microfono autorizzato.");
-    setNote("Microfono attivo. Collegamento audio in corso.", true);
+    setDebug("MIC LIVE: " + (track.label || "microfono") + " · enabled=" + track.enabled + " · muted=" + track.muted);
+    setNote("Microfono attivo. Preparo risposta audio.", true);
 
     return stream;
-  }
-
-  async function unlockPlaybackAfterMicGesture(){
-    const audio = createRemoteAudioShell();
-
-    try{
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if(AudioCtx){
-        window.__citofonamiUserAudioCtx = window.__citofonamiUserAudioCtx || new AudioCtx();
-        if(window.__citofonamiUserAudioCtx.state === "suspended"){
-          await window.__citofonamiUserAudioCtx.resume();
-        }
-      }
-    }catch(e){}
-
-    try{
-      audio.muted = false;
-      audio.volume = 1;
-      const p = audio.play();
-      if(p && p.catch) p.catch(() => {});
-    }catch(e){}
-
-    return audio;
-  }
-
-  function stopAll(){
-    clearInterval(statusTimer);
-    clearInterval(offerTimer);
-    clearInterval(iceTimer);
-    statusTimer = null;
-    offerTimer = null;
-    iceTimer = null;
-
-    if(userPeer){
-      try{ userPeer.close(); }catch(e){}
-      userPeer = null;
-    }
-
-    if(userStream){
-      userStream.getTracks().forEach(t => {
-        try{ t.stop(); }catch(e){}
-      });
-      userStream = null;
-    }
-
-    if(remoteAudio){
-      try{
-        remoteAudio.pause();
-        remoteAudio.srcObject = null;
-        remoteAudio.remove();
-      }catch(e){}
-      remoteAudio = null;
-    }
-
-    seenAdminIce.clear();
-    currentCallId = null;
-    adminAnswered = false;
-    offerReceived = null;
-    setMode("idle");
   }
 
   async function ring(){
@@ -354,7 +276,7 @@
 
     try{
       setHint("Invio chiamata all'admin...");
-      setNote("Attendi la risposta. Quando l’admin accetta, premi PARLA ORA.", false);
+      setNote("Attendi la risposta. Poi premi PARLA ORA.", false);
 
       const res = await fetch(api("/ring-v2"), {
         method:"POST",
@@ -363,12 +285,12 @@
           callerId: callerId(),
           source: "il-mio-citofono",
           lightClone: true,
-          userAgent: (navigator.userAgent + " IL_MIO_CITOFONO_LIGHT_CLONE"),
+          userAgent: navigator.userAgent + " IL_MIO_CITOFONO_LIGHT_CLONE",
           locationEnabled: false,
           geofenceEnabled: false,
           requireLocation: false,
           radiusDisabled: true,
-          door: {
+          door:{
             name: $("name").textContent || "Il mio citofono",
             description: $("address").textContent || ""
           }
@@ -378,27 +300,25 @@
       const data = await res.json();
 
       if(!data.ok){
-        throw new Error(data.error || data.message || "Chiamata non accettata dal server.");
+        throw new Error(data.error || data.message || "Chiamata non accettata.");
       }
 
       const call = data.call || data.pendingCall || data;
       currentCallId = data.callId || call.id || call.callId;
 
       if(!currentCallId){
-        throw new Error("CallId non ricevuto dal server.");
+        throw new Error("CallId mancante.");
       }
 
       setHint("Chiamata inviata. Attendi la risposta...");
-      setDebug("callId: " + currentCallId);
+      setDebug("callId=" + currentCallId);
 
       statusTimer = setInterval(() => pollStatus(currentCallId), 700);
       offerTimer = setInterval(() => pollOffer(currentCallId), 700);
 
     }catch(e){
-      console.error("[IL-MIO-CITOFONO] errore ring:", e);
       setHint("Errore chiamata: " + (e.message || e));
       setNote("Chiamata non avviata. Riprova.", false);
-      $("speaker").classList.remove("active");
       stopAll();
     }
   }
@@ -409,20 +329,19 @@
       const data = await res.json();
       const status = data.status || (data.call && data.call.status) || "";
 
-      setDebug("callId: " + callId + " · stato: " + (status || "in attesa"));
+      setDebug("callId=" + callId + " · status=" + (status || "pending"));
 
       if(status === "answered" && !adminAnswered){
         adminAnswered = true;
         setHint("Admin ha risposto.");
-        setNote("Premi PARLA ORA, poi AUTORIZZA MICROFONO.", false);
+        setNote("Premi PARLA ORA per attivare microfono e audio.", false);
         setMode("talk-ready");
       }
 
       if(status === "closed" || status === "rejected" || status === "ended"){
         setHint("Conversazione chiusa.");
-        setNote("Conversazione chiusa. Microfono spento.", true);
+        setNote("Microfono spento.", true);
         $("closed").style.display = "block";
-        $("speaker").classList.remove("active");
         stopAll();
       }
     }catch(e){}
@@ -433,30 +352,31 @@
       const res = await fetch(api(`/calls/${encodeURIComponent(callId)}/webrtc/offer?t=${Date.now()}`), { cache:"no-store" });
       const data = await res.json();
 
-      if(!data.ok || !data.offer) return;
-
-      offerReceived = data.offer;
-      setDebug("Offer admin ricevuta.");
-
-      if(adminAnswered){
-        setMode("talk-ready");
+      if(data.ok && data.offer){
+        offerReceived = data.offer;
+        setDebug("Offer ricevuta.");
+        if(adminAnswered) setMode("talk-ready");
+        clearInterval(offerTimer);
+        offerTimer = null;
       }
-
-      clearInterval(offerTimer);
-      offerTimer = null;
-
     }catch(e){}
   }
 
-  function prepareTalkStep(){
-    setHint("Autorizza il microfono.");
-    setNote("Ora premi AUTORIZZA MICROFONO: Android deve mostrare il popup nativo.", false);
-    setMode("mic-permission");
+  function prepareTalk(){
+    if(!currentCallId){
+      setHint("Chiamata non trovata.");
+      setMode("idle");
+      return;
+    }
+
+    setHint("Ora autorizza il microfono.");
+    setNote("Premi AUTORIZZA MICROFONO: deve aprirsi il popup del telefono.", false);
+    setMode("mic");
   }
 
-  async function confirmMicrophoneAndConnect(){
+  async function authorizeMicAndAnswer(){
     if(!currentCallId){
-      setHint("Chiamata non trovata. Riprova.");
+      setHint("Chiamata non trovata.");
       setMode("idle");
       return;
     }
@@ -465,15 +385,19 @@
 
     try{
       /*
-        QUI È IL PUNTO CHIAVE:
-        prima getUserMedia diretto, immediato, nel click su AUTORIZZA MICROFONO.
-        Solo dopo sblocchiamo playback e creiamo la answer.
+        ORDINE CORRETTO:
+        1. microfono utente
+        2. peer connection
+        3. addTrack
+        4. setRemoteDescription(offer)
+        5. createAnswer
+        6. setLocalDescription
+        7. POST answer
       */
-      await requestAndroidNativeMicrophonePrompt();
-      await unlockPlaybackAfterMicGesture();
+      await openUserMicrophoneDirect();
 
       if(!offerReceived){
-        setHint("Attendo collegamento admin...");
+        setHint("Attendo offer admin...");
         await waitOffer(currentCallId);
       }
 
@@ -481,13 +405,12 @@
         throw new Error("Offer admin non ricevuta.");
       }
 
-      await createAnswer(currentCallId, offerReceived);
+      await createUserAnswer(currentCallId, offerReceived);
 
     }catch(e){
-      console.error("[IL-MIO-CITOFONO] confirmMicrophoneAndConnect error:", e);
-      setHint("Errore microfono: " + (e.message || e));
-      setNote("Microfono non attivo. Controlla permessi del sito e riprova.", false);
-      setMode("mic-permission");
+      setHint("Errore audio: " + (e.message || e));
+      setNote("Microfono/audio non attivi. Riprova dal pulsante.", false);
+      setMode("mic");
     }
   }
 
@@ -496,71 +419,66 @@
       try{
         const res = await fetch(api(`/calls/${encodeURIComponent(callId)}/webrtc/offer?t=${Date.now()}`), { cache:"no-store" });
         const data = await res.json();
-
         if(data.ok && data.offer){
           offerReceived = data.offer;
-          setDebug("Offer admin ricevuta dopo attesa.");
+          setDebug("Offer ricevuta dopo attesa.");
           return;
         }
       }catch(e){}
-
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(r => setTimeout(r, 500));
     }
   }
 
-  async function createAnswer(callId, offer){
+  async function createUserAnswer(callId, offer){
     if(!userStream){
       throw new Error("Microfono utente non pronto.");
     }
 
-    const audio = createRemoteAudioShell();
+    const audio = makeRemoteAudio();
 
     userPeer = new RTCPeerConnection({
-      iceServers:[{ urls:["stun:stun.l.google.com:19302"] }]
-    });
-
-    userStream.getTracks().forEach(track => {
-      track.enabled = true;
-      userPeer.addTrack(track, userStream);
+      iceServers:[
+        { urls:["stun:stun.l.google.com:19302"] }
+      ]
     });
 
     userPeer.ontrack = event => {
-      const stream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream([event.track]);
+      const remoteStream = event.streams && event.streams[0]
+        ? event.streams[0]
+        : new MediaStream([event.track]);
 
-      audio.srcObject = stream;
+      audio.srcObject = remoteStream;
       audio.muted = false;
       audio.volume = 1;
 
-      const playPromise = audio.play();
-
-      if(playPromise && playPromise.catch){
-        playPromise.catch(err => {
-          setHint("Audio pronto. Tocca AUTORIZZA MICROFONO di nuovo se non senti.");
-          setDebug("Playback remoto bloccato: " + (err.message || err));
-          setMode("mic-permission");
+      const p = audio.play();
+      if(p && p.catch){
+        p.catch(err => {
+          setHint("Audio pronto. Tocca ancora AUTORIZZA MICROFONO se non senti.");
+          setDebug("play remoto bloccato: " + (err.message || err));
+          setMode("mic");
         });
       }
 
       setHint("Parla ora.");
-      setNote("Microfono e vivavoce attivi. Parla ora.", true);
+      setNote("Microfono e audio attivi. Parla ora.", true);
       setMode("connected");
     };
 
     userPeer.onconnectionstatechange = () => {
       if(!userPeer) return;
-      const st = userPeer.connectionState;
-      setDebug("Connessione: " + st + " · ICE: " + userPeer.iceConnectionState);
+      setDebug("pc=" + userPeer.connectionState + " · ice=" + userPeer.iceConnectionState);
 
-      if(st === "connected"){
+      if(userPeer.connectionState === "connected"){
         setHint("Audio collegato. Parla ora.");
-        setNote("Microfono e vivavoce attivi. Parla ora.", true);
+        setNote("Microfono e audio attivi. Parla ora.", true);
         setMode("connected");
       }
     };
 
     userPeer.oniceconnectionstatechange = () => {
       if(!userPeer) return;
-      setDebug("Connessione: " + userPeer.connectionState + " · ICE: " + userPeer.iceConnectionState);
+      setDebug("pc=" + userPeer.connectionState + " · ice=" + userPeer.iceConnectionState);
     };
 
     userPeer.onicecandidate = event => {
@@ -568,12 +486,24 @@
         fetch(api(`/calls/${encodeURIComponent(callId)}/webrtc/ice`), {
           method:"POST",
           headers:{ "Content-Type":"application/json" },
-          body:JSON.stringify({ role:"user", candidate:event.candidate })
+          body:JSON.stringify({
+            role:"user",
+            candidate:event.candidate
+          })
         }).catch(()=>{});
       }
     };
 
-    await userPeer.setRemoteDescription(offer);
+    /*
+      CRITICO:
+      Il microfono va aggiunto PRIMA della answer.
+    */
+    userStream.getAudioTracks().forEach(track => {
+      track.enabled = true;
+      userPeer.addTrack(track, userStream);
+    });
+
+    await userPeer.setRemoteDescription(new RTCSessionDescription(offer));
 
     const answer = await userPeer.createAnswer();
     await userPeer.setLocalDescription(answer);
@@ -581,13 +511,16 @@
     await fetch(api(`/calls/${encodeURIComponent(callId)}/webrtc/answer`), {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ answer:userPeer.localDescription })
+      body:JSON.stringify({
+        answer:userPeer.localDescription
+      })
     });
 
-    setHint("Risposta inviata. Collegamento audio...");
-    setNote("Microfono autorizzato. Vivavoce in attivazione.", true);
-    setDebug("Answer inviata all’admin · attendo ICE");
+    setHint("Risposta audio inviata all’admin.");
+    setNote("Collegamento audio in corso.", true);
+    setDebug("Answer POST ok.");
 
+    clearInterval(iceTimer);
     iceTimer = setInterval(() => pollAdminIce(callId), 700);
   }
 
@@ -613,6 +546,43 @@
     }catch(e){}
   }
 
+  function stopAll(){
+    clearInterval(statusTimer);
+    clearInterval(offerTimer);
+    clearInterval(iceTimer);
+
+    statusTimer = null;
+    offerTimer = null;
+    iceTimer = null;
+
+    if(userPeer){
+      try{ userPeer.close(); }catch(e){}
+      userPeer = null;
+    }
+
+    if(userStream){
+      try{ userStream.getTracks().forEach(t => t.stop()); }catch(e){}
+      userStream = null;
+    }
+
+    if(remoteAudio){
+      try{
+        remoteAudio.pause();
+        remoteAudio.srcObject = null;
+        remoteAudio.remove();
+      }catch(e){}
+      remoteAudio = null;
+    }
+
+    currentCallId = null;
+    offerReceived = null;
+    adminAnswered = false;
+    seenAdminIce.clear();
+
+    $("speaker").classList.remove("active");
+    setMode("idle");
+  }
+
   $("ringBtn").addEventListener("click", () => {
     if(mode === "idle"){
       ring();
@@ -620,23 +590,22 @@
     }
 
     if(mode === "talk-ready"){
-      prepareTalkStep();
+      prepareTalk();
       return;
     }
 
-    if(mode === "mic-permission"){
-      confirmMicrophoneAndConnect();
+    if(mode === "mic"){
+      authorizeMicAndAnswer();
       return;
     }
   });
 
-  window.addEventListener("beforeunload", () => {
-    stopAll();
-  });
+  window.addEventListener("beforeunload", stopAll);
 
   loadSettings();
   setMode("idle");
 </script>
+
 
 
 
