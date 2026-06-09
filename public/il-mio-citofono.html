@@ -180,20 +180,67 @@
     if(remoteAudio) return remoteAudio;
 
     remoteAudio = document.createElement("audio");
+    remoteAudio.id = "citofonamiUserRemoteAudio";
     remoteAudio.autoplay = true;
     remoteAudio.playsInline = true;
+    remoteAudio.setAttribute("playsinline", "true");
+    remoteAudio.setAttribute("webkit-playsinline", "true");
     remoteAudio.controls = false;
     remoteAudio.muted = false;
     remoteAudio.volume = 1;
+    remoteAudio.style.position = "fixed";
+    remoteAudio.style.left = "-9999px";
+    remoteAudio.style.width = "1px";
+    remoteAudio.style.height = "1px";
     document.body.appendChild(remoteAudio);
 
-    // Tentativo non bloccante, poi il vero play avverrà quando arriva la track.
-    try{
-      const p = remoteAudio.play();
-      if(p && p.catch) p.catch(() => {});
-    }catch(e){}
-
     return remoteAudio;
+  }
+
+  async function unlockUserAudioFromGesture(){
+    const audio = createRemoteAudioShell();
+
+    setHint("Attivo audio e vivavoce...");
+    setNote("Sto preparando ascolto e microfono.", false);
+
+    // Su Android spesso basta questo; su iPhone serve che avvenga nel gesto reale.
+    try{
+      audio.muted = true;
+      const p1 = audio.play();
+      if(p1 && p1.catch) await p1.catch(() => null);
+      audio.pause();
+      audio.currentTime = 0;
+      audio.muted = false;
+      audio.volume = 1;
+    }catch(e){
+      console.warn("[IL-MIO-CITOFONO] unlock audio element:", e);
+    }
+
+    // Sblocco WebAudio per Safari/iOS e Chrome Android.
+    try{
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if(AudioCtx){
+        window.__citofonamiUserAudioCtx = window.__citofonamiUserAudioCtx || new AudioCtx();
+        if(window.__citofonamiUserAudioCtx.state === "suspended"){
+          await window.__citofonamiUserAudioCtx.resume();
+        }
+
+        // Micro-suono silenzioso, utile a sbloccare il contesto audio.
+        const ctx = window.__citofonamiUserAudioCtx;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        gain.gain.value = 0.00001;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.03);
+      }
+    }catch(e){
+      console.warn("[IL-MIO-CITOFONO] unlock AudioContext:", e);
+    }
+
+    setDebug("Audio utente sbloccato dal gesto PARLA ORA.");
+    return audio;
   }
 
   async function requestUserMic(){
@@ -201,8 +248,8 @@
       throw new Error("Microfono non disponibile su questo browser.");
     }
 
-    setHint("Autorizza il microfono.");
-    setNote("Consenti il microfono per parlare con l’admin.", false);
+    setHint("Autorizza microfono e audio.");
+    setNote("Consenti microfono e audio per parlare con l’admin.", false);
 
     const stream = await navigator.mediaDevices.getUserMedia({
       audio:{
@@ -389,13 +436,14 @@
     }
 
     setMode("connecting");
-    setHint("Attivo microfono e vivavoce...");
-    setNote("Consenti il microfono. Poi potrai parlare.", false);
+    setHint("Attivo audio, microfono e vivavoce...");
+    setNote("Consenti il microfono. Poi potrai parlare e ascoltare.", false);
 
     try{
-      createRemoteAudioShell();
+      // Fondamentale: deve avvenire nel click reale su PARLA ORA.
+      await unlockUserAudioFromGesture();
 
-      // Gesto reale dell’utente: qui il browser deve chiedere microfono.
+      // Sempre nello stesso gesto, chiediamo il microfono.
       await requestUserMic();
 
       if(!offerReceived){
@@ -456,13 +504,17 @@
       audio.muted = false;
       audio.volume = 1;
 
+      audio.muted = false;
+      audio.volume = 1;
+
       const playPromise = audio.play();
 
       if(playPromise && playPromise.catch){
         playPromise.catch(err => {
           console.warn("[IL-MIO-CITOFONO] play remoto bloccato:", err);
-          setHint("Audio pronto. Tocca lo schermo se non senti.");
+          setHint("Audio pronto. Tocca PARLA ORA di nuovo se non senti.");
           setDebug("Playback remoto bloccato: " + (err.message || err));
+          setMode("talk-ready");
         });
       }
 
