@@ -6928,6 +6928,400 @@ app.post('/api/admin/followme/create-blank', requireAdmin, express.json({ limit:
     });
   }
 });
+
+
+// start-followme-url-only-activation-20260609
+function normalizeFollowMeActivationUrl20260609(value) {
+  let url = String(value || '').trim();
+
+  if (!url) {
+    return '';
+  }
+
+  if (!/^https?:\/\//i.test(url)) {
+    url = 'https://' + url;
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch (err) {
+    throw new Error('Inserisci un indirizzo valido.');
+  }
+
+  if (!/^https?:$/i.test(parsed.protocol)) {
+    throw new Error('Sono ammessi solo link http o https.');
+  }
+
+  return parsed.toString();
+}
+
+function followMeActivateUrlPage20260609(project, errorMessage) {
+  const esc = (v) => String(v || '').replace(/[&<>"']/g, (c) => ({
+    '&':'&amp;',
+    '<':'&lt;',
+    '>':'&gt;',
+    '"':'&quot;',
+    "'":'&#39;'
+  }[c]));
+
+  const publicId = project && (project.public_id || project.code) ? String(project.public_id || project.code) : '';
+  const action = '/api/followme/' + encodeURIComponent(publicId) + '/activate-url';
+
+  return `<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Attiva il tuo FollowMe QR</title>
+  <style>
+    :root{
+      --bg:#f5f7fb;
+      --card:#ffffff;
+      --text:#111827;
+      --muted:#64748b;
+      --line:rgba(17,24,39,.09);
+      --blue:#3f79d8;
+      --dark:#111827;
+      --err:#b91c1c;
+      --errbg:#fef2f2;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      min-height:100vh;
+      display:grid;
+      place-items:center;
+      background:
+        radial-gradient(circle at top left, rgba(63,121,216,.16), transparent 34%),
+        var(--bg);
+      color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+      padding:22px;
+    }
+    .card{
+      width:min(520px,100%);
+      border-radius:30px;
+      background:var(--card);
+      border:1px solid var(--line);
+      box-shadow:0 24px 80px rgba(17,24,39,.13);
+      padding:28px;
+    }
+    .kicker{
+      display:inline-flex;
+      border-radius:999px;
+      padding:7px 10px;
+      background:#eef4ff;
+      color:#2459a8;
+      font-size:12px;
+      font-weight:950;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      margin-bottom:14px;
+    }
+    h1{
+      margin:0 0 10px;
+      font-size:30px;
+      line-height:1.02;
+      letter-spacing:-.055em;
+    }
+    p{
+      margin:0 0 18px;
+      color:var(--muted);
+      font-size:15px;
+      line-height:1.5;
+      font-weight:650;
+    }
+    label{
+      display:block;
+      font-size:13px;
+      font-weight:950;
+      margin:0 0 8px;
+      color:#263142;
+    }
+    input{
+      width:100%;
+      border:1px solid rgba(15,23,42,.14);
+      border-radius:18px;
+      padding:15px 15px;
+      font-size:16px;
+      outline:none;
+      background:#fff;
+      color:#111827;
+      box-shadow:0 1px 0 rgba(15,23,42,.02);
+    }
+    input:focus{
+      border-color:rgba(63,121,216,.65);
+      box-shadow:0 0 0 4px rgba(63,121,216,.12);
+    }
+    .hint{
+      margin-top:8px;
+      font-size:12px;
+      color:#7b8798;
+      font-weight:700;
+      line-height:1.4;
+    }
+    .err{
+      margin:0 0 14px;
+      padding:12px 13px;
+      border-radius:16px;
+      background:var(--errbg);
+      color:var(--err);
+      font-size:13px;
+      line-height:1.4;
+      font-weight:850;
+      border:1px solid rgba(185,28,28,.16);
+    }
+    button{
+      width:100%;
+      margin-top:18px;
+      border:0;
+      border-radius:999px;
+      padding:15px 16px;
+      background:var(--dark);
+      color:white;
+      font-size:15px;
+      font-weight:950;
+      cursor:pointer;
+    }
+    button:disabled{opacity:.65;cursor:wait}
+    .code{
+      margin-top:16px;
+      font-size:12px;
+      color:#8a94a6;
+      font-weight:800;
+      word-break:break-word;
+      text-align:center;
+    }
+    .small{
+      margin-top:16px;
+      padding-top:14px;
+      border-top:1px solid rgba(15,23,42,.08);
+      color:#7b8798;
+      font-size:12px;
+      line-height:1.45;
+      font-weight:700;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="kicker">FollowMe QR</div>
+    <h1>Attiva il tuo QR</h1>
+    <p>Inserisci il primo link che vuoi trasmettere. Dopo l’attivazione potrai modificarlo e scoprire le altre funzioni dalla tua Web App.</p>
+
+    ${errorMessage ? `<div class="err">${esc(errorMessage)}</div>` : ''}
+
+    <form id="followmeActivateForm" method="post" action="${esc(action)}">
+      <label for="initialUrl">Link da trasmettere</label>
+      <input id="initialUrl" name="initial_url" type="url" inputmode="url" autocomplete="url" placeholder="https://www.tuosito.it" required>
+      <div class="hint">Puoi inserire un sito, una pagina social, un catalogo, un documento online o qualsiasi link pubblico.</div>
+      <button id="submitBtn" type="submit">Attiva QR</button>
+    </form>
+
+    <div class="code">Codice QR: ${esc(publicId)}</div>
+    <div class="small">Ti porteremo subito alla Web App di gestione, dove potrai salvare l’app sul dispositivo e attivare le notifiche.</div>
+  </main>
+
+  <script>
+    (function(){
+      var form = document.getElementById('followmeActivateForm');
+      var btn = document.getElementById('submitBtn');
+      if(!form) return;
+
+      form.addEventListener('submit', async function(ev){
+        ev.preventDefault();
+
+        if(btn){
+          btn.disabled = true;
+          btn.textContent = 'Attivo...';
+        }
+
+        try{
+          var fd = new FormData(form);
+          var res = await fetch(form.action, {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json' },
+            body:JSON.stringify({ initial_url: fd.get('initial_url') || '' })
+          });
+
+          var data = await res.json().catch(function(){ return {}; });
+
+          if(!res.ok || !data.success){
+            throw new Error(data.error || 'Non è stato possibile attivare il QR.');
+          }
+
+          window.location.href = data.manage_url || '/followme-app.html?code=' + encodeURIComponent(data.code || '') + '&onboarding=1';
+        }catch(err){
+          alert(err.message || err);
+          if(btn){
+            btn.disabled = false;
+            btn.textContent = 'Attiva QR';
+          }
+        }
+      });
+    })();
+  </script>
+</body>
+</html>`;
+}
+
+app.get('/fm/activate/:public_id', async (req, res) => {
+  try {
+    if (typeof ensureFollowMeProvisioningColumns20260609 === 'function') {
+      await ensureFollowMeProvisioningColumns20260609();
+    }
+
+    const raw = String(req.params.public_id || '').trim();
+    const publicId = typeof normalizeFollowMePublicId === 'function'
+      ? normalizeFollowMePublicId(raw)
+      : raw.toUpperCase();
+
+    const q = await pool.query(
+      `SELECT id, code, public_id, status, active_url, expires_at, activation_locked, blocked_at
+       FROM followme_projects
+       WHERE public_id = $1 OR code = $1
+       LIMIT 1`,
+      [publicId]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).send(followMeSimplePage20260609(
+        'FollowMe QR non trovato',
+        'QR non trovato',
+        'Questo QR FollowMe non risulta registrato.',
+        publicId,
+        '<a class="secondary" href="/">Torna al sito</a>'
+      ));
+    }
+
+    const project = q.rows[0];
+
+    if (project.blocked_at || String(project.status || '').toLowerCase() === 'blocked') {
+      return res.redirect(302, '/fm/expired/' + encodeURIComponent(project.public_id || project.code || publicId));
+    }
+
+    if (project.expires_at && new Date(project.expires_at).getTime() <= Date.now()) {
+      return res.redirect(302, '/fm/expired/' + encodeURIComponent(project.public_id || project.code || publicId));
+    }
+
+    if (project.activation_locked === true) {
+      return res.status(403).send(followMeSimplePage20260609(
+        'FollowMe QR bloccato',
+        'Attivazione bloccata',
+        'L’attivazione pubblica di questo QR è stata bloccata dall’amministratore.',
+        project.public_id || project.code || publicId,
+        '<a class="secondary" href="/">Torna al sito</a>'
+      ));
+    }
+
+    return res.status(200).send(followMeActivateUrlPage20260609(project));
+  } catch (err) {
+    console.error('followme activate page error:', err);
+    return res.status(500).send('Errore apertura attivazione FollowMe.');
+  }
+});
+
+app.post('/api/followme/:public_id/activate-url', express.json({ limit:'32kb' }), async (req, res) => {
+  try {
+    if (typeof ensureFollowMeProvisioningColumns20260609 === 'function') {
+      await ensureFollowMeProvisioningColumns20260609();
+    }
+
+    const raw = String(req.params.public_id || '').trim();
+    const publicId = typeof normalizeFollowMePublicId === 'function'
+      ? normalizeFollowMePublicId(raw)
+      : raw.toUpperCase();
+
+    const initialUrl = normalizeFollowMeActivationUrl20260609(req.body && req.body.initial_url);
+
+    if (!initialUrl) {
+      return res.status(400).json({
+        success:false,
+        error:'Inserisci il link da trasmettere.'
+      });
+    }
+
+    const q = await pool.query(
+      `SELECT id, code, public_id, status, active_url, expires_at, activation_locked, blocked_at
+       FROM followme_projects
+       WHERE public_id = $1 OR code = $1
+       LIMIT 1`,
+      [publicId]
+    );
+
+    if (!q.rows.length) {
+      return res.status(404).json({
+        success:false,
+        error:'QR FollowMe non trovato.'
+      });
+    }
+
+    const project = q.rows[0];
+
+    if (project.blocked_at || String(project.status || '').toLowerCase() === 'blocked') {
+      return res.status(403).json({
+        success:false,
+        error:'Questo QR non è attivo.'
+      });
+    }
+
+    if (project.expires_at && new Date(project.expires_at).getTime() <= Date.now()) {
+      try {
+        await pool.query(
+          `UPDATE followme_projects
+           SET status = CASE WHEN LOWER(COALESCE(status,'')) = 'active' THEN 'expired' ELSE status END,
+               updated_at = NOW()
+           WHERE id = $1`,
+          [project.id]
+        );
+      } catch(e) {}
+
+      return res.status(402).json({
+        success:false,
+        error:'Questo QR è scaduto. Procedi al rinnovo.'
+      });
+    }
+
+    if (project.activation_locked === true) {
+      return res.status(403).json({
+        success:false,
+        error:'L’attivazione pubblica è bloccata dall’amministratore.'
+      });
+    }
+
+    const upd = await pool.query(
+      `UPDATE followme_projects
+       SET active_url = $2,
+           status = 'active',
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, code, public_id, active_url, status`,
+      [project.id, initialUrl]
+    );
+
+    const row = upd.rows[0];
+    const manageUrl = '/followme-app.html?code=' + encodeURIComponent(row.code) + '&onboarding=1&activated=1';
+
+    return res.json({
+      success:true,
+      code:row.code,
+      public_id:row.public_id,
+      active_url:row.active_url,
+      status:row.status,
+      manage_url:manageUrl
+    });
+  } catch (err) {
+    console.error('followme activate url error:', err);
+    return res.status(400).json({
+      success:false,
+      error:String(err && err.message ? err.message : 'Errore attivazione QR.')
+    });
+  }
+});
+// end-followme-url-only-activation-20260609
+
+
 // end-admin-followme-isolated-provisioning-api-20260609
 
 
@@ -17899,11 +18293,11 @@ app.get('/fm/u/:public_id', async function followMePublicStatusExpiryPendingGuar
     }
 
     if (status === 'pending') {
-      return res.redirect(302, '/fm/pending/' + encodeURIComponent(p.public_id || p.code || publicId));
+      return res.redirect(302, '/fm/activate/' + encodeURIComponent(p.public_id || p.code || publicId));
     }
 
     if (status === 'active' && !activeUrl) {
-      return res.redirect(302, '/fm/not-configured/' + encodeURIComponent(p.public_id || p.code || publicId));
+      return res.redirect(302, '/fm/activate/' + encodeURIComponent(p.public_id || p.code || publicId));
     }
 
     return next();
