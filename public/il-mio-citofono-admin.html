@@ -325,22 +325,27 @@
 
 <script id="IL_MIO_CITOFONO_ADMIN_PENDING_CALLS_20260609">
 (function(){
-  if(window.__IL_MIO_CITOFONO_ADMIN_PENDING_CALLS_20260609__) return;
-  window.__IL_MIO_CITOFONO_ADMIN_PENDING_CALLS_20260609__ = true;
+  if(window.__IL_MIO_CITOFONO_ADMIN_PENDING_CALLS_AUDIO_20260609__) return;
+  window.__IL_MIO_CITOFONO_ADMIN_PENDING_CALLS_AUDIO_20260609__ = true;
 
   function $(id){ return document.getElementById(id); }
 
   function getCode(){
-    try{
-      return new URLSearchParams(location.search).get("code") || "DEMO";
-    }catch(e){
-      return "DEMO";
-    }
+    try{ return new URLSearchParams(location.search).get("code") || "DEMO"; }
+    catch(e){ return "DEMO"; }
   }
 
   function api(path){
     return "/api/citofonami/" + encodeURIComponent(getCode()) + path;
   }
+
+  var currentCall = null;
+  var adminPeer = null;
+  var adminStream = null;
+  var remoteAudio = null;
+  var answerTimer = null;
+  var iceTimer = null;
+  var seenUserIce = new Set();
 
   function ensureCallBox(){
     var box = $("incomingCallBox");
@@ -377,8 +382,6 @@
     return box;
   }
 
-  var currentCall = null;
-
   function setState(text){
     var el = $("incomingCallState");
     if(el) el.textContent = text;
@@ -399,11 +402,63 @@
       text.textContent = name + " sta suonando.";
     }
 
+    var answerBtn = $("answerIncomingBtn");
+    if(answerBtn){
+      answerBtn.disabled = false;
+      answerBtn.textContent = "Rispondi";
+    }
+
     setState("CALL_ID=" + call.id + " · status=" + (call.status || "pending"));
+  }
+
+  function makeRemoteAudio(){
+    if(remoteAudio) return remoteAudio;
+
+    remoteAudio = document.createElement("audio");
+    remoteAudio.autoplay = true;
+    remoteAudio.playsInline = true;
+    remoteAudio.setAttribute("playsinline","true");
+    remoteAudio.setAttribute("webkit-playsinline","true");
+    remoteAudio.controls = false;
+    remoteAudio.muted = false;
+    remoteAudio.volume = 1;
+    document.body.appendChild(remoteAudio);
+
+    return remoteAudio;
+  }
+
+  function stopAdminAudio(){
+    try{ clearInterval(answerTimer); }catch(e){}
+    try{ clearInterval(iceTimer); }catch(e){}
+    answerTimer = null;
+    iceTimer = null;
+
+    if(adminPeer){
+      try{ adminPeer.close(); }catch(e){}
+      adminPeer = null;
+    }
+
+    if(adminStream){
+      try{ adminStream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
+      adminStream = null;
+    }
+
+    if(remoteAudio){
+      try{
+        remoteAudio.pause();
+        remoteAudio.srcObject = null;
+        remoteAudio.remove();
+      }catch(e){}
+      remoteAudio = null;
+    }
+
+    seenUserIce.clear();
   }
 
   async function pollPending(){
     try{
+      if(currentCall) return;
+
       var res = await fetch(api("/calls/pending?t=" + Date.now()), { cache:"no-store" });
       var data = await res.json();
 
@@ -414,9 +469,7 @@
         (Array.isArray(data.items) ? data.items[0] : null);
 
       if(call && call.id){
-        if(!currentCall || currentCall.id !== call.id){
-          showCall(call);
-        }
+        showCall(call);
       }
     }catch(e){
       console.warn("pollPending errore:", e);
@@ -429,37 +482,177 @@
       return;
     }
 
+    var callId = currentCall.id;
+
+    var answerBtn = $("answerIncomingBtn");
+    if(answerBtn){
+      answerBtn.disabled = true;
+      answerBtn.textContent = "Attivo audio...";
+    }
+
     try{
-      setState("Rispondo...");
-      await fetch(api("/calls/" + encodeURIComponent(currentCall.id) + "/action"), {
+      setState("Autorizza microfono admin...");
+
+      adminStream = await navigator.mediaDevices.getUserMedia({
+        audio:true,
+        video:false
+      });
+
+      var tracks = adminStream.getAudioTracks();
+      if(!tracks || !tracks.length || tracks[0].readyState !== "live"){
+        throw new Error("Microfono admin non attivo.");
+      }
+
+      setState("Microfono admin attivo. Accetto chiamata...");
+
+      await fetch(api("/calls/" + encodeURIComponent(callId) + "/action"), {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
         body:JSON.stringify({ action:"answer" })
       });
-      setState("Chiamata accettata. Motore audio da collegare.");
+
+      var audio = makeRemoteAudio();
+
+      adminPeer = new RTCPeerConnection({
+        iceServers:[{ urls:["stun:stun.l.google.com:19302"] }]
+      });
+
+      adminStream.getAudioTracks().forEach(function(track){
+        track.enabled = true;
+        adminPeer.addTrack(track, adminStream);
+      });
+
+      adminPeer.onicecandidate = function(event){
+        if(event.candidate){
+          fetch(api("/calls/" + encodeURIComponent(callId) + "/webrtc/ice"), {
+            method:"POST",
+            headers:{ "Content-Type":"application/json" },
+            body:JSON.stringify({ role:"admin", candidate:event.candidate })
+          }).catch(function(){});
+        }
+      };
+
+      adminPeer.ontrack = function(event){
+        var stream = event.streams && event.streams[0]
+          ? event.streams[0]
+          : new MediaStream([event.track]);
+
+        audio.srcObject = stream;
+        audio.muted = false;
+        audio.volume = 1;
+
+        var p = audio.play();
+        if(p && p.catch){
+          p.catch(function(err){
+            console.warn("Audio remoto admin bloccato:", err);
+            setState("Audio pronto. Tocca lo schermo se non senti.");
+          });
+        }
+
+        setState("Audio remoto ricevuto. Vivavoce attivo.");
+      };
+
+      adminPeer.onconnectionstatechange = function(){
+        if(!adminPeer) return;
+        setState("WebRTC admin: " + adminPeer.connectionState + " / ICE: " + adminPeer.iceConnectionState);
+      };
+
+      adminPeer.oniceconnectionstatechange = function(){
+        if(!adminPeer) return;
+        setState("ICE admin: " + adminPeer.iceConnectionState);
+      };
+
+      var offer = await adminPeer.createOffer();
+      await adminPeer.setLocalDescription(offer);
+
+      await fetch(api("/calls/" + encodeURIComponent(callId) + "/webrtc/offer"), {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ offer:adminPeer.localDescription })
+      });
+
+      setState("Chiamata accettata. Attendo che l’utente prema PARLA ORA.");
+      answerTimer = setInterval(function(){ pollAnswer(callId); }, 700);
+      iceTimer = setInterval(function(){ pollUserIce(callId); }, 700);
+
     }catch(e){
-      setState("Errore risposta: " + (e.message || e));
+      console.error(e);
+      setState("Errore risposta audio: " + (e.message || e));
+
+      if(answerBtn){
+        answerBtn.disabled = false;
+        answerBtn.textContent = "Rispondi";
+      }
+
+      stopAdminAudio();
     }
   }
 
-  async function rejectCall(){
-    if(!currentCall || !currentCall.id){
-      setState("Nessuna chiamata da rifiutare.");
-      return;
-    }
+  async function pollAnswer(callId){
+    if(!adminPeer) return;
 
     try{
-      setState("Rifiuto...");
-      await fetch(api("/calls/" + encodeURIComponent(currentCall.id) + "/action"), {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ action:"close", closedBy:"admin" })
-      });
+      var res = await fetch(api("/calls/" + encodeURIComponent(callId) + "/webrtc/answer?t=" + Date.now()), { cache:"no-store" });
+      var data = await res.json();
+
+      if(data.ok && data.answer && data.answer.type === "answer" && !adminPeer.currentRemoteDescription){
+        setState("Answer utente ricevuta. Collegamento audio...");
+        await adminPeer.setRemoteDescription(new RTCSessionDescription(data.answer));
+        setState("Utente collegato. Audio in corso...");
+        clearInterval(answerTimer);
+        answerTimer = null;
+      }
+    }catch(e){
+      console.error("pollAnswer error:", e);
+      setState("Errore lettura answer: " + (e.message || e));
+    }
+  }
+
+  async function pollUserIce(callId){
+    if(!adminPeer) return;
+
+    try{
+      var res = await fetch(api("/calls/" + encodeURIComponent(callId) + "/webrtc/ice?role=user&t=" + Date.now()), { cache:"no-store" });
+      var data = await res.json();
+      var candidates = data.candidates || data.ice || [];
+
+      for(var i=0;i<candidates.length;i++){
+        var candidate = candidates[i].candidate || candidates[i];
+        if(!candidate) continue;
+
+        var key = JSON.stringify(candidate);
+        if(seenUserIce.has(key)) continue;
+        seenUserIce.add(key);
+
+        try{
+          await adminPeer.addIceCandidate(candidate);
+        }catch(e){
+          console.warn("ICE user non aggiunto:", e);
+        }
+      }
+    }catch(e){}
+  }
+
+  async function rejectCall(){
+    var callId = currentCall && currentCall.id ? currentCall.id : "";
+
+    try{
+      setState("Chiudo chiamata...");
+      if(callId){
+        await fetch(api("/calls/" + encodeURIComponent(callId) + "/action"), {
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body:JSON.stringify({ action:"close", closedBy:"admin" })
+        });
+      }
     }catch(e){}
 
+    stopAdminAudio();
     currentCall = null;
+
     var box = $("incomingCallBox");
     if(box) box.style.display = "none";
+
     setState("Chiamata chiusa.");
   }
 
@@ -474,6 +667,7 @@
   ensureCallBox();
   bindButtons();
   pollPending();
+
   setInterval(function(){
     bindButtons();
     pollPending();

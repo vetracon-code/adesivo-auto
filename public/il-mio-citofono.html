@@ -41,26 +41,16 @@
   <script>
     const $ = id => document.getElementById(id);
 
-    function loadSettings(){
-      const name = localStorage.getItem("ilMioCitofono.name") || "Casa Rossi";
-      const address = localStorage.getItem("ilMioCitofono.address") || "Via Roma 123, Milano";
-      $("name").textContent = name;
-      if(address){ $("address").textContent = address; $("address").style.display = "block"; }
-      else{ $("address").style.display = "none"; }
-    }
-
-    async function requestMic(){
-      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-        $("hint").textContent = "Microfono non disponibile su questo browser.";
-        return null;
-      }
-      try{ return await navigator.mediaDevices.getUserMedia({ audio:true, video:false }); }
-      catch(e){ $("hint").textContent = "Microfono non autorizzato."; return null; }
-    }
-
-    function stopStream(stream){
-      if(stream){ stream.getTracks().forEach(t => { try{ t.stop(); }catch(e){} }); }
-    }
+    let currentCallId = null;
+    let userPeer = null;
+    let userStream = null;
+    let remoteAudio = null;
+    let statusTimer = null;
+    let offerTimer = null;
+    let iceTimer = null;
+    let offerReceived = null;
+    let mode = "idle";
+    const seenAdminIce = new Set();
 
     function api(path){
       return "/api/citofonami/" + encodeURIComponent(new URLSearchParams(location.search).get("code") || "DEMO") + path;
@@ -75,11 +65,68 @@
       return id;
     }
 
-    $("ringBtn").addEventListener("click", async () => {
-      $("ringBtn").disabled = true;
+    function loadSettings(){
+      const name = localStorage.getItem("ilMioCitofono.name") || "Casa Rossi";
+      const address = localStorage.getItem("ilMioCitofono.address") || "Via Roma 123, Milano";
+      $("name").textContent = name;
+      if(address){ $("address").textContent = address; $("address").style.display = "block"; }
+      else{ $("address").style.display = "none"; }
+    }
+
+    function setMode(next){
+      mode = next;
+
+      if(next === "idle"){
+        $("ringBtn").disabled = false;
+        $("ringBtn").textContent = "🔔 SUONA";
+      }
+
+      if(next === "ringing"){
+        $("ringBtn").disabled = true;
+        $("ringBtn").textContent = "CHIAMATA IN CORSO";
+      }
+
+      if(next === "talk"){
+        $("ringBtn").disabled = false;
+        $("ringBtn").textContent = "🎙️ PARLA ORA";
+      }
+
+      if(next === "connecting"){
+        $("ringBtn").disabled = true;
+        $("ringBtn").textContent = "COLLEGO AUDIO...";
+      }
+
+      if(next === "connected"){
+        $("ringBtn").disabled = true;
+        $("ringBtn").textContent = "AUDIO ATTIVO";
+      }
+    }
+
+    function stopStream(stream){
+      if(stream){ stream.getTracks().forEach(t => { try{ t.stop(); }catch(e){} }); }
+    }
+
+    function makeRemoteAudio(){
+      if(remoteAudio) return remoteAudio;
+
+      remoteAudio = document.createElement("audio");
+      remoteAudio.autoplay = true;
+      remoteAudio.playsInline = true;
+      remoteAudio.setAttribute("playsinline","true");
+      remoteAudio.setAttribute("webkit-playsinline","true");
+      remoteAudio.controls = false;
+      remoteAudio.muted = false;
+      remoteAudio.volume = 1;
+      document.body.appendChild(remoteAudio);
+
+      return remoteAudio;
+    }
+
+    async function ring(){
+      setMode("ringing");
       $("speaker").classList.add("active");
+      $("closed").style.display = "none";
       $("hint").textContent = "Invio chiamata all'admin...";
-      $("ringBtn").textContent = "CHIAMATA IN CORSO";
 
       try{
         const res = await fetch(api("/ring-v2"), {
@@ -108,24 +155,265 @@
         }
 
         const call = data.call || data.pendingCall || data;
-        const callId = data.callId || call.id || call.callId || "";
+        currentCallId = data.callId || call.id || call.callId || "";
 
-        window.__IL_MIO_CITOFONO_CALL_ID__ = callId;
+        if(!currentCallId){
+          throw new Error("CallId mancante.");
+        }
 
+        window.__IL_MIO_CITOFONO_CALL_ID__ = currentCallId;
         $("hint").textContent = "Chiamata inviata. Attendi la risposta...";
-        console.log("[Il mio citofono] chiamata inviata", data);
+
+        statusTimer = setInterval(() => pollStatus(currentCallId), 700);
+        offerTimer = setInterval(() => pollOffer(currentCallId), 700);
 
       }catch(e){
         console.error(e);
         $("speaker").classList.remove("active");
         $("hint").textContent = "Errore chiamata: " + (e.message || e);
-        $("ringBtn").disabled = false;
-        $("ringBtn").textContent = "🔔 SUONA";
+        setMode("idle");
+      }
+    }
+
+    async function pollStatus(callId){
+      try{
+        const res = await fetch(api("/calls/" + encodeURIComponent(callId) + "/status?t=" + Date.now()), { cache:"no-store" });
+        const data = await res.json();
+        const status = data.status || "";
+
+        if(status === "answered" && mode === "ringing"){
+          $("hint").textContent = "Admin ha risposto. Premi PARLA ORA.";
+          setMode("talk");
+        }
+
+        if(status === "closed" || status === "rejected" || status === "ended"){
+          $("hint").textContent = "Conversazione chiusa.";
+          $("closed").style.display = "block";
+          stopAll();
+        }
+      }catch(e){}
+    }
+
+    async function pollOffer(callId){
+      try{
+        const offer = await fetchOffer(callId);
+        if(offer){
+          offerReceived = offer;
+          clearInterval(offerTimer);
+          offerTimer = null;
+        }
+      }catch(e){}
+    }
+
+    async function fetchOffer(callId){
+      const res = await fetch(api("/calls/" + encodeURIComponent(callId) + "/webrtc/offer?t=" + Date.now()), { cache:"no-store" });
+      const data = await res.json();
+
+      if(data.ok && data.offer && data.offer.type === "offer"){
+        return data.offer;
+      }
+
+      return null;
+    }
+
+    async function waitOffer(callId){
+      if(offerReceived) return offerReceived;
+
+      for(let i=0;i<30;i++){
+        const offer = await fetchOffer(callId).catch(() => null);
+        if(offer) return offer;
+        await new Promise(r => setTimeout(r, 400));
+      }
+
+      return null;
+    }
+
+    async function talkNow(){
+      if(!currentCallId){
+        $("hint").textContent = "Chiamata non trovata.";
+        setMode("idle");
+        return;
+      }
+
+      setMode("connecting");
+      $("hint").textContent = "Autorizza il microfono...";
+
+      try{
+        if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+          throw new Error("Microfono non disponibile.");
+        }
+
+        userStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false });
+
+        const tracks = userStream.getAudioTracks();
+        if(!tracks || !tracks.length || tracks[0].readyState !== "live"){
+          throw new Error("Microfono non attivo.");
+        }
+
+        tracks[0].enabled = true;
+
+        const offer = await waitOffer(currentCallId);
+        if(!offer){
+          throw new Error("Offer admin non ricevuta.");
+        }
+
+        await createAnswer(currentCallId, offer);
+
+      }catch(e){
+        console.error(e);
+        $("hint").textContent = "Errore audio: " + (e.message || e);
+        setMode("talk");
+      }
+    }
+
+    async function createAnswer(callId, offer){
+      const audio = makeRemoteAudio();
+
+      if(userPeer){
+        try{ userPeer.close(); }catch(e){}
+        userPeer = null;
+      }
+
+      userPeer = new RTCPeerConnection({
+        iceServers:[{ urls:["stun:stun.l.google.com:19302"] }]
+      });
+
+      userPeer.onicecandidate = event => {
+        if(event.candidate){
+          fetch(api("/calls/" + encodeURIComponent(callId) + "/webrtc/ice"), {
+            method:"POST",
+            headers:{ "Content-Type":"application/json" },
+            body:JSON.stringify({ role:"user", candidate:event.candidate })
+          }).catch(()=>{});
+        }
+      };
+
+      userPeer.ontrack = event => {
+        const stream = event.streams && event.streams[0]
+          ? event.streams[0]
+          : new MediaStream([event.track]);
+
+        audio.srcObject = stream;
+        audio.muted = false;
+        audio.volume = 1;
+
+        const p = audio.play();
+        if(p && p.catch){
+          p.catch(err => {
+            console.warn("Audio remoto utente bloccato:", err);
+            $("hint").textContent = "Audio pronto. Tocca lo schermo se non senti.";
+          });
+        }
+
+        $("hint").textContent = "Parla ora.";
+        setMode("connected");
+      };
+
+      userPeer.onconnectionstatechange = () => {
+        if(!userPeer) return;
+        if(userPeer.connectionState === "connected"){
+          $("hint").textContent = "Audio collegato. Parla ora.";
+          setMode("connected");
+        }
+      };
+
+      userStream.getAudioTracks().forEach(track => {
+        track.enabled = true;
+        userPeer.addTrack(track, userStream);
+      });
+
+      await userPeer.setRemoteDescription(new RTCSessionDescription(offer));
+
+      const answer = await userPeer.createAnswer();
+      await userPeer.setLocalDescription(answer);
+
+      await fetch(api("/calls/" + encodeURIComponent(callId) + "/webrtc/answer"), {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ answer:userPeer.localDescription })
+      });
+
+      $("hint").textContent = "Risposta inviata. Collegamento audio...";
+
+      clearInterval(iceTimer);
+      iceTimer = setInterval(() => pollAdminIce(callId), 700);
+    }
+
+    async function pollAdminIce(callId){
+      if(!userPeer) return;
+
+      try{
+        const res = await fetch(api("/calls/" + encodeURIComponent(callId) + "/webrtc/ice?role=admin&t=" + Date.now()), { cache:"no-store" });
+        const data = await res.json();
+        const candidates = data.candidates || data.ice || [];
+
+        for(const item of candidates){
+          const candidate = item.candidate || item;
+          if(!candidate) continue;
+
+          const key = JSON.stringify(candidate);
+          if(seenAdminIce.has(key)) continue;
+          seenAdminIce.add(key);
+
+          try{
+            await userPeer.addIceCandidate(candidate);
+          }catch(e){
+            console.warn("ICE admin non aggiunto:", e);
+          }
+        }
+      }catch(e){}
+    }
+
+    function stopAll(){
+      clearInterval(statusTimer);
+      clearInterval(offerTimer);
+      clearInterval(iceTimer);
+      statusTimer = null;
+      offerTimer = null;
+      iceTimer = null;
+
+      if(userPeer){
+        try{ userPeer.close(); }catch(e){}
+        userPeer = null;
+      }
+
+      if(userStream){
+        stopStream(userStream);
+        userStream = null;
+      }
+
+      if(remoteAudio){
+        try{
+          remoteAudio.pause();
+          remoteAudio.srcObject = null;
+          remoteAudio.remove();
+        }catch(e){}
+        remoteAudio = null;
+      }
+
+      currentCallId = null;
+      offerReceived = null;
+      seenAdminIce.clear();
+
+      $("speaker").classList.remove("active");
+      setMode("idle");
+    }
+
+    $("ringBtn").addEventListener("click", async () => {
+      if(mode === "idle"){
+        ring();
+        return;
+      }
+
+      if(mode === "talk"){
+        talkNow();
+        return;
       }
     });
 
-    window.addEventListener("beforeunload", () => stopStream(window.__IL_MIO_CITOFONO_STREAM__));
+    window.addEventListener("beforeunload", stopAll);
     loadSettings();
+    setMode("idle");
   </script>
 </body>
 </html>
