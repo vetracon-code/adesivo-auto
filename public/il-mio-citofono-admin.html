@@ -618,19 +618,52 @@
   }
 
   async function rejectIncoming(){
-    if(!currentCall || !currentCall.id) return;
+    const callId =
+      (currentCall && (currentCall.id || currentCall.callId)) ||
+      new URLSearchParams(location.search).get("call") ||
+      "";
+
+    setAdminState("Chiudo la chiamata...");
+
+    try{ clearInterval(answerTimer); }catch(e){}
+    try{ clearInterval(iceTimer); }catch(e){}
+    answerTimer = null;
+    iceTimer = null;
 
     try{
-      await fetch(api(`/calls/${encodeURIComponent(currentCall.id)}/action`), {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ action:"close", closedBy:"admin" })
-      });
-    }catch(e){}
+      if(callId){
+        await fetch(api(`/calls/${encodeURIComponent(callId)}/action`), {
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body:JSON.stringify({ action:"close", closedBy:"admin" })
+        });
+      }
+    }catch(e){
+      console.warn("Errore chiusura server:", e);
+    }
 
+    stopAdminMedia();
+    stopTimer();
     currentCall = null;
+
     if($("incomingPanel")) $("incomingPanel").classList.remove("show");
-    setAdminState("Chiamata rifiutata.");
+
+    if($("answerIncomingBtn")){
+      $("answerIncomingBtn").disabled = false;
+      $("answerIncomingBtn").textContent = "Rispondi";
+    }
+
+    if($("rejectIncomingBtn")){
+    $("rejectIncomingBtn").onclick = rejectIncoming;
+  }
+      $("rejectIncomingBtn").textContent = "Rifiuta";
+    }
+
+    setAdminState("Chiamata chiusa. Pronto per nuova chiamata.");
+
+    setTimeout(function(){
+      pollPending();
+    }, 600);
   }
 
   async function answerIncoming(){
@@ -769,32 +802,19 @@
   }
 
   async function pollAnswer(callId){
-    if(!adminPeer){
-      setAdminState("Peer admin non pronto. Riprova a rispondere.");
-      return;
-    }
+    if(!adminPeer) return;
 
     try{
       const res = await fetch(api(`/calls/${encodeURIComponent(callId)}/webrtc/answer?t=${Date.now()}`), { cache:"no-store" });
       const data = await res.json();
 
-      if(!data.ok){
-        setAdminState("Attendo answer utente... server: " + (data.error || "non pronta"));
-        return;
-      }
-
-      if(!data.answer || data.answer.type !== "answer"){
+      if(!data.ok || !data.answer || data.answer.type !== "answer"){
         setAdminState("Attendo answer utente...");
         return;
       }
 
       if(adminPeer.currentRemoteDescription){
-        setAdminState(
-          "Utente collegato. WebRTC: " +
-          adminPeer.connectionState +
-          " / ICE: " +
-          adminPeer.iceConnectionState
-        );
+        setAdminState("Utente collegato. Audio in corso...");
         return;
       }
 
@@ -802,58 +822,22 @@
 
       await adminPeer.setRemoteDescription(new RTCSessionDescription(data.answer));
 
-      diagAudio('ADMIN setRemoteDescription(answer)', adminPeer, adminStream, remoteAudio);
+      setAdminState("Utente collegato. Audio in corso...");
 
-      setAdminState(
-        "Utente collegato. WebRTC: " +
-        adminPeer.connectionState +
-        " / ICE: " +
-        adminPeer.iceConnectionState
-      );
-
-      clearInterval(answerTimer);
+      try{ clearInterval(answerTimer); }catch(e){}
       answerTimer = null;
 
     }catch(e){
       console.error("pollAnswer admin error:", e);
-      setAdminState("Errore applicazione answer: " + (e.message || e));
+      setAdminState("Errore answer admin: " + (e.message || e));
     }
-  }
-
-  async function pollUserIceRobust(callId){
-    // Recupero robusto: chiedo entrambi i ruoli per evitare inversioni lato server/client.
-    await pollUserIceByRole(callId, "admin");
-    await pollUserIceByRole(callId, "user");
-  }
-
-  async function pollUserIceByRole(callId, role){
-    if(!adminPeer) return;
-
-    try{
-      const res = await fetch(api(`/calls/${encodeURIComponent(callId)}/webrtc/ice?role=${encodeURIComponent(role)}&t=${Date.now()}`), { cache:"no-store" });
-      const data = await res.json();
-      const candidates = data.candidates || data.ice || [];
-
-      for(const item of candidates){
-        const candidate = item.candidate || item;
-        if(!candidate) continue;
-
-        const key = role + ":" + JSON.stringify(candidate);
-        if(seenUserIce.has(key)) continue;
-        seenUserIce.add(key);
-
-        try{
-          await adminPeer.addIceCandidate(candidate);
-        }catch(e){}
-      }
-    }catch(e){}
   }
 
   async function pollUserIce(callId){
     if(!adminPeer) return;
 
     try{
-      const res = await fetch(api(`/calls/${encodeURIComponent(callId)}/webrtc/ice?role=admin&t=${Date.now()}`), { cache:"no-store" });
+      const res = await fetch(api(`/calls/${encodeURIComponent(callId)}/webrtc/ice?role=user&t=${Date.now()}`), { cache:"no-store" });
       const data = await res.json();
       const candidates = data.candidates || data.ice || [];
 
@@ -940,157 +924,6 @@
 </script>
 
 
-
-<style id="citofonami-listen-unlock-style-20260609">
-  .citofonami-listen-unlock{
-    position:fixed;
-    left:14px;
-    right:14px;
-    bottom:calc(14px + env(safe-area-inset-bottom));
-    z-index:999999;
-    display:none;
-    border:0;
-    border-radius:22px;
-    padding:18px 16px;
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
-    font-size:18px;
-    font-weight:950;
-    color:#ffffff;
-    background:linear-gradient(135deg,#2563eb,#0ea5e9);
-    box-shadow:0 18px 45px rgba(37,99,235,.35);
-    cursor:pointer;
-  }
-  .citofonami-listen-unlock.show{
-    display:block;
-  }
-  .citofonami-listen-unlock.ok{
-    background:linear-gradient(135deg,#16a34a,#22c55e);
-  }
-</style>
-
-<button id="citofonamiListenUnlockBtn" class="citofonami-listen-unlock" type="button">
-  🔊 ATTIVA ASCOLTO
-</button>
-
-<script id="citofonami-listen-unlock-20260609">
-(function(){
-  if(window.__CITOFONAMI_LISTEN_UNLOCK_20260609__) return;
-  window.__CITOFONAMI_LISTEN_UNLOCK_20260609__ = true;
-
-  var btn = document.getElementById("citofonamiListenUnlockBtn");
-
-  function getAudioElements(){
-    return Array.prototype.slice.call(document.querySelectorAll("audio"));
-  }
-
-  function hasRemoteAudio(){
-    return getAudioElements().some(function(audio){
-      try{
-        return !!audio.srcObject;
-      }catch(e){
-        return false;
-      }
-    });
-  }
-
-  async function forcePlayAllAudio(){
-    var audios = getAudioElements();
-    var played = 0;
-    var failed = 0;
-
-    for(var i=0;i<audios.length;i++){
-      var audio = audios[i];
-
-      try{
-        audio.muted = false;
-        audio.volume = 1;
-        audio.autoplay = true;
-        audio.playsInline = true;
-        audio.setAttribute("playsinline","true");
-        audio.setAttribute("webkit-playsinline","true");
-
-        if(audio.srcObject && audio.srcObject.getAudioTracks){
-          audio.srcObject.getAudioTracks().forEach(function(track){
-            try{ track.enabled = true; }catch(e){}
-          });
-        }
-
-        var p = audio.play();
-        if(p && p.then){
-          await p;
-        }
-
-        played++;
-      }catch(e){
-        failed++;
-        console.warn("[Citofonami ascolto] play fallito:", e);
-      }
-    }
-
-    console.log("[Citofonami ascolto] audio play:", { played:played, failed:failed, total:audios.length });
-
-    if(btn){
-      if(played > 0){
-        btn.textContent = "✅ ASCOLTO ATTIVO";
-        btn.classList.add("ok");
-        setTimeout(function(){
-          btn.classList.remove("show");
-        }, 1600);
-      }else{
-        btn.textContent = "🔊 TOCCA ANCORA PER ASCOLTARE";
-        btn.classList.add("show");
-      }
-    }
-
-    return played;
-  }
-
-  function refreshListenButton(){
-    if(!btn) return;
-
-    if(hasRemoteAudio()){
-      if(!btn.classList.contains("ok")){
-        btn.textContent = "🔊 ATTIVA ASCOLTO";
-        btn.classList.add("show");
-      }
-    }
-  }
-
-  if(btn){
-    btn.addEventListener("click", function(e){
-      e.preventDefault();
-      e.stopPropagation();
-      forcePlayAllAudio();
-    }, { passive:false });
-  }
-
-  /*
-    Importante:
-    Su mobile il gesto reale dell'utente può essere qualsiasi tap.
-    Quindi se l'audio remoto è già arrivato, un tap sulla pagina prova a sbloccarlo.
-  */
-  ["click","touchstart","pointerdown"].forEach(function(evt){
-    document.addEventListener(evt, function(){
-      if(hasRemoteAudio()){
-        forcePlayAllAudio();
-      }
-    }, { passive:true, capture:true });
-  });
-
-  var observer = new MutationObserver(function(){
-    refreshListenButton();
-  });
-
-  observer.observe(document.documentElement, {
-    childList:true,
-    subtree:true,
-    attributes:true,
-    attributeFilter:["src","srcObject"]
-  });
-
-  setInterval(refreshListenButton, 700);
-})();
-</script>
 
 </body>
 </html>
