@@ -62,15 +62,66 @@
       if(stream){ stream.getTracks().forEach(t => { try{ t.stop(); }catch(e){} }); }
     }
 
+    function api(path){
+      return "/api/citofonami/" + encodeURIComponent(new URLSearchParams(location.search).get("code") || "DEMO") + path;
+    }
+
+    function callerId(){
+      let id = localStorage.getItem("ilMioCitofono.callerId");
+      if(!id){
+        id = "caller_" + Date.now() + "_" + Math.random().toString(36).slice(2,8);
+        localStorage.setItem("ilMioCitofono.callerId", id);
+      }
+      return id;
+    }
+
     $("ringBtn").addEventListener("click", async () => {
       $("ringBtn").disabled = true;
-      $("hint").textContent = "Attivo il microfono...";
-      const stream = await requestMic();
-      if(!stream){ $("ringBtn").disabled = false; return; }
       $("speaker").classList.add("active");
-      $("hint").textContent = "Chiamata inviata. Attendi la risposta...";
+      $("hint").textContent = "Invio chiamata all'admin...";
       $("ringBtn").textContent = "CHIAMATA IN CORSO";
-      window.__IL_MIO_CITOFONO_STREAM__ = stream;
+
+      try{
+        const res = await fetch(api("/ring-v2"), {
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body:JSON.stringify({
+            callerId: callerId(),
+            source: "il-mio-citofono",
+            lightClone: true,
+            userAgent: navigator.userAgent + " IL_MIO_CITOFONO_LIGHT_CLONE",
+            locationEnabled: false,
+            geofenceEnabled: false,
+            requireLocation: false,
+            radiusDisabled: true,
+            door: {
+              name: $("name").textContent || "Il mio citofono",
+              description: $("address").textContent || ""
+            }
+          })
+        });
+
+        const data = await res.json();
+
+        if(!data.ok){
+          throw new Error(data.error || data.message || "Chiamata non inviata.");
+        }
+
+        const call = data.call || data.pendingCall || data;
+        const callId = data.callId || call.id || call.callId || "";
+
+        window.__IL_MIO_CITOFONO_CALL_ID__ = callId;
+
+        $("hint").textContent = "Chiamata inviata. Attendi la risposta...";
+        console.log("[Il mio citofono] chiamata inviata", data);
+
+      }catch(e){
+        console.error(e);
+        $("speaker").classList.remove("active");
+        $("hint").textContent = "Errore chiamata: " + (e.message || e);
+        $("ringBtn").disabled = false;
+        $("ringBtn").textContent = "🔔 SUONA";
+      }
     });
 
     window.addEventListener("beforeunload", () => stopStream(window.__IL_MIO_CITOFONO_STREAM__));

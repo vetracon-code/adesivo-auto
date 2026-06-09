@@ -322,5 +322,164 @@
       $("installCard").classList.add("hidden");
     }
   </script>
+
+<script id="IL_MIO_CITOFONO_ADMIN_PENDING_CALLS_20260609">
+(function(){
+  if(window.__IL_MIO_CITOFONO_ADMIN_PENDING_CALLS_20260609__) return;
+  window.__IL_MIO_CITOFONO_ADMIN_PENDING_CALLS_20260609__ = true;
+
+  function $(id){ return document.getElementById(id); }
+
+  function getCode(){
+    try{
+      return new URLSearchParams(location.search).get("code") || "DEMO";
+    }catch(e){
+      return "DEMO";
+    }
+  }
+
+  function api(path){
+    return "/api/citofonami/" + encodeURIComponent(getCode()) + path;
+  }
+
+  function ensureCallBox(){
+    var box = $("incomingCallBox");
+    if(box) return box;
+
+    box = document.createElement("section");
+    box.id = "incomingCallBox";
+    box.style.display = "none";
+    box.style.margin = "14px 0";
+    box.style.padding = "18px";
+    box.style.borderRadius = "24px";
+    box.style.background = "linear-gradient(135deg,#eff6ff,#ffffff)";
+    box.style.border = "1px solid #bfdbfe";
+    box.style.boxShadow = "0 18px 44px rgba(37,99,235,.12)";
+    box.style.textAlign = "center";
+
+    box.innerHTML = `
+      <div style="font-size:22px;font-weight:950;margin-bottom:8px;color:#0f172a">Chiamata in arrivo</div>
+      <div id="incomingCallText" style="font-size:15px;color:#64748b;margin-bottom:14px">Qualcuno sta suonando.</div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <button id="answerIncomingBtn" type="button" style="border:0;border-radius:16px;padding:14px 18px;font-weight:950;background:linear-gradient(135deg,#22c55e,#16a34a);color:white">Rispondi</button>
+        <button id="rejectIncomingBtn" type="button" style="border:0;border-radius:16px;padding:14px 18px;font-weight:950;background:linear-gradient(135deg,#ef4444,#dc2626);color:white">Rifiuta</button>
+      </div>
+      <div id="incomingCallState" style="margin-top:12px;font-size:13px;color:#64748b">In attesa...</div>
+    `;
+
+    var firstCard = document.querySelector(".card");
+    if(firstCard && firstCard.parentNode){
+      firstCard.parentNode.insertBefore(box, firstCard);
+    }else{
+      document.body.prepend(box);
+    }
+
+    return box;
+  }
+
+  var currentCall = null;
+
+  function setState(text){
+    var el = $("incomingCallState");
+    if(el) el.textContent = text;
+    console.log("[Il mio citofono admin]", text);
+  }
+
+  function showCall(call){
+    if(!call || !call.id) return;
+
+    currentCall = call;
+
+    var box = ensureCallBox();
+    box.style.display = "block";
+
+    var text = $("incomingCallText");
+    if(text){
+      var name = call.door && call.door.name ? call.door.name : "Citofono";
+      text.textContent = name + " sta suonando.";
+    }
+
+    setState("CALL_ID=" + call.id + " · status=" + (call.status || "pending"));
+  }
+
+  async function pollPending(){
+    try{
+      var res = await fetch(api("/calls/pending?t=" + Date.now()), { cache:"no-store" });
+      var data = await res.json();
+
+      var call =
+        data.call ||
+        data.pending ||
+        (Array.isArray(data.calls) ? data.calls[0] : null) ||
+        (Array.isArray(data.items) ? data.items[0] : null);
+
+      if(call && call.id){
+        if(!currentCall || currentCall.id !== call.id){
+          showCall(call);
+        }
+      }
+    }catch(e){
+      console.warn("pollPending errore:", e);
+    }
+  }
+
+  async function answerCall(){
+    if(!currentCall || !currentCall.id){
+      setState("Nessuna chiamata da rispondere.");
+      return;
+    }
+
+    try{
+      setState("Rispondo...");
+      await fetch(api("/calls/" + encodeURIComponent(currentCall.id) + "/action"), {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ action:"answer" })
+      });
+      setState("Chiamata accettata. Motore audio da collegare.");
+    }catch(e){
+      setState("Errore risposta: " + (e.message || e));
+    }
+  }
+
+  async function rejectCall(){
+    if(!currentCall || !currentCall.id){
+      setState("Nessuna chiamata da rifiutare.");
+      return;
+    }
+
+    try{
+      setState("Rifiuto...");
+      await fetch(api("/calls/" + encodeURIComponent(currentCall.id) + "/action"), {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ action:"close", closedBy:"admin" })
+      });
+    }catch(e){}
+
+    currentCall = null;
+    var box = $("incomingCallBox");
+    if(box) box.style.display = "none";
+    setState("Chiamata chiusa.");
+  }
+
+  function bindButtons(){
+    var a = $("answerIncomingBtn");
+    var r = $("rejectIncomingBtn");
+
+    if(a) a.onclick = answerCall;
+    if(r) r.onclick = rejectCall;
+  }
+
+  ensureCallBox();
+  bindButtons();
+  pollPending();
+  setInterval(function(){
+    bindButtons();
+    pollPending();
+  }, 1000);
+})();
+</script>
+
 </body>
 </html>
