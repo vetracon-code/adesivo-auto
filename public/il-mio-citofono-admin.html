@@ -751,8 +751,9 @@
       setAdminState("Chiamata accettata. Attendo che l’utente attivi microfono e vivavoce.");
       startTimer();
 
-      answerTimer = setInterval(() => pollAnswer(callId), 700);
-      iceTimer = setInterval(() => pollUserIce(callId), 700);
+      pollAnswer(callId);
+      answerTimer = setInterval(() => pollAnswer(callId), 500);
+      iceTimer = setInterval(() => pollUserIce(callId), 500);
 
     }catch(e){
       console.error(e);
@@ -768,20 +769,55 @@
   }
 
   async function pollAnswer(callId){
-    if(!adminPeer) return;
+    if(!adminPeer){
+      setAdminState("Peer admin non pronto. Riprova a rispondere.");
+      return;
+    }
 
     try{
       const res = await fetch(api(`/calls/${encodeURIComponent(callId)}/webrtc/answer?t=${Date.now()}`), { cache:"no-store" });
       const data = await res.json();
 
-      if(data.ok && data.answer && !adminPeer.currentRemoteDescription){
-        await adminPeer.setRemoteDescription(data.answer);
-        diagAudio('ADMIN setRemoteDescription(answer)', adminPeer, adminStream, remoteAudio);
-        setAdminState("Utente collegato. Audio in corso...");
-        clearInterval(answerTimer);
-        answerTimer = null;
+      if(!data.ok){
+        setAdminState("Attendo answer utente... server: " + (data.error || "non pronta"));
+        return;
       }
-    }catch(e){}
+
+      if(!data.answer || data.answer.type !== "answer"){
+        setAdminState("Attendo answer utente...");
+        return;
+      }
+
+      if(adminPeer.currentRemoteDescription){
+        setAdminState(
+          "Utente collegato. WebRTC: " +
+          adminPeer.connectionState +
+          " / ICE: " +
+          adminPeer.iceConnectionState
+        );
+        return;
+      }
+
+      setAdminState("Answer utente ricevuta. Collegamento audio...");
+
+      await adminPeer.setRemoteDescription(new RTCSessionDescription(data.answer));
+
+      diagAudio('ADMIN setRemoteDescription(answer)', adminPeer, adminStream, remoteAudio);
+
+      setAdminState(
+        "Utente collegato. WebRTC: " +
+        adminPeer.connectionState +
+        " / ICE: " +
+        adminPeer.iceConnectionState
+      );
+
+      clearInterval(answerTimer);
+      answerTimer = null;
+
+    }catch(e){
+      console.error("pollAnswer admin error:", e);
+      setAdminState("Errore applicazione answer: " + (e.message || e));
+    }
   }
 
   async function pollUserIceRobust(callId){
