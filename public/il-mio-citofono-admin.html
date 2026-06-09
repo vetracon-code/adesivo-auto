@@ -655,12 +655,8 @@
 
       // Questo deve partire dal gesto reale su Rispondi.
       adminStream = await navigator.mediaDevices.getUserMedia({
-        audio:{
-          echoCancellation:true,
-          noiseSuppression:true,
-          autoGainControl:true
-        },
-        video:false
+        audio: true,
+        video: false
       });
 
       const tracks = adminStream.getAudioTracks();
@@ -692,11 +688,6 @@
       adminPeer = new RTCPeerConnection({
         iceServers:[{ urls:["stun:stun.l.google.com:19302"] }]
       });
-
-      // AUDIO FIX: il canale deve essere bidirezionale.
-      try {
-        adminPeer.addTransceiver("audio", { direction:"sendrecv" });
-      } catch(e) {}
 
       adminStream.getAudioTracks().forEach(track => {
         track.enabled = true;
@@ -743,7 +734,7 @@
         }
       };
 
-      const offer = await adminPeer.createOffer({ offerToReceiveAudio:true, offerToReceiveVideo:false });
+      const offer = await adminPeer.createOffer();
       await adminPeer.setLocalDescription(offer);
       diagAudio('ADMIN setLocalDescription(offer)', adminPeer, adminStream, remoteAudio);
 
@@ -761,7 +752,7 @@
       startTimer();
 
       answerTimer = setInterval(() => pollAnswer(callId), 700);
-      iceTimer = setInterval(() => pollUserIceRobust(callId), 700);
+      iceTimer = setInterval(() => pollUserIce(callId), 700);
 
     }catch(e){
       console.error(e);
