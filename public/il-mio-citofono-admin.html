@@ -616,29 +616,53 @@
     }
   }
 
+  // IL_MIO_CITOFONO_ROBUST_ICE_ADMIN_20260609
+  function getLocalIceUfrag(pc){
+    try{
+      var sdp = pc && pc.localDescription && pc.localDescription.sdp ? pc.localDescription.sdp : "";
+      var m = sdp.match(/a=ice-ufrag:([^\\r\\n]+)/);
+      return m ? m[1].trim() : "";
+    }catch(e){
+      return "";
+    }
+  }
+
   async function pollUserIce(callId){
     if(!adminPeer) return;
 
-    try{
-      var res = await fetch(api("/calls/" + encodeURIComponent(callId) + "/webrtc/ice?role=user&t=" + Date.now()), { cache:"no-store" });
-      var data = await res.json();
-      var candidates = data.candidates || data.ice || [];
+    var localUfrag = getLocalIceUfrag(adminPeer);
+    var roles = ["user", "admin"];
 
-      for(var i=0;i<candidates.length;i++){
-        var candidate = candidates[i].candidate || candidates[i];
-        if(!candidate) continue;
+    for(var r=0;r<roles.length;r++){
+      var role = roles[r];
 
-        var key = JSON.stringify(candidate);
-        if(seenUserIce.has(key)) continue;
-        seenUserIce.add(key);
+      try{
+        var res = await fetch(api("/calls/" + encodeURIComponent(callId) + "/webrtc/ice?role=" + role + "&t=" + Date.now()), { cache:"no-store" });
+        var data = await res.json();
+        var candidates = data.candidates || data.ice || [];
 
-        try{
-          await adminPeer.addIceCandidate(candidate);
-        }catch(e){
-          console.warn("ICE user non aggiunto:", e);
+        for(var i=0;i<candidates.length;i++){
+          var candidate = candidates[i].candidate || candidates[i];
+          if(!candidate) continue;
+
+          if(localUfrag && candidate.usernameFragment && candidate.usernameFragment === localUfrag){
+            continue;
+          }
+
+          var key = role + ":" + JSON.stringify(candidate);
+          if(seenUserIce.has(key)) continue;
+          seenUserIce.add(key);
+
+          try{
+            await adminPeer.addIceCandidate(candidate);
+          }catch(e){
+            console.warn("ICE remoto non aggiunto admin role=" + role + ":", e);
+          }
         }
+      }catch(e){
+        console.warn("pollUserIce role=" + role + " error:", e);
       }
-    }catch(e){}
+    }
   }
 
   async function rejectCall(){

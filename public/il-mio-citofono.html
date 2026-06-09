@@ -347,29 +347,51 @@
       iceTimer = setInterval(() => pollAdminIce(callId), 700);
     }
 
+    // IL_MIO_CITOFONO_ROBUST_ICE_USER_20260609
+    function getLocalIceUfrag(pc){
+      try{
+        const sdp = pc && pc.localDescription && pc.localDescription.sdp ? pc.localDescription.sdp : "";
+        const m = sdp.match(/a=ice-ufrag:([^\\r\\n]+)/);
+        return m ? m[1].trim() : "";
+      }catch(e){
+        return "";
+      }
+    }
+
     async function pollAdminIce(callId){
       if(!userPeer) return;
 
-      try{
-        const res = await fetch(api("/calls/" + encodeURIComponent(callId) + "/webrtc/ice?role=admin&t=" + Date.now()), { cache:"no-store" });
-        const data = await res.json();
-        const candidates = data.candidates || data.ice || [];
+      const localUfrag = getLocalIceUfrag(userPeer);
+      const roles = ["admin", "user"];
 
-        for(const item of candidates){
-          const candidate = item.candidate || item;
-          if(!candidate) continue;
+      for(const role of roles){
+        try{
+          const res = await fetch(api("/calls/" + encodeURIComponent(callId) + "/webrtc/ice?role=" + role + "&t=" + Date.now()), { cache:"no-store" });
+          const data = await res.json();
+          const candidates = data.candidates || data.ice || [];
 
-          const key = JSON.stringify(candidate);
-          if(seenAdminIce.has(key)) continue;
-          seenAdminIce.add(key);
+          for(const item of candidates){
+            const candidate = item.candidate || item;
+            if(!candidate) continue;
 
-          try{
-            await userPeer.addIceCandidate(candidate);
-          }catch(e){
-            console.warn("ICE admin non aggiunto:", e);
+            if(localUfrag && candidate.usernameFragment && candidate.usernameFragment === localUfrag){
+              continue;
+            }
+
+            const key = role + ":" + JSON.stringify(candidate);
+            if(seenAdminIce.has(key)) continue;
+            seenAdminIce.add(key);
+
+            try{
+              await userPeer.addIceCandidate(candidate);
+            }catch(e){
+              console.warn("ICE remoto non aggiunto utente role=" + role + ":", e);
+            }
           }
+        }catch(e){
+          console.warn("pollAdminIce role=" + role + " error:", e);
         }
-      }catch(e){}
+      }
     }
 
     function stopAll(){
