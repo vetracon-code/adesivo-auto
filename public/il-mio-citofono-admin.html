@@ -925,5 +925,231 @@
 
 
 
+
+<script id="IL_MIO_CITOFONO_ADMIN_QR_NOTIFY_RESTORE_20260609">
+(function(){
+  if(window.__IL_MIO_CITOFONO_ADMIN_QR_NOTIFY_RESTORE_20260609__) return;
+  window.__IL_MIO_CITOFONO_ADMIN_QR_NOTIFY_RESTORE_20260609__ = true;
+
+  function $(id){
+    return document.getElementById(id);
+  }
+
+  function getCode(){
+    try{
+      return new URLSearchParams(location.search).get("code") || window.CODE || "DEMO";
+    }catch(e){
+      return window.CODE || "DEMO";
+    }
+  }
+
+  function api(path){
+    return "/api/citofonami/" + encodeURIComponent(getCode()) + path;
+  }
+
+  function getPublicUserUrl(){
+    return window.location.origin + "/il-mio-citofono.html?code=" + encodeURIComponent(getCode());
+  }
+
+  function restoreQr(){
+    try{
+      var url = getPublicUserUrl();
+      var qrSrc = "https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=18&data=" + encodeURIComponent(url);
+
+      var qrImg = $("qrImg");
+      var qrUrlText = $("qrUrlText");
+      var publicUserUrl = $("publicUserUrl");
+
+      if(qrImg){
+        qrImg.src = qrSrc;
+        qrImg.alt = "QR Il mio citofono";
+      }
+
+      if(qrUrlText){
+        qrUrlText.textContent = url;
+      }
+
+      if(publicUserUrl){
+        publicUserUrl.textContent = url;
+      }
+
+      console.log("[Il mio citofono] QR ripristinato:", url);
+    }catch(e){
+      console.warn("[Il mio citofono] errore QR:", e);
+    }
+  }
+
+  function setNotifyStatus(text){
+    var el = $("notifyStatus");
+    if(el) el.textContent = text;
+    console.log("[Il mio citofono notifiche]", text);
+  }
+
+  function urlBase64ToUint8Array(base64String){
+    var padding = "=".repeat((4 - base64String.length % 4) % 4);
+    var base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    var rawData = window.atob(base64);
+    var outputArray = new Uint8Array(rawData.length);
+
+    for(var i = 0; i < rawData.length; ++i){
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+
+    return outputArray;
+  }
+
+  async function registerServiceWorker(){
+    if(!("serviceWorker" in navigator)){
+      throw new Error("Service worker non supportato.");
+    }
+
+    try{
+      return await navigator.serviceWorker.register("/il-mio-citofono-sw.js", { scope:"/" });
+    }catch(e){
+      console.warn("SW clone non registrato, provo citofonami-sw:", e);
+      return await navigator.serviceWorker.register("/citofonami-sw.js", { scope:"/" });
+    }
+  }
+
+  async function activateNotifications(){
+    try{
+      if(!("Notification" in window)){
+        setNotifyStatus("Stato notifiche: non supportate da questo browser.");
+        return;
+      }
+
+      if(!("serviceWorker" in navigator) || !("PushManager" in window)){
+        setNotifyStatus("Stato notifiche: push non supportate da questo browser.");
+        return;
+      }
+
+      setNotifyStatus("Stato notifiche: richiesta permesso...");
+
+      var permission = await Notification.requestPermission();
+
+      if(permission !== "granted"){
+        setNotifyStatus("Stato notifiche: " + permission);
+        return;
+      }
+
+      setNotifyStatus("Stato notifiche: registro App...");
+
+      var registration = await registerServiceWorker();
+      await navigator.serviceWorker.ready;
+
+      setNotifyStatus("Stato notifiche: preparo sottoscrizione...");
+
+      var vapidRes = await fetch(api("/vapid-public-key?t=" + Date.now()), { cache:"no-store" });
+      var vapidData = await vapidRes.json();
+
+      var publicKey =
+        vapidData.publicKey ||
+        vapidData.vapidPublicKey ||
+        vapidData.key ||
+        "";
+
+      if(!publicKey){
+        throw new Error("VAPID public key mancante.");
+      }
+
+      var existing = await registration.pushManager.getSubscription();
+
+      if(existing){
+        try{
+          await existing.unsubscribe();
+        }catch(e){}
+      }
+
+      var subscription = await registration.pushManager.subscribe({
+        userVisibleOnly:true,
+        applicationServerKey:urlBase64ToUint8Array(publicKey)
+      });
+
+      var subRes = await fetch(api("/subscribe"), {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({
+          subscription:subscription,
+          source:"il-mio-citofono-admin",
+          code:getCode(),
+          userAgent:navigator.userAgent
+        })
+      });
+
+      var subData = await subRes.json().catch(function(){ return {}; });
+
+      if(!subRes.ok || subData.ok === false){
+        throw new Error(subData.error || "Sottoscrizione non salvata.");
+      }
+
+      setNotifyStatus("Stato notifiche: attive.");
+      console.log("[Il mio citofono] sottoscrizione push attiva:", subscription);
+
+      try{
+        new Notification("Il mio citofono", {
+          body:"Notifiche attive.",
+          icon:"/icons/il-mio-citofono.svg"
+        });
+      }catch(e){}
+
+    }catch(e){
+      console.error("[Il mio citofono] errore notifiche:", e);
+      setNotifyStatus("Stato notifiche: errore - " + (e.message || e));
+    }
+  }
+
+  function restoreNotificationButton(){
+    var btn = $("notifyBtn");
+
+    if(!btn){
+      console.warn("[Il mio citofono] notifyBtn non trovato.");
+      return;
+    }
+
+    btn.disabled = false;
+    btn.onclick = function(ev){
+      if(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+      activateNotifications();
+      return false;
+    };
+
+    console.log("[Il mio citofono] pulsante notifiche ripristinato.");
+  }
+
+  function restoreInstallButton(){
+    var btn = $("installBtn");
+    if(!btn) return;
+
+    if(!btn.dataset.restoreInstalled){
+      btn.dataset.restoreInstalled = "1";
+      btn.addEventListener("click", function(){
+        alert("Se il telefono non mostra l’installazione automatica, usa il menu del browser: Condividi/Aggiungi a Home su iPhone, oppure ⋮/Aggiungi a Home su Android.");
+      });
+    }
+  }
+
+  function restoreAll(){
+    restoreQr();
+    restoreNotificationButton();
+    restoreInstallButton();
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", restoreAll);
+  }else{
+    restoreAll();
+  }
+
+  setTimeout(restoreAll, 500);
+  setTimeout(restoreAll, 1500);
+
+  window.ilMioCitofonoRestoreQrNotify = restoreAll;
+  window.ilMioCitofonoActivateNotifications = activateNotifications;
+})();
+</script>
+
 </body>
 </html>
