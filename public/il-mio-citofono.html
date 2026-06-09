@@ -70,6 +70,7 @@
   
 
 
+
 <script>
   const $ = id => document.getElementById(id);
 
@@ -84,6 +85,7 @@
   let currentCallId = null;
   let adminAnswered = false;
   let offerReceived = null;
+  let mode = "idle"; // idle | ringing | talk-ready | connecting | connected
   const seenAdminIce = new Set();
 
   function api(path){
@@ -116,6 +118,38 @@
       localStorage.setItem("ilMioCitofono.callerId", id);
     }
     return id;
+  }
+
+  function setMainButton(text, disabled){
+    const btn = $("ringBtn");
+    if(!btn) return;
+    btn.textContent = text;
+    btn.disabled = !!disabled;
+  }
+
+  function setMode(nextMode){
+    mode = nextMode;
+
+    if(mode === "idle"){
+      setMainButton("🔔 SUONA", false);
+    }
+
+    if(mode === "ringing"){
+      setMainButton("CHIAMATA IN CORSO", true);
+    }
+
+    if(mode === "talk-ready"){
+      setMainButton("🎙️ PARLA ORA", false);
+      $("ringBtn").style.background = "linear-gradient(135deg,#22c55e,#16a34a)";
+    }
+
+    if(mode === "connecting"){
+      setMainButton("ATTIVO AUDIO...", true);
+    }
+
+    if(mode === "connected"){
+      setMainButton("AUDIO ATTIVO", true);
+    }
   }
 
   async function loadSettings(){
@@ -153,16 +187,22 @@
     remoteAudio.volume = 1;
     document.body.appendChild(remoteAudio);
 
+    // Tentativo non bloccante, poi il vero play avverrà quando arriva la track.
+    try{
+      const p = remoteAudio.play();
+      if(p && p.catch) p.catch(() => {});
+    }catch(e){}
+
     return remoteAudio;
   }
 
-  async function requestMicFromTalkButton(){
+  async function requestUserMic(){
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
       throw new Error("Microfono non disponibile su questo browser.");
     }
 
     setHint("Autorizza il microfono.");
-    setNote("Autorizza il microfono per parlare con l’admin.", false);
+    setNote("Consenti il microfono per parlare con l’admin.", false);
 
     const stream = await navigator.mediaDevices.getUserMedia({
       audio:{
@@ -184,7 +224,7 @@
     }
 
     userStream = stream;
-    setDebug("Microfono: " + (tracks[0].label || "attivo") + " · " + tracks[0].readyState);
+    setDebug("Microfono utente: " + (tracks[0].label || "attivo") + " · " + tracks[0].readyState);
 
     return stream;
   }
@@ -222,11 +262,12 @@
     currentCallId = null;
     adminAnswered = false;
     offerReceived = null;
+    $("ringBtn").style.background = "";
+    setMode("idle");
   }
 
   async function ring(){
-    $("ringBtn").disabled = true;
-    $("ringBtn").textContent = "CHIAMATA IN CORSO";
+    setMode("ringing");
     $("speaker").classList.add("active");
     $("closed").style.display = "none";
 
@@ -234,7 +275,7 @@
 
     try{
       setHint("Invio chiamata all'admin...");
-      setNote("Attendi la risposta. Quando l’admin accetta, attiverai microfono e vivavoce.", false);
+      setNote("Attendi la risposta. Quando l’admin accetta, premi PARLA ORA.", false);
 
       const payload = {
         callerId: callerId(),
@@ -280,8 +321,6 @@
       console.error("[IL-MIO-CITOFONO] errore ring:", e);
       setHint("Errore chiamata: " + (e.message || e));
       setNote("Chiamata non avviata. Riprova.", false);
-      $("ringBtn").disabled = false;
-      $("ringBtn").textContent = "🔔 SUONA";
       $("speaker").classList.remove("active");
       stopAll();
     }
@@ -298,12 +337,11 @@
       if(status === "answered" && !adminAnswered){
         adminAnswered = true;
         setHint("Admin ha risposto.");
-        setNote("Ora attiva microfono e vivavoce per parlare.", false);
+        setNote("Premi PARLA ORA per attivare microfono e vivavoce.", false);
+        setMode("talk-ready");
 
         if($("talkNowBtn")){
-          $("talkNowBtn").classList.add("show");
-          $("talkNowBtn").disabled = false;
-          $("talkNowBtn").textContent = "🎙️ Attiva microfono e vivavoce";
+          $("talkNowBtn").classList.remove("show");
         }
       }
 
@@ -311,9 +349,6 @@
         setHint("Conversazione chiusa.");
         setNote("Conversazione chiusa. Microfono spento.", true);
         $("closed").style.display = "block";
-
-        if($("talkNowBtn")) $("talkNowBtn").classList.remove("show");
-
         $("speaker").classList.remove("active");
         stopAll();
 
@@ -334,8 +369,8 @@
       offerReceived = data.offer;
       setDebug("Offer admin ricevuta.");
 
-      if(adminAnswered && $("talkNowBtn")){
-        $("talkNowBtn").classList.add("show");
+      if(adminAnswered){
+        setMode("talk-ready");
       }
 
       clearInterval(offerTimer);
@@ -349,18 +384,19 @@
   async function talkNow(){
     if(!currentCallId){
       setHint("Chiamata non trovata. Riprova.");
+      setMode("idle");
       return;
     }
 
-    $("talkNowBtn").disabled = true;
-    $("talkNowBtn").textContent = "ATTIVO AUDIO...";
-    setNote("Attivo microfono e vivavoce.", false);
+    setMode("connecting");
+    setHint("Attivo microfono e vivavoce...");
+    setNote("Consenti il microfono. Poi potrai parlare.", false);
 
     try{
       createRemoteAudioShell();
 
-      // Questo parte da gesto reale utente, quindi va bene anche su iPhone.
-      await requestMicFromTalkButton();
+      // Gesto reale dell’utente: qui il browser deve chiedere microfono.
+      await requestUserMic();
 
       if(!offerReceived){
         setHint("Attendo collegamento admin...");
@@ -376,15 +412,13 @@
     }catch(e){
       console.error("[IL-MIO-CITOFONO] talkNow error:", e);
       setHint("Errore audio: " + (e.message || e));
-      setNote("Non sono riuscito ad attivare l’audio. Riprova.", false);
-
-      $("talkNowBtn").disabled = false;
-      $("talkNowBtn").textContent = "🎙️ Attiva microfono e vivavoce";
+      setNote("Non sono riuscito ad attivare l’audio. Premi di nuovo PARLA ORA.", false);
+      setMode("talk-ready");
     }
   }
 
   async function waitOffer(callId){
-    for(let i=0;i<16;i++){
+    for(let i=0;i<20;i++){
       try{
         const res = await fetch(api(`/calls/${encodeURIComponent(callId)}/webrtc/offer?t=${Date.now()}`), { cache:"no-store" });
         const data = await res.json();
@@ -427,15 +461,14 @@
       if(playPromise && playPromise.catch){
         playPromise.catch(err => {
           console.warn("[IL-MIO-CITOFONO] play remoto bloccato:", err);
-          setHint("Audio pronto. Tocca di nuovo lo schermo se non senti.");
+          setHint("Audio pronto. Tocca lo schermo se non senti.");
           setDebug("Playback remoto bloccato: " + (err.message || err));
         });
       }
 
       setHint("Parla ora.");
       setNote("Audio e vivavoce attivi. Parla ora.", true);
-
-      if($("talkNowBtn")) $("talkNowBtn").classList.remove("show");
+      setMode("connected");
     };
 
     userPeer.onconnectionstatechange = () => {
@@ -447,7 +480,7 @@
       if(st === "connected"){
         setHint("Audio collegato. Parla ora.");
         setNote("Audio e vivavoce attivi. Parla ora.", true);
-        if($("talkNowBtn")) $("talkNowBtn").classList.remove("show");
+        setMode("connected");
       }
 
       if(st === "failed" || st === "disconnected"){
@@ -483,7 +516,7 @@
 
     setHint("Risposta inviata. Collegamento audio...");
     setNote("Vivavoce in attivazione...", true);
-    setDebug("Answer inviata · attendo ICE admin");
+    setDebug("Answer inviata all’admin · attendo ICE");
 
     iceTimer = setInterval(() => pollAdminIce(callId), 700);
   }
@@ -511,10 +544,20 @@
     }catch(e){}
   }
 
-  $("ringBtn").addEventListener("click", ring);
+  $("ringBtn").addEventListener("click", () => {
+    if(mode === "idle"){
+      ring();
+      return;
+    }
+
+    if(mode === "talk-ready"){
+      talkNow();
+      return;
+    }
+  });
 
   if($("talkNowBtn")){
-    $("talkNowBtn").addEventListener("click", talkNow);
+    $("talkNowBtn").style.display = "none";
   }
 
   window.addEventListener("beforeunload", () => {
@@ -522,7 +565,9 @@
   });
 
   loadSettings();
+  setMode("idle");
 </script>
+
 
 
 
