@@ -442,6 +442,11 @@
       ]
     });
 
+    // AUDIO FIX: forza canale audio bidirezionale.
+    try {
+      userPeer.addTransceiver("audio", { direction:"sendrecv" });
+    } catch(e) {}
+
     userPeer.ontrack = event => {
       const remoteStream = event.streams && event.streams[0]
         ? event.streams[0]
@@ -460,7 +465,7 @@
         });
       }
 
-      setHint("Parla ora.");
+      setHint("Audio remoto ricevuto. Parla ora.");
       setNote("Microfono e audio attivi. Parla ora.", true);
       setMode("connected");
     };
@@ -503,6 +508,14 @@
       userPeer.addTrack(track, userStream);
     });
 
+    try {
+      userPeer.getTransceivers().forEach(t => {
+        if(t.receiver && t.receiver.track && t.receiver.track.kind === "audio"){
+          t.direction = "sendrecv";
+        }
+      });
+    } catch(e) {}
+
     await userPeer.setRemoteDescription(new RTCSessionDescription(offer));
 
     const answer = await userPeer.createAnswer();
@@ -521,7 +534,37 @@
     setDebug("Answer POST ok.");
 
     clearInterval(iceTimer);
-    iceTimer = setInterval(() => pollAdminIce(callId), 700);
+    iceTimer = setInterval(() => pollAdminIceRobust(callId), 700);
+  }
+
+  async function pollAdminIceRobust(callId){
+    // Recupero robusto: chiedo entrambi i ruoli per evitare inversioni lato server/client.
+    await pollAdminIceByRole(callId, "user");
+    await pollAdminIceByRole(callId, "admin");
+  }
+
+  async function pollAdminIceByRole(callId, role){
+    if(!userPeer) return;
+
+    try{
+      const res = await fetch(api(`/calls/${encodeURIComponent(callId)}/webrtc/ice?role=${encodeURIComponent(role)}&t=${Date.now()}`), { cache:"no-store" });
+      const data = await res.json();
+      const candidates = data.candidates || data.ice || [];
+
+      for(const item of candidates){
+        const candidate = item.candidate || item;
+        if(!candidate) continue;
+
+        const key = role + ":" + JSON.stringify(candidate);
+        if(seenAdminIce.has(key)) continue;
+
+        seenAdminIce.add(key);
+
+        try{
+          await userPeer.addIceCandidate(candidate);
+        }catch(e){}
+      }
+    }catch(e){}
   }
 
   async function pollAdminIce(callId){

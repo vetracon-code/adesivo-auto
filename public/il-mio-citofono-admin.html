@@ -634,7 +634,15 @@
         iceServers:[{ urls:["stun:stun.l.google.com:19302"] }]
       });
 
-      adminStream.getTracks().forEach(track => adminPeer.addTrack(track, adminStream));
+      // AUDIO FIX: il canale deve essere bidirezionale.
+      try {
+        adminPeer.addTransceiver("audio", { direction:"sendrecv" });
+      } catch(e) {}
+
+      adminStream.getAudioTracks().forEach(track => {
+        track.enabled = true;
+        adminPeer.addTrack(track, adminStream);
+      });
 
       adminPeer.ontrack = event => {
         const stream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream([event.track]);
@@ -648,14 +656,21 @@
           });
         }
 
-        setAdminState("Audio collegato. Vivavoce attivo.");
+        setAdminState("Audio remoto ricevuto. Vivavoce attivo.");
       };
 
       adminPeer.onconnectionstatechange = () => {
         if(!adminPeer) return;
         const st = adminPeer.connectionState;
+        const ice = adminPeer.iceConnectionState;
+        setAdminState("WebRTC admin: " + st + " / ICE: " + ice);
         if(st === "connected") setAdminState("Audio collegato. Vivavoce attivo.");
-        if(st === "failed" || st === "disconnected") setAdminState("Connessione audio instabile.");
+        if(st === "failed" || st === "disconnected") setAdminState("Connessione audio instabile: " + st + " / " + ice);
+      };
+
+      adminPeer.oniceconnectionstatechange = () => {
+        if(!adminPeer) return;
+        setAdminState("ICE admin: " + adminPeer.iceConnectionState);
       };
 
       adminPeer.onicecandidate = event => {
@@ -685,7 +700,7 @@
       startTimer();
 
       answerTimer = setInterval(() => pollAnswer(callId), 700);
-      iceTimer = setInterval(() => pollUserIce(callId), 700);
+      iceTimer = setInterval(() => pollUserIceRobust(callId), 700);
 
     }catch(e){
       console.error(e);
@@ -712,6 +727,35 @@
         setAdminState("Utente collegato. Audio in corso...");
         clearInterval(answerTimer);
         answerTimer = null;
+      }
+    }catch(e){}
+  }
+
+  async function pollUserIceRobust(callId){
+    // Recupero robusto: chiedo entrambi i ruoli per evitare inversioni lato server/client.
+    await pollUserIceByRole(callId, "admin");
+    await pollUserIceByRole(callId, "user");
+  }
+
+  async function pollUserIceByRole(callId, role){
+    if(!adminPeer) return;
+
+    try{
+      const res = await fetch(api(`/calls/${encodeURIComponent(callId)}/webrtc/ice?role=${encodeURIComponent(role)}&t=${Date.now()}`), { cache:"no-store" });
+      const data = await res.json();
+      const candidates = data.candidates || data.ice || [];
+
+      for(const item of candidates){
+        const candidate = item.candidate || item;
+        if(!candidate) continue;
+
+        const key = role + ":" + JSON.stringify(candidate);
+        if(seenUserIce.has(key)) continue;
+        seenUserIce.add(key);
+
+        try{
+          await adminPeer.addIceCandidate(candidate);
+        }catch(e){}
       }
     }catch(e){}
   }
