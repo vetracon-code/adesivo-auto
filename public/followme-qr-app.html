@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101820">
+  <title>FollowMe QR</title>
+  <style>
+    :root{
+      --bg:#f4f6f8;
+      --card:#ffffff;
+      --text:#101820;
+      --muted:#687386;
+      --line:#e5e9f0;
+      --dark:#101820;
+      --ok:#16a34a;
+      --warn:#eab308;
+      --err:#dc2626;
+      --radius:22px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+      background:var(--bg);
+      color:var(--text);
+    }
+    .wrap{
+      width:min(760px,100%);
+      margin:0 auto;
+      padding:18px 14px 34px;
+    }
+    .top{
+      position:sticky;
+      top:0;
+      z-index:5;
+      background:rgba(244,246,248,.94);
+      backdrop-filter:blur(12px);
+      padding:10px 0 12px;
+    }
+    .brand{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:center;
+    }
+    h1{
+      font-size:24px;
+      margin:0;
+      letter-spacing:-.03em;
+    }
+    .code{
+      font-size:12px;
+      color:var(--muted);
+      font-weight:700;
+      word-break:break-all;
+      text-align:right;
+    }
+    .chips{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-top:12px;
+    }
+    .chip{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:999px;
+      padding:8px 10px;
+      font-size:13px;
+      font-weight:800;
+      display:flex;
+      align-items:center;
+      gap:7px;
+    }
+    .dot{
+      width:9px;
+      height:9px;
+      border-radius:50%;
+      background:var(--warn);
+      display:inline-block;
+    }
+    .dot.ok{background:var(--ok)}
+    .dot.err{background:var(--err)}
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      padding:16px;
+      box-shadow:0 12px 34px rgba(16,24,32,.06);
+      margin-top:14px;
+    }
+    .label{
+      color:var(--muted);
+      font-size:13px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+      margin-bottom:7px;
+    }
+    .active{
+      font-size:15px;
+      font-weight:800;
+      word-break:break-all;
+      line-height:1.35;
+    }
+    input{
+      width:100%;
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:15px 14px;
+      font-size:16px;
+      outline:none;
+      margin-top:10px;
+      background:#fff;
+    }
+    input:focus{
+      border-color:#101820;
+      box-shadow:0 0 0 4px rgba(16,24,32,.08);
+    }
+    .row{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:12px;
+    }
+    button,a.btn{
+      border:0;
+      border-radius:16px;
+      padding:13px 15px;
+      background:var(--dark);
+      color:#fff;
+      font-size:15px;
+      font-weight:900;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      min-height:46px;
+    }
+    button.secondary,a.secondary{
+      background:#fff;
+      color:var(--dark);
+      border:1px solid var(--line);
+    }
+    button:disabled{
+      opacity:.55;
+      cursor:not-allowed;
+    }
+    .preview{
+      width:100%;
+      height:320px;
+      border:1px solid var(--line);
+      border-radius:18px;
+      overflow:hidden;
+      background:#f8fafc;
+      margin-top:12px;
+      position:relative;
+    }
+    iframe{
+      width:100%;
+      height:100%;
+      border:0;
+      background:#fff;
+    }
+    .empty{
+      color:var(--muted);
+      font-size:14px;
+      font-weight:700;
+      padding:14px;
+      line-height:1.35;
+    }
+    .history{
+      display:grid;
+      gap:10px;
+      margin-top:12px;
+    }
+    .hist-card{
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:12px;
+      background:#fff;
+      display:grid;
+      gap:8px;
+    }
+    .hist-url{
+      font-size:14px;
+      font-weight:900;
+      word-break:break-all;
+    }
+    .hist-meta{
+      color:var(--muted);
+      font-size:12px;
+      font-weight:700;
+    }
+    .badge{
+      display:inline-flex;
+      width:max-content;
+      border-radius:999px;
+      padding:5px 8px;
+      background:#e8fff0;
+      color:#166534;
+      font-size:12px;
+      font-weight:900;
+    }
+    .msg{
+      margin-top:10px;
+      font-size:14px;
+      font-weight:800;
+      display:none;
+    }
+    .msg.ok{color:var(--ok)}
+    .msg.err{color:var(--err)}
+    .installBox{
+      display:none;
+      color:var(--muted);
+      font-size:14px;
+      line-height:1.4;
+      font-weight:700;
+      margin-top:10px;
+      background:#f8fafc;
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand">
+        <h1>FollowMe QR</h1>
+        <div class="code" id="codeLabel">Carico...</div>
+      </div>
+      <div class="chips">
+        <button class="chip secondary" id="installChip" type="button"><span class="dot" id="installDot"></span>App installata</button>
+        <button class="chip secondary" id="pushChip" type="button"><span class="dot" id="pushDot"></span>Notifiche</button>
+      </div>
+      <div class="installBox" id="installBox"></div>
+    </div>
+
+    <section class="card">
+      <div class="label">Link attivo</div>
+      <div class="active" id="activeUrl">Carico...</div>
+
+      <input id="newUrl" autocomplete="url" inputmode="url" placeholder="Incolla qui il nuovo URL da trasmettere">
+
+      <div class="row">
+        <button id="saveUrlBtn" type="button">Aggiorna QR</button>
+        <a class="btn secondary" id="openPublicBtn" href="#" target="_blank" rel="noopener">Apri QR pubblico</a>
+        <button class="secondary" id="copyPublicBtn" type="button">Copia link QR</button>
+      </div>
+
+      <div class="msg" id="msg"></div>
+    </section>
+
+    <section class="card">
+      <div class="label">Preview</div>
+      <div class="preview">
+        <iframe id="previewFrame" src="about:blank" loading="eager"></iframe>
+      </div>
+      <div class="row">
+        <a class="btn secondary" id="openActiveBtn" href="#" target="_blank" rel="noopener">Apri link in nuova scheda</a>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="label">Schede link</div>
+      <div class="empty" id="historyEmpty">Carico le schede...</div>
+      <div class="history" id="historyList"></div>
+    </section>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+
+  function qs(){
+    return new URLSearchParams(location.search || "");
+  }
+
+  function rawId(){
+    var p = qs();
+    var c = p.get("id") || p.get("code") || p.get("public_id") || "";
+    if(!c){
+      var m = String(location.pathname || "").match(/\/fm\/app-new\/([^\/?#]+)/);
+      if(m && m[1]) c = decodeURIComponent(m[1]);
+    }
+    if(!c){
+      var m2 = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/);
+      if(m2 && m2[1]) c = decodeURIComponent(m2[1]);
+    }
+    return String(c || "").trim();
+  }
+
+  var ID = rawId();
+  var PROJECT = null;
+
+  function $(id){ return document.getElementById(id); }
+
+  function setMsg(text, type){
+    var el = $("msg");
+    if(!el) return;
+    el.textContent = text || "";
+    el.className = "msg " + (type || "");
+    el.style.display = text ? "block" : "none";
+  }
+
+  function normalizeUrl(value){
+    var v = String(value || "").trim();
+    if(!v) return "";
+    if(!/^https?:\/\//i.test(v)) v = "https://" + v;
+    try{
+      var u = new URL(v);
+      if(u.protocol !== "http:" && u.protocol !== "https:") return "";
+      return u.toString();
+    }catch(e){
+      return "";
+    }
+  }
+
+  function api(path, options){
+    return fetch(path, Object.assign({ cache:"no-store" }, options || {}))
+      .then(async function(res){
+        var data = await res.json().catch(function(){ return null; });
+        if(!res.ok || !data || data.success === false){
+          throw new Error((data && (data.error || data.detail)) || ("Errore " + res.status));
+        }
+        return data;
+      });
+  }
+
+  function publicUrl(){
+    var publicId = PROJECT && PROJECT.public_id ? PROJECT.public_id : ID;
+    return location.origin + "/fm/u/" + encodeURIComponent(publicId);
+  }
+
+  function appUrl(){
+    var publicId = PROJECT && PROJECT.public_id ? PROJECT.public_id : ID;
+    return location.origin + "/fm/app-new/" + encodeURIComponent(publicId);
+  }
+
+  function setInstallState(){
+    var standalone = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
+    var iosStandalone = window.navigator.standalone === true;
+    var ok = standalone || iosStandalone;
+
+    $("installDot").className = "dot " + (ok ? "ok" : "");
+    $("pushDot").className = "dot " + (
+      !("Notification" in window) ? "err" :
+      Notification.permission === "granted" ? "ok" :
+      Notification.permission === "denied" ? "err" : ""
+    );
+  }
+
+  function deviceText(){
+    var ua = navigator.userAgent || "";
+    var isiOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    var isAndroid = /Android/i.test(ua);
+    var isHuawei = /Huawei|Honor|HUAWEI|HONOR/i.test(ua);
+
+    if(isiOS){
+      return "Su iPhone: apri questa pagina da Safari, tocca Condividi, scegli Aggiungi alla schermata Home, poi riapri FollowMe dall’icona e attiva le notifiche.";
+    }
+    if(isHuawei){
+      return "Su Huawei/Honor: usa il menu del browser e scegli Aggiungi alla schermata Home o Installa app. Poi riapri dall’icona e attiva le notifiche.";
+    }
+    if(isAndroid){
+      return "Su Android: usa il menu del browser e scegli Installa app o Aggiungi a schermata Home. Poi attiva le notifiche.";
+    }
+    return "Salva questa Web App dal menu del browser. Le notifiche servono per ricevere un avviso quando qualcuno inquadra il QR.";
+  }
+
+  function render(data){
+    PROJECT = data.project || {};
+    ID = PROJECT.public_id || PROJECT.code || ID;
+
+    $("codeLabel").textContent = PROJECT.public_id || PROJECT.code || ID;
+
+    var active = PROJECT.active_url || "";
+    $("activeUrl").textContent = active || "Nessun link impostato.";
+    $("openPublicBtn").href = publicUrl();
+
+    if(active){
+      $("previewFrame").src = active;
+      $("openActiveBtn").href = active;
+    }else{
+      $("previewFrame").src = "about:blank";
+      $("openActiveBtn").href = "#";
+    }
+
+    renderHistory(data.history || [], active);
+    setInstallState();
+
+    try{
+      localStorage.setItem("followme_current_public_id", PROJECT.public_id || ID);
+      localStorage.setItem("followme_current_code", PROJECT.code || ID);
+    }catch(e){}
+  }
+
+  function renderHistory(history, active){
+    var list = $("historyList");
+    var empty = $("historyEmpty");
+    list.innerHTML = "";
+
+    if(!history || !history.length){
+      empty.style.display = "block";
+      empty.textContent = "Nessuna scheda ancora creata.";
+      return;
+    }
+
+    empty.style.display = "none";
+
+    var cleanActive = String(active || "").replace(/\/+$/,"");
+
+    history.forEach(function(item){
+      var url = String(item.url || "").trim();
+      if(!url) return;
+
+      var card = document.createElement("div");
+      card.className = "hist-card";
+
+      var isActive = url.replace(/\/+$/,"") === cleanActive;
+
+      card.innerHTML =
+        (isActive ? '<span class="badge">Attivo ora</span>' : '') +
+        '<div class="hist-url"></div>' +
+        '<div class="hist-meta"></div>' +
+        '<div class="row">' +
+          '<button class="secondary hist-use" type="button">Riattiva</button>' +
+          '<a class="btn secondary hist-open" target="_blank" rel="noopener">Apri</a>' +
+        '</div>';
+
+      card.querySelector(".hist-url").textContent = url;
+      card.querySelector(".hist-meta").textContent =
+        "Scansioni: " + (item.scan_count || 0) +
+        (item.activated_at ? " · Attivato: " + new Date(item.activated_at).toLocaleString() : "");
+
+      card.querySelector(".hist-open").href = url;
+      card.querySelector(".hist-use").onclick = function(){
+        $("newUrl").value = url;
+        saveUrl();
+      };
+
+      list.appendChild(card);
+    });
+
+    if(!list.children.length){
+      empty.style.display = "block";
+      empty.textContent = "Nessuna scheda valida.";
+    }
+  }
+
+  async function load(){
+    setMsg("", "");
+    if(!ID){
+      setMsg("QR non riconosciuto. Apri la Web App dal QR corretto.", "err");
+      return;
+    }
+
+    $("codeLabel").textContent = ID;
+
+    var data = await api("/api/followme/" + encodeURIComponent(ID) + "/status?v=" + Date.now());
+    render(data);
+  }
+
+  async function saveUrl(){
+    try{
+      setMsg("", "");
+      var url = normalizeUrl($("newUrl").value);
+      if(!url){
+        setMsg("Inserisci un link valido.", "err");
+        return;
+      }
+
+      var id = PROJECT && (PROJECT.public_id || PROJECT.code) ? (PROJECT.public_id || PROJECT.code) : ID;
+
+      $("saveUrlBtn").disabled = true;
+      $("saveUrlBtn").textContent = "Salvo...";
+
+      await api("/api/followme/" + encodeURIComponent(id) + "/update-url", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ url:url, active_url:url })
+      });
+
+      $("newUrl").value = "";
+      setMsg("Fatto. Il QR ora trasmette il nuovo link.", "ok");
+
+      await load();
+    }catch(err){
+      console.error(err);
+      setMsg(err.message || "Errore aggiornamento QR.", "err");
+    }finally{
+      $("saveUrlBtn").disabled = false;
+      $("saveUrlBtn").textContent = "Aggiorna QR";
+    }
+  }
+
+  async function enablePush(){
+    try{
+      if(!("Notification" in window)){
+        setMsg("Notifiche non supportate su questo dispositivo/browser.", "err");
+        setInstallState();
+        return;
+      }
+
+      var perm = await Notification.requestPermission();
+      setInstallState();
+
+      if(perm !== "granted"){
+        setMsg("Notifiche non attivate. Puoi abilitarle dalle impostazioni del browser.", "err");
+        return;
+      }
+
+      setMsg("Notifiche attivate sul dispositivo.", "ok");
+    }catch(e){
+      setMsg("Non sono riuscito ad attivare le notifiche.", "err");
+    }
+  }
+
+  $("saveUrlBtn").addEventListener("click", saveUrl);
+  $("copyPublicBtn").addEventListener("click", async function(){
+    try{
+      await navigator.clipboard.writeText(publicUrl());
+      setMsg("Link QR copiato.", "ok");
+    }catch(e){
+      prompt("Copia il link QR:", publicUrl());
+    }
+  });
+
+  $("installChip").addEventListener("click", function(){
+    var box = $("installBox");
+    box.textContent = deviceText();
+    box.style.display = box.style.display === "block" ? "none" : "block";
+  });
+
+  $("pushChip").addEventListener("click", enablePush);
+
+  window.addEventListener("focus", setInstallState);
+  setInstallState();
+  load().catch(function(err){
+    console.error(err);
+    setMsg(err.message || "Errore caricamento App.", "err");
+  });
+})();
+</script>
+</body>
+</html>

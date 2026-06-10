@@ -10930,6 +10930,25 @@ app.get('/fm/manifest/:code.json', async (req, res) => {
 });
 
 
+
+
+// FOLLOWME_CLEAN_QR_APP_ROUTE_20260610
+app.get('/fm/app-new/:public_id', async (req, res) => {
+  try {
+    res.set({
+      'Cache-Control':'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+      'Pragma':'no-cache',
+      'Expires':'0',
+      'Surrogate-Control':'no-store'
+    });
+    return res.sendFile(path.join(__dirname, 'public', 'followme-qr-app.html'));
+  } catch (err) {
+    console.error('followme clean qr app route error:', err);
+    return res.status(500).send('Errore apertura FollowMe QR App');
+  }
+});
+
+
 app.get('/fm/app/:code', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
   res.setHeader('Pragma', 'no-cache');
