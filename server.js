@@ -13424,11 +13424,11 @@ app.get('/fm/document/:code', async (req, res) => {
       [doc.id]
     ).catch(() => null);
 
-    const fileUrl = String(doc.public_path || '');
-
-    if (!fileUrl) {
-      return res.redirect(302, '/fm/document-closed');
-    }
+    // FOLLOWME_DOCUMENT_PUBLIC_VIEWER_FILE_ROUTE_20260610
+    // Nuovo standard: il viewer deve leggere dal percorso file stabile su storage_path.
+    // Non deve più puntare alle vecchie rotte /uploads/followme-documents/...
+    const publicCode = getFollowMePublicIdOrCode20260610(project);
+    const fileUrl = `/fm/file/${encodeURIComponent(publicCode)}/documento.pdf`;
 
     const viewerUrl = '/pdf-viewer.html?file=' + encodeURIComponent(fileUrl);
     return res.redirect(302, viewerUrl);
