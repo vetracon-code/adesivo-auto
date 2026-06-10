@@ -10902,7 +10902,7 @@ app.get('/fm/manifest/:code.json', async (req, res) => {
       name: 'FollowMe QR',
       short_name: 'FollowMe QR',
       description: 'Follow Me - QR dinamico',
-      start_url: `/fm/app/${encodeURIComponent(cleanCode)}?source=pwa&v=followme-dynamic-qr-v5`,
+      start_url: `/fm/app/${encodeURIComponent(cleanCode)}?source=pwa&v=followme-dynamic-qr-v6-history-push`,
       scope: '/fm/',
       display: 'standalone',
       background_color: '#101820',
@@ -10910,13 +10910,13 @@ app.get('/fm/manifest/:code.json', async (req, res) => {
       orientation: 'portrait',
       icons: [
         {
-          src: '/images/followme/icons/followme-icon-192.png?v=followme-dynamic-qr-v5',
+          src: '/images/followme/icons/followme-icon-192.png?v=followme-dynamic-qr-v6-history-push',
           sizes: '192x192',
           type: 'image/png',
           purpose: 'any maskable'
         },
         {
-          src: '/images/followme/icons/followme-icon-512.png?v=followme-dynamic-qr-v5',
+          src: '/images/followme/icons/followme-icon-512.png?v=followme-dynamic-qr-v6-history-push',
           sizes: '512x512',
           type: 'image/png',
           purpose: 'any maskable'
