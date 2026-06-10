@@ -22126,9 +22126,18 @@ async function getFollowMeQrProject20260610(rawCode){
   return q.rows[0] || null;
 }
 
-function getFollowMePublicQrUrl20260610(project){
+function getFollowMePublicQrUrl20260610(project, req){
   const publicId = project.public_id || project.code;
-  const base = String(PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+
+  // FOLLOWME_QR_PUBLIC_BASE_FROM_REQUEST_20260610
+  // Non dipende da PUBLIC_BASE_URL globale: usa host/protocol reali dietro Render/Cloudflare.
+  const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim() || 'https';
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+
+  const base = host
+    ? `${proto}://${host}`.replace(/\/+$/, '')
+    : 'https://adesivo-auto.onrender.com';
+
   return `${base}/fm/u/${encodeURIComponent(publicId)}`;
 }
 
@@ -22147,7 +22156,7 @@ app.get('/fm/qr/:code', async (req, res) => {
       return res.status(404).send('FollowMe QR non trovato.');
     }
 
-    const targetUrl = getFollowMePublicQrUrl20260610(project);
+    const targetUrl = getFollowMePublicQrUrl20260610(project, req);
     const pngUrl = `/fm/qr/${encodeURIComponent(project.code)}.png`;
     const svgUrl = `/fm/qr/${encodeURIComponent(project.code)}.svg`;
 
@@ -22197,7 +22206,7 @@ app.get('/fm/qr/:code.png', async (req, res) => {
       return res.status(404).type('text/plain').send('FollowMe QR non trovato.');
     }
 
-    const targetUrl = getFollowMePublicQrUrl20260610(project);
+    const targetUrl = getFollowMePublicQrUrl20260610(project, req);
     const buffer = await QRCode.toBuffer(targetUrl, {
       type: 'png',
       errorCorrectionLevel: 'M',
@@ -22223,7 +22232,7 @@ app.get('/fm/qr/:code.svg', async (req, res) => {
       return res.status(404).type('text/plain').send('FollowMe QR non trovato.');
     }
 
-    const targetUrl = getFollowMePublicQrUrl20260610(project);
+    const targetUrl = getFollowMePublicQrUrl20260610(project, req);
     const svg = await QRCode.toString(targetUrl, {
       type: 'svg',
       errorCorrectionLevel: 'M',
