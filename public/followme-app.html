@@ -43564,6 +43564,110 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-resolve-public-id-to-code-20260610">
+(function(){
+  if(window.__FOLLOWME_RESOLVE_PUBLIC_ID_TO_CODE_20260610__) return;
+  window.__FOLLOWME_RESOLVE_PUBLIC_ID_TO_CODE_20260610__ = true;
+
+  function rawCodeFromLocation(){
+    try{
+      var p = new URLSearchParams(location.search || "");
+      var c = String(p.get("code") || p.get("public_id") || "").trim();
+
+      if(!c){
+        var m = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/);
+        if(m && m[1]) c = decodeURIComponent(m[1]);
+      }
+
+      if(!c){
+        try{ c = String(localStorage.getItem("followme_current_code") || "").trim(); }catch(e){}
+      }
+
+      return c;
+    }catch(e){
+      return "";
+    }
+  }
+
+  function setCodeEverywhere(code){
+    if(!code) return;
+
+    try{ localStorage.setItem("followme_current_code", code); }catch(e){}
+
+    window.FOLLOWME_CODE = code;
+    window.FOLLOWME_PROJECT_CODE = code;
+    window.followMeCode = code;
+    window.followmeCode = code;
+
+    try{
+      if(typeof CODE !== "undefined"){
+        CODE = code;
+      }
+    }catch(e){}
+
+    try{
+      var manifest = document.getElementById("dynamicManifest");
+      if(!manifest){
+        manifest = document.createElement("link");
+        manifest.id = "dynamicManifest";
+        manifest.rel = "manifest";
+        document.head.appendChild(manifest);
+      }
+      manifest.href = "/fm/manifest/" + encodeURIComponent(code) + ".json?v=" + Date.now();
+    }catch(e){}
+
+    try{
+      var url = new URL(location.href);
+      if(url.searchParams.get("code") !== code){
+        url.searchParams.set("code", code);
+        url.searchParams.delete("public_id");
+        history.replaceState(null, "", url.pathname + "?" + url.searchParams.toString() + url.hash);
+      }
+    }catch(e){}
+  }
+
+  async function resolveCode(){
+    var raw = rawCodeFromLocation();
+    if(!raw) return;
+
+    setCodeEverywhere(raw);
+
+    try{
+      var res = await fetch("/api/followme/" + encodeURIComponent(raw) + "/status?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      if(!res.ok) return;
+
+      var data = await res.json().catch(function(){ return null; });
+      var internalCode = data && data.project && data.project.code ? String(data.project.code).trim() : "";
+
+      if(internalCode){
+        setCodeEverywhere(internalCode);
+        window.FOLLOWME_PUBLIC_ID = data.project.public_id || raw;
+      }
+    }catch(err){
+      console.warn("FollowMe resolve public_id -> code failed:", err);
+    }
+  }
+
+  window.followMeResolvePublicIdToCode20260610 = resolveCode;
+
+  resolveCode();
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", resolveCode);
+  }else{
+    setTimeout(resolveCode, 50);
+  }
+
+  setTimeout(resolveCode, 300);
+  setTimeout(resolveCode, 1000);
+  setTimeout(resolveCode, 2500);
+})();
+</script>
+
 </body>
 </html>
 
