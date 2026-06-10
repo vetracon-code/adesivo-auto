@@ -12106,14 +12106,62 @@ function countPdfPagesRough20260520(buffer) {
 }
 
 async function getFollowMeProjectByCode20260520(code) {
+  const clean = String(code || '').trim();
   const r = await pool.query(
-    `SELECT id, code, public_id
+    `SELECT id, code, public_id, storage_path, storage_key
      FROM followme_projects
      WHERE code = $1 OR public_id = $1
      LIMIT 1`,
-    [code]
+    [clean]
   );
   return r.rows[0] || null;
+}
+
+// FOLLOWME_DOC_IMAGE_STORAGE_PATH_FIX_20260610
+// Percorso stabile per file FollowMe: usa storage_path dedicato se presente.
+// Fallback sicuro per progetti vecchi/DEMO senza storage_path.
+function getFollowMeProjectStorageRoot20260610(project){
+  const path = require('path');
+
+  if(project && project.storage_path){
+    return path.resolve(String(project.storage_path));
+  }
+
+  const root = typeof FOLLOWME_STORAGE_ROOT !== 'undefined'
+    ? FOLLOWME_STORAGE_ROOT
+    : (process.env.FOLLOWME_STORAGE_DIR || path.join(__dirname, 'data'));
+
+  const code = String((project && (project.code || project.public_id)) || 'UNKNOWN')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, '') || 'UNKNOWN';
+
+  const key = String((project && project.storage_key) || ((project && project.id) ? `${project.id}-${code}` : code))
+    .replace(/[^A-Za-z0-9_-]+/g, '-');
+
+  return path.resolve(path.join(root, 'followme', 'projects', key));
+}
+
+function getFollowMePublicIdOrCode20260610(project){
+  return String((project && (project.public_id || project.code)) || '')
+    .trim()
+    .replace(/[^A-Za-z0-9_-]+/g, '');
+}
+
+async function ensureFollowMeProjectStoragePath20260610(project){
+  const fsp = require('fs/promises');
+  const root = getFollowMeProjectStorageRoot20260610(project);
+  await fsp.mkdir(root, { recursive:true });
+  await fsp.mkdir(require('path').join(root, 'documents'), { recursive:true });
+  await fsp.mkdir(require('path').join(root, 'images', 'active'), { recursive:true });
+  return root;
+}
+
+function isSafeChildPath20260610(parent, child){
+  const path = require('path');
+  const p = path.resolve(parent);
+  const c = path.resolve(child);
+  return c === p || c.startsWith(p + path.sep);
 }
 
 app.post('/api/followme/:code/document/upload', followmeDocumentUploadMulter20260520.single('document'), async (req, res) => {
@@ -12163,9 +12211,19 @@ app.post('/api/followme/:code/document/upload', followmeDocumentUploadMulter2026
     */
     const qrFolder = String(project.code || code || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '') || String(project.id);
     const storedName = 'documento.pdf';
-    const projectDocumentDir = followmeDocumentPath.join(FOLLOWME_DOCUMENT_UPLOAD_DIR, qrFolder);
+
+    // FOLLOWME_DOCUMENT_STORAGE_PATH_UPLOAD_20260610
+    // Nuovo standard: documento fisico dentro storage_path/documents/documento.pdf.
+    const projectRoot = await ensureFollowMeProjectStoragePath20260610(project);
+    const projectDocumentDir = followmeDocumentPath.join(projectRoot, 'documents');
     const diskPath = followmeDocumentPath.join(projectDocumentDir, storedName);
-    const publicPath = `/uploads/followme-documents/${qrFolder}/${storedName}`;
+
+    if(!isSafeChildPath20260610(projectRoot, diskPath)){
+      throw new Error('Percorso documento non sicuro.');
+    }
+
+    const publicCode = getFollowMePublicIdOrCode20260610(project);
+    const publicPath = `/fm/file/${encodeURIComponent(publicCode)}/${storedName}`;
 
     await followmeDocumentFsp.mkdir(projectDocumentDir, { recursive:true });
     await followmeDocumentFsp.writeFile(diskPath, buffer);
@@ -12590,7 +12648,15 @@ app.post('/api/followme/:code/image-card/upload', followmeImageCardUploadMulter2
       .toUpperCase()
       .replace(/[^A-Z0-9_-]/g, '') || String(project.id);
 
-    const projectImageDir = followmeDocumentPath.join(FOLLOWME_DOCUMENT_UPLOAD_DIR, qrFolder, 'image');
+    // FOLLOWME_IMAGE_STORAGE_PATH_UPLOAD_20260610
+    // Nuovo standard: immagine fisica dentro storage_path/images/active/.
+    const projectRoot = await ensureFollowMeProjectStoragePath20260610(project);
+    const projectImageDir = followmeDocumentPath.join(projectRoot, 'images', 'active');
+
+    if(!isSafeChildPath20260610(projectRoot, projectImageDir)){
+      throw new Error('Percorso immagine non sicuro.');
+    }
+
     await followmeDocumentFsp.mkdir(projectImageDir, { recursive:true });
 
     /*
@@ -12608,7 +12674,13 @@ app.post('/api/followme/:code/image-card/upload', followmeImageCardUploadMulter2
 
     const storedName = `immagine.${ext}`;
     const diskPath = followmeDocumentPath.join(projectImageDir, storedName);
-    const publicPath = `/uploads/followme-documents/${qrFolder}/image/${storedName}`;
+
+    if(!isSafeChildPath20260610(projectRoot, diskPath)){
+      throw new Error('Percorso file immagine non sicuro.');
+    }
+
+    const publicCode = getFollowMePublicIdOrCode20260610(project);
+    const publicPath = `/fm/file/${encodeURIComponent(publicCode)}/image`;
 
     await followmeDocumentFsp.writeFile(diskPath, buffer);
 
@@ -12617,7 +12689,7 @@ app.post('/api/followme/:code/image-card/upload', followmeImageCardUploadMulter2
       Per ora è una copia dell'immagine reale; in futuro potrà essere compressa/ridimensionata.
     */
     const previewDiskPath = followmeDocumentPath.join(projectImageDir, 'preview.jpg');
-    const previewPublicPath = `/uploads/followme-documents/${qrFolder}/image/preview.jpg`;
+    const previewPublicPath = `/fm/file/${encodeURIComponent(publicCode)}/image`;
 
     if (ext === 'jpg') {
       await followmeDocumentFsp.writeFile(previewDiskPath, buffer);
@@ -12777,6 +12849,140 @@ app.post('/api/followme/image-card/:image_id/view', express.json(), async (req, 
     return res.status(500).json({ success:false });
   }
 });
+
+
+// FOLLOWME_FILE_STORAGE_PUBLIC_ROUTES_20260610
+// Rotte file stabili per documento/foto FollowMe.
+// Usate da /fm/document/CODE e /fm/image/CODE.
+// Leggono sempre da storage_path dedicato, con fallback DB se necessario.
+app.get('/fm/file/:code/documento.pdf', async (req, res) => {
+  try {
+    await ensureFollowMeDocumentTable20260520();
+
+    const code = String(req.params.code || '').trim();
+    const project = await getFollowMeProjectByCode20260520(code);
+
+    if(!project){
+      return res.status(404).type('text/plain').send('Documento non trovato.');
+    }
+
+    const projectRoot = getFollowMeProjectStorageRoot20260610(project);
+    const filePath = followmeDocumentPath.join(projectRoot, 'documents', 'documento.pdf');
+
+    if(!isSafeChildPath20260610(projectRoot, filePath)){
+      return res.status(403).type('text/plain').send('Percorso non consentito.');
+    }
+
+    if(followmeDocumentFs.existsSync(filePath)){
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'inline; filename="documento.pdf"');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      return res.sendFile(filePath);
+    }
+
+    // Fallback per documenti vecchi registrati in DB con /uploads/followme-documents/...
+    const r = await pool.query(
+      `SELECT public_path
+       FROM followme_documents
+       WHERE project_id = $1
+         AND status = 'active'
+       ORDER BY id DESC
+       LIMIT 1`,
+      [project.id]
+    );
+
+    const oldPublicPath = String(r.rows[0]?.public_path || '').replace(/^\//, '');
+    if(oldPublicPath && oldPublicPath.startsWith('uploads/followme-documents/')){
+      const oldFile = followmeDocumentPath.join(FOLLOWME_STORAGE_ROOT, oldPublicPath);
+      if(followmeDocumentFs.existsSync(oldFile)){
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'inline; filename="documento.pdf"');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        return res.sendFile(oldFile);
+      }
+    }
+
+    return res.status(404).type('text/plain').send('Documento non disponibile.');
+  } catch(err) {
+    console.error('followme file document route error:', err);
+    return res.status(500).type('text/plain').send('Errore apertura documento.');
+  }
+});
+
+app.get('/fm/file/:code/image', async (req, res) => {
+  try {
+    await ensureFollowMeImageCardTable20260522();
+
+    const code = String(req.params.code || '').trim();
+    const project = await getFollowMeProjectByCode20260520(code);
+
+    if(!project){
+      return res.status(404).type('text/plain').send('Immagine non trovata.');
+    }
+
+    const projectRoot = getFollowMeProjectStorageRoot20260610(project);
+    const imageDir = followmeDocumentPath.join(projectRoot, 'images', 'active');
+
+    if(!isSafeChildPath20260610(projectRoot, imageDir)){
+      return res.status(403).type('text/plain').send('Percorso non consentito.');
+    }
+
+    const files = followmeDocumentFs.existsSync(imageDir)
+      ? await followmeDocumentFsp.readdir(imageDir).catch(() => [])
+      : [];
+
+    const imageName = files.find(name => /^immagine\.(jpg|jpeg|png|webp|gif)$/i.test(name));
+
+    if(imageName){
+      const filePath = followmeDocumentPath.join(imageDir, imageName);
+
+      if(!isSafeChildPath20260610(projectRoot, filePath)){
+        return res.status(403).type('text/plain').send('Percorso non consentito.');
+      }
+
+      const ext = imageName.split('.').pop().toLowerCase();
+      const mime =
+        ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' :
+        ext === 'png' ? 'image/png' :
+        ext === 'webp' ? 'image/webp' :
+        ext === 'gif' ? 'image/gif' :
+        'application/octet-stream';
+
+      res.setHeader('Content-Type', mime);
+      res.setHeader('Content-Disposition', `inline; filename="${imageName}"`);
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      return res.sendFile(filePath);
+    }
+
+    // Fallback per immagini vecchie registrate in DB con /uploads/followme-documents/...
+    const r = await pool.query(
+      `SELECT public_path, mime_type
+       FROM followme_image_cards
+       WHERE project_id = $1
+         AND status = 'active'
+       ORDER BY id DESC
+       LIMIT 1`,
+      [project.id]
+    );
+
+    const oldPublicPath = String(r.rows[0]?.public_path || '').replace(/^\//, '');
+    if(oldPublicPath && oldPublicPath.startsWith('uploads/followme-documents/')){
+      const oldFile = followmeDocumentPath.join(FOLLOWME_STORAGE_ROOT, oldPublicPath);
+      if(followmeDocumentFs.existsSync(oldFile)){
+        res.setHeader('Content-Type', r.rows[0]?.mime_type || 'image/jpeg');
+        res.setHeader('Content-Disposition', 'inline');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        return res.sendFile(oldFile);
+      }
+    }
+
+    return res.status(404).type('text/plain').send('Immagine non disponibile.');
+  } catch(err) {
+    console.error('followme file image route error:', err);
+    return res.status(500).type('text/plain').send('Errore apertura immagine.');
+  }
+});
+
 
 app.get('/fm/image/:code', async (req, res) => {
   try {
