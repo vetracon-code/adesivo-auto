@@ -43668,6 +43668,232 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-fix-missing-updateURL-20260610">
+(function(){
+  if(window.__FOLLOWME_FIX_MISSING_UPDATEURL_20260610__) return;
+  window.__FOLLOWME_FIX_MISSING_UPDATEURL_20260610__ = true;
+
+  function toast(msg){
+    try{
+      if(typeof window.toast === "function") return window.toast(msg);
+      if(typeof window.showFollowMeToastSafe === "function") return window.showFollowMeToastSafe(msg);
+    }catch(e){}
+    try{ alert(msg); }catch(e){}
+  }
+
+  function getCode(){
+    try{
+      if(window.FOLLOWME_CODE) return String(window.FOLLOWME_CODE).trim();
+      if(window.followMeCode) return String(window.followMeCode).trim();
+      if(window.followmeCode) return String(window.followmeCode).trim();
+
+      var p = new URLSearchParams(location.search || "");
+      var c = String(p.get("code") || p.get("public_id") || "").trim();
+
+      if(!c){
+        var m = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/);
+        if(m && m[1]) c = decodeURIComponent(m[1]);
+      }
+
+      if(!c){
+        try{ c = String(localStorage.getItem("followme_current_code") || "").trim(); }catch(e){}
+      }
+
+      return c;
+    }catch(e){
+      return "";
+    }
+  }
+
+  async function resolveInternalCode(raw){
+    raw = String(raw || "").trim();
+    if(!raw) return "";
+
+    try{
+      var res = await fetch("/api/followme/" + encodeURIComponent(raw) + "/status?v=" + Date.now(), {
+        cache:"no-store"
+      });
+      var data = await res.json().catch(function(){ return null; });
+
+      var internal = data && data.project && data.project.code ? String(data.project.code).trim() : "";
+      var publicId = data && data.project && data.project.public_id ? String(data.project.public_id).trim() : "";
+
+      if(internal){
+        try{ localStorage.setItem("followme_current_code", internal); }catch(e){}
+        window.FOLLOWME_CODE = internal;
+        window.FOLLOWME_PROJECT_CODE = internal;
+        window.followMeCode = internal;
+        window.followmeCode = internal;
+        window.FOLLOWME_PUBLIC_ID = publicId || raw;
+        try{ if(typeof CODE !== "undefined") CODE = internal; }catch(e){}
+        return internal;
+      }
+    }catch(e){
+      console.warn("resolveInternalCode failed:", e);
+    }
+
+    return raw;
+  }
+
+  function normalizeUrl(value){
+    var v = String(value || "").trim();
+    if(!v) return "";
+    if(!/^https?:\/\//i.test(v)) v = "https://" + v;
+
+    try{
+      var u = new URL(v);
+      if(u.protocol !== "http:" && u.protocol !== "https:") return "";
+      return u.toString();
+    }catch(e){
+      return "";
+    }
+  }
+
+  function setPreview(url){
+    try{
+      window.__followMeActiveUrl = url;
+      window.followMeCurrentActiveUrl = url;
+      window.currentFollowMeActiveUrl = url;
+    }catch(e){}
+
+    try{
+      var active = document.getElementById("activeUrl");
+      if(active) active.textContent = url || "Nessun link impostato.";
+    }catch(e){}
+
+    try{
+      if(typeof window.updateSimpleDestinationPreview === "function"){
+        window.updateSimpleDestinationPreview(url);
+      }
+    }catch(e){}
+
+    try{
+      var frame = document.getElementById("simpleDestinationPreviewFrame");
+      var empty = document.getElementById("simpleDestinationPreviewEmpty");
+      var open = document.getElementById("simpleDestinationPreviewOpen");
+
+      if(frame && url) frame.src = url;
+      if(empty) empty.style.display = url ? "none" : "flex";
+      if(open && url) open.href = url;
+    }catch(e){}
+  }
+
+  async function updateURLFinal(ev){
+    try{
+      if(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        if(typeof ev.stopImmediatePropagation === "function") ev.stopImmediatePropagation();
+      }
+
+      var input =
+        document.getElementById("newUrl") ||
+        document.querySelector("input[name='url']") ||
+        document.querySelector("input[type='url']") ||
+        document.querySelector(".destination-input");
+
+      var rawUrl = input ? input.value : "";
+      var url = normalizeUrl(rawUrl);
+
+      if(!url){
+        toast("Inserisci un link valido.");
+        return false;
+      }
+
+      var rawCode = getCode();
+      var code = await resolveInternalCode(rawCode);
+
+      if(!code){
+        toast("QR non riconosciuto. Riapri la Web App dal QR corretto.");
+        return false;
+      }
+
+      var btn = document.getElementById("updateDestinationBtn");
+      if(btn){
+        btn.disabled = true;
+        btn.dataset.oldText = btn.textContent || "";
+        btn.textContent = "Salvo...";
+      }
+
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/update-url", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ url:url, active_url:url })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || data.success === false){
+        throw new Error((data && (data.error || data.detail)) || "Errore aggiornamento link.");
+      }
+
+      var savedUrl =
+        (data.project && data.project.active_url) ||
+        data.active_url ||
+        url;
+
+      setPreview(savedUrl);
+
+      if(input){
+        input.value = "";
+        input.placeholder = "Incolla qui il nuovo URL che vuoi trasmettere.";
+      }
+
+      toast("Fatto. Il QR ora trasmette il nuovo link.");
+
+      try{
+        if(typeof window.loadStatus === "function") window.loadStatus();
+      }catch(e){}
+
+      return true;
+    }catch(err){
+      console.error("followme updateURL final error:", err);
+      toast("Errore aggiornamento QR: " + (err && err.message ? err.message : "riprova."));
+      return false;
+    }finally{
+      try{
+        var btn = document.getElementById("updateDestinationBtn");
+        if(btn){
+          btn.disabled = false;
+          btn.textContent = btn.dataset.oldText || "Aggiorna QR";
+        }
+      }catch(e){}
+    }
+  }
+
+  // Alias compatibilità: vecchi script chiamano updateURL, altri updateUrl.
+  window.updateURL = updateURLFinal;
+  window.updateUrlFinal20260610 = updateURLFinal;
+
+  if(typeof window.updateUrl !== "function"){
+    window.updateUrl = updateURLFinal;
+  }
+
+  function bind(){
+    var btn = document.getElementById("updateDestinationBtn");
+    if(!btn || btn.__followMeUpdateUrlFinalBound20260610__) return;
+
+    btn.__followMeUpdateUrlFinalBound20260610__ = true;
+
+    // Capture=true: intercetta prima degli handler vecchi.
+    btn.addEventListener("click", updateURLFinal, true);
+
+    btn.removeAttribute("onclick");
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bind);
+  }else{
+    bind();
+  }
+
+  setTimeout(bind, 200);
+  setTimeout(bind, 800);
+  setTimeout(bind, 1800);
+})();
+</script>
+
 </body>
 </html>
 
