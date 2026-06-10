@@ -44025,6 +44025,144 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-qr-buttons-download-fix-20260610">
+(function(){
+  if(window.__FOLLOWME_QR_BUTTONS_DOWNLOAD_FIX_20260610__) return;
+  window.__FOLLOWME_QR_BUTTONS_DOWNLOAD_FIX_20260610__ = true;
+
+  function getCode(){
+    try{
+      var m = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/);
+      if(m && m[1]) return decodeURIComponent(m[1]).trim();
+
+      var p = new URLSearchParams(location.search || "");
+      var c = String(p.get("code") || p.get("public_id") || "").trim();
+      if(c) return c;
+
+      if(window.FOLLOWME_CODE) return String(window.FOLLOWME_CODE).trim();
+      if(window.FOLLOWME_PROJECT_CODE) return String(window.FOLLOWME_PROJECT_CODE).trim();
+      if(window.followMeCode) return String(window.followMeCode).trim();
+
+      try{
+        c = String(localStorage.getItem("followme_current_code") || "").trim();
+        if(c) return c;
+      }catch(e){}
+
+      return "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  function setAnchor(el, href, downloadName, openNew){
+    if(!el) return;
+
+    if(el.tagName === "A"){
+      el.setAttribute("href", href);
+      if(downloadName) el.setAttribute("download", downloadName);
+      if(openNew) {
+        el.setAttribute("target", "_blank");
+        el.setAttribute("rel", "noopener");
+      }
+      return;
+    }
+
+    if(el.tagName === "BUTTON" && !el.dataset.fmQrDownloadFixedClick20260610){
+      el.dataset.fmQrDownloadFixedClick20260610 = "1";
+      el.addEventListener("click", function(ev){
+        ev.preventDefault();
+        if(downloadName){
+          var a = document.createElement("a");
+          a.href = href;
+          a.download = downloadName;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(function(){ try{ a.remove(); }catch(e){} }, 300);
+        }else{
+          window.open(href, "_blank", "noopener");
+        }
+      }, true);
+    }
+  }
+
+  function fixQrButtons(){
+    var code = getCode();
+    if(!code) return;
+
+    try{ localStorage.setItem("followme_current_code", code); }catch(e){}
+
+    var preview = "/fm/qr/" + encodeURIComponent(code);
+    var png = "/fm/qr/" + encodeURIComponent(code) + ".png";
+    var svg = "/fm/qr/" + encodeURIComponent(code) + ".svg";
+    var safeBase = code.replace(/[^A-Za-z0-9_-]+/g, "-");
+
+    [
+      document.getElementById("openQrPreview"),
+      document.getElementById("followmeOtherOpenQrPreview")
+    ].forEach(function(el){
+      setAnchor(el, preview, "", true);
+    });
+
+    [
+      document.getElementById("downloadQrPng"),
+      document.getElementById("followmeOtherDownloadQrPng")
+    ].forEach(function(el){
+      setAnchor(el, png, safeBase + ".png", false);
+    });
+
+    [
+      document.getElementById("downloadQrSvg"),
+      document.getElementById("followmeOtherDownloadQrSvg")
+    ].forEach(function(el){
+      setAnchor(el, svg, safeBase + ".svg", false);
+    });
+
+    var all = Array.prototype.slice.call(document.querySelectorAll("a,button"));
+    all.forEach(function(el){
+      var txt = String(el.textContent || "").toLowerCase();
+      var id = String(el.id || "").toLowerCase();
+      var cls = String(el.className || "").toLowerCase();
+      var hay = [txt,id,cls].join(" ");
+
+      if(hay.indexOf("apri anteprima qr") >= 0){
+        setAnchor(el, preview, "", true);
+      }
+
+      if(hay.indexOf("scarica") >= 0 && hay.indexOf("qr") >= 0 && hay.indexOf("png") >= 0){
+        setAnchor(el, png, safeBase + ".png", false);
+      }
+
+      if(hay.indexOf("scarica") >= 0 && hay.indexOf("qr") >= 0 && hay.indexOf("svg") >= 0){
+        setAnchor(el, svg, safeBase + ".svg", false);
+      }
+    });
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", fixQrButtons);
+  }else{
+    fixQrButtons();
+  }
+
+  setTimeout(fixQrButtons, 500);
+  setTimeout(fixQrButtons, 1500);
+  setTimeout(fixQrButtons, 3000);
+  setTimeout(fixQrButtons, 6000);
+
+  document.addEventListener("click", function(ev){
+    try{
+      var el = ev.target && ev.target.closest ? ev.target.closest("a,button") : null;
+      if(!el) return;
+      var txt = String(el.textContent || "").toLowerCase();
+      if(txt.indexOf("qr") >= 0){
+        fixQrButtons();
+      }
+    }catch(e){}
+  }, true);
+})();
+</script>
+
 </body>
 </html>
 

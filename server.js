@@ -22106,6 +22106,142 @@ if (require.main === module) {
   startServer();
 }
 
+
+
+// FOLLOWME_QR_DOWNLOAD_ENDPOINTS_20260610
+// Rotte stabili per anteprima e download QR FollowMe.
+// Valide per tutti i QR presenti e futuri: accettano code interno o public_id.
+async function getFollowMeQrProject20260610(rawCode){
+  const code = normalizeFollowMeCode(rawCode);
+  if(!code) return null;
+
+  const q = await pool.query(
+    `SELECT id, code, public_id, label, status
+     FROM followme_projects
+     WHERE code = $1 OR public_id = $1
+     LIMIT 1`,
+    [code]
+  );
+
+  return q.rows[0] || null;
+}
+
+function getFollowMePublicQrUrl20260610(project){
+  const publicId = project.public_id || project.code;
+  const base = String(PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+  return `${base}/fm/u/${encodeURIComponent(publicId)}`;
+}
+
+function getFollowMeSafeFilename20260610(project, ext){
+  const base = String(project.code || project.public_id || 'followme-qr')
+    .replace(/[^A-Za-z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'followme-qr';
+  return `${base}.${ext}`;
+}
+
+app.get('/fm/qr/:code', async (req, res) => {
+  try {
+    const project = await getFollowMeQrProject20260610(req.params.code);
+    if(!project){
+      return res.status(404).send('FollowMe QR non trovato.');
+    }
+
+    const targetUrl = getFollowMePublicQrUrl20260610(project);
+    const pngUrl = `/fm/qr/${encodeURIComponent(project.code)}.png`;
+    const svgUrl = `/fm/qr/${encodeURIComponent(project.code)}.svg`;
+
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+
+    return res.send(`<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Anteprima QR ${project.code}</title>
+  <style>
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f8fafc;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#0f172a}
+    .card{width:min(92vw,440px);background:#fff;border:1px solid #e2e8f0;border-radius:24px;padding:22px;box-shadow:0 18px 50px rgba(15,23,42,.12);text-align:center}
+    h1{font-size:22px;margin:0 0 8px}
+    p{font-size:14px;color:#475569;word-break:break-all}
+    img{width:260px;max-width:80vw;height:auto;margin:18px auto;display:block}
+    .actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:18px}
+    a{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:11px 15px;text-decoration:none;font-weight:800;background:#0f172a;color:#fff}
+    a.secondary{background:#e2e8f0;color:#0f172a}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Anteprima QR</h1>
+    <p>${targetUrl.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</p>
+    <img src="${pngUrl}" alt="QR FollowMe ${project.code}">
+    <div class="actions">
+      <a href="${pngUrl}" download>Scarica PNG</a>
+      <a class="secondary" href="${svgUrl}" download>Scarica SVG</a>
+    </div>
+  </main>
+</body>
+</html>`);
+  } catch (err) {
+    console.error('followme qr preview error:', err);
+    return res.status(500).send('Errore anteprima QR.');
+  }
+});
+
+app.get('/fm/qr/:code.png', async (req, res) => {
+  try {
+    const QRCode = require('qrcode');
+    const project = await getFollowMeQrProject20260610(req.params.code);
+    if(!project){
+      return res.status(404).type('text/plain').send('FollowMe QR non trovato.');
+    }
+
+    const targetUrl = getFollowMePublicQrUrl20260610(project);
+    const buffer = await QRCode.toBuffer(targetUrl, {
+      type: 'png',
+      errorCorrectionLevel: 'M',
+      margin: 2,
+      width: 1024
+    });
+
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Disposition', `attachment; filename="${getFollowMeSafeFilename20260610(project, 'png')}"`);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    return res.send(buffer);
+  } catch (err) {
+    console.error('followme qr png error:', err);
+    return res.status(500).type('text/plain').send('Errore generazione QR PNG.');
+  }
+});
+
+app.get('/fm/qr/:code.svg', async (req, res) => {
+  try {
+    const QRCode = require('qrcode');
+    const project = await getFollowMeQrProject20260610(req.params.code);
+    if(!project){
+      return res.status(404).type('text/plain').send('FollowMe QR non trovato.');
+    }
+
+    const targetUrl = getFollowMePublicQrUrl20260610(project);
+    const svg = await QRCode.toString(targetUrl, {
+      type: 'svg',
+      errorCorrectionLevel: 'M',
+      margin: 2,
+      width: 1024
+    });
+
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${getFollowMeSafeFilename20260610(project, 'svg')}"`);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    return res.send(svg);
+  } catch (err) {
+    console.error('followme qr svg error:', err);
+    return res.status(500).type('text/plain').send('Errore generazione QR SVG.');
+  }
+});
+
+
 module.exports = { app, startServer, initDb, validateRuntimeEnv };
 
 
