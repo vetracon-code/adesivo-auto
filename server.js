@@ -22108,15 +22108,18 @@ if (require.main === module) {
 
 
 
+
 // FOLLOWME_QR_DOWNLOAD_ENDPOINTS_20260610
+// FOLLOWME_QR_ROUTE_ORDER_STORAGE_FIX_20260610
 // Rotte stabili per anteprima e download QR FollowMe.
 // Valide per tutti i QR presenti e futuri: accettano code interno o public_id.
+// Nota importante: le rotte .png/.svg devono stare PRIMA della rotta generica /fm/qr/:code.
 async function getFollowMeQrProject20260610(rawCode){
-  const code = normalizeFollowMeCode(rawCode);
+  const code = normalizeFollowMeCode(String(rawCode || '').replace(/\.(png|svg)$/i, ''));
   if(!code) return null;
 
   const q = await pool.query(
-    `SELECT id, code, public_id, label, status
+    `SELECT id, code, public_id, label, status, storage_path, storage_key
      FROM followme_projects
      WHERE code = $1 OR public_id = $1
      LIMIT 1`,
@@ -22130,7 +22133,6 @@ function getFollowMePublicQrUrl20260610(project, req){
   const publicId = project.public_id || project.code;
 
   // FOLLOWME_QR_PUBLIC_BASE_FROM_REQUEST_20260610
-  // Non dipende da PUBLIC_BASE_URL globale: usa host/protocol reali dietro Render/Cloudflare.
   const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim() || 'https';
   const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
 
@@ -22149,6 +22151,102 @@ function getFollowMeSafeFilename20260610(project, ext){
   return `${base}.${ext}`;
 }
 
+async function getOrCreateFollowMeQrFile20260610(project, req, ext){
+  const fs = require('fs');
+  const fsp = require('fs/promises');
+  const path = require('path');
+  const QRCode = require('qrcode');
+
+  const safeExt = String(ext || '').toLowerCase() === 'svg' ? 'svg' : 'png';
+  const publicId = String(project.public_id || project.code || '').replace(/[^A-Za-z0-9_-]+/g, '');
+  const fileName = `followme-${publicId}-qr.${safeExt}`;
+
+  let qrDir = null;
+
+  if(project.storage_path){
+    qrDir = path.join(project.storage_path, 'qr');
+  }else{
+    const root = process.env.FOLLOWME_STORAGE_DIR
+      ? path.resolve(process.env.FOLLOWME_STORAGE_DIR)
+      : path.join(__dirname, 'data');
+    const storageKey = project.storage_key || `${project.id}-${project.code}`;
+    qrDir = path.join(root, 'followme', 'projects', storageKey, 'qr');
+  }
+
+  await fsp.mkdir(qrDir, { recursive:true });
+
+  const filePath = path.join(qrDir, fileName);
+  const normalizedQrDir = path.resolve(qrDir);
+  const normalizedFile = path.resolve(filePath);
+
+  if(!normalizedFile.startsWith(normalizedQrDir + path.sep)){
+    throw new Error('Percorso QR non sicuro.');
+  }
+
+  if(!fs.existsSync(filePath)){
+    const targetUrl = getFollowMePublicQrUrl20260610(project, req);
+
+    if(safeExt === 'svg'){
+      await QRCode.toFile(filePath, targetUrl, {
+        type: 'svg',
+        errorCorrectionLevel: 'M',
+        margin: 2,
+        width: 1024
+      });
+    }else{
+      await QRCode.toFile(filePath, targetUrl, {
+        type: 'png',
+        errorCorrectionLevel: 'M',
+        margin: 2,
+        width: 1024
+      });
+    }
+  }
+
+  return { filePath, fileName };
+}
+
+// Prima PNG: deve precedere /fm/qr/:code
+app.get('/fm/qr/:code.png', async (req, res) => {
+  try {
+    const project = await getFollowMeQrProject20260610(req.params.code);
+    if(!project){
+      return res.status(404).type('text/plain').send('FollowMe QR non trovato.');
+    }
+
+    const out = await getOrCreateFollowMeQrFile20260610(project, req, 'png');
+
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Disposition', `attachment; filename="${getFollowMeSafeFilename20260610(project, 'png')}"`);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    return res.sendFile(out.filePath);
+  } catch (err) {
+    console.error('followme qr png error:', err);
+    return res.status(500).type('text/plain').send('Errore generazione QR PNG: ' + (err.message || String(err)));
+  }
+});
+
+// Poi SVG: deve precedere /fm/qr/:code
+app.get('/fm/qr/:code.svg', async (req, res) => {
+  try {
+    const project = await getFollowMeQrProject20260610(req.params.code);
+    if(!project){
+      return res.status(404).type('text/plain').send('FollowMe QR non trovato.');
+    }
+
+    const out = await getOrCreateFollowMeQrFile20260610(project, req, 'svg');
+
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${getFollowMeSafeFilename20260610(project, 'svg')}"`);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    return res.sendFile(out.filePath);
+  } catch (err) {
+    console.error('followme qr svg error:', err);
+    return res.status(500).type('text/plain').send('Errore generazione QR SVG: ' + (err.message || String(err)));
+  }
+});
+
+// Infine anteprima HTML
 app.get('/fm/qr/:code', async (req, res) => {
   try {
     const project = await getFollowMeQrProject20260610(req.params.code);
@@ -22159,6 +22257,11 @@ app.get('/fm/qr/:code', async (req, res) => {
     const targetUrl = getFollowMePublicQrUrl20260610(project, req);
     const pngUrl = `/fm/qr/${encodeURIComponent(project.code)}.png`;
     const svgUrl = `/fm/qr/${encodeURIComponent(project.code)}.svg`;
+    const esc = (v) => String(v || '')
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;');
 
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -22168,7 +22271,7 @@ app.get('/fm/qr/:code', async (req, res) => {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Anteprima QR ${project.code}</title>
+  <title>Anteprima QR ${esc(project.code)}</title>
   <style>
     body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f8fafc;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#0f172a}
     .card{width:min(92vw,440px);background:#fff;border:1px solid #e2e8f0;border-radius:24px;padding:22px;box-shadow:0 18px 50px rgba(15,23,42,.12);text-align:center}
@@ -22183,8 +22286,8 @@ app.get('/fm/qr/:code', async (req, res) => {
 <body>
   <main class="card">
     <h1>Anteprima QR</h1>
-    <p>${targetUrl.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</p>
-    <img src="${pngUrl}" alt="QR FollowMe ${project.code}">
+    <p>${esc(targetUrl)}</p>
+    <img src="${pngUrl}" alt="QR FollowMe ${esc(project.code)}">
     <div class="actions">
       <a href="${pngUrl}" download>Scarica PNG</a>
       <a class="secondary" href="${svgUrl}" download>Scarica SVG</a>
@@ -22194,61 +22297,10 @@ app.get('/fm/qr/:code', async (req, res) => {
 </html>`);
   } catch (err) {
     console.error('followme qr preview error:', err);
-    return res.status(500).send('Errore anteprima QR.');
+    return res.status(500).type('text/plain').send('Errore anteprima QR: ' + (err.message || String(err)));
   }
 });
 
-app.get('/fm/qr/:code.png', async (req, res) => {
-  try {
-    const QRCode = require('qrcode');
-    const project = await getFollowMeQrProject20260610(req.params.code);
-    if(!project){
-      return res.status(404).type('text/plain').send('FollowMe QR non trovato.');
-    }
-
-    const targetUrl = getFollowMePublicQrUrl20260610(project, req);
-    const buffer = await QRCode.toBuffer(targetUrl, {
-      type: 'png',
-      errorCorrectionLevel: 'M',
-      margin: 2,
-      width: 1024
-    });
-
-    res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Content-Disposition', `attachment; filename="${getFollowMeSafeFilename20260610(project, 'png')}"`);
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-    return res.send(buffer);
-  } catch (err) {
-    console.error('followme qr png error:', err);
-    return res.status(500).type('text/plain').send('Errore generazione QR PNG.');
-  }
-});
-
-app.get('/fm/qr/:code.svg', async (req, res) => {
-  try {
-    const QRCode = require('qrcode');
-    const project = await getFollowMeQrProject20260610(req.params.code);
-    if(!project){
-      return res.status(404).type('text/plain').send('FollowMe QR non trovato.');
-    }
-
-    const targetUrl = getFollowMePublicQrUrl20260610(project, req);
-    const svg = await QRCode.toString(targetUrl, {
-      type: 'svg',
-      errorCorrectionLevel: 'M',
-      margin: 2,
-      width: 1024
-    });
-
-    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${getFollowMeSafeFilename20260610(project, 'svg')}"`);
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-    return res.send(svg);
-  } catch (err) {
-    console.error('followme qr svg error:', err);
-    return res.status(500).type('text/plain').send('Errore generazione QR SVG.');
-  }
-});
 
 
 module.exports = { app, startServer, initDb, validateRuntimeEnv };
