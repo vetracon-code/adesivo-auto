@@ -10975,6 +10975,25 @@ app.get('/fm/app/:code', async (req, res) => {
     }
 
     const project = projectRes.rows[0];
+
+    // FOLLOWME_SERVER_SIDE_DYNAMIC_MANIFEST_20260610
+    // Serve il manifest corretto già nell'HTML, prima che iOS/Android leggano la PWA.
+    // Evita che la App installata parta dal manifest placeholder e perda il codice QR.
+    html = html.replace(
+      /<link\s+id=["']dynamicManifest["']\s+rel=["']manifest["']\s+href=["'][^"']*["']\s*\/?>/i,
+      `<link id="dynamicManifest" rel="manifest" href="/fm/manifest/${encodeURIComponent(project.code)}.json?v=followme-dynamic-qr-v6-history-push">`
+    );
+
+    html = html.replace(
+      /<meta\s+name=["']apple-mobile-web-app-title["']\s+content=["'][^"']*["']\s*\/?>/i,
+      `<meta name="apple-mobile-web-app-title" content="FollowMe QR">`
+    );
+
+    html = html.replace(
+      /<html([^>]*)>/i,
+      `<html$1 data-followme-code="${String(project.code).replace(/"/g, '&quot;')}">`
+    );
+
     const activeUrl = String(project.active_url || '').trim().replace(/\/+$/, '');
 
     const statsRes = await pool.query(
