@@ -22114,8 +22114,19 @@ if (require.main === module) {
 // Rotte stabili per anteprima e download QR FollowMe.
 // Valide per tutti i QR presenti e futuri: accettano code interno o public_id.
 // Nota importante: le rotte .png/.svg devono stare PRIMA della rotta generica /fm/qr/:code.
+function normalizeFollowMeQrCode20260610(rawCode){
+  const value = String(rawCode || '')
+    .replace(/\.(png|svg)$/i, '')
+    .trim();
+
+  // Accetta sia code interno FM-XXXX sia public_id FMXXXX...
+  return value
+    .replace(/[^A-Za-z0-9_-]+/g, '')
+    .toUpperCase();
+}
+
 async function getFollowMeQrProject20260610(rawCode){
-  const code = normalizeFollowMeCode(String(rawCode || '').replace(/\.(png|svg)$/i, ''));
+  const code = normalizeFollowMeQrCode20260610(rawCode);
   if(!code) return null;
 
   const q = await pool.query(
