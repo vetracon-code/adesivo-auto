@@ -13026,10 +13026,19 @@ app.get('/fm/image/:code', async (req, res) => {
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
 
-    const imageUrl = String(img.public_path || '');
-    const manageUrl20260526 = `/followme-app.html?code=${encodeURIComponent(project.code || project.public_id || code)}`;
-    const title = esc(String(img.original_name || 'Immagine').replace(/\\.(jpg|jpeg|png|webp|gif)$/i, ''));
-
+    // FOLLOWME_IMAGE_PUBLIC_USER_ADMIN_SEPARATION_20260610
+    // Pagina pubblica utente: solo foto + Salva immagine.
+    // Anteprima admin: bottone ritorno App solo con ?admin=1.
+    const publicCode = getFollowMePublicIdOrCode20260610(project);
+    const imageUrl = `/fm/file/${encodeURIComponent(publicCode)}/image`;
+    const isAdminPreview20260610 = String(req.query.admin || '') === '1';
+    const manageUrl20260526 = `/fm/app/${encodeURIComponent(project.code || project.public_id || code)}`;
+    const adminBackButtonHtml20260610 = isAdminPreview20260610
+      ? `
+      ${adminBackButtonHtml20260610}
+`
+      : ``;
+    const title = esc(String(img.original_name || 'Immagine').replace(/\.(jpg|jpeg|png|webp|gif)$/i, ''));
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
@@ -13170,11 +13179,8 @@ app.get('/fm/image/:code', async (req, res) => {
         </svg>
         <span>Salva immagine</span>
       </a>
-      <a class="followme-public-image-back-app-btn-20260526" id="followmePublicImageBackAppBtn20260526" href="${esc(manageUrl20260526)}">
-        Torna all’App
-      </a>
-
-      <div class="followme-ios-save-note-20260522" id="followmeIosSaveNote20260522">
+      
+<div class="followme-ios-save-note-20260522" id="followmeIosSaveNote20260522">
         Su iPhone: apri l’immagine, tieni premuto e scegli “Salva in Foto”.
       </div>
     </section>
