@@ -44472,6 +44472,239 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-preview-no-bounce-doc-to-url-20260611">
+(function(){
+  "use strict";
+
+  // FOLLOWME_PREVIEW_NO_BOUNCE_DOC_TO_URL_20260611
+  if(window.__followmePreviewNoBounceDocToUrl20260611) return;
+  window.__followmePreviewNoBounceDocToUrl20260611 = true;
+
+  var pendingDestination = "";
+  var pendingUntil = 0;
+
+  function clean(v){
+    return String(v || "").trim();
+  }
+
+  function now(){
+    return Date.now ? Date.now() : new Date().getTime();
+  }
+
+  function isDoc(u){
+    return /^\/fm\/document\/[A-Za-z0-9_-]+(?:[?#].*)?$/i.test(clean(u));
+  }
+
+  function isImage(u){
+    return /^\/fm\/image\/[A-Za-z0-9_-]+(?:[?#].*)?$/i.test(clean(u));
+  }
+
+  function isExternalUrl(u){
+    return /^https?:\/\//i.test(clean(u));
+  }
+
+  function shouldBlock(candidate){
+    candidate = clean(candidate);
+
+    if(!pendingDestination) return false;
+    if(now() > pendingUntil) return false;
+    if(!candidate) return false;
+    if(candidate === pendingDestination) return false;
+
+    /*
+      Caso principale:
+      l'utente passa da documento trasmesso a URL esterno.
+      Per circa 2 secondi blocchiamo vecchi refresh che tentano di rimettere il documento.
+    */
+    if(isExternalUrl(pendingDestination) && (isDoc(candidate) || isImage(candidate))){
+      return true;
+    }
+
+    /*
+      Se è in corso qualsiasi destinazione esplicita,
+      non permettere a una vecchia card interna di rimbalzare nella preview.
+    */
+    if((isDoc(candidate) || isImage(candidate)) && candidate !== pendingDestination){
+      return true;
+    }
+
+    return false;
+  }
+
+  function applyPreview(url){
+    url = clean(url);
+    if(!url) return;
+
+    try{
+      var activeText = document.getElementById("activeUrl");
+      if(activeText) activeText.textContent = url;
+    }catch(e){}
+
+    try{
+      var input = document.getElementById("newUrl");
+      if(input && document.activeElement !== input) input.value = url;
+    }catch(e){}
+
+    try{
+      var frame = document.getElementById("simpleDestinationPreviewFrame") ||
+                  document.getElementById("previewFrame") ||
+                  document.getElementById("followmePreviewFrame") ||
+                  document.querySelector("iframe");
+
+      var empty = document.getElementById("simpleDestinationPreviewEmpty");
+      var open = document.getElementById("simpleDestinationPreviewOpen");
+
+      if(frame){
+        if(isExternalUrl(url)){
+          frame.src = url;
+          if(empty) empty.style.display = "none";
+        }else{
+          frame.src = "about:blank";
+        }
+      }
+
+      if(open){
+        open.href = url;
+        open.style.opacity = "1";
+        open.style.pointerEvents = "auto";
+      }
+    }catch(e){}
+  }
+
+  window.followMeSetPreviewPending20260611 = function(url, ttl){
+    url = clean(url);
+    if(!url) return;
+
+    pendingDestination = url;
+    pendingUntil = now() + (ttl || 2200);
+
+    window.__followMeActiveUrl = url;
+    window.followMeCurrentActiveUrl = url;
+    window.currentFollowMeActiveUrl = url;
+
+    applyPreview(url);
+  };
+
+  window.followMePreviewShouldBlockStale20260611 = shouldBlock;
+
+  function wrapUpdateSimplePreview(){
+    if(typeof window.updateSimpleDestinationPreview !== "function") return false;
+    if(window.updateSimpleDestinationPreview.__noBounce20260611) return true;
+
+    var original = window.updateSimpleDestinationPreview;
+
+    window.updateSimpleDestinationPreview = function(url){
+      try{
+        if(shouldBlock(url)){
+          return;
+        }
+      }catch(e){}
+
+      return original.apply(this, arguments);
+    };
+
+    window.updateSimpleDestinationPreview.__noBounce20260611 = true;
+    return true;
+  }
+
+  function wrapImmediatePreview(){
+    if(typeof window.followMePreviewImmediate20260529 !== "function") return false;
+    if(window.followMePreviewImmediate20260529.__noBounce20260611) return true;
+
+    var original = window.followMePreviewImmediate20260529;
+
+    window.followMePreviewImmediate20260529 = function(url){
+      try{
+        if(shouldBlock(url)){
+          return;
+        }
+      }catch(e){}
+
+      return original.apply(this, arguments);
+    };
+
+    window.followMePreviewImmediate20260529.__noBounce20260611 = true;
+    return true;
+  }
+
+  function wrapForcePreview(){
+    if(typeof window.forceFollowMePreview !== "function") return false;
+    if(window.forceFollowMePreview.__noBounce20260611) return true;
+
+    var original = window.forceFollowMePreview;
+
+    window.forceFollowMePreview = function(url){
+      try{
+        if(shouldBlock(url)){
+          return;
+        }
+      }catch(e){}
+
+      return original.apply(this, arguments);
+    };
+
+    window.forceFollowMePreview.__noBounce20260611 = true;
+    return true;
+  }
+
+  function wrapUpdateUrl(){
+    if(typeof window.updateUrl !== "function") return false;
+    if(window.updateUrl.__noBounce20260611) return true;
+
+    var original = window.updateUrl;
+
+    window.updateUrl = function(){
+      try{
+        var input = document.getElementById("newUrl");
+        var url = input ? clean(input.value) : "";
+
+        if(url && !/^https?:\/\//i.test(url) && !/^\/fm\//i.test(url)){
+          url = "https://" + url;
+        }
+
+        if(url){
+          window.followMeSetPreviewPending20260611(url, 2400);
+        }
+      }catch(e){}
+
+      return original.apply(this, arguments);
+    };
+
+    window.updateUrl.__noBounce20260611 = true;
+    return true;
+  }
+
+  function boot(){
+    wrapUpdateSimplePreview();
+    wrapImmediatePreview();
+    wrapForcePreview();
+    wrapUpdateUrl();
+
+    setTimeout(wrapUpdateSimplePreview, 200);
+    setTimeout(wrapImmediatePreview, 200);
+    setTimeout(wrapForcePreview, 200);
+    setTimeout(wrapUpdateUrl, 200);
+
+    setTimeout(wrapUpdateSimplePreview, 900);
+    setTimeout(wrapImmediatePreview, 900);
+    setTimeout(wrapForcePreview, 900);
+    setTimeout(wrapUpdateUrl, 900);
+
+    setTimeout(wrapUpdateSimplePreview, 1800);
+    setTimeout(wrapImmediatePreview, 1800);
+    setTimeout(wrapForcePreview, 1800);
+    setTimeout(wrapUpdateUrl, 1800);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+})();
+</script>
+
 </body>
 </html>
 
