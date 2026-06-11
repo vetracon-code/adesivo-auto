@@ -19127,6 +19127,32 @@ app.get('/api/followme/:code/status', async (req, res) => {
 
 // FOLLOWME_ENFORCE_GOOGLE_SAFE_BROWSING_ON_URL_SAVE_20260528
 async function followMeRequireSafeUrlBeforeSave20260528(req, res, next) {
+
+  // FOLLOWME_SAFE_BROWSING_ALLOW_INTERNAL_ROUTES_20260611
+  // Le rotte interne FollowMe non sono URL esterni: sono pagine della piattaforma.
+  // Esempi validi:
+  //   /fm/image/PUBLIC_ID
+  //   /fm/document/PUBLIC_ID
+  //   /fm/info/PUBLIC_ID
+  // Non devono passare da Google Safe Browsing, che valida URL assoluti esterni.
+  const followMeRawCandidateUrl20260611 = String(
+    req.body?.url ||
+    req.body?.active_url ||
+    req.body?.destination_url ||
+    ''
+  ).trim();
+
+  if(/^\/fm\/(image|document|info)\/[A-Za-z0-9_-]+(?:[?#].*)?$/i.test(followMeRawCandidateUrl20260611)){
+    req.followMeSafeBrowsing = {
+      skipped:true,
+      internal:true,
+      reason:'internal-followme-route',
+      url:followMeRawCandidateUrl20260611
+    };
+    return next();
+  }
+
+
   try {
     /*
       Controllo invisibile lato server:
