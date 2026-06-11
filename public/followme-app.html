@@ -44705,6 +44705,176 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-fast-qr-preview-20260611">
+(function(){
+  if (window.__FOLLOWME_FAST_QR_PREVIEW_20260611__) return;
+  window.__FOLLOWME_FAST_QR_PREVIEW_20260611__ = true;
+
+  /*
+    FOLLOWME_FAST_QR_PREVIEW_20260611
+    Mostra subito il QR reale nell'anteprima/download senza aspettare
+    loadStatus, history, iframe o vecchi fallback /followme/qrs.
+  */
+
+  function getCode(){
+    try {
+      var htmlCode = document.documentElement && document.documentElement.getAttribute("data-followme-code");
+      if (htmlCode) return String(htmlCode).trim();
+
+      var appCode = document.body && document.body.getAttribute("data-followme-code");
+      if (appCode) return String(appCode).trim();
+
+      if (window.FOLLOWME_CODE) return String(window.FOLLOWME_CODE).trim();
+      if (window.followMeCode) return String(window.followMeCode).trim();
+
+      var m = location.pathname.match(/\/fm\/app\/([^/?#]+)/);
+      if (m && m[1]) return decodeURIComponent(m[1]).trim();
+    } catch(e) {}
+    return "";
+  }
+
+  function setAttrs(el, attrs){
+    if (!el) return;
+    Object.keys(attrs).forEach(function(k){
+      try { el.setAttribute(k, attrs[k]); } catch(e) {}
+    });
+  }
+
+  function findQrImg(){
+    var selectors = [
+      "#qrPreview img",
+      "#qrPreviewImg",
+      "#followmeQrPreview img",
+      "#followmeQrPreviewImg",
+      ".qr-preview img",
+      ".followme-qr-preview img",
+      ".qr-preview-card img",
+      "img[data-followme-qr-preview]",
+      "img[src*='/fm/qr/']",
+      "img[src*='/followme/qrs/']"
+    ];
+
+    for (var i = 0; i < selectors.length; i++) {
+      var el = document.querySelector(selectors[i]);
+      if (el) return el;
+    }
+
+    return null;
+  }
+
+  function findQrBox(){
+    var selectors = [
+      "#qrPreview",
+      "#followmeQrPreview",
+      "#qrPreviewBox",
+      ".qr-preview",
+      ".followme-qr-preview",
+      ".qr-preview-card",
+      "[data-followme-qr-box]"
+    ];
+
+    for (var i = 0; i < selectors.length; i++) {
+      var el = document.querySelector(selectors[i]);
+      if (el) return el;
+    }
+
+    return null;
+  }
+
+  function setFastQrPreview(){
+    var code = getCode();
+    if (!code) return;
+
+    var png = "/fm/qr/" + encodeURIComponent(code) + ".png";
+    var svg = "/fm/qr/" + encodeURIComponent(code) + ".svg";
+    var preview = "/fm/qr/" + encodeURIComponent(code);
+
+    // Aggiorna subito i pulsanti download.
+    var dlPng = document.getElementById("downloadQrPng");
+    var dlSvg = document.getElementById("downloadQrSvg");
+
+    setAttrs(dlPng, {
+      href: png,
+      download: code + ".png"
+    });
+
+    setAttrs(dlSvg, {
+      href: svg,
+      download: code + ".svg"
+    });
+
+    // Aggiorna eventuale link preview esistente.
+    var previewLink = document.querySelector("a[href*='/followme/qrs/'], a[href*='/fm/qr/']");
+    if (previewLink && previewLink !== dlPng && previewLink !== dlSvg) {
+      setAttrs(previewLink, { href: preview });
+    }
+
+    var img = findQrImg();
+
+    if (!img) {
+      var box = findQrBox();
+      if (box) {
+        img = document.createElement("img");
+        img.setAttribute("data-followme-qr-preview", "1");
+        img.alt = "QR FollowMe";
+        img.style.maxWidth = "100%";
+        img.style.width = "220px";
+        img.style.height = "auto";
+        img.style.display = "block";
+        img.style.margin = "0 auto";
+        img.style.opacity = "1";
+        img.style.visibility = "visible";
+
+        box.appendChild(img);
+      }
+    }
+
+    if (!img) return;
+
+    try {
+      img.loading = "eager";
+      img.decoding = "async";
+      img.fetchPriority = "high";
+    } catch(e) {}
+
+    img.style.opacity = "1";
+    img.style.visibility = "visible";
+
+    // Evita cache-busting continuo: il QR per codice è stabile.
+    if (img.getAttribute("src") !== png) {
+      img.src = png;
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", setFastQrPreview, {once:true});
+  } else {
+    setFastQrPreview();
+  }
+
+  // Piccoli retry perché alcune parti della UI vengono create tardi.
+  setTimeout(setFastQrPreview, 50);
+  setTimeout(setFastQrPreview, 200);
+  setTimeout(setFastQrPreview, 700);
+
+  // Se vecchi script modificano di nuovo la preview, la riportiamo alla rotta corretta.
+  try {
+    var observer = new MutationObserver(function(){
+      clearTimeout(window.__FOLLOWME_FAST_QR_PREVIEW_TIMER__);
+      window.__FOLLOWME_FAST_QR_PREVIEW_TIMER__ = setTimeout(setFastQrPreview, 60);
+    });
+    observer.observe(document.documentElement, {
+      childList:true,
+      subtree:true,
+      attributes:true,
+      attributeFilter:["src","href"]
+    });
+    setTimeout(function(){ try { observer.disconnect(); } catch(e) {} }, 5000);
+  } catch(e) {}
+})();
+</script>
+
 </body>
 </html>
 
