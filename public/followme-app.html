@@ -7912,7 +7912,8 @@ function closeDeleteHistoryConfirm(){
   __followMeDeleteHistoryIsActive = false;
 }
 
-async async function confirmDeleteHistoryLink(){
+async function confirmDeleteHistoryLink(){
+  // FOLLOWME_DELETE_CARD_FAST_STABLE_20260611
   const url = String(__followMeDeleteHistoryUrl || "").trim();
 
   if(!url){
@@ -7923,64 +7924,71 @@ async async function confirmDeleteHistoryLink(){
 
   const btn = document.getElementById("confirmDeleteHistoryBtn");
 
+  if(btn && btn.dataset.running === "1"){
+    return;
+  }
+
   try{
     CODE = getCode();
 
-    /*
-      UX immediata: chiudo popup e rimuovo la card prima della risposta server.
-    */
+    if(!CODE){
+      toast("Codice FollowMe mancante.");
+      return;
+    }
+
+    // Chiudo subito la finestra e rimuovo subito la card dalla UI.
     closeDeleteHistoryConfirm();
+
     const removed = followMeRemoveHistoryCardImmediate20260529(url);
 
     if(btn){
+      btn.dataset.running = "1";
       btn.disabled = true;
       btn.textContent = "Elimino...";
     }
 
-    toast(removed ? "Link rimosso." : "Elimino link...");
+    toast(removed ? "Card eliminata." : "Elimino card...");
 
     const res = await fetch("/api/followme/" + encodeURIComponent(CODE) + "/history/delete", {
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ url:url, client_command_ts:Date.now() })
+      cache:"no-store",
+      body:JSON.stringify({
+        url:url,
+        client_command_ts:Date.now(),
+        source:"delete-card-fast-stable-20260611"
+      })
     });
 
     const data = await res.json().catch(()=>null);
 
     if(!res.ok || !data || !data.success){
-      toast((data && data.error) || "Errore eliminazione link.");
+      toast((data && data.error) || "Errore eliminazione card.");
 
-      /*
-        Rollback: ricarico lo storico se il server non conferma.
-      */
+      // Se il server non conferma, riallineo lo storico.
       setTimeout(function(){
-        try{ if(typeof renderFollowMeEmergencyHistory === "function") renderFollowMeEmergencyHistory(); }catch(e){}
-      }, 350);
+        try{ if(typeof loadStatus === "function") loadStatus(); }catch(e){}
+      }, 250);
 
       return;
     }
 
-    /*
-      Riallineo dopo, senza bloccare la percezione.
-    */
+    // Server confermato: un solo refresh leggero, non doppio/triplo.
     setTimeout(function(){
       try{ if(typeof loadStatus === "function") loadStatus(); }catch(e){}
-    }, 550);
-
-    setTimeout(function(){
-      try{ if(typeof renderFollowMeEmergencyHistory === "function") renderFollowMeEmergencyHistory(); }catch(e){}
-    }, 800);
+    }, 250);
 
   }catch(err){
     console.error("confirmDeleteHistoryLink error:", err);
     toast("Errore eliminazione: " + (err.message || err));
 
     setTimeout(function(){
-      try{ if(typeof renderFollowMeEmergencyHistory === "function") renderFollowMeEmergencyHistory(); }catch(e){}
-    }, 350);
+      try{ if(typeof loadStatus === "function") loadStatus(); }catch(e){}
+    }, 250);
 
   }finally{
     if(btn){
+      btn.dataset.running = "0";
       btn.disabled = false;
       btn.textContent = "Confermi";
     }
@@ -44422,6 +44430,45 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
   wrappedFetch.__followmeImageUploadActivate20260611 = true;
   window.fetch = wrappedFetch;
+})();
+</script>
+
+
+<script id="followme-delete-card-fast-stable-20260611">
+(function(){
+  "use strict";
+
+  // FOLLOWME_DELETE_CARD_CLICK_GUARD_20260611
+  if(window.__followmeDeleteCardFastStable20260611) return;
+  window.__followmeDeleteCardFastStable20260611 = true;
+
+  document.addEventListener("click", function(ev){
+    var btn = ev.target && ev.target.closest ? ev.target.closest("#confirmDeleteHistoryBtn") : null;
+    if(!btn) return;
+
+    if(btn.dataset.followmeFastDeleteHandled === "1"){
+      ev.preventDefault();
+      ev.stopPropagation();
+      return false;
+    }
+
+    if(typeof window.confirmDeleteHistoryLink === "function"){
+      ev.preventDefault();
+      ev.stopPropagation();
+
+      btn.dataset.followmeFastDeleteHandled = "1";
+
+      Promise.resolve()
+        .then(function(){ return window.confirmDeleteHistoryLink(); })
+        .finally(function(){
+          setTimeout(function(){
+            try{ btn.dataset.followmeFastDeleteHandled = "0"; }catch(e){}
+          }, 500);
+        });
+
+      return false;
+    }
+  }, true);
 })();
 </script>
 
