@@ -44251,6 +44251,180 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 </script>
 
 <!-- FOLLOWME_SPEED_UI_PATCH_20260611 -->
+
+<script id="followme-image-upload-activate-destination-20260611">
+(function(){
+  "use strict";
+
+  // FOLLOWME_IMAGE_UPLOAD_ACTIVATE_DESTINATION_20260611
+  // Dopo upload immagine riuscito:
+  // - attiva il QR sulla pagina pubblica /fm/image/PUBLIC_ID
+  // - aggiorna subito preview/testo attivo
+  // - evita vecchi percorsi /uploads o /fm/file come active_url finale
+  if(window.__followmeImageUploadActivateDestination20260611) return;
+  window.__followmeImageUploadActivateDestination20260611 = true;
+
+  function code(){
+    try{
+      if(typeof getCode === "function") return String(getCode() || "").trim();
+    }catch(e){}
+    try{
+      if(window.CODE) return String(window.CODE || "").trim();
+    }catch(e){}
+    try{
+      var htmlCode = document.documentElement && document.documentElement.getAttribute("data-followme-code");
+      if(htmlCode) return String(htmlCode || "").trim();
+    }catch(e){}
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^/?#]+)/);
+      if(m && m[1]) return decodeURIComponent(m[1]);
+    }catch(e){}
+    return "";
+  }
+
+  function cleanImagePublicUrl(data){
+    data = data || {};
+
+    var candidates = [
+      data.public_url,
+      data.image_public_url,
+      data.image_url,
+      data.url,
+      data.publicUrl,
+      data.image && data.image.public_url,
+      data.image && data.image.publicUrl
+    ];
+
+    for(var i=0;i<candidates.length;i++){
+      var u = String(candidates[i] || "").trim();
+      if(!u) continue;
+
+      // La destinazione attiva deve essere la pagina immagine, NON il file diretto.
+      if(u.indexOf("/fm/image/") >= 0){
+        return u;
+      }
+    }
+
+    // Fallback sicuro: anche /fm/image/CODE funziona perché il server accetta code o public_id.
+    var c = code();
+    return c ? ("/fm/image/" + encodeURIComponent(c)) : "";
+  }
+
+  function immediateUi(url, data){
+    try{
+      window.__followMeActiveUrl = url;
+      window.followMeCurrentActiveUrl = url;
+      window.currentFollowMeActiveUrl = url;
+    }catch(e){}
+
+    try{
+      if(typeof followMePreviewImmediate20260529 === "function"){
+        followMePreviewImmediate20260529(url);
+      }
+    }catch(e){}
+
+    try{
+      var active = document.getElementById("activeUrl");
+      if(active) active.textContent = url;
+    }catch(e){}
+
+    try{
+      var input = document.getElementById("newUrl");
+      if(input && document.activeElement !== input) input.value = url;
+    }catch(e){}
+
+    try{
+      if(window.followmeInstantActiveImageCard20260526 && typeof window.followmeInstantActiveImageCard20260526 === "function"){
+        window.followmeInstantActiveImageCard20260526(data || {});
+      }
+    }catch(e){}
+
+    try{
+      if(typeof window.followmeRenderImageCardPreviewFast20260526 === "function"){
+        window.followmeRenderImageCardPreviewFast20260526(data || {});
+      }
+    }catch(e){}
+  }
+
+  async function activateImageDestination(data){
+    var c = code();
+    var url = cleanImagePublicUrl(data);
+
+    if(!c || !url) return;
+
+    immediateUi(url, data);
+
+    try{
+      if(typeof toast === "function") toast("Immagine caricata. Attivo il QR...");
+    }catch(e){}
+
+    var res = await fetch("/api/followme/" + encodeURIComponent(c) + "/update-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        url: url,
+        client_command_ts: Date.now(),
+        source: "image-card-upload-activate-20260611"
+      })
+    });
+
+    var json = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !json || !json.success){
+      try{
+        if(typeof toast === "function") toast((json && json.error) || "Immagine caricata, ma QR non aggiornato.");
+      }catch(e){}
+      return;
+    }
+
+    immediateUi(url, data);
+
+    try{
+      if(typeof toast === "function") toast("Immagine attiva sul QR.");
+    }catch(e){}
+
+    setTimeout(function(){
+      try{ if(typeof loadStatus === "function") loadStatus(); }catch(e){}
+    }, 350);
+  }
+
+  var originalFetch = window.fetch;
+  if(!originalFetch || originalFetch.__followmeImageUploadActivate20260611) return;
+
+  function wrappedFetch(input, init){
+    var requestUrl = "";
+    try{
+      requestUrl = typeof input === "string" ? input : (input && input.url) || "";
+    }catch(e){}
+
+    return originalFetch.apply(this, arguments).then(function(res){
+      try{
+        if(res && res.ok && requestUrl.indexOf("/image-card/upload") >= 0){
+          res.clone().json().then(function(data){
+            activateImageDestination(data || {}).catch(function(err){
+              console.error("followme image upload activate destination error:", err);
+              try{
+                if(typeof toast === "function") toast("Immagine caricata, ma attivazione QR non riuscita.");
+              }catch(e){}
+            });
+          }).catch(function(err){
+            console.warn("followme image upload activate parse error:", err);
+          });
+        }
+      }catch(e){
+        console.warn("followme image upload activate hook error:", e);
+      }
+
+      return res;
+    });
+  }
+
+  wrappedFetch.__followmeImageUploadActivate20260611 = true;
+  window.fetch = wrappedFetch;
+})();
+</script>
+
 </body>
 </html>
 
