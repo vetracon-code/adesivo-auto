@@ -12019,6 +12019,148 @@ const followmeDocumentFsp = followmeDocumentFs.promises;
 */
 const FOLLOWME_DOCUMENT_UPLOAD_DIR = FOLLOWME_DOCUMENTS_DISK_DIR;
 
+
+// FOLLOWME_UNIVERSAL_STORAGE_STANDARD_20260610
+// Standard unico per tutti i QR FollowMe.
+// Ogni progetto deve avere storage_path dedicato su disco persistente:
+//   /data/followme/projects/ID-CODE
+// e sottocartelle stabili per qr, documents, images, voice, chat, exports, logs.
+function normalizeFollowMeStorageCode20260610(v) {
+  return String(v || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]+/g, '') || 'UNKNOWN';
+}
+
+function normalizeFollowMeStorageKey20260610(project) {
+  const code = normalizeFollowMeStorageCode20260610(project && (project.code || project.public_id));
+  const id = String((project && project.id) || '').replace(/[^0-9]+/g, '');
+  return `${id || '0'}-${code}`.replace(/[^A-Z0-9_-]+/gi, '-');
+}
+
+function getFollowMeStorageBaseRoot20260610() {
+  const path = require('path');
+  const root =
+    process.env.FOLLOWME_STORAGE_DIR ||
+    process.env.RENDER_DISK_MOUNT_PATH ||
+    '/data';
+
+  return path.resolve(root);
+}
+
+function getFollowMeCanonicalStoragePath20260610(project) {
+  const path = require('path');
+  const base = getFollowMeStorageBaseRoot20260610();
+  return path.resolve(path.join(base, 'followme', 'projects', normalizeFollowMeStorageKey20260610(project)));
+}
+
+function getFollowMePublicCode20260610(project) {
+  return String((project && (project.public_id || project.code)) || '')
+    .trim()
+    .replace(/[^A-Za-z0-9_-]+/g, '');
+}
+
+function isFollowMeSafeChildPath20260610(parent, child) {
+  const path = require('path');
+  const p = path.resolve(parent);
+  const c = path.resolve(child);
+  return c === p || c.startsWith(p + path.sep);
+}
+
+async function ensureFollowMeUniversalProjectStorage20260610(project) {
+  const path = require('path');
+  const fs = require('fs/promises');
+
+  if (!project || !project.id) {
+    throw new Error('Progetto FollowMe non valido per storage.');
+  }
+
+  const canonicalPath = getFollowMeCanonicalStoragePath20260610(project);
+  const storageKey = normalizeFollowMeStorageKey20260610(project);
+
+  const dirs = [
+    '',
+    'qr',
+    'documents',
+    'images',
+    path.join('images', 'active'),
+    path.join('images', 'preview'),
+    'voice',
+    path.join('voice', 'messages'),
+    path.join('voice', 'active'),
+    'chat',
+    path.join('chat', 'attachments'),
+    path.join('chat', 'exports'),
+    'exports',
+    'logs'
+  ];
+
+  for (const d of dirs) {
+    await fs.mkdir(path.join(canonicalPath, d), { recursive:true });
+  }
+
+  if (project.storage_path !== canonicalPath || project.storage_key !== storageKey) {
+    await pool.query(
+      `UPDATE followme_projects
+       SET storage_path = $2,
+           storage_key = $3,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [project.id, canonicalPath, storageKey]
+    ).catch(err => {
+      console.error('followme universal storage update project error:', err);
+    });
+
+    project.storage_path = canonicalPath;
+    project.storage_key = storageKey;
+  }
+
+  return canonicalPath;
+}
+
+async function repairAllFollowMeStoragePaths20260610() {
+  const r = await pool.query(
+    `SELECT id, code, public_id, storage_path, storage_key
+     FROM followme_projects
+     ORDER BY id ASC`
+  );
+
+  const repaired = [];
+
+  for (const row of r.rows) {
+    const storagePath = await ensureFollowMeUniversalProjectStorage20260610(row);
+    repaired.push({
+      id: row.id,
+      code: row.code,
+      public_id: row.public_id,
+      storage_path: storagePath
+    });
+  }
+
+  return repaired;
+}
+
+// Endpoint tecnico admin per riparare in blocco i QR già esistenti.
+// Non serve ai clienti; serve solo a noi per allineare vecchi e nuovi QR.
+app.post('/api/admin/followme/repair-storage-paths-20260610', express.json({ limit:'1mb' }), async (req, res) => {
+  try {
+    const repaired = await repairAllFollowMeStoragePaths20260610();
+    return res.json({
+      success:true,
+      repaired_count: repaired.length,
+      repaired
+    });
+  } catch(err) {
+    console.error('followme repair storage paths error:', err);
+    return res.status(500).json({
+      success:false,
+      error: err.message || 'Errore riparazione storage FollowMe.'
+    });
+  }
+});
+
+
+
 const followmeDocumentUploadMulter20260520 = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -12114,54 +12256,32 @@ async function getFollowMeProjectByCode20260520(code) {
      LIMIT 1`,
     [clean]
   );
-  return r.rows[0] || null;
+  const project = r.rows[0] || null;
+  if (project) {
+    await ensureFollowMeUniversalProjectStorage20260610(project).catch(err => {
+      console.error('followme ensure universal storage lookup error:', err);
+    });
+  }
+  return project;
 }
 
 // FOLLOWME_DOC_IMAGE_STORAGE_PATH_FIX_20260610
 // Percorso stabile per file FollowMe: usa storage_path dedicato se presente.
 // Fallback sicuro per progetti vecchi/DEMO senza storage_path.
 function getFollowMeProjectStorageRoot20260610(project){
-  const path = require('path');
-
-  if(project && project.storage_path){
-    return path.resolve(String(project.storage_path));
-  }
-
-  const root = typeof FOLLOWME_STORAGE_ROOT !== 'undefined'
-    ? FOLLOWME_STORAGE_ROOT
-    : (process.env.FOLLOWME_STORAGE_DIR || path.join(__dirname, 'data'));
-
-  const code = String((project && (project.code || project.public_id)) || 'UNKNOWN')
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9_-]/g, '') || 'UNKNOWN';
-
-  const key = String((project && project.storage_key) || ((project && project.id) ? `${project.id}-${code}` : code))
-    .replace(/[^A-Za-z0-9_-]+/g, '-');
-
-  return path.resolve(path.join(root, 'followme', 'projects', key));
+  return getFollowMeCanonicalStoragePath20260610(project);
 }
 
 function getFollowMePublicIdOrCode20260610(project){
-  return String((project && (project.public_id || project.code)) || '')
-    .trim()
-    .replace(/[^A-Za-z0-9_-]+/g, '');
+  return getFollowMePublicCode20260610(project);
 }
 
 async function ensureFollowMeProjectStoragePath20260610(project){
-  const fsp = require('fs/promises');
-  const root = getFollowMeProjectStorageRoot20260610(project);
-  await fsp.mkdir(root, { recursive:true });
-  await fsp.mkdir(require('path').join(root, 'documents'), { recursive:true });
-  await fsp.mkdir(require('path').join(root, 'images', 'active'), { recursive:true });
-  return root;
+  return await ensureFollowMeUniversalProjectStorage20260610(project);
 }
 
 function isSafeChildPath20260610(parent, child){
-  const path = require('path');
-  const p = path.resolve(parent);
-  const c = path.resolve(child);
-  return c === p || c.startsWith(p + path.sep);
+  return isFollowMeSafeChildPath20260610(parent, child);
 }
 
 app.post('/api/followme/:code/document/upload', followmeDocumentUploadMulter20260520.single('document'), async (req, res) => {
