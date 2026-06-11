@@ -1,3 +1,25 @@
+
+
+/*
+  PLATFORM_SW_HIGH_PRIORITY_SMARTWATCH_20260611
+  Normalizza tutte le notifiche mostrate dal service worker come avvisi importanti.
+*/
+function normalizePlatformNotificationOptions20260611(data, options) {
+  data = data || {};
+  options = options || {};
+
+  options.requireInteraction = data.requireInteraction !== false;
+  options.renotify = data.renotify !== false;
+  options.silent = false;
+  options.vibrate = data.vibrate || options.vibrate || [220, 120, 220, 120, 420];
+  options.icon = data.icon || options.icon || '/icons/icon-192.png';
+  options.badge = data.badge || options.badge || '/icons/icon-192.png';
+  options.tag = data.tag || options.tag || ('platform-alert-' + Date.now());
+  options.timestamp = data.timestamp || options.timestamp || Date.now();
+
+  return options;
+}
+
 const ANDROID_FIX_VERSION = '20260428140657';
 const FOLLOWME_CHAT_DIRECT_OPEN_VERSION = '20260515-DIRECT-OPEN';
 const FOLLOWME_CHAT_PUSH_AUTO_OPEN_VERSION = '20260515-CHAT-AUTO-OPEN';

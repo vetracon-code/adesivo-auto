@@ -26,6 +26,86 @@ const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:prova@example.com';
 
 if (vapidPublicKey && vapidPrivateKey) {
   webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+
+
+/*
+  PLATFORM_PUSH_HIGH_PRIORITY_SMARTWATCH_20260611
+
+  Profilo globale per notifiche push della piattaforma.
+  Obiettivo: massima priorità Web Push e migliore compatibilità con notifiche inoltrate a smartwatch.
+
+  Limite tecnico: Apple decide comunque se inoltrare la notifica da iPhone ad Apple Watch
+  in base a blocco schermo, stato iPhone, Focus, mirroring notifiche e impostazioni watchOS.
+*/
+(function installPlatformHighPriorityWebPush20260611(){
+  if (!webpush || typeof webpush.sendNotification !== 'function') return;
+  if (webpush.__PLATFORM_PUSH_HIGH_PRIORITY_SMARTWATCH_20260611__) return;
+
+  const originalSendNotification = webpush.sendNotification.bind(webpush);
+
+  function normalizePayload(payload) {
+    let data = {};
+
+    try {
+      if (Buffer.isBuffer(payload)) {
+        data = JSON.parse(payload.toString('utf8'));
+      } else if (typeof payload === 'string') {
+        data = JSON.parse(payload);
+      } else if (payload && typeof payload === 'object') {
+        data = Object.assign({}, payload);
+      }
+    } catch (e) {
+      data = {
+        title: 'Avviso importante',
+        body: typeof payload === 'string' ? payload : 'Hai una nuova notifica.'
+      };
+    }
+
+    if (!data || typeof data !== 'object') data = {};
+
+    data.title = data.title || 'Avviso importante';
+    data.body = data.body || data.message || 'Hai una nuova notifica.';
+
+    // Profilo visuale ad alta priorità, usato dal service worker dove supportato.
+    data.requireInteraction = true;
+    data.renotify = true;
+    data.silent = false;
+    data.priority = 'high';
+    data.importance = 'high';
+    data.urgency = 'high';
+    data.timestamp = data.timestamp || Date.now();
+
+    if (!data.vibrate) data.vibrate = [220, 120, 220, 120, 420];
+    if (!data.icon) data.icon = '/icons/icon-192.png';
+    if (!data.badge) data.badge = '/icons/icon-192.png';
+
+    // Tag differenziato: evita che notifiche diverse vengano schiacciate troppo facilmente.
+    if (!data.tag) {
+      const base = String(data.type || data.kind || data.code || 'platform-alert')
+        .replace(/[^a-zA-Z0-9_-]/g, '')
+        .slice(0, 24) || 'platform-alert';
+      data.tag = base + '-' + Date.now();
+    }
+
+    return JSON.stringify(data);
+  }
+
+  webpush.sendNotification = function patchedSendNotification(subscription, payload, options) {
+    const finalPayload = normalizePayload(payload);
+
+    const finalOptions = Object.assign({}, options || {});
+    finalOptions.urgency = 'high';
+
+    // web-push usa TTL maiuscolo; lascio anche eventuali opzioni esistenti.
+    if (!finalOptions.TTL && !finalOptions.ttl) {
+      finalOptions.TTL = 60 * 60 * 24;
+    }
+
+    return originalSendNotification(subscription, finalPayload, finalOptions);
+  };
+
+  webpush.__PLATFORM_PUSH_HIGH_PRIORITY_SMARTWATCH_20260611__ = true;
+})();
 }
 
 
