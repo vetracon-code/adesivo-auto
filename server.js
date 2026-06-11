@@ -13106,13 +13106,16 @@ app.get('/fm/file/:code/image', async (req, res) => {
 
 app.get('/fm/image/:code', async (req, res) => {
   try {
+    // FOLLOWME_IMAGE_ROUTE_CLEAN_USER_ADMIN_20260611
+    // Utente pubblico: solo foto + Salva immagine.
+    // Admin preview: aggiunge Torna all’App solo con ?admin=1.
     await ensureFollowMeImageCardTable20260522();
 
     const code = String(req.params.code || '').trim();
     const project = await getFollowMeProjectByCode20260520(code);
 
     if (!project) {
-      return res.status(404).send('Immagine non disponibile.');
+      return res.redirect(302, '/fm/document-closed');
     }
 
     const r = await pool.query(
@@ -13146,19 +13149,16 @@ app.get('/fm/image/:code', async (req, res) => {
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
 
-    // FOLLOWME_IMAGE_PUBLIC_USER_ADMIN_SEPARATION_20260610
-    // Pagina pubblica utente: solo foto + Salva immagine.
-    // Anteprima admin: bottone ritorno App solo con ?admin=1.
     const publicCode = getFollowMePublicIdOrCode20260610(project);
-    const imageUrl = `/fm/file/${encodeURIComponent(publicCode)}/image`;
-    const isAdminPreview20260610 = String(req.query.admin || '') === '1';
-    const manageUrl20260526 = `/fm/app/${encodeURIComponent(project.code || project.public_id || code)}`;
-    const adminBackButtonHtml20260610 = isAdminPreview20260610
-      ? `
-      ${adminBackButtonHtml20260610}
-`
-      : ``;
-    const title = esc(String(img.original_name || 'Immagine').replace(/\.(jpg|jpeg|png|webp|gif)$/i, ''));
+    const imageUrl = '/fm/file/' + encodeURIComponent(publicCode) + '/image';
+    const isAdminPreview = String(req.query.admin || '') === '1';
+    const manageUrl = '/fm/app/' + encodeURIComponent(project.code || project.public_id || code);
+    const title = esc(String(img.original_name || 'Immagine').replace(/\.(jpg|jpeg|png|webp|gif)$/i, '') || 'Immagine');
+
+    const adminBackButtonHtml = isAdminPreview
+      ? '<a class="followme-public-image-back-app-btn-20260611" id="followmePublicImageBackAppBtn20260611" href="' + esc(manageUrl) + '">Torna all’App</a>'
+      : '';
+
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
@@ -13170,40 +13170,25 @@ app.get('/fm/image/:code', async (req, res) => {
   <meta name="robots" content="noindex,nofollow">
   <title>${title}</title>
   <style>
-    :root{
-      --bg:#05070d;
-      --card:#101018;
-      --text:#ffffff;
-      --muted:rgba(255,255,255,.68);
-      --line:rgba(255,255,255,.12);
-      --accent:#c8ff2e;
-    }
     *{box-sizing:border-box}
     html,body{margin:0;min-height:100%}
     body{
       min-height:100vh;
       padding:18px;
-      background:
-        radial-gradient(circle at 20% 0%, rgba(200,255,46,.16), transparent 32%),
-        radial-gradient(circle at 90% 8%, rgba(94,231,255,.12), transparent 30%),
-        linear-gradient(145deg,#020617,#0f172a 48%,#020617);
-      color:var(--text);
+      background:#05070d;
+      color:#fff;
       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
       display:flex;
       align-items:center;
       justify-content:center;
     }
-    .wrap{
-      width:min(520px,100%);
-    }
+    .wrap{width:min(520px,100%)}
     .card{
       overflow:hidden;
-      border-radius:34px;
+      border-radius:28px;
       background:rgba(255,255,255,.06);
-      border:1px solid var(--line);
-      box-shadow:0 28px 90px rgba(0,0,0,.42);
-      backdrop-filter:blur(18px);
-      -webkit-backdrop-filter:blur(18px);
+      border:1px solid rgba(255,255,255,.12);
+      box-shadow:0 24px 80px rgba(0,0,0,.45);
       padding-bottom:18px;
     }
     .image{
@@ -13216,75 +13201,51 @@ app.get('/fm/image/:code', async (req, res) => {
       height:auto;
       display:block;
     }
+    .followme-public-image-download-btn-20260611,
+    .followme-public-image-back-app-btn-20260611{
+      width:min(420px, calc(100vw - 32px));
+      min-height:54px;
+      margin:18px auto 0 auto;
+      padding:0 20px;
+      border-radius:999px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
+      font-size:15px;
+      font-weight:950;
+      line-height:1.05;
+      text-decoration:none;
+      box-sizing:border-box;
+      cursor:pointer;
+      -webkit-tap-highlight-color:transparent;
+    }
+    .followme-public-image-download-btn-20260611{
+      border:0;
+      background:linear-gradient(135deg,#9bd61e,#5ee7ff);
+      color:#101018;
+      box-shadow:0 14px 32px rgba(34,120,42,.22);
+    }
+    .followme-public-image-back-app-btn-20260611{
+      margin-top:10px;
+      border:1px solid rgba(255,255,255,.18);
+      background:rgba(255,255,255,.08);
+      color:#fff;
+    }
+    .followme-ios-save-note-20260611{
+      display:none;
+      width:min(420px, calc(100vw - 32px));
+      margin:10px auto 0 auto;
+      color:rgba(255,255,255,.82);
+      font-size:12px;
+      line-height:1.35;
+      font-weight:700;
+      text-align:center;
+    }
+    body.followme-ios-device-20260611 .followme-ios-save-note-20260611{
+      display:block;
+    }
   </style>
-
-<style id="followme-public-image-download-only-css-20260522">
-  .followme-public-image-download-btn-20260522{
-    width:min(420px, calc(100vw - 32px));
-    min-height:54px;
-    margin:18px auto 0 auto;
-    padding:0 20px;
-    border:0;
-    border-radius:999px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    gap:10px;
-    background:linear-gradient(135deg,#9bd61e,#5ee7ff);
-    color:#101018;
-    font-size:15px;
-    font-weight:950;
-    line-height:1.05;
-    text-decoration:none;
-    box-shadow:0 14px 32px rgba(34,120,42,.22);
-    box-sizing:border-box;
-    cursor:pointer;
-    -webkit-tap-highlight-color:transparent;
-  }
-  .followme-public-image-back-app-btn-20260526{
-    width:min(420px, calc(100vw - 32px));
-    min-height:54px;
-    margin:10px auto 0 auto;
-    padding:0 20px;
-    border:1px solid rgba(255,255,255,.18);
-    border-radius:999px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    gap:10px;
-    background:rgba(255,255,255,.08);
-    color:#fff;
-    font-size:15px;
-    font-weight:950;
-    line-height:1.05;
-    text-decoration:none;
-    box-sizing:border-box;
-    cursor:pointer;
-    -webkit-tap-highlight-color:transparent;
-  }
-
-  .followme-public-image-download-btn-20260522 svg{
-    width:22px;
-    height:22px;
-    flex:0 0 22px;
-  }
-
-  .followme-ios-save-note-20260522{
-    display:none;
-    width:min(420px, calc(100vw - 32px));
-    margin:10px auto 0 auto;
-    color:rgba(255,255,255,.82);
-    font-size:12px;
-    line-height:1.35;
-    font-weight:700;
-    text-align:center;
-  }
-
-  body.followme-ios-device-20260522 .followme-ios-save-note-20260522{
-    display:block;
-  }
-</style>
-
 </head>
 <body>
   <main class="wrap">
@@ -13293,36 +13254,29 @@ app.get('/fm/image/:code', async (req, res) => {
         <img src="${esc(imageUrl)}?v=${Date.now()}" alt="${title}">
       </div>
 
-      <a class="followme-public-image-download-btn-20260522" id="followmePublicImageDownloadBtn20260522" href="${esc(imageUrl)}?v=${img.id}" data-original-image-url="${esc(imageUrl)}?v=${img.id}" download target="_blank" rel="noopener">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 3v10.2m0 0 4-4m-4 4-4-4M5 17.5V20h14v-2.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+      <a class="followme-public-image-download-btn-20260611" id="followmePublicImageDownloadBtn20260611" href="${esc(imageUrl)}?v=${img.id}" data-original-image-url="${esc(imageUrl)}?v=${img.id}" download target="_blank" rel="noopener">
         <span>Salva immagine</span>
       </a>
-      
-<div class="followme-ios-save-note-20260522" id="followmeIosSaveNote20260522">
+
+      ${adminBackButtonHtml}
+
+      <div class="followme-ios-save-note-20260611" id="followmeIosSaveNote20260611">
         Su iPhone: apri l’immagine, tieni premuto e scegli “Salva in Foto”.
       </div>
     </section>
   </main>
 
-<script id="followme-public-image-save-ux-final-20260522">
+<script id="followme-public-image-save-ux-clean-20260611">
 (function(){
   "use strict";
-
   var ua = navigator.userAgent || "";
   var isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
   if(isIOS){
-    document.body.classList.add("followme-ios-device-20260522");
-
-    var btn = document.getElementById("followmePublicImageDownloadBtn20260522");
+    document.body.classList.add("followme-ios-device-20260611");
+    var btn = document.getElementById("followmePublicImageDownloadBtn20260611");
     var img = document.querySelector(".image img");
 
-    /*
-      iOS Safari non permette a una pagina web di salvare direttamente nel rullino.
-      Apriamo l'immagine reale: l'utente usa pressione lunga / condividi / Salva in Foto.
-    */
     if(btn && img){
       btn.removeAttribute("download");
       btn.href = btn.getAttribute("data-original-image-url") || img.currentSrc || img.src || btn.href;
@@ -13332,14 +13286,15 @@ app.get('/fm/image/:code', async (req, res) => {
   }
 })();
 </script>
-
 </body>
 </html>`);
   } catch(err) {
-    console.error('followme image public page error:', err);
+    console.error('followme image public page clean route error:', err);
     return res.status(500).send('Errore apertura immagine.');
   }
 });
+
+
 // end-followme-image-card-single-upload-final-20260522
 
 
