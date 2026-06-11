@@ -16641,6 +16641,17 @@ app.get('/fm/info/:public_id', async function(req, res) {
 
     const project = q.rows[0];
     const activeUrl = String(project.active_url || '').trim();
+
+    // FOLLOWME_INFO_DIRECT_OFF_REDIRECT_20260611
+    // Se Richiesta informazioni è OFF, anche l'apertura diretta/mobile/cache
+    // di /fm/info/CODICE deve rispettare la destinazione attiva.
+    if (project.info_requests_enabled !== true) {
+      if (activeUrl) {
+        return res.redirect(302, activeUrl);
+      }
+      return res.redirect(302, '/fm/app/' + encodeURIComponent(project.code || publicId));
+    }
+
     const sourceLabel = followMeShortSourceLabel20260528(activeUrl);
 
     // FOLLOWME_INFO_CONTAINER_ACTIVE_VOICE_20260528
