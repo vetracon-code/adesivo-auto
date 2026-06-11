@@ -18804,10 +18804,19 @@ app.get('/fm/u/:public_id', async function(req, res, next) {
     }
 
     if (activeUrl) {
+      // FOLLOWME_INFO_REQUESTS_OFF_STRICT_FIX_20260611
+      // Se la destinazione attiva è una card interna documento/immagine,
+      // la trasmissione deve rispettare quella card. La pagina info non deve
+      // scavalcarla, soprattutto quando l'admin ha messo Richiesta informazioni OFF.
+      if (/^\/fm\/(image|document)\/[A-Za-z0-9_-]+(?:[?#].*)?$/i.test(activeUrl)) {
+        return res.redirect(302, activeUrl);
+      }
+
       // FOLLOWME_FAST_FMU_INFO_REQUESTS_REDIRECT_20260528
       if (row.info_requests_enabled === true) {
         return res.redirect(302, '/fm/info/' + encodeURIComponent(row.public_id || row.code || raw));
       }
+
       return res.redirect(302, activeUrl);
     }
 
@@ -19109,7 +19118,9 @@ app.get('/api/followme/:code/status', async (req, res) => {
         active_url: project.active_url,
         status: project.status,
         existing_qr_url: project.existing_qr_url || '',
-        existing_qr_status: project.existing_qr_status || ''
+        existing_qr_status: project.existing_qr_status || '',
+        // FOLLOWME_INFO_REQUESTS_OFF_STRICT_FIX_20260611
+        info_requests_enabled: project.info_requests_enabled === true
       },
       stats:{
         total_scans: totalRes.rows[0]?.total || 0,
