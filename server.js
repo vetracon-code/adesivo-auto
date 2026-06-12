@@ -7558,10 +7558,18 @@ app.post('/api/admin/followme/project/:code/delete', requireAdmin, express.json(
 
     const project = projectRes.rows[0];
 
+    // FOLLOWME_DELETE_SAFEDELETE_SAVEPOINT_20260612
+    // In PostgreSQL, se una query fallisce dentro BEGIN, la transazione resta aborted.
+    // Quindi ogni delete opzionale deve essere isolato con SAVEPOINT.
     const safeDelete = async (sql, params) => {
+      const sp = 'followme_delete_optional_' + Math.random().toString(36).slice(2);
       try {
+        await client.query('SAVEPOINT ' + sp);
         await client.query(sql, params);
+        await client.query('RELEASE SAVEPOINT ' + sp);
       } catch (e) {
+        try { await client.query('ROLLBACK TO SAVEPOINT ' + sp); } catch (_) {}
+        try { await client.query('RELEASE SAVEPOINT ' + sp); } catch (_) {}
         console.warn('followme delete optional table warning:', e.message);
       }
     };
