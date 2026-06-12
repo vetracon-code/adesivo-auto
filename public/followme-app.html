@@ -45267,6 +45267,206 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<style id="FOLLOWME_PREVIEW_BLOCKED_ELEGANT_FALLBACK_STYLE_20260612">
+  .followme-preview-blocked-fallback-20260612{
+    display:none;
+    position:absolute;
+    inset:0;
+    z-index:6;
+    align-items:center;
+    justify-content:center;
+    padding:18px;
+    text-align:center;
+    background:rgba(248,250,252,.96);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius:inherit;
+  }
+  .followme-preview-blocked-fallback-20260612.is-visible{
+    display:flex;
+  }
+  .followme-preview-blocked-card-20260612{
+    width:min(92%, 420px);
+    padding:18px 16px;
+    border-radius:20px;
+    background:#ffffff;
+    border:1px solid rgba(15,23,42,.10);
+    box-shadow:0 18px 50px rgba(15,23,42,.12);
+  }
+  .followme-preview-blocked-card-20260612 strong{
+    display:block;
+    font-size:16px;
+    line-height:1.2;
+    color:#0f172a;
+    margin-bottom:7px;
+  }
+  .followme-preview-blocked-card-20260612 span{
+    display:block;
+    font-size:13px;
+    line-height:1.45;
+    color:#64748b;
+    margin-bottom:14px;
+  }
+  .followme-preview-blocked-card-20260612 a{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-height:38px;
+    padding:0 16px;
+    border-radius:999px;
+    background:#0f172a;
+    color:#fff !important;
+    text-decoration:none;
+    font-size:13px;
+    font-weight:700;
+  }
+</style>
+
+<script id="FOLLOWME_PREVIEW_BLOCKED_ELEGANT_FALLBACK_20260612">
+(function(){
+  if(window.__FOLLOWME_PREVIEW_BLOCKED_ELEGANT_FALLBACK_20260612__) return;
+  window.__FOLLOWME_PREVIEW_BLOCKED_ELEGANT_FALLBACK_20260612__ = true;
+
+  function isValidExternalUrl20260612(url){
+    try{
+      var u = new URL(String(url || "").trim());
+      return /^https?:$/i.test(u.protocol);
+    }catch(e){
+      return false;
+    }
+  }
+
+  function ensurePreviewFallback20260612(frame){
+    if(!frame || frame.dataset.previewFallbackReady20260612 === "1") return null;
+    frame.dataset.previewFallbackReady20260612 = "1";
+
+    var parent = frame.parentElement;
+    if(!parent) return null;
+
+    var pos = "";
+    try{ pos = window.getComputedStyle(parent).position; }catch(e){}
+    if(!pos || pos === "static"){
+      parent.style.position = "relative";
+    }
+
+    var fallback = document.createElement("div");
+    fallback.className = "followme-preview-blocked-fallback-20260612";
+    fallback.innerHTML =
+      '<div class="followme-preview-blocked-card-20260612">' +
+        '<strong>Anteprima non disponibile</strong>' +
+        '<span>Questo sito protegge la visualizzazione dentro altre pagine. Il link è comunque trasmesso correttamente dal tuo QR.</span>' +
+        '<a href="#" target="_blank" rel="noopener">Apri pagina trasmessa</a>' +
+      '</div>';
+
+    parent.appendChild(fallback);
+
+    frame.addEventListener("load", function(){
+      // Quando il browser segnala load, nascondiamo il fallback.
+      // Se il sito blocca frame-ancestors/X-Frame-Options spesso il riquadro resta comunque vuoto:
+      // in quel caso il timer successivo lo ripristina solo per domini noti/bloccati o frame apparentemente vuoti.
+      fallback.classList.remove("is-visible");
+    });
+
+    return fallback;
+  }
+
+  function getFrameUrl20260612(frame){
+    var url = "";
+    try{ url = frame.getAttribute("src") || frame.src || ""; }catch(e){}
+    return String(url || "").trim();
+  }
+
+  function shouldShowFallbackForUrl20260612(url){
+    if(!isValidExternalUrl20260612(url)) return false;
+
+    var host = "";
+    try{ host = new URL(url).hostname.toLowerCase(); }catch(e){}
+
+    // Domini noti che spesso bloccano iframe. Lista prudente, non modifica il link.
+    if(
+      host.indexOf("ferrari.com") >= 0 ||
+      host.indexOf("google.com") >= 0 ||
+      host.indexOf("facebook.com") >= 0 ||
+      host.indexOf("instagram.com") >= 0 ||
+      host.indexOf("linkedin.com") >= 0 ||
+      host.indexOf("youtube.com") >= 0
+    ){
+      return true;
+    }
+
+    return false;
+  }
+
+  function armFrameFallback20260612(frame){
+    if(!frame) return;
+
+    var fallback = ensurePreviewFallback20260612(frame);
+    if(!fallback) return;
+
+    var link = fallback.querySelector("a");
+
+    function check(){
+      var url = getFrameUrl20260612(frame);
+
+      if(link && isValidExternalUrl20260612(url)){
+        link.href = url;
+      }
+
+      if(!isValidExternalUrl20260612(url) || url === "about:blank"){
+        fallback.classList.remove("is-visible");
+        return;
+      }
+
+      // Mostriamo fallback solo per siti notoriamente non incorporabili.
+      // Non forziamo sui siti che invece si vedono, come app-me.it.
+      if(shouldShowFallbackForUrl20260612(url)){
+        fallback.classList.add("is-visible");
+      }else{
+        fallback.classList.remove("is-visible");
+      }
+    }
+
+    var last = "";
+    setInterval(function(){
+      var now = getFrameUrl20260612(frame);
+      if(now !== last){
+        last = now;
+        fallback.classList.remove("is-visible");
+        setTimeout(check, 1800);
+      }
+    }, 800);
+
+    setTimeout(check, 2200);
+  }
+
+  function bindAllPreviewFrames20260612(){
+    [
+      "simpleDestinationPreviewFrame",
+      "destinationPreviewFrame",
+      "followmePreviewFrame",
+      "previewFrame"
+    ].forEach(function(id){
+      var frame = document.getElementById(id);
+      if(frame) armFrameFallback20260612(frame);
+    });
+
+    document.querySelectorAll("iframe").forEach(function(frame){
+      var id = String(frame.id || "").toLowerCase();
+      var cls = String(frame.className || "").toLowerCase();
+      if(id.indexOf("preview") >= 0 || cls.indexOf("preview") >= 0){
+        armFrameFallback20260612(frame);
+      }
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", bindAllPreviewFrames20260612);
+  setTimeout(bindAllPreviewFrames20260612, 500);
+  setTimeout(bindAllPreviewFrames20260612, 1500);
+  setTimeout(bindAllPreviewFrames20260612, 3000);
+})();
+</script>
+
 </body>
 </html>
 
