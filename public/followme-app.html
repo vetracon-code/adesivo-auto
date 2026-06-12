@@ -23781,6 +23781,144 @@ document.addEventListener("visibilitychange", function(){
 
 
 
+
+<script id="followme-pdf-upload-false-error-suppress-20260612">
+(function(){
+  if(window.__FOLLOWME_PDF_UPLOAD_FALSE_ERROR_SUPPRESS_20260612__) return;
+  window.__FOLLOWME_PDF_UPLOAD_FALSE_ERROR_SUPPRESS_20260612__ = true;
+
+  /*
+    FOLLOWME_PDF_UPLOAD_FALSE_ERROR_SUPPRESS_20260612
+
+    Il caricamento PDF reale funziona tramite multipart/form-data.
+    Un vecchio controller base64 può ancora mostrare alert "Caricamento non riuscito"
+    anche quando il PDF è stato caricato e pubblicato correttamente.
+
+    Questa patch NON tocca upload, server, storage, QR o PDF viewer.
+    Sopprime solo il falso alert se il documento risulta effettivamente presente.
+  */
+
+  var lastPdfUploadOkAt = 0;
+  var lastPdfUploadCheckAt = 0;
+
+  function getCode(){
+    try{
+      var htmlCode = document.documentElement && document.documentElement.getAttribute("data-followme-code");
+      if(htmlCode) return String(htmlCode).trim();
+
+      var m = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m && m[1]) return decodeURIComponent(m[1]).trim();
+
+      if(window.FOLLOWME_CODE) return String(window.FOLLOWME_CODE).trim();
+      if(window.followMeCode) return String(window.followMeCode).trim();
+
+      var p = new URLSearchParams(location.search || "");
+      var c = String(p.get("code") || p.get("public_id") || "").trim();
+      if(c) return c;
+    }catch(e){}
+    return "";
+  }
+
+  async function verifyPdfActuallyAvailable(){
+    var now = Date.now();
+
+    if(now - lastPdfUploadOkAt < 15000) return true;
+    if(now - lastPdfUploadCheckAt < 900) return false;
+
+    lastPdfUploadCheckAt = now;
+
+    var code = getCode();
+    if(!code) return false;
+
+    try{
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/document/current?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(res.ok && data && data.success && data.document && data.document.status === "active"){
+        lastPdfUploadOkAt = Date.now();
+        return true;
+      }
+    }catch(e){}
+
+    return false;
+  }
+
+  function isFalsePdfUploadErrorMessage(msg){
+    msg = String(msg || "").toLowerCase();
+
+    return (
+      msg.includes("caricamento non riuscito") ||
+      msg.includes("errore caricamento documento") ||
+      msg.includes("pubblicazione non riuscita")
+    );
+  }
+
+  if(typeof window.alert === "function" && !window.alert.__followmePdfFalseErrorSuppress20260612){
+    var nativeAlert = window.alert;
+
+    var patchedAlert = function(msg){
+      try{
+        if(isFalsePdfUploadErrorMessage(msg)){
+          verifyPdfActuallyAvailable().then(function(ok){
+            if(ok){
+              try{
+                if(typeof window.toast === "function"){
+                  window.toast("Documento PDF caricato correttamente.");
+                }
+              }catch(e){}
+              return;
+            }
+
+            nativeAlert.call(window, msg);
+          }).catch(function(){
+            nativeAlert.call(window, msg);
+          });
+
+          return;
+        }
+      }catch(e){}
+
+      return nativeAlert.call(window, msg);
+    };
+
+    patchedAlert.__followmePdfFalseErrorSuppress20260612 = true;
+    window.alert = patchedAlert;
+  }
+
+  if(window.fetch && !window.fetch.__followmePdfUploadOkTracker20260612){
+    var nativeFetch = window.fetch;
+
+    function wrappedFetch(input, init){
+      var url = "";
+      try{
+        url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+      }catch(e){}
+
+      return nativeFetch.apply(this, arguments).then(function(res){
+        try{
+          if(res && res.ok && String(url).includes("/document/upload")){
+            res.clone().json().then(function(data){
+              if(data && data.success && data.document){
+                lastPdfUploadOkAt = Date.now();
+              }
+            }).catch(function(){});
+          }
+        }catch(e){}
+
+        return res;
+      });
+    }
+
+    wrappedFetch.__followmePdfUploadOkTracker20260612 = true;
+    window.fetch = wrappedFetch;
+  }
+})();
+</script>
+
+
 <script id="followme-consegna-documento-premium-admin-final-20260520">
 (function(){
   if(window.__FollowMeConsegnaDocumentoPremiumAdminFinal20260520) return;
