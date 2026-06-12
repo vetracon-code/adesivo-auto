@@ -4074,13 +4074,20 @@ function setDeadlineCleanupFlag(enabled){
     }
 
     try{
+      // FOLLOWME_ADMIN_DELETE_PROJECT_CREDENTIALS_20260612
+      // L'endpoint è protetto da requireAdmin: il browser deve inviare la sessione admin.
       const res = await fetch("/api/admin/followme/project/" + encodeURIComponent(code) + "/delete", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ confirm:true })
       });
 
       const data = await res.json().catch(() => null);
+
+      if(res.status === 401 || res.status === 403){
+        throw new Error("Sessione admin scaduta o non autorizzata. Rientra nel portale admin e riprova.");
+      }
 
       if(!res.ok || !data || data.success !== true){
         throw new Error((data && data.error) || "Eliminazione non riuscita.");
