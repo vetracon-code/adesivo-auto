@@ -7574,6 +7574,40 @@ app.post('/api/admin/followme/project/:code/delete', requireAdmin, express.json(
     await safeDelete(`DELETE FROM followme_image_cards WHERE project_id = $1`, [project.id]);
     await safeDelete(`DELETE FROM followme_chat_messages WHERE project_id = $1`, [project.id]);
     await safeDelete(`DELETE FROM followme_chat_sessions WHERE project_id = $1`, [project.id]);
+    await safeDelete(`DELETE FROM followme_voice_messages WHERE project_id = $1`, [project.id]);
+    await safeDelete(`DELETE FROM followme_push_subscriptions WHERE project_id = $1`, [project.id]);
+
+    // FOLLOWME_DELETE_DYNAMIC_PROJECT_TABLE_CLEANUP_20260612
+    // Cleanup robusto: elimina anche eventuali nuove tabelle FollowMe collegate
+    // tramite project_id, evitando errori FK quando si cancella followme_projects.
+    try {
+      const linkedTables = await client.query(
+        `SELECT table_name
+         FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND column_name = 'project_id'
+           AND table_name LIKE 'followme_%'
+           AND table_name <> 'followme_projects'
+         ORDER BY table_name`
+      );
+
+      for (const tr of linkedTables.rows) {
+        const tableName = String(tr.table_name || '').trim();
+
+        if (!/^followme_[a-z0-9_]+$/i.test(tableName)) {
+          console.warn('followme delete skipped unsafe table name:', tableName);
+          continue;
+        }
+
+        try {
+          await client.query(`DELETE FROM "${tableName}" WHERE project_id = $1`, [project.id]);
+        } catch (e) {
+          console.warn('followme dynamic delete table warning:', tableName, e.message);
+        }
+      }
+    } catch (dynamicErr) {
+      console.warn('followme dynamic cleanup warning:', dynamicErr.message);
+    }
 
     await client.query(`DELETE FROM followme_projects WHERE id = $1`, [project.id]);
 
