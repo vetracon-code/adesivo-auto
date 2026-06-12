@@ -18963,11 +18963,9 @@ app.get('/fm/u/:public_id', async function(req, res, next) {
         return res.redirect(302, activeUrl);
       }
 
-      // FOLLOWME_FAST_FMU_INFO_REQUESTS_REDIRECT_20260528
-      if (row.info_requests_enabled === true) {
-        return res.redirect(302, '/fm/info/' + encodeURIComponent(row.public_id || row.code || raw));
-      }
-
+      // FOLLOWME_FMU_ALWAYS_TRANSMIT_ACTIVE_URL_20260612
+      // La rotta QR pubblica /fm/u/PUBLIC_ID deve sempre trasmettere active_url.
+      // /fm/info/PUBLIC_ID resta pagina informativa opzionale, ma non scavalca il QR.
       return res.redirect(302, activeUrl);
     }
 
