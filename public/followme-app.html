@@ -7703,12 +7703,80 @@ setTimeout(bindSaveExistingQrButton, 400);
 setTimeout(bindSaveExistingQrButton, 1200);
 
 function updateSimpleDestinationPreview(url){
+  // FOLLOWME_PREVIEW_BLOCKED_DIRECT_FRAME_FIX_20260612
   const frame = document.getElementById("simpleDestinationPreviewFrame");
   const empty = document.getElementById("simpleDestinationPreviewEmpty");
   const open = document.getElementById("simpleDestinationPreviewOpen");
 
   const cleanUrl = String(url || "").trim();
   const valid = /^https?:\/\//i.test(cleanUrl);
+
+  function getPreviewHost20260612(value){
+    try{
+      return new URL(String(value || "")).hostname.toLowerCase();
+    }catch(e){
+      return "";
+    }
+  }
+
+  function isKnownBlockedPreviewHost20260612(value){
+    const host = getPreviewHost20260612(value);
+    return !!(
+      host.includes("ferrari.com") ||
+      host.includes("google.com") ||
+      host.includes("facebook.com") ||
+      host.includes("instagram.com") ||
+      host.includes("linkedin.com") ||
+      host.includes("youtube.com")
+    );
+  }
+
+  function ensureDirectPreviewFallback20260612(){
+    if(!frame || !frame.parentElement) return null;
+
+    const parent = frame.parentElement;
+
+    try{
+      const pos = window.getComputedStyle(parent).position;
+      if(!pos || pos === "static") parent.style.position = "relative";
+    }catch(e){
+      parent.style.position = "relative";
+    }
+
+    let fallback = document.getElementById("followmePreviewBlockedDirectFallback20260612");
+
+    if(!fallback){
+      fallback = document.createElement("div");
+      fallback.id = "followmePreviewBlockedDirectFallback20260612";
+      fallback.style.cssText = [
+        "display:none",
+        "position:absolute",
+        "inset:0",
+        "z-index:9999",
+        "align-items:center",
+        "justify-content:center",
+        "padding:18px",
+        "text-align:center",
+        "background:rgba(248,250,252,.98)",
+        "border-radius:inherit",
+        "box-sizing:border-box"
+      ].join(";");
+
+      fallback.innerHTML =
+        '<div style="width:min(92%,420px);padding:18px 16px;border-radius:20px;background:#fff;border:1px solid rgba(15,23,42,.10);box-shadow:0 18px 50px rgba(15,23,42,.12);font-family:inherit;">' +
+          '<strong style="display:block;font-size:16px;line-height:1.2;color:#0f172a;margin-bottom:7px;">Anteprima non disponibile</strong>' +
+          '<span style="display:block;font-size:13px;line-height:1.45;color:#64748b;margin-bottom:14px;">Questo sito protegge la visualizzazione dentro altre pagine. Il link è comunque trasmesso correttamente dal tuo QR.</span>' +
+          '<a id="followmePreviewBlockedDirectOpen20260612" href="#" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 16px;border-radius:999px;background:#0f172a;color:#fff;text-decoration:none;font-size:13px;font-weight:700;">Apri pagina trasmessa</a>' +
+        '</div>';
+
+      parent.appendChild(fallback);
+    }
+
+    return fallback;
+  }
+
+  const directFallback = ensureDirectPreviewFallback20260612();
+  const directFallbackOpen = document.getElementById("followmePreviewBlockedDirectOpen20260612");
 
   if(frame){
     frame.src = valid ? cleanUrl : "about:blank";
@@ -7727,6 +7795,16 @@ function updateSimpleDestinationPreview(url){
       open.href = "#";
       open.style.opacity = ".45";
       open.style.pointerEvents = "none";
+    }
+  }
+
+  if(directFallback){
+    if(valid && isKnownBlockedPreviewHost20260612(cleanUrl)){
+      if(directFallbackOpen) directFallbackOpen.href = cleanUrl;
+      directFallback.style.display = "flex";
+    }else{
+      directFallback.style.display = "none";
+      if(directFallbackOpen) directFallbackOpen.href = valid ? cleanUrl : "#";
     }
   }
 }
