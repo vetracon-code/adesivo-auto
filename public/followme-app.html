@@ -8832,6 +8832,10 @@ document.addEventListener("visibilitychange", function(){
 
 <script id="followme-preview-fallback-fix">
 (function(){
+  // FOLLOWME_PREVIEW_BLOCKED_CLEAN_FINAL_20260612
+  if(window.__FOLLOWME_PREVIEW_BLOCKED_CLEAN_FINAL_20260612__) return;
+  window.__FOLLOWME_PREVIEW_BLOCKED_CLEAN_FINAL_20260612__ = true;
+
   function getFollowMeCodeSafe(){
     try{
       var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
@@ -8843,15 +8847,93 @@ document.addEventListener("visibilitychange", function(){
     }
   }
 
-  function setPreviewFallback(url, show){
+  function isValidUrl(url){
+    try{
+      var u = new URL(String(url || "").trim());
+      return u.protocol === "http:" || u.protocol === "https:";
+    }catch(e){
+      return false;
+    }
+  }
+
+  function hostOf(url){
+    try{
+      return new URL(String(url || "").trim()).hostname.toLowerCase();
+    }catch(e){
+      return "";
+    }
+  }
+
+  function isKnownIframeBlocked(url){
+    var host = hostOf(url);
+
+    /*
+      Lista prudente: mostriamo il messaggio solo per siti noti che
+      normalmente vietano l'incorporamento iframe.
+      app-me.it resta fuori, quindi continua a vedersi normalmente.
+    */
+    return !!(
+      host.includes("ferrari.com") ||
+      host.includes("google.com") ||
+      host.includes("facebook.com") ||
+      host.includes("instagram.com") ||
+      host.includes("linkedin.com") ||
+      host.includes("youtube.com")
+    );
+  }
+
+  function ensurePreviewFallbackBox(){
     var box = document.getElementById("previewFallbackBox");
+    if(box) return box;
+
+    var frame = document.getElementById("simpleDestinationPreviewFrame");
+    var parent = frame && frame.parentElement ? frame.parentElement : null;
+    if(!parent) return null;
+
+    try{
+      var pos = window.getComputedStyle(parent).position;
+      if(!pos || pos === "static") parent.style.position = "relative";
+    }catch(e){
+      parent.style.position = "relative";
+    }
+
+    box = document.createElement("div");
+    box.id = "previewFallbackBox";
+    box.className = "preview-fallback-box followme-clean-preview-fallback-20260612";
+    box.style.cssText = [
+      "display:none",
+      "position:absolute",
+      "inset:0",
+      "z-index:50",
+      "align-items:center",
+      "justify-content:center",
+      "padding:18px",
+      "text-align:center",
+      "background:rgba(248,250,252,.97)",
+      "border-radius:inherit",
+      "box-sizing:border-box"
+    ].join(";");
+
+    box.innerHTML =
+      '<div style="width:min(92%,420px);padding:18px 16px;border-radius:20px;background:#fff;border:1px solid rgba(15,23,42,.10);box-shadow:0 18px 50px rgba(15,23,42,.12);font-family:inherit;">' +
+        '<strong style="display:block;font-size:16px;line-height:1.2;color:#0f172a;margin-bottom:7px;">Anteprima non disponibile</strong>' +
+        '<span id="previewFallbackUrl" style="display:block;font-size:13px;line-height:1.45;color:#64748b;margin-bottom:14px;">Questo sito protegge la visualizzazione dentro altre pagine. Il link è comunque trasmesso correttamente dal tuo QR.</span>' +
+        '<a id="previewFallbackOpen" href="#" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 16px;border-radius:999px;background:#0f172a;color:#fff;text-decoration:none;font-size:13px;font-weight:700;">Apri pagina trasmessa</a>' +
+      '</div>';
+
+    parent.appendChild(box);
+    return box;
+  }
+
+  function setPreviewFallback(url, show){
+    var box = ensurePreviewFallbackBox();
     var urlEl = document.getElementById("previewFallbackUrl");
     var openEl = document.getElementById("previewFallbackOpen");
 
     if(urlEl){
-      urlEl.textContent = url
-        ? "La pagina " + url + " non consente sempre l’anteprima interna. Puoi comunque aprirla."
-        : "Imposta una destinazione per vedere cosa stai trasmettendo.";
+      urlEl.textContent = show
+        ? "Questo sito protegge la visualizzazione dentro altre pagine. Il link è comunque trasmesso correttamente dal tuo QR."
+        : "";
     }
 
     if(openEl){
@@ -8861,6 +8943,7 @@ document.addEventListener("visibilitychange", function(){
     }
 
     if(box){
+      box.style.display = show ? "flex" : "none";
       if(show) box.classList.add("show");
       else box.classList.remove("show");
     }
@@ -8880,7 +8963,7 @@ document.addEventListener("visibilitychange", function(){
         open.style.opacity = url ? "1" : ".5";
       }
 
-      if(!url){
+      if(!url || !isValidUrl(url)){
         if(frame) frame.src = "about:blank";
         if(empty) empty.style.display = "flex";
         setPreviewFallback("", false);
@@ -8888,43 +8971,38 @@ document.addEventListener("visibilitychange", function(){
       }
 
       if(empty) empty.style.display = "none";
-      setPreviewFallback(url, false);
+
+      var blocked = isKnownIframeBlocked(url);
 
       if(frame){
+        frame.style.display = "block";
         frame.src = "about:blank";
 
         setTimeout(function(){
           frame.src = url;
         }, 80);
 
-        // Se il sito blocca iframe/X-Frame/CSP o resta bianco, mostriamo fallback utile.
+        /*
+          Per siti noti che bloccano iframe mostriamo subito il fallback.
+          Non aspettiamo l'onload, perché alcuni browser emettono load anche su frame bloccato.
+        */
+        setPreviewFallback(url, blocked);
+
         clearTimeout(window.__followMePreviewFallbackTimer);
         window.__followMePreviewFallbackTimer = setTimeout(function(){
-          // Non copro automaticamente la preview: molti iframe cross-domain sono leggibili ma non ispezionabili.
-          setPreviewFallback(url, false);
-        }, 3500);
+          setPreviewFallback(url, isKnownIframeBlocked(url));
+        }, 900);
 
         frame.onload = function(){
           clearTimeout(window.__followMePreviewFallbackTimer);
 
-          // Non possiamo leggere cross-domain; aspettiamo poco e poi lasciamo fallback solo se necessario.
-          // Per evitare pagina bianca, mostriamo comunque un fallback leggero sui siti che non si incorporano bene.
           setTimeout(function(){
-            try{
-              // Se stesso dominio, possiamo controllare. Se cross-domain genera errore e va al catch.
-              var doc = frame.contentDocument || frame.contentWindow.document;
-              var bodyText = doc && doc.body ? String(doc.body.innerText || "").trim() : "";
-              if(!bodyText){
-                setPreviewFallback(url, true);
-              }else{
-                setPreviewFallback(url, false);
-              }
-            }catch(e){
-              // Cross-domain normale: non posso ispezionare il contenuto.
-              // Lascio visibile l'iframe e tengo il pulsante sotto come apertura alternativa.
-              setPreviewFallback(url, false);
-            }
-          }, 300);
+            /*
+              Se è un dominio noto come bloccato, il messaggio resta.
+              Per app-me.it e siti normali il fallback resta spento.
+            */
+            setPreviewFallback(url, isKnownIframeBlocked(url));
+          }, 250);
         };
       }
     }catch(err){
@@ -8952,7 +9030,6 @@ document.addEventListener("visibilitychange", function(){
     }
   }
 
-  // Sovrascrivo la funzione esistente, così anche dopo Attivalo la preview non resta bianca.
   window.updateSimpleDestinationPreview = function(url){
     window.forceFollowMePreview(url);
   };
@@ -45345,329 +45422,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
-
-<style id="FOLLOWME_PREVIEW_BLOCKED_ELEGANT_FALLBACK_STYLE_20260612">
-  .followme-preview-blocked-fallback-20260612{
-    display:none;
-    position:absolute;
-    inset:0;
-    z-index:6;
-    align-items:center;
-    justify-content:center;
-    padding:18px;
-    text-align:center;
-    background:rgba(248,250,252,.96);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border-radius:inherit;
-  }
-  .followme-preview-blocked-fallback-20260612.is-visible{
-    display:flex;
-  }
-  .followme-preview-blocked-card-20260612{
-    width:min(92%, 420px);
-    padding:18px 16px;
-    border-radius:20px;
-    background:#ffffff;
-    border:1px solid rgba(15,23,42,.10);
-    box-shadow:0 18px 50px rgba(15,23,42,.12);
-  }
-  .followme-preview-blocked-card-20260612 strong{
-    display:block;
-    font-size:16px;
-    line-height:1.2;
-    color:#0f172a;
-    margin-bottom:7px;
-  }
-  .followme-preview-blocked-card-20260612 span{
-    display:block;
-    font-size:13px;
-    line-height:1.45;
-    color:#64748b;
-    margin-bottom:14px;
-  }
-  .followme-preview-blocked-card-20260612 a{
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    min-height:38px;
-    padding:0 16px;
-    border-radius:999px;
-    background:#0f172a;
-    color:#fff !important;
-    text-decoration:none;
-    font-size:13px;
-    font-weight:700;
-  }
-</style>
-
-<script id="FOLLOWME_PREVIEW_BLOCKED_ELEGANT_FALLBACK_20260612">
-(function(){
-  if(window.__FOLLOWME_PREVIEW_BLOCKED_ELEGANT_FALLBACK_20260612__) return;
-  window.__FOLLOWME_PREVIEW_BLOCKED_ELEGANT_FALLBACK_20260612__ = true;
-
-  function isValidExternalUrl20260612(url){
-    try{
-      var u = new URL(String(url || "").trim());
-      return /^https?:$/i.test(u.protocol);
-    }catch(e){
-      return false;
-    }
-  }
-
-  function ensurePreviewFallback20260612(frame){
-    if(!frame || frame.dataset.previewFallbackReady20260612 === "1") return null;
-    frame.dataset.previewFallbackReady20260612 = "1";
-
-    var parent = frame.parentElement;
-    if(!parent) return null;
-
-    var pos = "";
-    try{ pos = window.getComputedStyle(parent).position; }catch(e){}
-    if(!pos || pos === "static"){
-      parent.style.position = "relative";
-    }
-
-    var fallback = document.createElement("div");
-    fallback.className = "followme-preview-blocked-fallback-20260612";
-    fallback.innerHTML =
-      '<div class="followme-preview-blocked-card-20260612">' +
-        '<strong>Anteprima non disponibile</strong>' +
-        '<span>Questo sito protegge la visualizzazione dentro altre pagine. Il link è comunque trasmesso correttamente dal tuo QR.</span>' +
-        '<a href="#" target="_blank" rel="noopener">Apri pagina trasmessa</a>' +
-      '</div>';
-
-    parent.appendChild(fallback);
-
-    frame.addEventListener("load", function(){
-      // Quando il browser segnala load, nascondiamo il fallback.
-      // Se il sito blocca frame-ancestors/X-Frame-Options spesso il riquadro resta comunque vuoto:
-      // in quel caso il timer successivo lo ripristina solo per domini noti/bloccati o frame apparentemente vuoti.
-      fallback.classList.remove("is-visible");
-    });
-
-    return fallback;
-  }
-
-  function getFrameUrl20260612(frame){
-    var url = "";
-    try{ url = frame.getAttribute("src") || frame.src || ""; }catch(e){}
-    return String(url || "").trim();
-  }
-
-  function shouldShowFallbackForUrl20260612(url){
-    if(!isValidExternalUrl20260612(url)) return false;
-
-    var host = "";
-    try{ host = new URL(url).hostname.toLowerCase(); }catch(e){}
-
-    // Domini noti che spesso bloccano iframe. Lista prudente, non modifica il link.
-    if(
-      host.indexOf("ferrari.com") >= 0 ||
-      host.indexOf("google.com") >= 0 ||
-      host.indexOf("facebook.com") >= 0 ||
-      host.indexOf("instagram.com") >= 0 ||
-      host.indexOf("linkedin.com") >= 0 ||
-      host.indexOf("youtube.com") >= 0
-    ){
-      return true;
-    }
-
-    return false;
-  }
-
-  function armFrameFallback20260612(frame){
-    if(!frame) return;
-
-    var fallback = ensurePreviewFallback20260612(frame);
-    if(!fallback) return;
-
-    var link = fallback.querySelector("a");
-
-    function check(){
-      var url = getFrameUrl20260612(frame);
-
-      if(link && isValidExternalUrl20260612(url)){
-        link.href = url;
-      }
-
-      if(!isValidExternalUrl20260612(url) || url === "about:blank"){
-        fallback.classList.remove("is-visible");
-        return;
-      }
-
-      // Mostriamo fallback solo per siti notoriamente non incorporabili.
-      // Non forziamo sui siti che invece si vedono, come app-me.it.
-      if(shouldShowFallbackForUrl20260612(url)){
-        fallback.classList.add("is-visible");
-      }else{
-        fallback.classList.remove("is-visible");
-      }
-    }
-
-    var last = "";
-    setInterval(function(){
-      var now = getFrameUrl20260612(frame);
-      if(now !== last){
-        last = now;
-        fallback.classList.remove("is-visible");
-        setTimeout(check, 1800);
-      }
-    }, 800);
-
-    setTimeout(check, 2200);
-  }
-
-  function bindAllPreviewFrames20260612(){
-    [
-      "simpleDestinationPreviewFrame",
-      "destinationPreviewFrame",
-      "followmePreviewFrame",
-      "previewFrame"
-    ].forEach(function(id){
-      var frame = document.getElementById(id);
-      if(frame) armFrameFallback20260612(frame);
-    });
-
-    document.querySelectorAll("iframe").forEach(function(frame){
-      var id = String(frame.id || "").toLowerCase();
-      var cls = String(frame.className || "").toLowerCase();
-      if(id.indexOf("preview") >= 0 || cls.indexOf("preview") >= 0){
-        armFrameFallback20260612(frame);
-      }
-    });
-  }
-
-  document.addEventListener("DOMContentLoaded", bindAllPreviewFrames20260612);
-  setTimeout(bindAllPreviewFrames20260612, 500);
-  setTimeout(bindAllPreviewFrames20260612, 1500);
-  setTimeout(bindAllPreviewFrames20260612, 3000);
-})();
-</script>
-
-
-<script id="FOLLOWME_PREVIEW_BLOCKED_FINAL_FIXED_OVERLAY_20260612">
-(function(){
-  if(window.__FOLLOWME_PREVIEW_BLOCKED_FINAL_FIXED_OVERLAY_20260612__) return;
-  window.__FOLLOWME_PREVIEW_BLOCKED_FINAL_FIXED_OVERLAY_20260612__ = true;
-
-  function getPreviewUrl20260612(frame){
-    try{
-      return String(frame && (frame.getAttribute("src") || frame.src) || "").trim();
-    }catch(e){
-      return "";
-    }
-  }
-
-  function getHost20260612(url){
-    try{
-      return new URL(String(url || "")).hostname.toLowerCase();
-    }catch(e){
-      return "";
-    }
-  }
-
-  function isBlockedPreviewHost20260612(url){
-    var host = getHost20260612(url);
-    return !!(
-      host.indexOf("ferrari.com") >= 0 ||
-      host.indexOf("google.com") >= 0 ||
-      host.indexOf("facebook.com") >= 0 ||
-      host.indexOf("instagram.com") >= 0 ||
-      host.indexOf("linkedin.com") >= 0 ||
-      host.indexOf("youtube.com") >= 0
-    );
-  }
-
-  function isRealUrl20260612(url){
-    try{
-      var u = new URL(String(url || ""));
-      return u.protocol === "http:" || u.protocol === "https:";
-    }catch(e){
-      return false;
-    }
-  }
-
-  function ensureOverlay20260612(){
-    var overlay = document.getElementById("followmePreviewBlockedFinalOverlay20260612");
-    if(overlay) return overlay;
-
-    overlay = document.createElement("div");
-    overlay.id = "followmePreviewBlockedFinalOverlay20260612";
-    overlay.style.cssText = [
-      "display:none",
-      "position:fixed",
-      "z-index:2147483000",
-      "align-items:center",
-      "justify-content:center",
-      "padding:18px",
-      "box-sizing:border-box",
-      "text-align:center",
-      "background:rgba(248,250,252,.985)",
-      "border-radius:22px",
-      "pointer-events:auto"
-    ].join(";");
-
-    overlay.innerHTML =
-      '<div style="width:min(92%,420px);padding:18px 16px;border-radius:20px;background:#fff;border:1px solid rgba(15,23,42,.10);box-shadow:0 18px 50px rgba(15,23,42,.14);font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">' +
-        '<strong style="display:block;font-size:16px;line-height:1.2;color:#0f172a;margin-bottom:7px;">Anteprima non disponibile</strong>' +
-        '<span style="display:block;font-size:13px;line-height:1.45;color:#64748b;margin-bottom:14px;">Questo sito protegge la visualizzazione dentro altre pagine. Il link è comunque trasmesso correttamente dal tuo QR.</span>' +
-        '<a id="followmePreviewBlockedFinalOpen20260612" href="#" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 16px;border-radius:999px;background:#0f172a;color:#fff;text-decoration:none;font-size:13px;font-weight:700;">Apri pagina trasmessa</a>' +
-      '</div>';
-
-    document.body.appendChild(overlay);
-    return overlay;
-  }
-
-  function findPreviewFrame20260612(){
-    return document.getElementById("simpleDestinationPreviewFrame") ||
-           document.querySelector("iframe[id*='Preview'], iframe[id*='preview'], iframe[class*='preview']");
-  }
-
-  function updateOverlay20260612(){
-    var frame = findPreviewFrame20260612();
-    var overlay = ensureOverlay20260612();
-
-    if(!frame){
-      overlay.style.display = "none";
-      return;
-    }
-
-    var url = getPreviewUrl20260612(frame);
-    var shouldShow = isRealUrl20260612(url) && isBlockedPreviewHost20260612(url);
-
-    if(!shouldShow){
-      overlay.style.display = "none";
-      return;
-    }
-
-    var rect = frame.getBoundingClientRect();
-
-    if(!rect || rect.width < 40 || rect.height < 40){
-      overlay.style.display = "none";
-      return;
-    }
-
-    var open = document.getElementById("followmePreviewBlockedFinalOpen20260612");
-    if(open) open.href = url;
-
-    overlay.style.left = Math.round(rect.left) + "px";
-    overlay.style.top = Math.round(rect.top) + "px";
-    overlay.style.width = Math.round(rect.width) + "px";
-    overlay.style.height = Math.round(rect.height) + "px";
-    overlay.style.display = "flex";
-  }
-
-  document.addEventListener("DOMContentLoaded", updateOverlay20260612);
-  window.addEventListener("resize", updateOverlay20260612);
-  window.addEventListener("scroll", updateOverlay20260612, true);
-
-  setInterval(updateOverlay20260612, 500);
-  setTimeout(updateOverlay20260612, 500);
-  setTimeout(updateOverlay20260612, 1500);
-  setTimeout(updateOverlay20260612, 3000);
-})();
-</script>
 
 </body>
 </html>
