@@ -3961,6 +3961,7 @@ function setDeadlineCleanupFlag(enabled){
       + '    <div style="display:flex;flex-wrap:wrap;gap:8px;">'
       + '      <a href="' + esc(qrUrl) + '" target="_blank" rel="noopener" class="fm-admin-btn primary" style="display:inline-flex;align-items:center;text-decoration:none;">Apri QR</a>'
       + '      <a href="' + esc(appUrl) + '" target="_blank" rel="noopener" class="fm-admin-btn" style="display:inline-flex;align-items:center;text-decoration:none;">Apri gestione</a>'
+      + '      <button type="button" class="fm-admin-btn danger" data-followme-delete-project-code="' + esc(p.code || p.public_id || '') + '">Elimina definitivamente</button>'
       + '      <button type="button" class="fm-admin-btn" data-fm-close-detail>Chiudi</button>'
       + '      <button type="button" class="fm-admin-btn danger" data-fm-toggle-block="' + esc(code) + '" data-fm-status="' + esc(p.status || "active") + '">' + (String(p.status || "active").toLowerCase() === "blocked" ? "Sblocca QR" : "Blocca QR") + '</button>'
       + '    </div>'
@@ -4043,6 +4044,82 @@ function setDeadlineCleanupFlag(enabled){
       if(d) d.open = false;
     }
   });
+
+
+  // FOLLOWME_ADMIN_DELETE_PROJECT_BUTTON_20260612
+  async function deleteFollowMeProjectDefinitively20260612(code, btn){
+    code = String(code || "").trim();
+    if(!code){
+      alert("Codice QR FollowMe mancante.");
+      return;
+    }
+
+    const first = confirm(
+      "Vuoi eliminare definitivamente questo QR FollowMe?\n\n" +
+      "Saranno cancellati progetto, statistiche, documenti, immagini, chat e storico collegato.\n\n" +
+      "Operazione non reversibile."
+    );
+    if(!first) return;
+
+    const second = confirm(
+      "Conferma finale:\n\n" +
+      "Eliminare definitivamente il QR FollowMe " + code + "?"
+    );
+    if(!second) return;
+
+    const oldText = btn ? btn.textContent : "";
+    if(btn){
+      btn.disabled = true;
+      btn.textContent = "Elimino...";
+    }
+
+    try{
+      const res = await fetch("/api/admin/followme/project/" + encodeURIComponent(code) + "/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm:true })
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if(!res.ok || !data || data.success !== true){
+        throw new Error((data && data.error) || "Eliminazione non riuscita.");
+      }
+
+      if(btn){
+        const card = btn.closest(".fm-admin-card");
+        if(card) card.remove();
+      }
+
+      const note = document.getElementById("adminFollowMeNote20260525");
+      if(note) note.textContent = "QR FollowMe eliminato definitivamente.";
+
+      if(typeof loadProjects === "function"){
+        setTimeout(loadProjects, 400);
+      }
+    }catch(err){
+      alert(err.message || "Errore eliminazione QR FollowMe.");
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = oldText || "Elimina definitivamente";
+      }
+    }
+  }
+
+  document.addEventListener("click", function(ev){
+    const btn = ev.target && ev.target.closest
+      ? ev.target.closest("[data-followme-delete-project-code]")
+      : null;
+
+    if(!btn) return;
+
+    ev.preventDefault();
+    deleteFollowMeProjectDefinitively20260612(
+      btn.getAttribute("data-followme-delete-project-code"),
+      btn
+    );
+  });
+
 
   window.adminFollowMeLoadProjects20260525 = loadProjects;
 
