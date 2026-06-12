@@ -45109,6 +45109,164 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="FOLLOWME_EXISTING_QR_SCANNER_SAVE_FIX_20260612">
+(function(){
+  if(window.__FOLLOWME_EXISTING_QR_SCANNER_SAVE_FIX_20260612__) return;
+  window.__FOLLOWME_EXISTING_QR_SCANNER_SAVE_FIX_20260612__ = true;
+
+  function normalizeScannedQrUrl20260612(value){
+    var raw = String(value || "").trim();
+    if(!raw) return "";
+
+    // Se il QR contiene testo multilinea, prova a prendere la prima URL.
+    var match = raw.match(/https?:\/\/[^\s"'<>]+/i);
+    if(match && match[0]) raw = match[0].trim();
+
+    if(!/^https?:\/\//i.test(raw)){
+      // Non trasformo testi qualsiasi in URL: evito falsi positivi.
+      if(/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(raw)){
+        raw = "https://" + raw;
+      }
+    }
+
+    try{
+      var u = new URL(raw);
+      return u.href;
+    }catch(e){
+      return "";
+    }
+  }
+
+  async function saveScannedExistingQr20260612(scannedValue){
+    var url = normalizeScannedQrUrl20260612(scannedValue);
+    if(!url){
+      if(typeof window.toast === "function") window.toast("QR letto, ma non contiene un URL valido.");
+      return false;
+    }
+
+    var input = document.getElementById("existingQrUrl");
+    if(input){
+      input.value = url;
+      input.dispatchEvent(new Event("input", { bubbles:true }));
+      input.dispatchEvent(new Event("change", { bubbles:true }));
+    }
+
+    try{
+      window.qrScannerLastUrl = url;
+      window.followmeLastScannedExistingQrUrl = url;
+      sessionStorage.setItem("qrScannerLastUrl", url);
+    }catch(e){}
+
+    if(typeof window.toast === "function") window.toast("QR letto. Collego il QR esistente...");
+
+    if(typeof window.saveExistingQr === "function"){
+      await window.saveExistingQr();
+      return true;
+    }
+
+    // Fallback diretto se per qualche motivo saveExistingQr non fosse disponibile.
+    var code = "";
+    try{
+      code = typeof window.getCode === "function" ? window.getCode() : "";
+    }catch(e){}
+    code = code || document.documentElement.getAttribute("data-followme-code") || "";
+
+    if(!code){
+      if(typeof window.toast === "function") window.toast("Codice FollowMe non trovato. Aggiorna la pagina.");
+      return false;
+    }
+
+    var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/update-existing-qr", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ existing_qr_url:url })
+    });
+
+    var data = await res.json().catch(function(){ return null; });
+
+    if(!res.ok || !data || !data.success){
+      if(typeof window.toast === "function") window.toast((data && data.error) || "Errore salvataggio QR esistente.");
+      return false;
+    }
+
+    if(typeof window.updateExistingQrVisualState === "function"){
+      window.updateExistingQrVisualState(
+        (data.project && data.project.existing_qr_url) || url,
+        data.status || (data.project && data.project.existing_qr_status) || ""
+      );
+    }
+
+    if(typeof window.loadStatus === "function"){
+      try{ await window.loadStatus(); }catch(e){}
+    }
+
+    if(typeof window.toast === "function") window.toast("QR esistente collegato.");
+    return true;
+  }
+
+  window.followMeSaveScannedExistingQr20260612 = saveScannedExistingQr20260612;
+
+  // Intercetta il risultato scanner quando altre patch salvano qrScannerLastUrl/sessionStorage
+  // ma non chiamano più il salvataggio existing QR.
+  var lastHandled = "";
+  setInterval(function(){
+    var candidate = "";
+    try{
+      candidate = window.qrScannerLastUrl || sessionStorage.getItem("qrScannerLastUrl") || "";
+    }catch(e){
+      candidate = window.qrScannerLastUrl || "";
+    }
+
+    candidate = normalizeScannedQrUrl20260612(candidate);
+    if(!candidate || candidate === lastHandled) return;
+
+    var panel = document.getElementById("qrScanPanel");
+    var scannerVisible = panel && panel.offsetParent !== null;
+
+    // Salva solo durante/ subito dopo una scansione visibile, per non rieseguire salvataggi casuali.
+    if(scannerVisible || document.body.classList.contains("qr-scanner-open") || document.querySelector(".qr-video-wrap.scanning")){
+      lastHandled = candidate;
+      saveScannedExistingQr20260612(candidate).then(function(){
+        try{
+          if(typeof window.stopQrScanner === "function") window.stopQrScanner();
+          if(typeof window.closeQrScanner === "function") window.closeQrScanner();
+        }catch(e){}
+      });
+    }
+  }, 700);
+
+  // Aggancia eventuali pulsanti di conferma/importazione scanner.
+  document.addEventListener("click", function(ev){
+    var btn = ev.target && ev.target.closest ? ev.target.closest("button,a,[role='button']") : null;
+    if(!btn) return;
+
+    var txt = String(btn.textContent || btn.getAttribute("aria-label") || "").toLowerCase();
+    var isImport =
+      txt.indexOf("importa") >= 0 ||
+      txt.indexOf("usa questo") >= 0 ||
+      txt.indexOf("collega") >= 0 ||
+      txt.indexOf("sostituisci") >= 0;
+
+    if(!isImport) return;
+
+    var candidate = "";
+    try{
+      candidate = window.qrScannerLastUrl || sessionStorage.getItem("qrScannerLastUrl") || "";
+    }catch(e){
+      candidate = window.qrScannerLastUrl || "";
+    }
+
+    candidate = normalizeScannedQrUrl20260612(candidate);
+    if(!candidate) return;
+
+    ev.preventDefault();
+    ev.stopPropagation();
+    saveScannedExistingQr20260612(candidate);
+  }, true);
+})();
+</script>
+
 </body>
 </html>
 
