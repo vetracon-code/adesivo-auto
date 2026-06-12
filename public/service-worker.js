@@ -1,4 +1,102 @@
 
+/*
+  FOLLOWME_SW_NEVER_OPEN_OLD_GENERIC_APP_20260612
+
+  Protezione percorsi univoci FollowMe.
+  Le notifiche FollowMe non devono mai aprire /followme-app.html,
+  perché quella rotta può perdere il CODE reale del QR/PWA.
+*/
+function followMeSafeNotificationTarget20260612(data) {
+  data = data || {};
+
+  var raw =
+    data.targetUrl ||
+    data.url ||
+    data.relativeTargetUrl ||
+    (data.data && (data.data.targetUrl || data.data.url || data.data.relativeTargetUrl)) ||
+    "";
+
+  var code =
+    data.code ||
+    data.project_code ||
+    data.followme_code ||
+    (data.data && (data.data.code || data.data.project_code || data.data.followme_code)) ||
+    "";
+
+  var sessionId =
+    data.session_id ||
+    data.sessionId ||
+    (data.data && (data.data.session_id || data.data.sessionId)) ||
+    "";
+
+  if (raw && typeof raw === "string") {
+    if (raw.indexOf("/fm/app/FM-DEMO?source=old-sw-fallback-blocked") >= 0) {
+      raw = "";
+    }
+    if (raw.indexOf("/fm/app/undefined") >= 0 || raw.indexOf("/fm/app/null") >= 0) {
+      raw = "";
+    }
+  }
+
+  if (raw) return raw;
+
+  if (code) {
+    var target = "/fm/app/" + encodeURIComponent(String(code).trim());
+    if (sessionId) {
+      target += "?chatSession=" + encodeURIComponent(String(sessionId).trim()) + "&focus=chat";
+    } else {
+      target += "?source=push&v=sw-followme-safe-20260612";
+    }
+    return target;
+  }
+
+  return "/fm/app/FM-DEMO?source=push-fallback&v=sw-followme-safe-20260612";
+}
+
+self.addEventListener("notificationclick", function(event) {
+  var data = (event.notification && event.notification.data) || {};
+  var isFollowMe =
+    data.type === "followme_chat_new_user" ||
+    data.type === "followme" ||
+    data.product === "followme" ||
+    data.code ||
+    data.project_code ||
+    data.followme_code ||
+    (data.targetUrl && String(data.targetUrl).indexOf("/fm/app/") >= 0) ||
+    (data.url && String(data.url).indexOf("/fm/app/") >= 0);
+
+  if (!isFollowMe) return;
+
+  try {
+    event.notification.close();
+  } catch(e) {}
+
+  if (event.stopImmediatePropagation) {
+    event.stopImmediatePropagation();
+  }
+
+  event.waitUntil((async function(){
+    var target = followMeSafeNotificationTarget20260612(data);
+    var absolute = new URL(target, self.location.origin).href;
+
+    var list = await clients.matchAll({ type:"window", includeUncontrolled:true });
+    for (var i = 0; i < list.length; i++) {
+      var client = list[i];
+      if (client.url && client.url.indexOf("/fm/app/") >= 0 && client.focus) {
+        if (client.navigate) {
+          await client.navigate(absolute);
+        }
+        return client.focus();
+      }
+    }
+
+    if (clients.openWindow) {
+      return clients.openWindow(absolute);
+    }
+  })());
+});
+
+
 
 /*
   PLATFORM_SW_HIGH_PRIORITY_SMARTWATCH_20260611
@@ -181,7 +279,7 @@ self.addEventListener('notificationclick', function(event) {
       data.targetUrl ||
       data.relativeTargetUrl ||
       (data.data && (data.data.url || data.data.targetUrl || data.data.relativeTargetUrl)) ||
-      '/followme-app.html';
+      '/fm/app/FM-DEMO?source=old-sw-fallback-blocked';
 
     if (n) n.close();
 

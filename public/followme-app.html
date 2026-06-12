@@ -6992,6 +6992,102 @@ function followmeSafeClearPdfPreview20260526(preview){
 
 </head>
 <body>
+
+<script id="followme-pwa-real-code-subscribe-lock-20260612">
+(function(){
+  if (window.__FOLLOWME_PWA_REAL_CODE_SUBSCRIBE_LOCK_20260612__) return;
+  window.__FOLLOWME_PWA_REAL_CODE_SUBSCRIBE_LOCK_20260612__ = true;
+
+  /*
+    FOLLOWME_PWA_REAL_CODE_SUBSCRIBE_LOCK_20260612
+
+    Il CODE reale della PWA deve venire prima di tutto da:
+    <html data-followme-code="FM-...">
+
+    Serve a evitare che dopo salvataggio Home + notifiche la App usi
+    /followme-app.html, FM-DEMO, undefined o un vecchio codice.
+  */
+
+  function realCode(){
+    try {
+      var htmlCode = document.documentElement && document.documentElement.getAttribute("data-followme-code");
+      if (htmlCode && String(htmlCode).trim()) return String(htmlCode).trim();
+
+      var pathMatch = location.pathname.match(/\/fm\/app\/([^/?#]+)/);
+      if (pathMatch && pathMatch[1]) return decodeURIComponent(pathMatch[1]).trim();
+
+      var q = new URLSearchParams(location.search);
+      var queryCode = q.get("code");
+      if (queryCode && String(queryCode).trim()) return String(queryCode).trim();
+
+      if (window.FOLLOWME_CODE && String(window.FOLLOWME_CODE).trim()) return String(window.FOLLOWME_CODE).trim();
+      if (window.followMeCode && String(window.followMeCode).trim()) return String(window.followMeCode).trim();
+    } catch(e) {}
+    return "";
+  }
+
+  function lockCode(){
+    var c = realCode();
+    if (!c) return "";
+
+    window.FOLLOWME_CODE = c;
+    window.followMeCode = c;
+    window.__FOLLOWME_CODE__ = c;
+    window.FOLLOWME_PROJECT_CODE = c;
+
+    try {
+      document.documentElement.setAttribute("data-followme-code", c);
+      if (document.body) document.body.setAttribute("data-followme-code", c);
+    } catch(e) {}
+
+    return c;
+  }
+
+  lockCode();
+  document.addEventListener("DOMContentLoaded", lockCode);
+  setTimeout(lockCode, 50);
+  setTimeout(lockCode, 300);
+  setTimeout(lockCode, 1000);
+
+  var originalFetch = window.fetch;
+  if (typeof originalFetch === "function" && !window.__FOLLOWME_SUBSCRIBE_FETCH_LOCK_20260612__) {
+    window.__FOLLOWME_SUBSCRIBE_FETCH_LOCK_20260612__ = true;
+
+    window.fetch = function(input, init){
+      try {
+        var url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+        if (url && url.indexOf("/api/followme/") >= 0 && url.indexOf("/subscribe") >= 0) {
+          var c = lockCode();
+
+          if (c) {
+            var fixed = "/api/followme/" + encodeURIComponent(c) + "/subscribe";
+
+            if (typeof input === "string") {
+              input = fixed;
+            } else if (input instanceof Request) {
+              input = new Request(fixed, input);
+            }
+          }
+        }
+      } catch(e) {}
+
+      return originalFetch.call(this, input, init).then(function(res){
+        return res;
+      });
+    };
+  }
+
+  // Evita che la PWA resti su vecchie rotte generiche.
+  try {
+    var c = lockCode();
+    if (c && location.pathname.indexOf("/followme-app.html") >= 0) {
+      location.replace("/fm/app/" + encodeURIComponent(c) + "?source=old-route-recovered&v=20260612");
+    }
+  } catch(e) {}
+})();
+</script>
+
+
   <main class="app">
     <section class="hero">
       <div class="badge">Dynamic QR</div>
