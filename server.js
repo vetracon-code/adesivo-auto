@@ -995,6 +995,60 @@ app.get('/owner-app.html', async (req, res) => {
 });
 
 app.use(express.json());
+
+
+/*
+  FOLLOWME_ACTIVE_URL_HISTORY_AUTOCARD_TRIGGER_20260612
+
+  Protezione centrale:
+  ogni volta che followme_projects.active_url viene inserito/modificato,
+  il database crea automaticamente la relativa card in followme_url_history.
+
+  Serve a evitare nuovi QR con active_url salvato ma storico vuoto.
+*/
+async function ensureFollowMeActiveUrlHistoryAutocardTrigger20260612() {
+  if (!pool || typeof pool.query !== 'function') return;
+
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION followme_active_url_history_autocard_20260612()
+    RETURNS trigger AS $$
+    BEGIN
+      IF NEW.active_url IS NOT NULL AND btrim(NEW.active_url) <> '' THEN
+        INSERT INTO followme_url_history
+          (project_id, url, activated_at, last_used_at, scan_count)
+        VALUES
+          (NEW.id, NEW.active_url, NOW(), NULL, 0)
+        ON CONFLICT (project_id, url)
+        DO UPDATE SET activated_at = NOW();
+      END IF;
+
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+  `);
+
+  await pool.query(`
+    DROP TRIGGER IF EXISTS followme_active_url_history_autocard_20260612_trg
+    ON followme_projects;
+  `);
+
+  await pool.query(`
+    CREATE TRIGGER followme_active_url_history_autocard_20260612_trg
+    AFTER INSERT OR UPDATE OF active_url
+    ON followme_projects
+    FOR EACH ROW
+    WHEN (NEW.active_url IS NOT NULL AND btrim(NEW.active_url) <> '')
+    EXECUTE FUNCTION followme_active_url_history_autocard_20260612();
+  `);
+}
+
+setTimeout(() => {
+  ensureFollowMeActiveUrlHistoryAutocardTrigger20260612()
+    .then(() => console.log('FollowMe active_url history autocard trigger ready.'))
+    .catch((err) => console.error('FollowMe active_url history autocard trigger error:', err));
+}, 1500);
+
+
 app.use(express.urlencoded({ extended: true }));
 
 // FOLLOWME_SERVER_BLOCK_LEGACY_CHAT_WAITING_20260528
