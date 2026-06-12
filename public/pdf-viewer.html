@@ -134,7 +134,7 @@
       <span id="zoomLabel">120%</span>
       <button type="button" onclick="zoomIn()">+</button>
       <button type="button" class="secondary" onclick="fitWidth()">Adatta</button>
-      <a id="openPdfBtn" href="#" target="_blank" rel="noopener">Apri</a>
+      <a id="openPdfBtn" href="#" target="_blank" rel="noopener" download>Scarica</a>
     </div>
 
     <div id="status">Caricamento documento…</div>
@@ -153,6 +153,14 @@
     const params = new URLSearchParams(window.location.search);
     const pdfUrl = params.get("file") || params.get("url") || "";
 
+    // FOLLOWME_PDF_VIEWER_DOWNLOAD_COUNTER_20260612
+    // file serve per visualizzare il PDF.
+    // doc_id serve per scaricare passando dalla route che incrementa downloads_count.
+    const documentId = params.get("doc_id") || params.get("document_id") || "";
+    const countedDownloadUrl = documentId
+      ? ("/api/followme/document/" + encodeURIComponent(documentId) + "/download")
+      : pdfUrl;
+
     const viewer = document.getElementById("pdfViewer");
     const statusEl = document.getElementById("status");
     const zoomLabel = document.getElementById("zoomLabel");
@@ -165,7 +173,7 @@
     if (!pdfUrl) {
       showError("Documento non trovato. Manca il parametro file nell’indirizzo.");
     } else {
-      openPdfBtn.href = pdfUrl;
+      openPdfBtn.href = countedDownloadUrl;
       renderPdf();
     }
 
@@ -250,7 +258,7 @@
       viewer.innerHTML = `
         <div class="error-box">
           <p>${message}</p>
-          ${pdfUrl ? `<a href="${pdfUrl}" target="_blank" rel="noopener">Apri direttamente il PDF</a>` : ""}
+          ${pdfUrl ? `<a href="${countedDownloadUrl}" target="_blank" rel="noopener" download>Scarica direttamente il PDF</a>` : ""}
         </div>
       `;
     }

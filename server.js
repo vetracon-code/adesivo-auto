@@ -13645,7 +13645,13 @@ app.get('/fm/document/:code', async (req, res) => {
     const publicCode = getFollowMePublicIdOrCode20260610(project);
     const fileUrl = `/fm/file/${encodeURIComponent(publicCode)}/documento.pdf`;
 
-    const viewerUrl = '/pdf-viewer.html?file=' + encodeURIComponent(fileUrl);
+    // FOLLOWME_PDF_VIEWER_DOC_ID_DOWNLOAD_COUNTER_20260612
+    // Passiamo anche doc_id al viewer: la visualizzazione resta su /fm/file/...
+    // ma il pulsante Scarica usa /api/followme/document/:id/download,
+    // così downloads_count viene incrementato.
+    const viewerUrl =
+      '/pdf-viewer.html?file=' + encodeURIComponent(fileUrl) +
+      '&doc_id=' + encodeURIComponent(String(doc.id));
     return res.redirect(302, viewerUrl);
 
   } catch(err) {
