@@ -51808,3 +51808,399 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
 </script>
 <!-- FOLLOWME_SCREENSHOT_PREVIEW_FOR_EXTERNAL_DOMAINS_20260622: preview screenshot per tutti i domini esterni -->
 
+
+<script id="followme-stable-preview-no-blank-20260622">
+(function(){
+  // FOLLOWME_STABLE_PREVIEW_NO_BLANK_20260622
+  // Controller finale assoluto:
+  // - PDF/documenti: iframe
+  // - immagini: immagine reale
+  // - domini esterni: card immediata + screenshot quando disponibile
+  // - mai pagina bianca
+  // - nessun iframe esterno, quindi niente blocco X-Frame-Options
+
+  if(window.__FOLLOWME_STABLE_PREVIEW_NO_BLANK_20260622__) return;
+  window.__FOLLOWME_STABLE_PREVIEW_NO_BLANK_20260622__ = true;
+
+  function s(v){ return String(v || "").trim(); }
+
+  function esc(v){
+    return String(v == null ? "" : v).replace(/[&<>"']/g,function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+
+  function norm(raw){
+    var u = s(raw);
+    if(!u) return "";
+    try{ u = decodeURIComponent(u); }catch(e){}
+    u = s(u);
+    if(/^https?:\/\//i.test(u)) return u;
+    if(u.charAt(0)==="/") return location.origin + u;
+    if(/^[a-z0-9.-]+\.[a-z]{2,}/i.test(u)) return "https://" + u;
+    return "";
+  }
+
+  function hostname(url){
+    try{ return new URL(url).hostname.replace(/^www\./i,""); }catch(e){ return ""; }
+  }
+
+  function titleFromHost(url){
+    var h = hostname(url);
+    if(!h) return "Pagina trasmessa";
+    return h;
+  }
+
+  function isPdf(u){
+    var x = s(u).toLowerCase();
+    return x.includes("/fm/document/") || x.includes("/pdf-viewer.html") || /\.pdf(\?|#|$)/.test(x);
+  }
+
+  function isImage(u){
+    var x = s(u).toLowerCase();
+    return x.includes("/fm/image/") || /\.(png|jpg|jpeg|gif|webp|avif|svg)(\?|#|$)/.test(x);
+  }
+
+  function frame(){
+    return document.getElementById("simpleDestinationPreviewFrame");
+  }
+
+  function parentBox(){
+    var f = frame();
+    if(f && f.parentElement) return f.parentElement;
+    return document.querySelector(".simple-preview-square") || document.querySelector(".simple-preview-card");
+  }
+
+  function ensureParent(){
+    var p = parentBox();
+    if(!p) return null;
+    try{
+      if(getComputedStyle(p).position === "static") p.style.position = "relative";
+    }catch(e){
+      p.style.position = "relative";
+    }
+    return p;
+  }
+
+  function hide(id){
+    var el = document.getElementById(id);
+    if(el){
+      try{
+        el.style.display = "none";
+        if(el.classList) el.classList.remove("show");
+      }catch(e){}
+    }
+  }
+
+  function clearLayers(){
+    [
+      "previewFallbackBox",
+      "followmePreviewBlockedDirectFallback20260612",
+      "followmeSingleRouterFallback20260622",
+      "followmeFinalPreviewFallback20260622",
+      "followmeExactPreviewFallback20260622",
+      "followmePassiveBlockedFallback20260622",
+      "followmePassiveBlockedFallbackV220260622",
+      "followmePreviewAlwaysVisible20260622",
+      "followmeReactivateInstantPreview20260622",
+      "followmeInstantCardPreviewShell20260622",
+      "followmePassivePreviewBanner20260622",
+      "followmePassiveExactBannerV220260622",
+      "followmeSingleRouterImage20260622",
+      "followmeFinalImagePreview20260622",
+      "followmeUniversalScreenshotPreview20260622",
+      "followmeStablePreviewNoBlank20260622"
+    ].forEach(hide);
+  }
+
+  function setOpenButtons(url, label){
+    [
+      document.getElementById("simpleDestinationPreviewOpen"),
+      document.getElementById("openQrPreview"),
+      document.getElementById("followmeOtherOpenQrPreview")
+    ].filter(Boolean).forEach(function(a){
+      try{
+        if(String(a.tagName || "").toLowerCase()==="a"){
+          a.href = url || "#";
+          a.target = "_blank";
+          a.rel = "noopener";
+        }
+        if(label) a.textContent = label;
+        a.style.opacity = url ? "1" : ".45";
+        a.style.pointerEvents = url ? "auto" : "none";
+        a.removeAttribute("disabled");
+      }catch(e){}
+    });
+  }
+
+  function setActive(url){
+    var active = document.getElementById("activeUrl");
+    var empty = document.getElementById("simpleDestinationPreviewEmpty");
+
+    if(active) active.textContent = url || "Nessun link impostato.";
+    if(empty) empty.style.display = url ? "none" : "flex";
+  }
+
+  function renderIframe(url){
+    clearLayers();
+
+    var f = frame();
+    if(!f) return false;
+
+    f.style.display = "block";
+    f.style.visibility = "visible";
+    f.style.opacity = "1";
+    f.style.position = "relative";
+    f.style.zIndex = "1";
+    f.style.background = "#fff";
+    f.style.pointerEvents = "auto";
+    f.setAttribute("loading", "eager");
+
+    f.src = "about:blank";
+    setTimeout(function(){
+      f.src = url || "about:blank";
+    }, 20);
+
+    return true;
+  }
+
+  function renderRealImage(url){
+    clearLayers();
+
+    var f = frame();
+    if(f) f.style.display = "none";
+
+    var p = ensureParent();
+    if(!p) return false;
+
+    var img = document.getElementById("followmeStablePreviewNoBlank20260622");
+    if(!img || String(img.tagName || "").toLowerCase() !== "img"){
+      if(img && img.parentElement) img.parentElement.removeChild(img);
+
+      img = document.createElement("img");
+      img.id = "followmeStablePreviewNoBlank20260622";
+      img.alt = "Anteprima immagine";
+      img.style.cssText = [
+        "position:absolute",
+        "inset:0",
+        "z-index:30",
+        "width:100%",
+        "height:100%",
+        "object-fit:cover",
+        "border-radius:inherit",
+        "background:#fff",
+        "display:none"
+      ].join(";");
+      p.appendChild(img);
+    }
+
+    img.src = url;
+    img.style.display = "block";
+    return true;
+  }
+
+  function screenshotUrl(url){
+    return "https://s.wordpress.com/mshots/v1/" + encodeURIComponent(url) + "?w=1200";
+  }
+
+  function ensureExternalBox(){
+    var p = ensureParent();
+    if(!p) return null;
+
+    var box = document.getElementById("followmeStablePreviewNoBlank20260622");
+
+    if(!box || String(box.tagName || "").toLowerCase() !== "a"){
+      if(box && box.parentElement) box.parentElement.removeChild(box);
+
+      box = document.createElement("a");
+      box.id = "followmeStablePreviewNoBlank20260622";
+      box.target = "_blank";
+      box.rel = "noopener";
+      box.style.cssText = [
+        "position:absolute",
+        "inset:0",
+        "z-index:40",
+        "display:none",
+        "border-radius:inherit",
+        "overflow:hidden",
+        "background:linear-gradient(135deg,#f8fafc,#e2e8f0)",
+        "text-decoration:none",
+        "color:inherit",
+        "font-family:inherit"
+      ].join(";");
+
+      box.innerHTML =
+        '<div data-role="fallback" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px;text-align:center;background:linear-gradient(135deg,#f8fafc,#e2e8f0);">' +
+          '<div style="width:58px;height:58px;border-radius:18px;background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;margin-bottom:12px;">↗</div>' +
+          '<strong data-role="title" style="display:block;font-size:16px;line-height:1.2;color:#0f172a;margin-bottom:6px;">Pagina trasmessa</strong>' +
+          '<span data-role="domain" style="display:block;font-size:13px;line-height:1.35;color:#64748b;max-width:90%;word-break:break-word;margin-bottom:14px;">Carico anteprima...</span>' +
+          '<span style="display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 15px;border-radius:999px;background:#0f172a;color:#fff;font-size:13px;font-weight:800;">Apri pagina</span>' +
+        '</div>' +
+        '<img data-role="shot" alt="Anteprima sito" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;background:#fff;opacity:0;transition:opacity .22s ease;" loading="eager">' +
+        '<div data-role="caption" style="position:absolute;left:10px;right:10px;bottom:10px;display:none;padding:8px 10px;border-radius:14px;background:rgba(15,23,42,.78);color:white;font-size:12px;font-weight:800;text-align:center;backdrop-filter:blur(8px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Apri pagina</div>';
+
+      p.appendChild(box);
+    }
+
+    return box;
+  }
+
+  function renderExternal(url){
+    clearLayers();
+
+    var f = frame();
+    if(f){
+      f.src = "about:blank";
+      f.style.display = "none";
+    }
+
+    var box = ensureExternalBox();
+    if(!box) return false;
+
+    var h = titleFromHost(url);
+    var fallback = box.querySelector('[data-role="fallback"]');
+    var title = box.querySelector('[data-role="title"]');
+    var domain = box.querySelector('[data-role="domain"]');
+    var img = box.querySelector('[data-role="shot"]');
+    var caption = box.querySelector('[data-role="caption"]');
+
+    box.href = url;
+    box.style.display = "block";
+
+    if(title) title.textContent = h;
+    if(domain) domain.textContent = url;
+    if(caption){
+      caption.textContent = h + " · apri pagina";
+      caption.style.display = "none";
+    }
+
+    if(fallback) fallback.style.display = "flex";
+
+    if(img){
+      img.style.opacity = "0";
+      img.removeAttribute("src");
+
+      var done = false;
+
+      img.onload = function(){
+        if(done) return;
+        done = true;
+        try{
+          img.style.opacity = "1";
+          if(fallback) fallback.style.display = "none";
+          if(caption) caption.style.display = "block";
+        }catch(e){}
+      };
+
+      img.onerror = function(){
+        if(done) return;
+        done = true;
+        try{
+          img.style.opacity = "0";
+          if(fallback) fallback.style.display = "flex";
+          if(domain) domain.textContent = "Anteprima non disponibile. Il link è comunque corretto.";
+          if(caption) caption.style.display = "none";
+        }catch(e){}
+      };
+
+      /*
+        Timeout breve: se il servizio screenshot è lento,
+        non resta bianco. Rimane la card elegante.
+      */
+      setTimeout(function(){
+        if(done) return;
+        try{
+          if(fallback) fallback.style.display = "flex";
+          if(domain) domain.textContent = "Anteprima in preparazione. Tocca per aprire la pagina.";
+        }catch(e){}
+      }, 1800);
+
+      img.src = screenshotUrl(url);
+    }
+
+    console.log("[FollowMe stable preview] external =", url);
+    return true;
+  }
+
+  function render(raw){
+    var url = norm(raw);
+
+    setActive(url);
+
+    if(!url){
+      setOpenButtons("", "Apri pagina");
+      clearLayers();
+      renderIframe("");
+      return false;
+    }
+
+    if(isImage(url)){
+      setOpenButtons(url, "Apri immagine");
+      return renderRealImage(url);
+    }
+
+    if(isPdf(url)){
+      setOpenButtons(url, "Apri documento");
+      return renderIframe(url);
+    }
+
+    setOpenButtons(url, "Apri pagina");
+    return renderExternal(url);
+  }
+
+  window.followmeStablePreviewNoBlank20260622 = render;
+  window.followmeScreenshotPreviewForExternalDomains20260622 = render;
+  window.followmeAbsoluteFinalDirectPreview20260622 = render;
+  window.followmeSinglePreviewRouter20260622 = render;
+  window.updateSimpleDestinationPreview = render;
+  window.forceFollowMePreview = render;
+
+  document.addEventListener("click", function(ev){
+    try{
+      var btn = ev.target && ev.target.closest
+        ? ev.target.closest(".premium-history-reactivate, .btn.small.secondary")
+        : null;
+
+      if(!btn) return;
+
+      var card = btn.closest(".premium-history-card,.history-item,[data-url],[data-history-url]");
+      var url = "";
+
+      if(card){
+        url = card.getAttribute("data-url") || card.getAttribute("data-history-url") || "";
+      }
+
+      if(!url){
+        var on = String(btn.getAttribute("onclick") || "");
+        var m = on.match(/reactivateUrl\(['"]([^'"]+)['"]\)/) ||
+                on.match(/activateUrlEmergency\(decodeURIComponent\(['"]([^'"]+)['"]\)\)/);
+        if(m && m[1]) url = m[1];
+      }
+
+      if(url) render(url);
+    }catch(e){}
+  }, true);
+
+  /*
+    Stato iniziale: uso active_url server.
+  */
+  setTimeout(function(){
+    try{
+      var code = "";
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) code = decodeURIComponent(m[1] || "").trim();
+      if(!code) return;
+
+      fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), { cache:"no-store" })
+        .then(function(r){ return r.json(); })
+        .then(function(data){
+          var url = data && data.project ? data.project.active_url : "";
+          if(url) render(url);
+        })
+        .catch(function(){});
+    }catch(e){}
+  }, 900);
+})();
+</script>
+<!-- FOLLOWME_STABLE_PREVIEW_NO_BLANK_20260622: preview stabile con fallback immediato, niente pagina bianca -->
+
