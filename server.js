@@ -19414,6 +19414,44 @@ async function followMeRequireSafeUrlBeforeSave20260528(req, res, next) {
       });
     }
 
+    // FOLLOWME_SKIP_SAFE_BROWSING_FOR_EXISTING_HISTORY_URL_20260622
+    // Se l'URL è già presente nello storico dello stesso QR FollowMe,
+    // non rifacciamo Google Safe Browsing: è una semplice riattivazione card.
+    // Gli URL nuovi continuano invece a essere controllati.
+    try {
+      const code = normalizeFollowMeCode(req.params.code);
+      const existingHistoryUrl = await pool.query(
+        `SELECT h.id
+         FROM followme_projects p
+         JOIN followme_url_history h ON h.project_id = p.id
+         WHERE (p.code = $1 OR p.public_id = $1)
+           AND LOWER(TRIM(BOTH '/' FROM COALESCE(h.url,''))) = LOWER(TRIM(BOTH '/' FROM $2))
+         LIMIT 1`,
+        [code, normalized.url]
+      );
+
+      if (existingHistoryUrl.rows.length) {
+        req.followmeUrlSecurity20260528 = {
+          success:true,
+          status:'skipped_existing_history_url',
+          safe:true,
+          skipped:true,
+          provider:'Google Safe Browsing',
+          url:normalized.url,
+          hostname:normalized.hostname,
+          reason:'existing-followme-history-url',
+          label:'Controllo Google Safe Browsing saltato: URL già presente nello storico di questo QR FollowMe.',
+          checked_at:new Date().toISOString()
+        };
+
+        return next();
+      }
+    } catch (historySkipErr) {
+      console.warn('followme safe browsing existing history skip check failed:', historySkipErr && historySkipErr.message ? historySkipErr.message : historySkipErr);
+      // In caso di errore nel controllo storico NON saltiamo la sicurezza:
+      // proseguiamo con Google Safe Browsing.
+    }
+
     const result = await googleSafeBrowsingCheck20260528(normalized.url);
 
     /*
