@@ -52641,3 +52641,469 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
 </script>
 <!-- FOLLOWME_FAST_SCREENSHOT_PREWARM_20260622: preview esterne più rapide con prewarm e card immediata -->
 
+
+<script id="followme-thum-preview-scroll-to-top-20260622">
+(function(){
+  // FOLLOWME_THUM_PREVIEW_SCROLL_TO_TOP_20260622
+  // Controller finale:
+  // - scroll immediato alla preview dopo click Riattiva
+  // - anteprima esterna primaria con image.thum.io
+  // - fallback automatico a WordPress mshots
+  // - card immediata sempre visibile
+  // - nessun iframe esterno
+
+  if(window.__FOLLOWME_THUM_PREVIEW_SCROLL_TO_TOP_20260622__) return;
+  window.__FOLLOWME_THUM_PREVIEW_SCROLL_TO_TOP_20260622__ = true;
+
+  var warmed = Object.create(null);
+
+  function s(v){ return String(v || "").trim(); }
+
+  function norm(raw){
+    var u = s(raw);
+    if(!u) return "";
+    try{ u = decodeURIComponent(u); }catch(e){}
+    u = s(u);
+    if(/^https?:\/\//i.test(u)) return u;
+    if(u.charAt(0)==="/") return location.origin + u;
+    if(/^[a-z0-9.-]+\.[a-z]{2,}/i.test(u)) return "https://" + u;
+    return "";
+  }
+
+  function host(url){
+    try{ return new URL(url).hostname.replace(/^www\./i,""); }catch(e){ return ""; }
+  }
+
+  function isPdf(u){
+    var x = s(u).toLowerCase();
+    return x.includes("/fm/document/") || x.includes("/pdf-viewer.html") || /\.pdf(\?|#|$)/.test(x);
+  }
+
+  function isImage(u){
+    var x = s(u).toLowerCase();
+    return x.includes("/fm/image/") || /\.(png|jpg|jpeg|gif|webp|avif|svg)(\?|#|$)/.test(x);
+  }
+
+  function thumUrl(url){
+    return "https://image.thum.io/get/width/900/crop/650/noanimate/" + encodeURIComponent(url);
+  }
+
+  function mshotsUrl(url){
+    return "https://s.wordpress.com/mshots/v1/" + encodeURIComponent(url) + "?w=800";
+  }
+
+  function frame(){
+    return document.getElementById("simpleDestinationPreviewFrame");
+  }
+
+  function previewContainer(){
+    return (
+      document.querySelector(".simple-preview-card") ||
+      document.querySelector(".simple-preview-square") ||
+      document.getElementById("simpleDestinationPreviewFrame") ||
+      document.getElementById("activeUrl")
+    );
+  }
+
+  function scrollToPreview(){
+    try{
+      var el = previewContainer();
+      if(!el) return;
+
+      setTimeout(function(){
+        try{
+          el.scrollIntoView({
+            behavior:"smooth",
+            block:"start",
+            inline:"nearest"
+          });
+        }catch(e){
+          try{ el.scrollIntoView(true); }catch(_){}
+        }
+      }, 60);
+    }catch(e){}
+  }
+
+  function parentBox(){
+    var f = frame();
+    if(f && f.parentElement) return f.parentElement;
+    return document.querySelector(".simple-preview-square") || document.querySelector(".simple-preview-card");
+  }
+
+  function ensureParent(){
+    var p = parentBox();
+    if(!p) return null;
+    try{
+      if(getComputedStyle(p).position === "static") p.style.position = "relative";
+    }catch(e){
+      p.style.position = "relative";
+    }
+    return p;
+  }
+
+  function hide(id){
+    var el = document.getElementById(id);
+    if(el){
+      try{
+        el.style.display = "none";
+        if(el.classList) el.classList.remove("show");
+      }catch(e){}
+    }
+  }
+
+  function clearLayers(){
+    [
+      "previewFallbackBox",
+      "followmePreviewBlockedDirectFallback20260612",
+      "followmeSingleRouterFallback20260622",
+      "followmeFinalPreviewFallback20260622",
+      "followmeExactPreviewFallback20260622",
+      "followmePassiveBlockedFallback20260622",
+      "followmePassiveBlockedFallbackV220260622",
+      "followmePreviewAlwaysVisible20260622",
+      "followmeReactivateInstantPreview20260622",
+      "followmeInstantCardPreviewShell20260622",
+      "followmePassivePreviewBanner20260622",
+      "followmePassiveExactBannerV220260622",
+      "followmeSingleRouterImage20260622",
+      "followmeFinalImagePreview20260622",
+      "followmeUniversalScreenshotPreview20260622",
+      "followmeStablePreviewNoBlank20260622",
+      "followmeFastScreenshotPreview20260622",
+      "followmeThumPreviewScroll20260622"
+    ].forEach(hide);
+  }
+
+  function setOpenButtons(url, label){
+    [
+      document.getElementById("simpleDestinationPreviewOpen"),
+      document.getElementById("openQrPreview"),
+      document.getElementById("followmeOtherOpenQrPreview")
+    ].filter(Boolean).forEach(function(a){
+      try{
+        if(String(a.tagName || "").toLowerCase()==="a"){
+          a.href = url || "#";
+          a.target = "_blank";
+          a.rel = "noopener";
+        }
+        if(label) a.textContent = label;
+        a.style.opacity = url ? "1" : ".45";
+        a.style.pointerEvents = url ? "auto" : "none";
+        a.removeAttribute("disabled");
+      }catch(e){}
+    });
+  }
+
+  function setActive(url){
+    var active = document.getElementById("activeUrl");
+    var empty = document.getElementById("simpleDestinationPreviewEmpty");
+    if(active) active.textContent = url || "Nessun link impostato.";
+    if(empty) empty.style.display = url ? "none" : "flex";
+  }
+
+  function renderIframe(url){
+    clearLayers();
+
+    var f = frame();
+    if(!f) return false;
+
+    f.style.display = "block";
+    f.style.visibility = "visible";
+    f.style.opacity = "1";
+    f.style.position = "relative";
+    f.style.zIndex = "1";
+    f.style.background = "#fff";
+    f.style.pointerEvents = "auto";
+    f.setAttribute("loading", "eager");
+
+    f.src = "about:blank";
+    setTimeout(function(){
+      f.src = url || "about:blank";
+    }, 20);
+
+    return true;
+  }
+
+  function renderImage(url){
+    clearLayers();
+
+    var f = frame();
+    if(f) f.style.display = "none";
+
+    var p = ensureParent();
+    if(!p) return false;
+
+    var img = document.getElementById("followmeThumPreviewScroll20260622");
+    if(!img || String(img.tagName || "").toLowerCase() !== "img"){
+      if(img && img.parentElement) img.parentElement.removeChild(img);
+
+      img = document.createElement("img");
+      img.id = "followmeThumPreviewScroll20260622";
+      img.alt = "Anteprima";
+      img.style.cssText = "position:absolute;inset:0;z-index:90;width:100%;height:100%;object-fit:cover;border-radius:inherit;background:#fff;display:none;";
+      p.appendChild(img);
+    }
+
+    img.src = url;
+    img.style.display = "block";
+    return true;
+  }
+
+  function ensureExternalBox(){
+    var p = ensureParent();
+    if(!p) return null;
+
+    var box = document.getElementById("followmeThumPreviewScroll20260622");
+
+    if(!box || String(box.tagName || "").toLowerCase() !== "a"){
+      if(box && box.parentElement) box.parentElement.removeChild(box);
+
+      box = document.createElement("a");
+      box.id = "followmeThumPreviewScroll20260622";
+      box.target = "_blank";
+      box.rel = "noopener";
+      box.style.cssText = [
+        "position:absolute",
+        "inset:0",
+        "z-index:100",
+        "display:none",
+        "border-radius:inherit",
+        "overflow:hidden",
+        "background:linear-gradient(135deg,#f8fafc,#e2e8f0)",
+        "text-decoration:none",
+        "color:inherit",
+        "font-family:inherit"
+      ].join(";");
+
+      box.innerHTML =
+        '<div data-role="fallback" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px;text-align:center;background:linear-gradient(135deg,#f8fafc,#e2e8f0);">' +
+          '<div style="width:58px;height:58px;border-radius:18px;background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;margin-bottom:12px;">↗</div>' +
+          '<strong data-role="title" style="display:block;font-size:16px;line-height:1.2;color:#0f172a;margin-bottom:6px;">Pagina trasmessa</strong>' +
+          '<span data-role="domain" style="display:block;font-size:13px;line-height:1.35;color:#64748b;max-width:90%;word-break:break-word;margin-bottom:14px;">Apro anteprima...</span>' +
+          '<span style="display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 15px;border-radius:999px;background:#0f172a;color:#fff;font-size:13px;font-weight:800;">Apri pagina</span>' +
+        '</div>' +
+        '<img data-role="shot" alt="Anteprima sito" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;background:#fff;opacity:0;transition:opacity .12s ease;" decoding="async" loading="eager">' +
+        '<div data-role="caption" style="position:absolute;left:10px;right:10px;bottom:10px;display:none;padding:8px 10px;border-radius:14px;background:rgba(15,23,42,.78);color:white;font-size:12px;font-weight:800;text-align:center;backdrop-filter:blur(8px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Apri pagina</div>';
+
+      p.appendChild(box);
+    }
+
+    return box;
+  }
+
+  function renderExternal(url){
+    clearLayers();
+
+    var f = frame();
+    if(f){
+      f.src = "about:blank";
+      f.style.display = "none";
+    }
+
+    var box = ensureExternalBox();
+    if(!box) return false;
+
+    var h = host(url) || "Pagina trasmessa";
+    var fallback = box.querySelector('[data-role="fallback"]');
+    var title = box.querySelector('[data-role="title"]');
+    var domain = box.querySelector('[data-role="domain"]');
+    var img = box.querySelector('[data-role="shot"]');
+    var caption = box.querySelector('[data-role="caption"]');
+
+    box.href = url;
+    box.style.display = "block";
+
+    if(title) title.textContent = h;
+    if(domain) domain.textContent = url;
+    if(caption){
+      caption.textContent = h + " · apri pagina";
+      caption.style.display = "none";
+    }
+    if(fallback) fallback.style.display = "flex";
+
+    if(img){
+      var primary = thumUrl(url);
+      var fallbackSrc = mshotsUrl(url);
+      var triedFallback = false;
+      var loaded = false;
+
+      img.onload = function(){
+        loaded = true;
+        try{
+          img.style.opacity = "1";
+          if(fallback) fallback.style.display = "none";
+          if(caption) caption.style.display = "block";
+        }catch(e){}
+      };
+
+      img.onerror = function(){
+        if(!triedFallback){
+          triedFallback = true;
+          if(domain) domain.textContent = "Uso anteprima alternativa...";
+          img.src = fallbackSrc;
+          return;
+        }
+
+        loaded = true;
+        try{
+          img.style.opacity = "0";
+          if(fallback) fallback.style.display = "flex";
+          if(domain) domain.textContent = "Anteprima non disponibile. Tocca per aprire.";
+          if(caption) caption.style.display = "none";
+        }catch(e){}
+      };
+
+      img.style.opacity = "0";
+      img.removeAttribute("src");
+      img.src = primary;
+
+      setTimeout(function(){
+        if(loaded) return;
+        try{
+          if(fallback) fallback.style.display = "flex";
+          if(domain) domain.textContent = "Sto preparando l’anteprima. Tocca per aprire subito.";
+        }catch(e){}
+      }, 550);
+    }
+
+    return true;
+  }
+
+  function render(raw){
+    var url = norm(raw);
+
+    setActive(url);
+
+    if(!url){
+      setOpenButtons("", "Apri pagina");
+      renderIframe("");
+      return false;
+    }
+
+    if(isImage(url)){
+      setOpenButtons(url, "Apri immagine");
+      scrollToPreview();
+      return renderImage(url);
+    }
+
+    if(isPdf(url)){
+      setOpenButtons(url, "Apri documento");
+      scrollToPreview();
+      return renderIframe(url);
+    }
+
+    setOpenButtons(url, "Apri pagina");
+    scrollToPreview();
+    return renderExternal(url);
+  }
+
+  function prewarm(url){
+    url = norm(url);
+    if(!url || isPdf(url) || isImage(url)) return;
+    if(warmed[url]) return;
+    warmed[url] = true;
+
+    try{
+      var im = new Image();
+      im.decoding = "async";
+      im.loading = "eager";
+      im.src = thumUrl(url);
+    }catch(e){}
+  }
+
+  function collectUrls(){
+    var urls = [];
+
+    try{
+      document.querySelectorAll("[data-url],[data-history-url]").forEach(function(el){
+        var u = norm(el.getAttribute("data-url") || el.getAttribute("data-history-url") || "");
+        if(u) urls.push(u);
+      });
+    }catch(e){}
+
+    try{
+      document.querySelectorAll(".premium-history-reactivate,[onclick*='reactivateUrl'],[onclick*='activateUrlEmergency']").forEach(function(el){
+        var on = String(el.getAttribute("onclick") || "");
+        var m = on.match(/reactivateUrl\(['"]([^'"]+)['"]\)/) ||
+                on.match(/activateUrlEmergency\(decodeURIComponent\(['"]([^'"]+)['"]\)\)/);
+        if(m && m[1]){
+          var u = norm(m[1]);
+          if(u) urls.push(u);
+        }
+      });
+    }catch(e){}
+
+    return Array.from(new Set(urls));
+  }
+
+  function prewarmHistory(){
+    var urls = collectUrls();
+    urls.slice(0, 24).forEach(function(u, i){
+      setTimeout(function(){ prewarm(u); }, 250 + i * 160);
+    });
+    console.log("[FollowMe thum preview] prewarm:", urls.length);
+  }
+
+  window.followmeThumPreviewScrollToTop20260622 = render;
+  window.followmeFastScreenshotPrewarm20260622 = render;
+  window.followmeStablePreviewNoBlank20260622 = render;
+  window.updateSimpleDestinationPreview = render;
+  window.forceFollowMePreview = render;
+
+  document.addEventListener("click", function(ev){
+    try{
+      var btn = ev.target && ev.target.closest
+        ? ev.target.closest(".premium-history-reactivate, .btn.small.secondary")
+        : null;
+
+      if(!btn) return;
+
+      var card = btn.closest(".premium-history-card,.history-item,[data-url],[data-history-url]");
+      var url = "";
+
+      if(card){
+        url = card.getAttribute("data-url") || card.getAttribute("data-history-url") || "";
+      }
+
+      if(!url){
+        var on = String(btn.getAttribute("onclick") || "");
+        var m = on.match(/reactivateUrl\(['"]([^'"]+)['"]\)/) ||
+                on.match(/activateUrlEmergency\(decodeURIComponent\(['"]([^'"]+)['"]\)\)/);
+        if(m && m[1]) url = m[1];
+      }
+
+      if(url){
+        render(url);
+        prewarm(url);
+      }
+    }catch(e){}
+  }, true);
+
+  setTimeout(function(){
+    try{
+      var code = "";
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) code = decodeURIComponent(m[1] || "").trim();
+
+      if(code){
+        fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), { cache:"no-store" })
+          .then(function(r){ return r.json(); })
+          .then(function(data){
+            var url = data && data.project ? data.project.active_url : "";
+            if(url) render(url);
+            setTimeout(prewarmHistory, 450);
+          })
+          .catch(function(){
+            setTimeout(prewarmHistory, 450);
+          });
+      }else{
+        prewarmHistory();
+      }
+    }catch(e){
+      prewarmHistory();
+    }
+  }, 850);
+})();
+</script>
+<!-- FOLLOWME_THUM_PREVIEW_SCROLL_TO_TOP_20260622: thum.io primary preview, mshots fallback, scroll immediato alla preview -->
+
