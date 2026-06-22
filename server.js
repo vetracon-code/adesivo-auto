@@ -24511,3 +24511,170 @@ app.post('/api/followme/chat-v2/session/:session_id/settings', express.json(), a
 
 
 // FOLLOWME_CHAT_V2_NEUTRAL_BLOCK_TEXT_20260528
+
+
+// FOLLOWME_SAFE_BROWSING_SERVER_CACHE_20260622
+// Cache prudente: se lo stesso URL è già stato verificato come sicuro,
+// non richiama Google Safe Browsing a ogni riattivazione/cambio card.
+// Non salta il controllo sul primo URL nuovo: memorizza solo esiti positivi.
+(function(){
+  if (global.__FOLLOWME_SAFE_BROWSING_SERVER_CACHE_20260622__) return;
+  global.__FOLLOWME_SAFE_BROWSING_SERVER_CACHE_20260622__ = true;
+
+  const TTL_MS = 24 * 60 * 60 * 1000;
+  const cache = global.__FOLLOWME_SAFE_BROWSING_SERVER_CACHE_MAP_20260622__ || new Map();
+  global.__FOLLOWME_SAFE_BROWSING_SERVER_CACHE_MAP_20260622__ = cache;
+
+  function normalizeUrl20260622(value){
+    try {
+      let v = String(value || "").trim();
+      if (!v) return "";
+      try { v = decodeURIComponent(v); } catch (_) {}
+      v = String(v || "").trim();
+      if (!/^https?:\/\//i.test(v)) return "";
+      const u = new URL(v);
+      u.hash = "";
+      return u.toString().replace(/\/+$/, "");
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function extractUrl20260622(args){
+    try {
+      for (const arg of Array.from(args || [])) {
+        if (typeof arg === "string") {
+          const u = normalizeUrl20260622(arg);
+          if (u) return u;
+        }
+
+        if (arg && typeof arg === "object") {
+          const direct = normalizeUrl20260622(
+            arg.url || arg.target || arg.link || arg.active_url || arg.activeUrl || arg.destination_url || arg.destinationUrl
+          );
+          if (direct) return direct;
+
+          try {
+            const s = JSON.stringify(arg);
+            const m = s.match(/https?:\/\/[^"'\s\\)]+/i);
+            if (m && m[0]) {
+              const u = normalizeUrl20260622(m[0]);
+              if (u) return u;
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    return "";
+  }
+
+  function isPositiveSafeResult20260622(result){
+    if (result === true) return true;
+    if (!result || typeof result !== "object") return false;
+
+    if (result.safe === true) return true;
+    if (result.allowed === true) return true;
+    if (result.success === true && result.safe !== false && result.blocked !== true && result.dangerous !== true) return true;
+
+    if (Array.isArray(result.matches) && result.matches.length === 0) return true;
+    if (Array.isArray(result.threatMatches) && result.threatMatches.length === 0) return true;
+
+    return false;
+  }
+
+  function cachedResultLike20260622(original){
+    if (original && typeof original === "object") {
+      return Object.assign({}, original, {
+        cached: true,
+        skipped: true,
+        safeBrowsingCache: true,
+        source: "FOLLOWME_SAFE_BROWSING_SERVER_CACHE_20260622"
+      });
+    }
+
+    return true;
+  }
+
+  async function runWithCache20260622(name, original, self, args){
+    const url = extractUrl20260622(args);
+
+    if (!url) {
+      return original.apply(self, args);
+    }
+
+    const now = Date.now();
+    const hit = cache.get(url);
+
+    if (hit && hit.safe === true && hit.expires > now) {
+      console.log("[FollowMe] Safe Browsing cache HIT:", url);
+      return cachedResultLike20260622(hit.result);
+    }
+
+    console.log("[FollowMe] Safe Browsing check:", url);
+
+    const result = await original.apply(self, args);
+
+    if (isPositiveSafeResult20260622(result)) {
+      cache.set(url, {
+        safe: true,
+        result,
+        checkedAt: now,
+        expires: now + TTL_MS,
+        fn: name
+      });
+
+      if (cache.size > 500) {
+        const keys = Array.from(cache.keys());
+        for (const k of keys.slice(0, cache.size - 500)) cache.delete(k);
+      }
+    }
+
+    return result;
+  }
+
+  function wrap20260622(name, getter, setter){
+    try {
+      const original = getter();
+      if (typeof original !== "function") return false;
+      if (original.__followmeSafeBrowsingCached20260622) return true;
+
+      const wrapped = async function(){
+        return runWithCache20260622(name, original, this, arguments);
+      };
+
+      wrapped.__followmeSafeBrowsingCached20260622 = true;
+      setter(wrapped);
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  const wrapped = [];
+
+  try {
+    if (wrap20260622("checkSafeBrowsing", function(){ return checkSafeBrowsing; }, function(v){ checkSafeBrowsing = v; })) wrapped.push("checkSafeBrowsing");
+  } catch (_) {}
+
+  try {
+    if (wrap20260622("checkGoogleSafeBrowsing", function(){ return checkGoogleSafeBrowsing; }, function(v){ checkGoogleSafeBrowsing = v; })) wrapped.push("checkGoogleSafeBrowsing");
+  } catch (_) {}
+
+  try {
+    if (wrap20260622("checkUrlWithSafeBrowsing", function(){ return checkUrlWithSafeBrowsing; }, function(v){ checkUrlWithSafeBrowsing = v; })) wrapped.push("checkUrlWithSafeBrowsing");
+  } catch (_) {}
+
+  try {
+    if (wrap20260622("checkUrlSafety", function(){ return checkUrlSafety; }, function(v){ checkUrlSafety = v; })) wrapped.push("checkUrlSafety");
+  } catch (_) {}
+
+  try {
+    if (wrap20260622("googleSafeBrowsingCheck", function(){ return googleSafeBrowsingCheck; }, function(v){ googleSafeBrowsingCheck = v; })) wrapped.push("googleSafeBrowsingCheck");
+  } catch (_) {}
+
+  try {
+    if (wrap20260622("safeBrowsingCheck", function(){ return safeBrowsingCheck; }, function(v){ safeBrowsingCheck = v; })) wrapped.push("safeBrowsingCheck");
+  } catch (_) {}
+
+  console.log("[FollowMe] Safe Browsing server cache active. Wrapped:", wrapped.length ? wrapped.join(", ") : "nessuna funzione nota trovata");
+})();
