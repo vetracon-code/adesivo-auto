@@ -8850,14 +8850,6 @@ document.addEventListener("visibilitychange", function(){
         return;
       }
 
-      // FOLLOWME_PREVIEW_EXACT_CORE_FUNCTIONS_20260622
-      // Preview immediata sull'URL esatto della card semplice, prima del controllo server/Safe Browsing.
-      try{
-        if(typeof window.followmePreviewExactCoreNow20260622 === "function"){
-          window.followmePreviewExactCoreNow20260622(url);
-        }
-      }catch(e){}
-
       var input = document.getElementById("newUrl");
       if(input) if(document.activeElement !== newUrl){ newUrl.value = ""; newUrl.placeholder = "Incolla qui il nuovo URL che vuoi trasmettere."; }
 
@@ -8899,7 +8891,7 @@ document.addEventListener("visibilitychange", function(){
 </script>
 
 
-<script id="followme-preview-fallback-fix">
+<script id="followme-preview-fallback-fix-disabled-single-router" type="text/plain" data-disabled-by="FOLLOWME_CLEAN_SINGLE_PREVIEW_ROUTER_20260622">
 (function(){
   // FOLLOWME_PREVIEW_BLOCKED_CLEAN_FINAL_20260612
   if(window.__FOLLOWME_PREVIEW_BLOCKED_CLEAN_FINAL_20260612__) return;
@@ -46487,7 +46479,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 <!-- FOLLOWME_DISABLE_REACTIVATE_OVERRIDE_CONTROLLERS_20260622: disattivati controller Riattiva override perché bloccavano il cambio card; ripristinato flusso originale -->
 
-<script id="followme-passive-preview-payhip-method-20260622-disabled-exact-url-v2" type="text/plain" data-disabled-by="FOLLOWME_PASSIVE_PREVIEW_EXACT_CLICK_URL_V2_20260622">
+<script id="followme-passive-preview-payhip-method-20260622-disabled-single-router" type="text/plain" data-disabled-by="FOLLOWME_CLEAN_SINGLE_PREVIEW_ROUTER_20260622">
 (function(){
   // FOLLOWME_PASSIVE_PREVIEW_PAYHIP_METHOD_20260622
   // Preview passiva: NON blocca il click Riattiva originale.
@@ -47805,6 +47797,262 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 <!-- FOLLOWME_FINAL_PREVIEW_ROUTER_SINGLE_SOURCE_20260622: una sola funzione finale per preview URL/PDF/immagine/fallback -->
 
+
+<script id="followme-clean-single-preview-router-20260622">
+(function(){
+  // FOLLOWME_CLEAN_SINGLE_PREVIEW_ROUTER_20260622
+  // Unica funzione ufficiale preview alta FollowMe.
+  // Gestisce URL esterni, PDF, immagini e fallback. Nessun DOM guessing, nessun Payhip hardcoded.
+
+  if(window.__FOLLOWME_CLEAN_SINGLE_PREVIEW_ROUTER_20260622__) return;
+  window.__FOLLOWME_CLEAN_SINGLE_PREVIEW_ROUTER_20260622__ = true;
+
+  function s(v){ return String(v || "").trim(); }
+
+  function esc(v){
+    return String(v == null ? "" : v).replace(/[&<>"']/g,function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+
+  function norm(raw){
+    var u = s(raw);
+    if(!u) return "";
+    try{ u = decodeURIComponent(u); }catch(e){}
+    u = s(u);
+    if(/^https?:\/\//i.test(u)) return u;
+    if(u.charAt(0)==="/") return location.origin + u;
+    if(/^[a-z0-9.-]+\.[a-z]{2,}/i.test(u)) return "https://" + u;
+    return "";
+  }
+
+  function host(u){
+    try{ return new URL(u).hostname.toLowerCase(); }catch(e){ return ""; }
+  }
+
+  function blocksIframe(u){
+    var h = host(u);
+
+    /*
+      Ferrari e social noti bloccano iframe.
+      app-me.it viene trattato come fallback perché La Fonte oggi manda:
+      X-Frame-Options: SAMEORIGIN.
+      Se togli quell'header da lafonte.app-me.it, rimuoveremo questa eccezione.
+    */
+    return h.includes("ferrari.com") ||
+           h.includes("google.com") ||
+           h.includes("facebook.com") ||
+           h.includes("instagram.com") ||
+           h.includes("linkedin.com") ||
+           h.includes("youtube.com") ||
+           h.includes("x.com") ||
+           h.includes("twitter.com") ||
+           h.includes("tiktok.com") ||
+           h === "app-me.it" ||
+           h.endsWith(".app-me.it");
+  }
+
+  function isPdf(u){
+    var x = s(u).toLowerCase();
+    return x.includes("/fm/document/") || x.includes("/pdf-viewer.html") || /\.pdf(\?|#|$)/.test(x);
+  }
+
+  function isImage(u){
+    var x = s(u).toLowerCase();
+    return x.includes("/fm/image/") || /\.(png|jpg|jpeg|gif|webp|avif|svg)(\?|#|$)/.test(x);
+  }
+
+  function frame(){
+    return document.getElementById("simpleDestinationPreviewFrame");
+  }
+
+  function parentBox(){
+    var f = frame();
+    if(f && f.parentElement) return f.parentElement;
+    return document.querySelector(".simple-preview-square");
+  }
+
+  function ensurePosition(){
+    var p = parentBox();
+    if(!p) return null;
+    try{
+      if(getComputedStyle(p).position === "static") p.style.position = "relative";
+    }catch(e){
+      p.style.position = "relative";
+    }
+    return p;
+  }
+
+  function hide(id){
+    var el = document.getElementById(id);
+    if(el) el.style.display = "none";
+  }
+
+  function clearLayers(){
+    [
+      "previewFallbackBox",
+      "followmePreviewBlockedDirectFallback20260612",
+      "followmeFinalPreviewFallback20260622",
+      "followmeExactPreviewFallback20260622",
+      "followmePassiveBlockedFallback20260622",
+      "followmePassiveBlockedFallbackV220260622",
+      "followmePreviewAlwaysVisible20260622",
+      "followmeReactivateInstantPreview20260622",
+      "followmeInstantCardPreviewShell20260622",
+      "followmePassivePreviewBanner20260622",
+      "followmePassiveExactBannerV220260622",
+      "followmeSingleRouterFallback20260622",
+      "followmeSingleRouterImage20260622"
+    ].forEach(hide);
+  }
+
+  function setOpen(u, label){
+    [
+      document.getElementById("simpleDestinationPreviewOpen"),
+      document.getElementById("openQrPreview"),
+      document.getElementById("followmeOtherOpenQrPreview")
+    ].filter(Boolean).forEach(function(a){
+      try{
+        if(String(a.tagName || "").toLowerCase()==="a"){
+          a.href = u || "#";
+          a.target = "_blank";
+          a.rel = "noopener";
+        }
+        if(label) a.textContent = label;
+        a.style.opacity = u ? "1" : ".45";
+        a.style.pointerEvents = u ? "auto" : "none";
+      }catch(e){}
+    });
+  }
+
+  function fallback(u, title, msg){
+    var f = frame();
+    if(f) f.style.display = "none";
+
+    var p = ensurePosition();
+    if(!p) return false;
+
+    var box = document.getElementById("followmeSingleRouterFallback20260622");
+    if(!box){
+      box = document.createElement("div");
+      box.id = "followmeSingleRouterFallback20260622";
+      box.style.cssText = "position:absolute;inset:0;z-index:500;display:none;align-items:center;justify-content:center;padding:18px;text-align:center;background:rgba(248,250,252,.98);border-radius:inherit;box-sizing:border-box;font-family:inherit;";
+      p.appendChild(box);
+    }
+
+    box.innerHTML =
+      '<div style="width:min(92%,430px);padding:18px 16px;border-radius:20px;background:#fff;border:1px solid rgba(15,23,42,.10);box-shadow:0 18px 50px rgba(15,23,42,.12);">' +
+        '<strong style="display:block;font-size:16px;color:#0f172a;margin-bottom:7px;">' + esc(title || "Anteprima non disponibile") + '</strong>' +
+        '<span style="display:block;font-size:13px;line-height:1.45;color:#64748b;margin-bottom:14px;">' + esc(msg || "Il QR trasmette comunque il link corretto.") + '</span>' +
+        '<a href="' + esc(u) + '" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 16px;border-radius:999px;background:#0f172a;color:#fff;text-decoration:none;font-size:13px;font-weight:700;">Apri pagina trasmessa</a>' +
+      '</div>';
+
+    box.style.display = "flex";
+    return true;
+  }
+
+  function image(u){
+    var f = frame();
+    if(f) f.style.display = "none";
+
+    var p = ensurePosition();
+    if(!p) return false;
+
+    var img = document.getElementById("followmeSingleRouterImage20260622");
+    if(!img){
+      img = document.createElement("img");
+      img.id = "followmeSingleRouterImage20260622";
+      img.alt = "Preview immagine";
+      img.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:inherit;background:#05070d;display:none;";
+      p.appendChild(img);
+    }
+
+    img.src = u;
+    img.style.display = "block";
+    return true;
+  }
+
+  function iframe(u){
+    var f = frame();
+    if(!f) return false;
+
+    f.style.display = "block";
+    f.style.visibility = "visible";
+    f.style.opacity = "1";
+    f.style.position = "relative";
+    f.style.zIndex = "1";
+    f.style.background = "#fff";
+    f.setAttribute("loading","eager");
+
+    f.src = "about:blank";
+    setTimeout(function(){
+      f.src = u;
+    }, 20);
+
+    return true;
+  }
+
+  function render(raw){
+    var u = norm(raw);
+
+    clearLayers();
+
+    var active = document.getElementById("activeUrl");
+    if(active) active.textContent = u || "Nessun link impostato.";
+
+    var empty = document.getElementById("simpleDestinationPreviewEmpty");
+    if(empty) empty.style.display = u ? "none" : "flex";
+
+    if(!u){
+      setOpen("", "Apri pagina in nuova scheda");
+      var f = frame();
+      if(f){
+        f.style.display = "block";
+        f.src = "about:blank";
+      }
+      return false;
+    }
+
+    if(isImage(u)){
+      setOpen(u, "Apri immagine");
+      return image(u);
+    }
+
+    if(isPdf(u)){
+      setOpen(u, "Apri documento");
+      return iframe(u);
+    }
+
+    setOpen(u, "Apri pagina in nuova scheda");
+
+    if(blocksIframe(u)){
+      return fallback(
+        u,
+        "Anteprima non disponibile",
+        "Questo sito non permette la visualizzazione dentro altre pagine. Il QR trasmette comunque il link corretto."
+      );
+    }
+
+    return iframe(u);
+  }
+
+  window.followmeSinglePreviewRouter20260622 = render;
+  window.updateSimpleDestinationPreview = render;
+  window.forceFollowMePreview = render;
+
+  document.addEventListener("click", function(ev){
+    try{
+      var btn = ev.target && ev.target.closest ? ev.target.closest(".premium-history-reactivate") : null;
+      if(!btn) return;
+      var card = btn.closest(".premium-history-card");
+      var u = card ? card.getAttribute("data-url") : "";
+      if(u) render(u);
+    }catch(e){}
+  }, true);
+})();
+</script>
+
+<!-- FOLLOWME_CLEAN_SINGLE_PREVIEW_ROUTER_20260622 -->
 </body>
 </html>
 
