@@ -46469,6 +46469,384 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 
 <!-- FOLLOWME_DISABLE_REACTIVATE_OVERRIDE_CONTROLLERS_20260622: disattivati controller Riattiva override perché bloccavano il cambio card; ripristinato flusso originale -->
+
+<script id="followme-passive-preview-payhip-method-20260622">
+(function(){
+  // FOLLOWME_PASSIVE_PREVIEW_PAYHIP_METHOD_20260622
+  // Preview passiva: NON blocca il click Riattiva originale.
+  // Usa iframe diretto come Payhip per tutti i siti incorporabili.
+  // Per siti che bloccano iframe mostra fallback, mai pagina bianca.
+
+  if(window.__FOLLOWME_PASSIVE_PREVIEW_PAYHIP_METHOD_20260622__) return;
+  window.__FOLLOWME_PASSIVE_PREVIEW_PAYHIP_METHOD_20260622__ = true;
+
+  function clean(v){ return String(v || "").trim(); }
+
+  function esc(v){
+    return String(v == null ? "" : v).replace(/[&<>"']/g,function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+
+  function normalizeUrl(raw){
+    var v = clean(raw);
+    if(!v) return "";
+    try{ v = decodeURIComponent(v); }catch(e){}
+    v = clean(v);
+    if(/^https?:\/\//i.test(v)) return v;
+    if(v.charAt(0)==="/") return location.origin + v;
+    if(/^[a-z0-9.-]+\.[a-z]{2,}/i.test(v)) return "https://" + v;
+    return "";
+  }
+
+  function host(url){
+    try{ return new URL(url).hostname.toLowerCase(); }catch(e){ return ""; }
+  }
+
+  function iframeBlockedLikely(url){
+    var h = host(url);
+    return h.includes("ferrari.com") ||
+           h.includes("google.com") ||
+           h.includes("facebook.com") ||
+           h.includes("instagram.com") ||
+           h.includes("linkedin.com") ||
+           h.includes("youtube.com") ||
+           h.includes("x.com") ||
+           h.includes("twitter.com") ||
+           h.includes("tiktok.com");
+  }
+
+  function kind(url){
+    var u = clean(url).toLowerCase();
+    if(u.includes("/fm/image/") || u.includes("/image-card")) return "image";
+    if(u.includes("/fm/document/") || u.includes("/pdf-viewer.html") || u.includes(".pdf")) return "pdf";
+    return "url";
+  }
+
+  function cardOf(el){
+    return el && el.closest ? el.closest(".premium-history-card,.history-item,.history-card,.premium-card,[data-history-url],[data-url]") : null;
+  }
+
+  function isReactivateClick(el){
+    var btn = el && el.closest ? el.closest("button,a") : null;
+    if(!btn) return false;
+
+    var txt = clean(btn.textContent).toLowerCase();
+    var cls = clean(btn.className).toLowerCase();
+    var id = clean(btn.id).toLowerCase();
+    var on = clean(btn.getAttribute("onclick")).toLowerCase();
+
+    if(txt.includes("elimina") || cls.includes("delete") || id.includes("delete")) return false;
+    if(txt.includes("apri")) return false;
+
+    return txt.includes("riattiva") ||
+           txt.includes("attiva") ||
+           txt.includes("attivalo") ||
+           cls.includes("reactivate") ||
+           cls.includes("activate") ||
+           on.includes("reactivate") ||
+           on.includes("activate");
+  }
+
+  function urlFrom(card, btn){
+    if(!card) return "";
+
+    var attrs = ["data-history-url","data-url","data-active-url","data-destination-url","data-followme-url"];
+    for(var i=0;i<attrs.length;i++){
+      var u = normalizeUrl(card.getAttribute(attrs[i]));
+      if(u) return u;
+    }
+
+    var chunks = [];
+    if(btn) chunks.push(clean(btn.getAttribute("onclick")));
+    chunks.push(String(card.outerHTML || ""));
+
+    for(var j=0;j<chunks.length;j++){
+      var html = chunks[j];
+
+      var d = html.match(/decodeURIComponent\(['"]([^'"]+)['"]\)/);
+      if(d && d[1]){
+        var u1 = normalizeUrl(d[1]);
+        if(u1) return u1;
+      }
+
+      var r = html.match(/(?:reactivateUrl|activateUrlEmergency)\(['"]([^'"]+)['"]\)/);
+      if(r && r[1]){
+        var u2 = normalizeUrl(r[1]);
+        if(u2) return u2;
+      }
+
+      var p = html.match(/https?:\/\/[^'"<>\s\\)]+/i);
+      if(p && p[0]){
+        var u3 = normalizeUrl(p[0]);
+        if(u3) return u3;
+      }
+    }
+
+    var el = card.querySelector(".premium-history-url,.history-url,.premium-card-url,.url,code,.mono,strong");
+    if(el){
+      var u4 = normalizeUrl(el.textContent);
+      if(u4) return u4;
+    }
+
+    return "";
+  }
+
+  function previewParent(){
+    var f = document.getElementById("simpleDestinationPreviewFrame");
+    if(f && f.parentElement) return f.parentElement;
+
+    return document.querySelector(".simple-preview-square") ||
+           document.querySelector("#simpleDestinationPreviewBlock .simple-preview-square") ||
+           document.querySelector(".destination-preview-frame") ||
+           document.querySelector(".qr-auto-preview-frame");
+  }
+
+  function ensureFrame(){
+    var frame = document.getElementById("simpleDestinationPreviewFrame");
+    if(frame) return frame;
+
+    var parent = previewParent();
+    if(!parent) return null;
+
+    frame = document.createElement("iframe");
+    frame.id = "simpleDestinationPreviewFrame";
+    frame.setAttribute("loading","eager");
+    frame.setAttribute("referrerpolicy","no-referrer-when-downgrade");
+    frame.style.cssText = "width:100%;height:100%;border:0;border-radius:inherit;background:#fff;display:block;";
+
+    parent.appendChild(frame);
+    return frame;
+  }
+
+  function ensureBanner(){
+    var parent = previewParent();
+    if(!parent) return null;
+
+    try{
+      if(getComputedStyle(parent).position === "static") parent.style.position = "relative";
+    }catch(e){
+      parent.style.position = "relative";
+    }
+
+    var banner = document.getElementById("followmePassivePreviewBanner20260622");
+    if(!banner){
+      banner = document.createElement("div");
+      banner.id = "followmePassivePreviewBanner20260622";
+      banner.style.cssText = "position:absolute;top:12px;left:12px;right:12px;z-index:260;display:none;justify-content:center;pointer-events:none;font-family:inherit;";
+      parent.appendChild(banner);
+    }
+
+    return banner;
+  }
+
+  function setOpenButton(url,label){
+    [
+      document.getElementById("simpleDestinationPreviewOpen"),
+      document.getElementById("openQrPreview"),
+      document.getElementById("followmeOtherOpenQrPreview")
+    ].filter(Boolean).forEach(function(a){
+      try{
+        if(String(a.tagName || "").toLowerCase()==="a"){
+          a.href = url;
+          a.target = "_blank";
+          a.rel = "noopener";
+        }
+        a.textContent = label || "Apri";
+        a.style.opacity = "1";
+        a.style.pointerEvents = "auto";
+        a.removeAttribute("disabled");
+      }catch(e){}
+    });
+  }
+
+  function showBanner(title, subtitle, url, stay){
+    var banner = ensureBanner();
+    if(!banner) return;
+
+    banner.innerHTML =
+      '<div style="width:min(94%,460px);max-width:460px;padding:12px 14px;border-radius:18px;background:rgba(255,255,255,.94);border:1px solid rgba(15,23,42,.10);box-shadow:0 14px 40px rgba(15,23,42,.14);backdrop-filter:blur(10px);pointer-events:auto;text-align:center;">' +
+        '<strong style="display:block;font-size:14px;line-height:1.2;color:#0f172a;margin-bottom:4px;">' + esc(title) + '</strong>' +
+        '<span style="display:block;font-size:12px;line-height:1.35;color:#64748b;word-break:break-word;">' + esc(subtitle || url || "") + '</span>' +
+      '</div>';
+
+    banner.style.display = "flex";
+
+    clearTimeout(window.__followmePassivePreviewBannerTimer20260622);
+    if(!stay){
+      window.__followmePassivePreviewBannerTimer20260622 = setTimeout(function(){
+        var b = document.getElementById("followmePassivePreviewBanner20260622");
+        if(b) b.style.display = "none";
+      }, 1800);
+    }
+  }
+
+  function hideOtherFullOverlays(){
+    [
+      "followmePreviewAlwaysVisible20260622",
+      "followmeReactivateInstantPreview20260622",
+      "followmeInstantCardPreviewShell20260622"
+    ].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el) el.style.display = "none";
+    });
+  }
+
+  function setGlobals(url){
+    try{ window.__followMeActiveUrl = url; }catch(e){}
+    try{ window.__followMePreviewWantedUrl = url; }catch(e){}
+    try{ window.followMeCurrentActiveUrl = url; }catch(e){}
+    try{ window.currentFollowMeActiveUrl = url; }catch(e){}
+    try{ window.activeFollowMeUrl = url; }catch(e){}
+
+    var active = document.getElementById("activeUrl");
+    if(active) active.textContent = url;
+
+    var empty = document.getElementById("simpleDestinationPreviewEmpty");
+    if(empty) empty.style.display = "none";
+
+    var block = document.getElementById("simpleDestinationPreviewBlock");
+    if(block){
+      block.classList.add("preview-loaded");
+      block.classList.remove("preview-loading");
+    }
+  }
+
+  function renderPreview(url, card){
+    url = normalizeUrl(url);
+    if(!url) return;
+
+    hideOtherFullOverlays();
+    setGlobals(url);
+
+    var k = kind(url);
+    var frame = ensureFrame();
+
+    if(k === "pdf"){
+      setOpenButton(url, "Apri documento");
+      showBanner("Destinazione attivata", url, url, false);
+      if(frame){
+        frame.style.display = "block";
+        frame.src = url;
+      }
+      return;
+    }
+
+    if(k === "image"){
+      setOpenButton(url, "Apri immagine");
+      showBanner("Destinazione attivata", url, url, false);
+
+      var img = card && card.querySelector ? card.querySelector("img") : null;
+      if(frame && img && img.src){
+        frame.style.display = "none";
+        var parent = previewParent();
+        if(parent){
+          var existing = document.getElementById("followmePassiveImagePreview20260622");
+          if(!existing){
+            existing = document.createElement("img");
+            existing.id = "followmePassiveImagePreview20260622";
+            existing.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;background:#05070d;";
+            parent.appendChild(existing);
+          }
+          existing.src = img.src;
+          existing.style.display = "block";
+        }
+      }
+      return;
+    }
+
+    setOpenButton(url, "Apri pagina");
+
+    if(iframeBlockedLikely(url)){
+      if(frame){
+        frame.style.display = "none";
+      }
+
+      var parent = previewParent();
+      if(parent){
+        var fallback = document.getElementById("followmePassiveBlockedFallback20260622");
+        if(!fallback){
+          fallback = document.createElement("div");
+          fallback.id = "followmePassiveBlockedFallback20260622";
+          fallback.style.cssText = "width:100%;height:100%;box-sizing:border-box;border-radius:inherit;background:#fff;display:flex;align-items:center;justify-content:center;padding:18px;text-align:center;font-family:inherit;";
+          parent.appendChild(fallback);
+        }
+
+        fallback.innerHTML =
+          '<div style="width:min(92%,430px);padding:18px 16px;border-radius:20px;background:#fff;border:1px solid rgba(15,23,42,.10);box-shadow:0 18px 50px rgba(15,23,42,.12);">' +
+            '<strong style="display:block;font-size:16px;color:#0f172a;margin-bottom:7px;">Anteprima non disponibile</strong>' +
+            '<span style="display:block;font-size:13px;line-height:1.45;color:#64748b;margin-bottom:14px;">Questo sito non permette la visualizzazione dentro altre pagine. Il QR trasmette comunque il link corretto.</span>' +
+            '<a href="' + esc(url) + '" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 16px;border-radius:999px;background:#0f172a;color:#fff;text-decoration:none;font-size:13px;font-weight:700;">Apri pagina trasmessa</a>' +
+          '</div>';
+
+        fallback.style.display = "flex";
+      }
+
+      showBanner("Destinazione attivata", url, url, true);
+      return;
+    }
+
+    var fallback2 = document.getElementById("followmePassiveBlockedFallback20260622");
+    if(fallback2) fallback2.style.display = "none";
+
+    var img2 = document.getElementById("followmePassiveImagePreview20260622");
+    if(img2) img2.style.display = "none";
+
+    showBanner("Destinazione attivata", url, url, false);
+
+    if(frame){
+      frame.style.display = "block";
+      frame.style.visibility = "visible";
+      frame.style.opacity = "1";
+      frame.setAttribute("loading","eager");
+
+      /*
+        Metodo Payhip: iframe diretto.
+        Non aspettiamo controlli o loader aggiuntivi.
+      */
+      frame.src = "about:blank";
+      setTimeout(function(){
+        frame.src = url;
+      }, 25);
+    }
+  }
+
+  document.addEventListener("click", function(ev){
+    try{
+      if(!isReactivateClick(ev.target)) return;
+
+      var btn = ev.target.closest("button,a");
+      var card = cardOf(btn || ev.target);
+      if(!card) return;
+
+      var url = urlFrom(card, btn);
+      if(!url) return;
+
+      /*
+        NON preventDefault.
+        NON stopPropagation.
+        Lasciamo lavorare il cambio card originale.
+        Noi facciamo solo preview immediata.
+      */
+      setTimeout(function(){
+        renderPreview(url, card);
+      }, 0);
+
+      setTimeout(function(){
+        renderPreview(url, card);
+      }, 400);
+
+    }catch(e){
+      console.warn("[FollowMe passive preview] errore:", e);
+    }
+  }, true);
+
+  window.followmePassivePreviewPayhipMethod20260622 = renderPreview;
+})();
+</script>
+
+<!-- FOLLOWME_PASSIVE_PREVIEW_PAYHIP_METHOD_20260622: preview passiva iframe diretto stile Payhip, senza bloccare Riattiva -->
+
 </body>
 </html>
 
