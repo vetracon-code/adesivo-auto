@@ -31120,7 +31120,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     polling continuo del pulsante immagine rimosso per evitare micro-rerender.
     Il pulsante viene già posizionato al boot, load e pageshow.
     FOLLOWME_FIX_REAL_JS_ERRORS_IMAGE_COMMENT_PDF_PAREN_20260622:
-    rimosso commento annidato rotto che lasciava un token */ fuori posto.
+    rimosso commento annidato rotto che lasciava una chiusura commento fuori posto.
   */
 })();
 </script>
@@ -48098,6 +48098,451 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 <!-- FOLLOWME_CLEAN_SINGLE_PREVIEW_ROUTER_20260622 -->
 
 <!-- FOLLOWME_REMOVE_GENERIC_APPME_IFRAME_BLOCK_20260622: rimosso blocco generico app-me.it dal router preview -->
+
+<script id="followme-authoritative-history-preview-controller-20260622">
+(function(){
+  "use strict";
+  // FOLLOWME_AUTHORITATIVE_HISTORY_PREVIEW_CONTROLLER_20260622
+  // Controller finale autorevole:
+  // - prende active_url solo dal server
+  // - ricostruisce historyList
+  // - usa card statica Payhip-style per tutti gli URL esterni
+  // - PDF e immagini restano dedicati
+
+  if(window.__FOLLOWME_AUTHORITATIVE_HISTORY_PREVIEW_CONTROLLER_20260622__) return;
+  window.__FOLLOWME_AUTHORITATIVE_HISTORY_PREVIEW_CONTROLLER_20260622__ = true;
+
+  var busy = false;
+
+  function code(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m && m[1]) return decodeURIComponent(m[1]).trim();
+    }catch(e){}
+    try{
+      var p = new URLSearchParams(location.search || "");
+      return String(p.get("code") || "").trim();
+    }catch(e){}
+    return "";
+  }
+
+  function esc(v){
+    return String(v || "")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
+  }
+
+  function norm(raw){
+    var u = String(raw || "").trim();
+    if(!u) return "";
+    try{ u = decodeURIComponent(u); }catch(e){}
+    u = String(u || "").trim();
+
+    if(u.charAt(0)==="/") return location.origin + u;
+    if(/^https?:\/\//i.test(u)) return u;
+    if(/^[a-z0-9.-]+\.[a-z]{2,}/i.test(u)) return "https://" + u;
+
+    return u;
+  }
+
+  function key(raw){
+    return norm(raw).replace(/\/+$/,"").toLowerCase();
+  }
+
+  function host(url){
+    try{ return new URL(norm(url)).hostname.replace(/^www\./i,""); }catch(e){ return "Pagina trasmessa"; }
+  }
+
+  function isPdf(url){
+    var u = String(url || "").toLowerCase();
+    return u.includes("/fm/document/") || u.includes("/pdf-viewer.html") || /\.pdf(\?|#|$)/.test(u);
+  }
+
+  function isImage(url){
+    var u = String(url || "").toLowerCase();
+    return u.includes("/fm/image/") || /\.(png|jpg|jpeg|gif|webp|avif|svg)(\?|#|$)/.test(u);
+  }
+
+  function previewParent(){
+    var frame = document.getElementById("simpleDestinationPreviewFrame");
+    if(frame && frame.parentElement) return frame.parentElement;
+    return document.querySelector(".simple-preview-square") || document.querySelector(".simple-preview-card");
+  }
+
+  function setActiveText(url){
+    var active = document.getElementById("activeUrl");
+    if(active) active.textContent = url || "Nessun link impostato.";
+
+    try{
+      window.__followMeActiveUrl = url;
+      window.followMeCurrentActiveUrl = url;
+      window.currentFollowMeActiveUrl = url;
+      window.__followMePreviewWantedUrl = url;
+    }catch(e){}
+  }
+
+  function setOpenButtons(url, label){
+    [
+      document.getElementById("simpleDestinationPreviewOpen"),
+      document.getElementById("openQrPreview"),
+      document.getElementById("followmeOtherOpenQrPreview")
+    ].filter(Boolean).forEach(function(a){
+      try{
+        if(String(a.tagName || "").toLowerCase()==="a"){
+          a.href = url || "#";
+          a.target = "_blank";
+          a.rel = "noopener";
+        }
+        a.textContent = label || "Apri pagina";
+        a.style.opacity = url ? "1" : ".45";
+        a.style.pointerEvents = url ? "auto" : "none";
+        a.removeAttribute("disabled");
+      }catch(e){}
+    });
+  }
+
+  function clearPreviewLayers(){
+    [
+      "followmeAuthoritativeStaticPreview20260622",
+      "followmeAuthoritativeImagePreview20260622",
+      "previewFallbackBox",
+      "followmePreviewBlockedDirectFallback20260612",
+      "followmeSingleRouterFallback20260622",
+      "followmeFinalPreviewFallback20260622",
+      "followmeExactPreviewFallback20260622",
+      "followmePassiveBlockedFallback20260622",
+      "followmePassiveBlockedFallbackV220260622",
+      "followmePreviewAlwaysVisible20260622",
+      "followmeReactivateInstantPreview20260622",
+      "followmeInstantCardPreviewShell20260622",
+      "followmePassivePreviewBanner20260622",
+      "followmePassiveExactBannerV220260622",
+      "followmeSingleRouterImage20260622",
+      "followmeFinalImagePreview20260622",
+      "followmeUniversalScreenshotPreview20260622",
+      "followmeStablePreviewNoBlank20260622",
+      "followmeFastScreenshotPreview20260622",
+      "followmeThumPreviewScroll20260622",
+      "followmeStaticFastReactivateNoLoadstatus20260622"
+    ].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el){
+        try{ el.style.display = "none"; }catch(e){}
+      }
+    });
+  }
+
+  function renderExternalCard(url){
+    clearPreviewLayers();
+
+    var frame = document.getElementById("simpleDestinationPreviewFrame");
+    if(frame){
+      try{
+        frame.src = "about:blank";
+        frame.style.display = "none";
+        frame.style.visibility = "hidden";
+        frame.style.opacity = "0";
+      }catch(e){}
+    }
+
+    var empty = document.getElementById("simpleDestinationPreviewEmpty");
+    if(empty) empty.style.display = "none";
+
+    var parent = previewParent();
+    if(!parent) return;
+
+    try{
+      if(getComputedStyle(parent).position === "static") parent.style.position = "relative";
+      parent.classList.add("followme-static-preview-active-20260622");
+    }catch(e){ parent.style.position = "relative"; }
+
+    var box = document.getElementById("followmeAuthoritativeStaticPreview20260622");
+    if(!box){
+      box = document.createElement("a");
+      box.id = "followmeAuthoritativeStaticPreview20260622";
+      box.target = "_blank";
+      box.rel = "noopener";
+      box.style.cssText = [
+        "position:absolute",
+        "inset:0",
+        "z-index:2000000",
+        "display:block",
+        "border-radius:inherit",
+        "overflow:hidden",
+        "background:linear-gradient(135deg,#0f172a,#1e293b)",
+        "text-decoration:none",
+        "color:white",
+        "font-family:inherit",
+        "pointer-events:auto"
+      ].join(";");
+      box.innerHTML =
+        '<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:22px;text-align:center;">' +
+          '<div data-role="badge" style="width:68px;height:68px;border-radius:22px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:900;margin-bottom:14px;box-shadow:0 18px 50px rgba(0,0,0,.22);">↗</div>' +
+          '<strong data-role="title" style="display:block;font-size:18px;line-height:1.15;color:#fff;margin-bottom:7px;max-width:92%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Pagina trasmessa</strong>' +
+          '<span data-role="url" style="display:block;font-size:13px;line-height:1.35;color:rgba(255,255,255,.78);max-width:92%;word-break:break-word;margin-bottom:16px;">Link pronto</span>' +
+          '<span style="display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 17px;border-radius:999px;background:#fff;color:#0f172a;font-size:13px;font-weight:900;">Apri pagina</span>' +
+        '</div>';
+      parent.appendChild(box);
+    }
+
+    var h = host(url);
+    box.href = url;
+    box.style.display = "block";
+
+    var title = box.querySelector('[data-role="title"]');
+    var label = box.querySelector('[data-role="url"]');
+    var badge = box.querySelector('[data-role="badge"]');
+
+    if(title) title.textContent = h;
+    if(label) label.textContent = url;
+    if(badge) badge.textContent = h ? h.charAt(0).toUpperCase() : "↗";
+
+    setOpenButtons(url, "Apri pagina");
+  }
+
+  function renderImage(url){
+    clearPreviewLayers();
+
+    var frame = document.getElementById("simpleDestinationPreviewFrame");
+    if(frame) frame.style.display = "none";
+
+    var empty = document.getElementById("simpleDestinationPreviewEmpty");
+    if(empty) empty.style.display = "none";
+
+    var parent = previewParent();
+    if(!parent) return;
+
+    try{
+      if(getComputedStyle(parent).position === "static") parent.style.position = "relative";
+    }catch(e){ parent.style.position = "relative"; }
+
+    var img = document.getElementById("followmeAuthoritativeImagePreview20260622");
+    if(!img){
+      img = document.createElement("img");
+      img.id = "followmeAuthoritativeImagePreview20260622";
+      img.alt = "Anteprima";
+      img.style.cssText = "position:absolute;inset:0;z-index:2000000;width:100%;height:100%;object-fit:cover;border-radius:inherit;background:#fff;display:block;";
+      parent.appendChild(img);
+    }
+
+    img.src = url;
+    img.style.display = "block";
+
+    setOpenButtons(url, "Apri immagine");
+  }
+
+  function renderPdf(url){
+    clearPreviewLayers();
+
+    var frame = document.getElementById("simpleDestinationPreviewFrame");
+    var empty = document.getElementById("simpleDestinationPreviewEmpty");
+
+    if(empty) empty.style.display = "none";
+
+    if(frame){
+      frame.style.display = "block";
+      frame.style.visibility = "visible";
+      frame.style.opacity = "1";
+      frame.style.zIndex = "1";
+      frame.src = url || "about:blank";
+    }
+
+    setOpenButtons(url, "Apri documento");
+  }
+
+  function renderPreview(url){
+    url = norm(url);
+    setActiveText(url);
+
+    if(!url){
+      var empty = document.getElementById("simpleDestinationPreviewEmpty");
+      if(empty) empty.style.display = "flex";
+      setOpenButtons("", "Apri pagina");
+      return;
+    }
+
+    if(isImage(url)) return renderImage(url);
+    if(isPdf(url)) return renderPdf(url);
+
+    return renderExternalCard(url);
+  }
+
+  function renderHistory(data){
+    var list = document.getElementById("historyList");
+    if(!list || !data) return;
+
+    var active = key(data.project && data.project.active_url);
+    var rows = Array.isArray(data.history) ? data.history.slice() : [];
+
+    rows.sort(function(a,b){
+      var aa = key(a.url) === active ? 0 : 1;
+      var bb = key(b.url) === active ? 0 : 1;
+      if(aa !== bb) return aa - bb;
+
+      var ad = new Date(a.activated_at || a.last_used_at || 0).getTime();
+      var bd = new Date(b.activated_at || b.last_used_at || 0).getTime();
+      return bd - ad;
+    });
+
+    if(!rows.length){
+      list.innerHTML = '<div class="empty">Nessun link ancora registrato.</div>';
+      return;
+    }
+
+    list.innerHTML = rows.slice(0,20).map(function(x){
+      var url = norm(x.url || "");
+      var activeNow = key(url) === active;
+      var scans = x.scan_count || 0;
+      var last = x.last_used_at ? new Date(x.last_used_at).toLocaleString("it-IT") : "mai";
+
+      return '' +
+        '<div class="' + (activeNow ? 'history-item history-row-active' : 'history-item') + '" data-history-url="' + esc(url) + '" data-url="' + esc(url) + '">' +
+          '<div>' +
+            '<strong>' + esc(url) + '</strong>' +
+            '<span>' + scans + ' scansioni · ultimo uso: ' + esc(last) + '</span>' +
+          '</div>' +
+          '<div class="followme-history-actions">' +
+            (activeNow
+              ? '<button class="btn-history-active-now" type="button" disabled>Attivo ora</button>'
+              : '<button class="btn small secondary" type="button" data-followme-authoritative-reactivate="1">Attivalo</button>') +
+          '</div>' +
+        '</div>';
+    }).join("");
+  }
+
+  function refresh(reason){
+    var c = code();
+    if(!c) return Promise.resolve(null);
+
+    return fetch("/api/followme/" + encodeURIComponent(c) + "/status?v=authoritative-" + Date.now(), { cache:"no-store" })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if(!data || !data.success) return data;
+
+        var url = data.project && data.project.active_url ? data.project.active_url : "";
+
+        renderHistory(data);
+        renderPreview(url);
+
+        try{
+          window.__followMeServerAuthoritativeActiveUrl20260622 = url;
+          console.log("[FollowMe authoritative controller] active_url:", url, reason || "");
+        }catch(e){}
+
+        return data;
+      })
+      .catch(function(err){
+        try{ console.warn("[FollowMe authoritative controller] refresh failed", err); }catch(e){}
+        return null;
+      });
+  }
+
+  function activate(url){
+    url = norm(url);
+    var c = code();
+
+    if(!c || !url) return false;
+    if(busy) return false;
+
+    busy = true;
+
+    renderPreview(url);
+
+    fetch("/api/followme/" + encodeURIComponent(c) + "/update-url?v=authoritative-activate-" + Date.now(), {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      cache:"no-store",
+      body:JSON.stringify({ url:url, source:"authoritative-history-preview-controller-20260622" })
+    })
+    .then(function(r){ return r.json().catch(function(){ return null; }); })
+    .then(function(){
+      return refresh("after-activate");
+    })
+    .finally(function(){
+      busy = false;
+      setTimeout(function(){ refresh("after-activate-800"); }, 800);
+    });
+
+    return false;
+  }
+
+  document.addEventListener("click", function(ev){
+    var btn = ev.target && ev.target.closest ? ev.target.closest("[data-followme-authoritative-reactivate='1'],[onclick*='reactivateUrl'],[onclick*='activateUrlEmergency']") : null;
+    if(!btn) return;
+
+    var card = btn.closest ? btn.closest("[data-history-url],[data-url],.history-item,.premium-history-card") : null;
+    var url = "";
+
+    if(card){
+      url = card.getAttribute("data-history-url") || card.getAttribute("data-url") || "";
+      if(!url){
+        var strong = card.querySelector("strong");
+        if(strong) url = strong.textContent || "";
+      }
+    }
+
+    if(!url){
+      var on = String(btn.getAttribute("onclick") || "");
+      var m = on.match(/decodeURIComponent\(['"]([^'"]+)['"]\)/) || on.match(/reactivateUrl\(['"]([^'"]+)['"]\)/);
+      if(m && m[1]) url = m[1];
+    }
+
+    url = norm(url);
+    if(!url) return;
+
+    ev.preventDefault();
+    ev.stopPropagation();
+    if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+
+    activate(url);
+    return false;
+  }, true);
+
+  window.reactivateUrl = function(encoded){
+    return activate(encoded);
+  };
+
+  window.activateUrlEmergency = function(url){
+    return activate(url);
+  };
+
+  window.updateSimpleDestinationPreview = function(url){
+    return renderPreview(url);
+  };
+
+  window.forceFollowMePreview = function(url){
+    return renderPreview(url);
+  };
+
+  window.followmeAuthoritativeHistoryPreviewRefresh20260622 = refresh;
+  window.followmeAuthoritativeHistoryPreviewRender20260622 = renderPreview;
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", function(){ refresh("dom"); });
+  }else{
+    refresh("boot");
+  }
+
+  setTimeout(function(){ refresh("boot-300"); }, 300);
+  setTimeout(function(){ refresh("boot-900"); }, 900);
+  setTimeout(function(){ refresh("boot-1800"); }, 1800);
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(function(){ refresh("pageshow"); }, 150);
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible"){
+      setTimeout(function(){ refresh("visible"); }, 150);
+    }
+  });
+})();
+</script>
+<!-- FOLLOWME_AUTHORITATIVE_HISTORY_PREVIEW_CONTROLLER_20260622: controller finale autorevole per history + preview statica Payhip-style per URL esterni -->
+
 </body>
 </html>
 
