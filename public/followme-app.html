@@ -8850,6 +8850,14 @@ document.addEventListener("visibilitychange", function(){
         return;
       }
 
+      // FOLLOWME_PREVIEW_EXACT_CORE_FUNCTIONS_20260622
+      // Preview immediata sull'URL esatto della card semplice, prima del controllo server/Safe Browsing.
+      try{
+        if(typeof window.followmePreviewExactCoreNow20260622 === "function"){
+          window.followmePreviewExactCoreNow20260622(url);
+        }
+      }catch(e){}
+
       var input = document.getElementById("newUrl");
       if(input) if(document.activeElement !== newUrl){ newUrl.value = ""; newUrl.placeholder = "Incolla qui il nuovo URL che vuoi trasmettere."; }
 
@@ -11184,6 +11192,15 @@ document.addEventListener("visibilitychange", function(){
       mainBtn.addEventListener("click", function(ev){
         ev.preventDefault();
         ev.stopPropagation();
+
+        // FOLLOWME_PREVIEW_EXACT_CORE_FUNCTIONS_20260622
+        // Preview immediata sull'URL esatto della card premium.
+        try{
+          if(typeof window.followmePreviewExactCoreNow20260622 === "function"){
+            window.followmePreviewExactCoreNow20260622(url);
+          }
+        }catch(e){}
+
         activateUrlFromPremium(url);
       });
     }
@@ -46848,7 +46865,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 <!-- FOLLOWME_PASSIVE_PREVIEW_PAYHIP_METHOD_20260622: preview passiva iframe diretto stile Payhip, senza bloccare Riattiva -->
 
 
-<script id="followme-passive-preview-exact-click-url-v2-20260622">
+<script id="followme-passive-preview-exact-click-url-v2-20260622-disabled-core-exact" type="text/plain" data-disabled-by="FOLLOWME_PREVIEW_EXACT_CORE_FUNCTIONS_20260622">
 (function(){
   // FOLLOWME_PASSIVE_PREVIEW_EXACT_CLICK_URL_V2_20260622
   // Non blocca Riattiva.
@@ -47259,6 +47276,195 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 <!-- FOLLOWME_PASSIVE_PREVIEW_EXACT_CLICK_URL_V2_20260622: preview basata solo sull’URL esatto del click, non su HTML globale -->
 
+
+<script id="followme-preview-exact-core-functions-20260622">
+(function(){
+  // FOLLOWME_PREVIEW_EXACT_CORE_FUNCTIONS_20260622
+  // Usa SOLO l'URL esatto passato dalle funzioni originali:
+  // - reactivateUrl(encoded)
+  // - activateUrlFromPremium(url)
+  // Non blocca il cambio card e non cerca URL nel DOM.
+
+  if(window.__FOLLOWME_PREVIEW_EXACT_CORE_FUNCTIONS_20260622__) return;
+  window.__FOLLOWME_PREVIEW_EXACT_CORE_FUNCTIONS_20260622__ = true;
+
+  function clean(v){ return String(v || "").trim(); }
+
+  function normalizeUrl(raw){
+    var v = clean(raw);
+    if(!v) return "";
+    try{ v = decodeURIComponent(v); }catch(e){}
+    v = clean(v);
+    if(/^https?:\/\//i.test(v)) return v;
+    if(v.charAt(0)==="/") return location.origin + v;
+    if(/^[a-z0-9.-]+\.[a-z]{2,}/i.test(v)) return "https://" + v;
+    return "";
+  }
+
+  function esc(v){
+    return String(v == null ? "" : v).replace(/[&<>"']/g,function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+
+  function host(url){
+    try{ return new URL(url).hostname.toLowerCase(); }catch(e){ return ""; }
+  }
+
+  function isBlocked(url){
+    var h = host(url);
+    return h.includes("ferrari.com") ||
+           h.includes("google.com") ||
+           h.includes("facebook.com") ||
+           h.includes("instagram.com") ||
+           h.includes("linkedin.com") ||
+           h.includes("youtube.com") ||
+           h.includes("x.com") ||
+           h.includes("twitter.com") ||
+           h.includes("tiktok.com");
+  }
+
+  function hideBadOverlays(){
+    [
+      "followmePreviewAlwaysVisible20260622",
+      "followmeReactivateInstantPreview20260622",
+      "followmeInstantCardPreviewShell20260622",
+      "followmePassivePreviewBanner20260622",
+      "followmePassiveExactBannerV220260622",
+      "followmePassiveBlockedFallback20260622",
+      "followmePassiveBlockedFallbackV220260622",
+      "followmePassiveImagePreview20260622",
+      "followmePassiveImagePreviewV220260622"
+    ].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el) el.style.display = "none";
+    });
+  }
+
+  function ensureFallback(frame){
+    if(!frame || !frame.parentElement) return null;
+
+    var parent = frame.parentElement;
+    try{
+      if(getComputedStyle(parent).position === "static") parent.style.position = "relative";
+    }catch(e){
+      parent.style.position = "relative";
+    }
+
+    var box = document.getElementById("followmeExactPreviewFallback20260622");
+    if(!box){
+      box = document.createElement("div");
+      box.id = "followmeExactPreviewFallback20260622";
+      box.style.cssText = [
+        "display:none",
+        "position:absolute",
+        "inset:0",
+        "z-index:300",
+        "align-items:center",
+        "justify-content:center",
+        "padding:18px",
+        "text-align:center",
+        "background:rgba(248,250,252,.98)",
+        "border-radius:inherit",
+        "box-sizing:border-box",
+        "font-family:inherit"
+      ].join(";");
+
+      parent.appendChild(box);
+    }
+
+    return box;
+  }
+
+  function setOpenButton(url){
+    [
+      document.getElementById("simpleDestinationPreviewOpen"),
+      document.getElementById("openQrPreview"),
+      document.getElementById("followmeOtherOpenQrPreview")
+    ].filter(Boolean).forEach(function(a){
+      try{
+        if(String(a.tagName || "").toLowerCase()==="a"){
+          a.href = url;
+          a.target = "_blank";
+          a.rel = "noopener";
+        }
+        a.style.opacity = "1";
+        a.style.pointerEvents = "auto";
+        a.removeAttribute("disabled");
+      }catch(e){}
+    });
+  }
+
+  window.followmePreviewExactCoreNow20260622 = function(url){
+    url = normalizeUrl(url);
+    if(!url) return false;
+
+    hideBadOverlays();
+
+    try{ window.__followMeActiveUrl = url; }catch(e){}
+    try{ window.__followMePreviewWantedUrl = url; }catch(e){}
+    try{ window.followMeCurrentActiveUrl = url; }catch(e){}
+    try{ window.currentFollowMeActiveUrl = url; }catch(e){}
+    try{ window.activeFollowMeUrl = url; }catch(e){}
+
+    var active = document.getElementById("activeUrl");
+    if(active) active.textContent = url;
+
+    var empty = document.getElementById("simpleDestinationPreviewEmpty");
+    if(empty) empty.style.display = "none";
+
+    var block = document.getElementById("simpleDestinationPreviewBlock");
+    if(block){
+      block.classList.add("preview-loaded");
+      block.classList.remove("preview-loading");
+    }
+
+    setOpenButton(url);
+
+    var frame = document.getElementById("simpleDestinationPreviewFrame");
+    if(!frame) return false;
+
+    var fallback = ensureFallback(frame);
+
+    if(isBlocked(url)){
+      frame.style.display = "none";
+
+      if(fallback){
+        fallback.innerHTML =
+          '<div style="width:min(92%,430px);padding:18px 16px;border-radius:20px;background:#fff;border:1px solid rgba(15,23,42,.10);box-shadow:0 18px 50px rgba(15,23,42,.12);">' +
+            '<strong style="display:block;font-size:16px;color:#0f172a;margin-bottom:7px;">Anteprima non disponibile</strong>' +
+            '<span style="display:block;font-size:13px;line-height:1.45;color:#64748b;margin-bottom:14px;">Questo sito non permette la visualizzazione dentro altre pagine. Il QR trasmette comunque il link corretto.</span>' +
+            '<a href="' + esc(url) + '" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 16px;border-radius:999px;background:#0f172a;color:#fff;text-decoration:none;font-size:13px;font-weight:700;">Apri pagina trasmessa</a>' +
+          '</div>';
+        fallback.style.display = "flex";
+      }
+
+      return true;
+    }
+
+    if(fallback) fallback.style.display = "none";
+
+    frame.style.display = "block";
+    frame.style.visibility = "visible";
+    frame.style.opacity = "1";
+    frame.setAttribute("loading","eager");
+
+    /*
+      Metodo che funziona con Payhip:
+      iframe diretto, ma sull'URL ESATTO della funzione originale.
+    */
+    frame.src = "about:blank";
+    setTimeout(function(){
+      try{ frame.src = url; }catch(e){}
+    }, 25);
+
+    return true;
+  };
+})();
+</script>
+
+
+<!-- FOLLOWME_PREVIEW_EXACT_CORE_FUNCTIONS_20260622: preview aggiornata solo da URL esatto delle funzioni originali -->
 </body>
 </html>
 
