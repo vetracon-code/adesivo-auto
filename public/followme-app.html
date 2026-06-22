@@ -47458,7 +47458,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 <!-- FOLLOWME_PREVIEW_EXACT_CORE_FUNCTIONS_20260622: preview aggiornata solo da URL esatto delle funzioni originali -->
 
-<script id="followme-final-preview-router-single-source-20260622">
+<script id="followme-final-preview-router-single-source-20260622" type="text/plain" data-disabled-by="FOLLOWME_CLEAN_OLD_EXTERNAL_PREVIEW_CONTROLLERS_20260622">
 (function(){
   // FOLLOWME_FINAL_PREVIEW_ROUTER_SINGLE_SOURCE_20260622
   // Unica fonte finale per la preview alta FollowMe.
@@ -47798,7 +47798,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 <!-- FOLLOWME_FINAL_PREVIEW_ROUTER_SINGLE_SOURCE_20260622: una sola funzione finale per preview URL/PDF/immagine/fallback -->
 
 
-<script id="followme-clean-single-preview-router-20260622">
+<script id="followme-clean-single-preview-router-20260622" type="text/plain" data-disabled-by="FOLLOWME_CLEAN_OLD_EXTERNAL_PREVIEW_CONTROLLERS_20260622">
 (function(){
   // FOLLOWME_CLEAN_SINGLE_PREVIEW_ROUTER_20260622
   // Unica funzione ufficiale preview alta FollowMe.
@@ -51323,7 +51323,7 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
 </script>
 
 
-<script id="followme-absolute-final-direct-preview-20260622">
+<script id="followme-absolute-final-direct-preview-20260622" type="text/plain" data-disabled-by="FOLLOWME_CLEAN_OLD_EXTERNAL_PREVIEW_CONTROLLERS_20260622">
 (function(){
   // FOLLOWME_ABSOLUTE_FINAL_DIRECT_PREVIEW_20260622
   // Ultimo script assoluto: ripristina la preview diretta del safepoint.
@@ -51490,7 +51490,7 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
 <!-- FOLLOWME_ABSOLUTE_FINAL_DIRECT_PREVIEW_20260622: ultimo router preview diretto del file -->
 
 
-<script id="followme-screenshot-preview-external-domains-20260622">
+<script id="followme-screenshot-preview-external-domains-20260622" type="text/plain" data-disabled-by="FOLLOWME_CLEAN_OLD_EXTERNAL_PREVIEW_CONTROLLERS_20260622">
 (function(){
   // FOLLOWME_SCREENSHOT_PREVIEW_FOR_EXTERNAL_DOMAINS_20260622
   // Preview universale per domini esterni:
@@ -51809,7 +51809,7 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
 <!-- FOLLOWME_SCREENSHOT_PREVIEW_FOR_EXTERNAL_DOMAINS_20260622: preview screenshot per tutti i domini esterni -->
 
 
-<script id="followme-stable-preview-no-blank-20260622">
+<script id="followme-stable-preview-no-blank-20260622" type="text/plain" data-disabled-by="FOLLOWME_CLEAN_OLD_EXTERNAL_PREVIEW_CONTROLLERS_20260622">
 (function(){
   // FOLLOWME_STABLE_PREVIEW_NO_BLANK_20260622
   // Controller finale assoluto:
@@ -52205,7 +52205,7 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
 <!-- FOLLOWME_STABLE_PREVIEW_NO_BLANK_20260622: preview stabile con fallback immediato, niente pagina bianca -->
 
 
-<script id="followme-fast-screenshot-prewarm-20260622">
+<script id="followme-fast-screenshot-prewarm-20260622" type="text/plain" data-disabled-by="FOLLOWME_CLEAN_OLD_EXTERNAL_PREVIEW_CONTROLLERS_20260622">
 (function(){
   // FOLLOWME_FAST_SCREENSHOT_PREWARM_20260622
   // Migliora la velocità percepita delle preview esterne:
@@ -52642,7 +52642,7 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
 <!-- FOLLOWME_FAST_SCREENSHOT_PREWARM_20260622: preview esterne più rapide con prewarm e card immediata -->
 
 
-<script id="followme-thum-preview-scroll-to-top-20260622">
+<script id="followme-thum-preview-scroll-to-top-20260622" type="text/plain" data-disabled-by="FOLLOWME_CLEAN_OLD_EXTERNAL_PREVIEW_CONTROLLERS_20260622">
 (function(){
   // FOLLOWME_THUM_PREVIEW_SCROLL_TO_TOP_20260622
   // Controller finale:
@@ -53408,19 +53408,78 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
     try{
       var wanted = norm(url).replace(/\/+$/,"").toLowerCase();
 
+      function cardUrl(card){
+        if(!card) return "";
+
+        var u = "";
+
+        try{
+          u = card.getAttribute("data-url") || card.getAttribute("data-history-url") || "";
+        }catch(e){}
+
+        if(!u){
+          try{
+            var b = card.querySelector("[onclick*='reactivateUrl'],[onclick*='activateUrlEmergency']");
+            var on = b ? String(b.getAttribute("onclick") || "") : "";
+            var m =
+              on.match(/reactivateUrl\(['"]([^'"]+)['"]\)/) ||
+              on.match(/activateUrlEmergency\(decodeURIComponent\(['"]([^'"]+)['"]\)\)/) ||
+              on.match(/decodeURIComponent\(['"]([^'"]+)['"]\)/);
+            if(m && m[1]) u = m[1];
+          }catch(e){}
+        }
+
+        if(!u){
+          try{
+            var strong = card.querySelector("strong");
+            if(strong) u = strong.textContent || "";
+          }catch(e){}
+        }
+
+        return norm(u);
+      }
+
+      function makeReactivateButton(u){
+        var enc = encodeURIComponent(u || "");
+        return '<button class="btn small secondary" type="button" onclick="reactivateUrl(\\'' + enc + '\\')">Attivalo</button>';
+      }
+
+      function makeActiveButton(){
+        return '<button class="btn-history-active-now" type="button" disabled>Attivo ora</button>';
+      }
+
       document.querySelectorAll(".history-item,.premium-history-card,[data-url],[data-history-url]").forEach(function(card){
-        var cu = norm(card.getAttribute("data-url") || card.getAttribute("data-history-url") || "").replace(/\/+$/,"").toLowerCase();
+        var raw = cardUrl(card);
+        var cu = norm(raw).replace(/\/+$/,"").toLowerCase();
         if(!cu) return;
+
+        var btn =
+          card.querySelector(".btn-history-active-now") ||
+          card.querySelector(".premium-history-reactivate") ||
+          card.querySelector("[onclick*='reactivateUrl']") ||
+          card.querySelector("[onclick*='activateUrlEmergency']");
 
         if(cu === wanted){
           card.classList.add("history-row-active","is-active","active","selected");
           card.setAttribute("data-active","1");
+          card.setAttribute("data-url", raw);
+
+          if(btn){
+            btn.outerHTML = makeActiveButton();
+          }
         }else{
           card.classList.remove("history-row-active","is-active","active","selected");
           card.removeAttribute("data-active");
+          card.setAttribute("data-url", raw);
+
+          if(btn && btn.classList && btn.classList.contains("btn-history-active-now")){
+            btn.outerHTML = makeReactivateButton(raw);
+          }
         }
       });
-    }catch(e){}
+    }catch(e){
+      console.warn("[FollowMe static fast reactivate] card state update failed", e);
+    }
   }
 
   function postInBackground(url){
@@ -53556,4 +53615,4 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
 })();
 </script>
 <!-- FOLLOWME_STATIC_FAST_REACTIVATE_NO_LOADSTATUS_20260622: preview statica immediata, override reactivateUrl, no updateUrl/loadStatus su successo -->
-
+<!-- FOLLOWME_CLEAN_OLD_EXTERNAL_PREVIEW_CONTROLLERS_20260622: disattivati controller preview esterni/vecchi; resta preview statica finale -->
