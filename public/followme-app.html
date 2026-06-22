@@ -45960,6 +45960,452 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 })();
 </script>
 
+
+<script id="followme-reactivate-preview-override-20260622">
+(function(){
+  // FOLLOWME_REACTIVATE_PREVIEW_OVERRIDE_20260622
+  if(window.__FOLLOWME_REACTIVATE_PREVIEW_OVERRIDE_20260622__) return;
+  window.__FOLLOWME_REACTIVATE_PREVIEW_OVERRIDE_20260622__ = true;
+
+  var busy = false;
+  var lastUrl = "";
+  var lastTime = 0;
+  var verifiedKey = "followme_verified_history_urls_20260622";
+
+  function clean(v){ return String(v || "").trim(); }
+
+  function esc(v){
+    return String(v == null ? "" : v).replace(/[&<>"']/g,function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+
+  function normalizeUrl(raw){
+    var v = clean(raw);
+    if(!v) return "";
+    try{ v = decodeURIComponent(v); }catch(e){}
+    v = clean(v);
+    if(/^https?:\/\//i.test(v)) return v;
+    if(v.charAt(0)==="/") return location.origin + v;
+    if(/^[a-z0-9.-]+\.[a-z]{2,}/i.test(v)) return "https://" + v;
+    return "";
+  }
+
+  function getCode(){
+    var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+    if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+    return clean(window.FOLLOWME_CODE || window.followMeCode || "").toUpperCase();
+  }
+
+  function canonical(url){
+    try{
+      var u = new URL(normalizeUrl(url));
+      u.hash = "";
+      return u.toString().replace(/\/+$/,"");
+    }catch(e){
+      return normalizeUrl(url).replace(/\/+$/,"");
+    }
+  }
+
+  function readVerified(){
+    try{
+      var a = JSON.parse(sessionStorage.getItem(verifiedKey) || "[]");
+      return Array.isArray(a) ? a : [];
+    }catch(e){
+      return [];
+    }
+  }
+
+  function markVerified(url){
+    var c = canonical(url);
+    if(!c) return;
+    var a = readVerified();
+    if(a.indexOf(c) === -1) a.push(c);
+    try{ sessionStorage.setItem(verifiedKey, JSON.stringify(a.slice(-200))); }catch(e){}
+  }
+
+  function isVerified(url){
+    return readVerified().indexOf(canonical(url)) !== -1;
+  }
+
+  function isReactivate(el){
+    var b = el && el.closest ? el.closest("button,a") : null;
+    if(!b) return false;
+
+    var txt = clean(b.textContent).toLowerCase();
+    var cls = clean(b.className).toLowerCase();
+    var id = clean(b.id).toLowerCase();
+    var on = clean(b.getAttribute("onclick")).toLowerCase();
+
+    if(txt.includes("elimina") || cls.includes("delete") || id.includes("delete")) return false;
+    if(txt.includes("apri")) return false;
+
+    return txt.includes("riattiva") ||
+           txt.includes("attiva") ||
+           txt.includes("attivalo") ||
+           cls.includes("reactivate") ||
+           cls.includes("activate") ||
+           on.includes("reactivate") ||
+           on.includes("activate");
+  }
+
+  function cardOf(el){
+    return el && el.closest ? el.closest(".premium-history-card,.history-item,.history-card,.premium-card,[data-history-url],[data-url]") : null;
+  }
+
+  function urlFrom(card, btn){
+    if(!card) return "";
+
+    var attrs = ["data-history-url","data-url","data-active-url","data-destination-url","data-followme-url"];
+    for(var i=0;i<attrs.length;i++){
+      var u = normalizeUrl(card.getAttribute(attrs[i]));
+      if(u) return u;
+    }
+
+    var texts = [];
+    if(btn) texts.push(clean(btn.getAttribute("onclick")));
+    texts.push(String(card.outerHTML || ""));
+
+    for(var j=0;j<texts.length;j++){
+      var html = texts[j];
+
+      var d = html.match(/decodeURIComponent\(['"]([^'"]+)['"]\)/);
+      if(d && d[1]){
+        var u1 = normalizeUrl(d[1]);
+        if(u1) return u1;
+      }
+
+      var r = html.match(/(?:reactivateUrl|activateUrlEmergency)\(['"]([^'"]+)['"]\)/);
+      if(r && r[1]){
+        var u2 = normalizeUrl(r[1]);
+        if(u2) return u2;
+      }
+
+      var p = html.match(/https?:\/\/[^'"<>\s\\)]+/i);
+      if(p && p[0]){
+        var u3 = normalizeUrl(p[0]);
+        if(u3) return u3;
+      }
+    }
+
+    var el = card.querySelector(".premium-history-url,.history-url,.premium-card-url,.url,code,.mono,strong");
+    if(el){
+      var u4 = normalizeUrl(el.textContent);
+      if(u4) return u4;
+    }
+
+    return "";
+  }
+
+  function host(url){
+    try{ return new URL(url).hostname.toLowerCase(); }catch(e){ return ""; }
+  }
+
+  function blocked(url){
+    var h = host(url);
+    return h.includes("ferrari.com") ||
+           h.includes("google.com") ||
+           h.includes("facebook.com") ||
+           h.includes("instagram.com") ||
+           h.includes("linkedin.com") ||
+           h.includes("youtube.com") ||
+           h.includes("x.com") ||
+           h.includes("twitter.com");
+  }
+
+  function kind(url){
+    var u = clean(url).toLowerCase();
+    if(u.includes("/fm/image/") || u.includes("/image-card")) return "image";
+    if(u.includes("/fm/document/") || u.includes("/pdf-viewer.html") || u.includes(".pdf")) return "pdf";
+    return "url";
+  }
+
+  function previewParent(){
+    var f = document.getElementById("simpleDestinationPreviewFrame");
+    if(f && f.parentElement) return f.parentElement;
+    return document.querySelector(".simple-preview-square") ||
+           document.querySelector("#simpleDestinationPreviewBlock .simple-preview-square") ||
+           document.querySelector(".destination-preview-frame") ||
+           document.querySelector(".qr-auto-preview-frame");
+  }
+
+  function ensureBox(){
+    var parent = previewParent();
+    if(!parent) return null;
+
+    try{
+      if(getComputedStyle(parent).position === "static") parent.style.position = "relative";
+    }catch(e){
+      parent.style.position = "relative";
+    }
+
+    var box = document.getElementById("followmePreviewAlwaysVisible20260622");
+    if(!box){
+      box = document.createElement("div");
+      box.id = "followmePreviewAlwaysVisible20260622";
+      box.style.cssText = "position:absolute;inset:0;z-index:200;display:none;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;border-radius:inherit;background:rgba(248,250,252,.98);text-align:center;font-family:inherit;";
+      parent.appendChild(box);
+    }
+    return box;
+  }
+
+  function setOpen(url,label){
+    [
+      document.getElementById("simpleDestinationPreviewOpen"),
+      document.getElementById("openQrPreview"),
+      document.getElementById("followmeOtherOpenQrPreview")
+    ].filter(Boolean).forEach(function(a){
+      try{
+        if(String(a.tagName || "").toLowerCase()==="a"){
+          a.href = url;
+          a.target = "_blank";
+          a.rel = "noopener";
+        }
+        a.textContent = label || "Apri";
+        a.style.opacity = "1";
+        a.style.pointerEvents = "auto";
+        a.removeAttribute("disabled");
+      }catch(e){}
+    });
+  }
+
+  function setGlobals(url){
+    try{ window.__followMeActiveUrl = url; }catch(e){}
+    try{ window.__followMePreviewWantedUrl = url; }catch(e){}
+    try{ window.followMeCurrentActiveUrl = url; }catch(e){}
+    try{ window.currentFollowMeActiveUrl = url; }catch(e){}
+    try{ window.activeFollowMeUrl = url; }catch(e){}
+
+    var active = document.getElementById("activeUrl");
+    if(active) active.textContent = url;
+
+    var empty = document.getElementById("simpleDestinationPreviewEmpty");
+    if(empty) empty.style.display = "none";
+
+    var block = document.getElementById("simpleDestinationPreviewBlock");
+    if(block){
+      block.classList.add("preview-loaded");
+      block.classList.remove("preview-loading");
+    }
+  }
+
+  function showPreview(url, card){
+    url = normalizeUrl(url);
+    if(!url) return;
+
+    setGlobals(url);
+    markVerified(url);
+
+    var box = ensureBox();
+    var frame = document.getElementById("simpleDestinationPreviewFrame");
+    var k = kind(url);
+
+    if(k === "pdf"){
+      setOpen(url, "Apri documento");
+      if(box){
+        box.innerHTML = '<div style="width:min(92%,420px);padding:18px 16px;border-radius:20px;background:#111827;color:#fff;box-shadow:0 18px 50px rgba(15,23,42,.18);"><strong style="display:block;font-size:16px;margin-bottom:7px;">Documento PDF</strong><span style="display:block;font-size:13px;opacity:.82;">Destinazione attivata. Il QR trasmette questo documento.</span></div>';
+        box.style.display = "flex";
+      }
+      return;
+    }
+
+    if(k === "image"){
+      setOpen(url, "Apri immagine");
+      var img = card && card.querySelector ? card.querySelector("img") : null;
+      if(box){
+        if(img && img.src){
+          box.innerHTML = '<div style="width:100%;height:100%;border-radius:18px;overflow:hidden;background:#05070d;display:flex;align-items:center;justify-content:center;"><img src="' + esc(img.src) + '" style="width:100%;height:100%;object-fit:cover;display:block;"></div>';
+        }else{
+          box.innerHTML = '<div style="width:min(92%,420px);padding:18px 16px;border-radius:20px;background:#05070d;color:#fff;box-shadow:0 18px 50px rgba(15,23,42,.18);"><strong style="display:block;font-size:16px;margin-bottom:7px;">Immagine</strong><span style="display:block;font-size:13px;opacity:.82;">Destinazione immagine attivata.</span></div>';
+        }
+        box.style.display = "flex";
+      }
+      return;
+    }
+
+    setOpen(url, "Apri pagina");
+
+    if(blocked(url)){
+      if(box){
+        box.innerHTML = '<div style="width:min(92%,420px);padding:18px 16px;border-radius:20px;background:#fff;border:1px solid rgba(15,23,42,.10);box-shadow:0 18px 50px rgba(15,23,42,.12);"><strong style="display:block;font-size:16px;color:#0f172a;margin-bottom:7px;">Anteprima non disponibile</strong><span style="display:block;font-size:13px;line-height:1.45;color:#64748b;margin-bottom:14px;">Questo sito protegge la visualizzazione dentro altre pagine. Il link è comunque trasmesso correttamente dal tuo QR.</span><a href="' + esc(url) + '" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 16px;border-radius:999px;background:#0f172a;color:#fff;text-decoration:none;font-size:13px;font-weight:700;">Apri pagina trasmessa</a></div>';
+        box.style.display = "flex";
+      }
+      return;
+    }
+
+    if(box){
+      box.innerHTML = '<div style="width:min(92%,420px);padding:18px 16px;border-radius:20px;background:#fff;border:1px solid rgba(15,23,42,.10);box-shadow:0 18px 50px rgba(15,23,42,.12);"><strong style="display:block;font-size:16px;color:#0f172a;margin-bottom:7px;">Destinazione attivata</strong><span style="display:block;font-size:13px;line-height:1.45;color:#64748b;word-break:break-word;">' + esc(url) + '</span></div>';
+      box.style.display = "flex";
+    }
+
+    if(frame){
+      try{
+        frame.style.display = "block";
+        frame.setAttribute("loading","eager");
+        frame.onload = function(){
+          setTimeout(function(){
+            var b = document.getElementById("followmePreviewAlwaysVisible20260622");
+            if(b && !blocked(url)) b.style.display = "none";
+          }, 500);
+        };
+        frame.src = "about:blank";
+        setTimeout(function(){ frame.src = url; }, 40);
+      }catch(e){}
+    }
+  }
+
+  function markCard(card,url){
+    try{
+      document.querySelectorAll(".premium-history-card,.history-item,.history-card,.premium-card").forEach(function(c){
+        c.classList.remove("is-active","followme-emergency-active");
+      });
+      if(card){
+        card.classList.add("is-active","followme-emergency-active");
+        card.setAttribute("data-history-url", url);
+      }
+    }catch(e){}
+  }
+
+  async function activate(url, card, btn){
+    var code = getCode();
+    url = normalizeUrl(url);
+    if(!code || !url) return;
+
+    var now = Date.now();
+    if(busy && lastUrl === url && now - lastTime < 2000) return;
+
+    busy = true;
+    lastUrl = url;
+    lastTime = now;
+
+    var oldText = btn ? clean(btn.textContent) : "";
+
+    try{
+      if(btn){
+        btn.disabled = true;
+        btn.textContent = "Attivo ora";
+      }
+
+      showPreview(url, card);
+      markCard(card, url);
+
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/update-url", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        cache:"no-store",
+        body:JSON.stringify({
+          url:url,
+          source:"reactivate_preview_override_20260622",
+          skip_repeated_safe_browsing:true,
+          already_verified:isVerified(url),
+          client_command_ts:Date.now()
+        })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        if(btn){
+          btn.disabled = false;
+          btn.textContent = oldText || "Riattiva";
+        }
+        return;
+      }
+
+      markVerified(url);
+
+      setTimeout(function(){
+        try{ if(typeof window.forceFollowMePreview === "function") window.forceFollowMePreview(url); }catch(e){}
+        try{ if(typeof window.updateSimpleDestinationPreview === "function") window.updateSimpleDestinationPreview(url); }catch(e){}
+      }, 100);
+
+    }catch(e){
+      console.error("[FollowMe override riattiva] errore:", e);
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = oldText || "Riattiva";
+      }
+    }finally{
+      setTimeout(function(){ busy = false; }, 500);
+    }
+  }
+
+  window.addEventListener("click", function(ev){
+    try{
+      if(!isReactivate(ev.target)) return;
+
+      var btn = ev.target.closest("button,a");
+      var card = cardOf(btn || ev.target);
+      if(!card) return;
+
+      var url = urlFrom(card, btn);
+      if(!url) return;
+
+      ev.preventDefault();
+      ev.stopPropagation();
+      if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+
+      activate(url, card, btn);
+    }catch(e){
+      console.warn("[FollowMe override click] errore:", e);
+    }
+  }, true);
+
+  if(!window.__FOLLOWME_SAFE_BROWSING_FETCH_CACHE_20260622__){
+    window.__FOLLOWME_SAFE_BROWSING_FETCH_CACHE_20260622__ = true;
+    var oldFetch = window.fetch;
+
+    window.fetch = function(input, init){
+      try{
+        var req = String(input && input.url ? input.url : input || "");
+        if(/safe[-_]?brows|safebrows|browsing/i.test(req)){
+          var target = "";
+
+          try{
+            var u = new URL(req, location.origin);
+            target = normalizeUrl(u.searchParams.get("url") || u.searchParams.get("target") || u.searchParams.get("link") || "");
+          }catch(e){}
+
+          if(!target && init && typeof init.body === "string"){
+            try{
+              var body = JSON.parse(init.body);
+              target = normalizeUrl(body.url || body.target || body.link || "");
+            }catch(e){}
+          }
+
+          if(target && isVerified(target)){
+            return Promise.resolve(new Response(JSON.stringify({
+              success:true,
+              safe:true,
+              allowed:true,
+              skipped:true,
+              cached:true,
+              reason:"already_verified_history_url"
+            }), {
+              status:200,
+              headers:{"Content-Type":"application/json"}
+            }));
+          }
+        }
+      }catch(e){}
+
+      return oldFetch.apply(this, arguments);
+    };
+  }
+
+  setTimeout(function(){
+    try{
+      document.querySelectorAll(".premium-history-card,.history-item,.history-card,.premium-card,[data-history-url],[data-url]").forEach(function(card){
+        var u = urlFrom(card, null);
+        if(u) markVerified(u);
+      });
+    }catch(e){}
+  }, 800);
+
+  window.followmeReactivatePreviewOverride20260622 = activate;
+})();
+</script>
+
 </body>
 </html>
 
