@@ -53571,6 +53571,24 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
         }
       }catch(e){}
 
+      try{
+        var finalUrl = url;
+        if(out.data && out.data.project && out.data.project.active_url){
+          finalUrl = out.data.project.active_url;
+        }
+
+        render(finalUrl);
+        setCardActiveState(finalUrl);
+
+        setTimeout(function(){
+          try{ refreshFromServerAuthoritative("post-success-450"); }catch(e){}
+        }, 450);
+
+        setTimeout(function(){
+          try{ refreshFromServerAuthoritative("post-success-1200"); }catch(e){}
+        }, 1200);
+      }catch(e){}
+
       try{ toast("QR aggiornato."); }catch(e){}
     })
     .catch(function(err){
@@ -53646,26 +53664,56 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
     }catch(e){}
   }, true);
 
+  function refreshFromServerAuthoritative(reason){
+    try{
+      var c = code();
+      if(!c) return;
+
+      fetch("/api/followme/" + encodeURIComponent(c) + "/status?v=payhip-style-all-external-" + Date.now(), { cache:"no-store" })
+        .then(function(r){ return r.json(); })
+        .then(function(data){
+          var url = data && data.project ? data.project.active_url : "";
+
+          if(!url) return;
+
+          render(url);
+          setCardActiveState(url);
+
+          try{
+            window.__followMeServerAuthoritativeActiveUrl20260622 = url;
+            console.log("[FollowMe Payhip-style all external] active_url server:", url, reason || "");
+          }catch(e){}
+        })
+        .catch(function(err){
+          try{ console.warn("[FollowMe Payhip-style all external] status refresh failed", err); }catch(e){}
+        });
+    }catch(e){}
+  }
+
   window.followmeStaticFastReactivateNoLoadstatus20260622 = fastReactivate; // FOLLOWME_FIX_STATIC_FAST_REACTIVATE_EXPORT_20260622
   window.followmeThumPreviewScrollToTop20260622 = render;
   window.followmeFastScreenshotPrewarm20260622 = render;
   window.followmeStablePreviewNoBlank20260622 = render;
   window.updateSimpleDestinationPreview = render;
   window.forceFollowMePreview = render;
+  window.followmePayhipStyleStaticPreviewAllExternal20260622 = render; // FOLLOWME_PAYHIP_STYLE_STATIC_PREVIEW_ALL_EXTERNAL_20260622
+  window.followmeRefreshServerAuthoritative20260622 = refreshFromServerAuthoritative;
 
-  setTimeout(function(){
-    try{
-      var c = code();
-      if(!c) return;
-      fetch("/api/followme/" + encodeURIComponent(c) + "/status?v=" + Date.now(), { cache:"no-store" })
-        .then(function(r){ return r.json(); })
-        .then(function(data){
-          var url = data && data.project ? data.project.active_url : "";
-          if(url) render(url);
-        })
-        .catch(function(){});
-    }catch(e){}
-  }, 700);
+  setTimeout(function(){ refreshFromServerAuthoritative("boot-0"); }, 0);
+  setTimeout(function(){ refreshFromServerAuthoritative("boot-350"); }, 350);
+  setTimeout(function(){ refreshFromServerAuthoritative("boot-900"); }, 900);
+  setTimeout(function(){ refreshFromServerAuthoritative("boot-1800"); }, 1800);
+  setTimeout(function(){ refreshFromServerAuthoritative("boot-3200"); }, 3200);
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(function(){ refreshFromServerAuthoritative("pageshow"); }, 200);
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible"){
+      setTimeout(function(){ refreshFromServerAuthoritative("visible"); }, 200);
+    }
+  });
 })();
 </script>
 <!-- FOLLOWME_STATIC_FAST_REACTIVATE_NO_LOADSTATUS_20260622: preview statica immediata, override reactivateUrl, no updateUrl/loadStatus su successo -->
@@ -53678,3 +53726,4 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
 <!-- FOLLOWME_FIX_ACTIVE_SCRIPT_SYNTAX_ERRORS_20260622: corretti errori sintassi script principale/emergency history -->
 <!-- FOLLOWME_FIX_RESIDUAL_ESCAPED_ONCLICK_SYNTAX_20260622: corretti escape residui onclick delete/reactivate emergency -->
 <!-- FOLLOWME_FIX_MAIN_SCRIPT_MISSING_FINAL_BRACE_20260622: aggiunta graffa finale mancante nello script principale -->
+<!-- FOLLOWME_PAYHIP_STYLE_STATIC_PREVIEW_ALL_EXTERNAL_20260622: preview statica tipo Payhip per tutti gli URL esterni + refresh server authoritative -->
