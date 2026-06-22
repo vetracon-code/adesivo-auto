@@ -45429,6 +45429,537 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 <!-- FOLLOWME_RESTORE_CARD_PREVIEW_SCRIPTS_20260619: ripristinati gli script preview card; resta disattivato solo il render history duplicato -->
 
 <!-- FOLLOWME_RESTORE_FULL_CARD_PREVIEW_RENDER_20260622: ripristinato anche followme-emergency-history-render per riallineare card e preview -->
+
+<script id="followme-reactivate-single-fast-controller-20260622">
+(function(){
+  // FOLLOWME_REACTIVATE_SINGLE_FAST_CONTROLLER_20260622
+  if(window.__FOLLOWME_REACTIVATE_SINGLE_FAST_CONTROLLER_20260622__) return;
+  window.__FOLLOWME_REACTIVATE_SINGLE_FAST_CONTROLLER_20260622__ = true;
+
+  var running = false;
+  var lastUrl = "";
+  var lastTs = 0;
+
+  function clean(v){
+    return String(v || "").trim();
+  }
+
+  function esc(v){
+    return String(v == null ? "" : v).replace(/[&<>"']/g, function(c){
+      return ({
+        "&":"&amp;",
+        "<":"&lt;",
+        ">":"&gt;",
+        '"':"&quot;",
+        "'":"&#39;"
+      })[c];
+    });
+  }
+
+  function getCode(){
+    try{
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) return decodeURIComponent(m[1] || "").trim().toUpperCase();
+
+      var p = new URLSearchParams(location.search || "");
+      return clean(
+        p.get("code") ||
+        p.get("qr") ||
+        p.get("c") ||
+        window.FOLLOWME_CODE ||
+        window.FOLLOWME_PROJECT_CODE ||
+        window.followMeCode ||
+        window.followmeCode ||
+        ""
+      ).toUpperCase();
+    }catch(e){
+      return clean(window.FOLLOWME_CODE || window.followMeCode || "").toUpperCase();
+    }
+  }
+
+  function normalizeUrl(raw){
+    var v = clean(raw);
+    if(!v) return "";
+
+    try{ v = decodeURIComponent(v); }catch(e){}
+    v = clean(v);
+
+    if(!v) return "";
+    if(/^https?:\/\//i.test(v)) return v;
+    if(v.charAt(0) === "/") return location.origin + v;
+    if(/^[a-z0-9.-]+\.[a-z]{2,}/i.test(v)) return "https://" + v;
+
+    return "";
+  }
+
+  function findHistoryCard(el){
+    if(!el || !el.closest) return null;
+    return el.closest(
+      ".premium-history-card,.history-item,.history-card,.premium-card,[data-history-url],[data-url]"
+    );
+  }
+
+  function isReactivateButton(el){
+    if(!el || !el.closest) return false;
+
+    var btn = el.closest("button,a");
+    if(!btn) return false;
+
+    var txt = clean(btn.textContent).toLowerCase();
+    var cls = clean(btn.className).toLowerCase();
+    var id = clean(btn.id).toLowerCase();
+    var onclick = clean(btn.getAttribute && btn.getAttribute("onclick")).toLowerCase();
+
+    if(txt.includes("elimina") || cls.includes("delete") || id.includes("delete")) return false;
+    if(txt.includes("apri")) return false;
+
+    return !!(
+      txt.includes("riattiva") ||
+      txt.includes("attiva") ||
+      txt.includes("attivalo") ||
+      cls.includes("reactivate") ||
+      cls.includes("activate") ||
+      onclick.includes("reactivate") ||
+      onclick.includes("activate")
+    );
+  }
+
+  function findCardUrl(card, btn){
+    if(!card) return "";
+
+    var attrs = [
+      "data-history-url",
+      "data-url",
+      "data-active-url",
+      "data-destination-url",
+      "data-followme-url"
+    ];
+
+    for(var i=0;i<attrs.length;i++){
+      var v = normalizeUrl(card.getAttribute(attrs[i]));
+      if(v) return v;
+    }
+
+    if(btn){
+      var onclick = clean(btn.getAttribute && btn.getAttribute("onclick"));
+
+      var m1 = onclick.match(/decodeURIComponent\(['"]([^'"]+)['"]\)/);
+      if(m1 && m1[1]){
+        var u1 = normalizeUrl(m1[1]);
+        if(u1) return u1;
+      }
+
+      var m2 = onclick.match(/reactivateUrl\(['"]([^'"]+)['"]\)/);
+      if(m2 && m2[1]){
+        var u2 = normalizeUrl(m2[1]);
+        if(u2) return u2;
+      }
+
+      var m3 = onclick.match(/activateUrlEmergency\(['"]([^'"]+)['"]\)/);
+      if(m3 && m3[1]){
+        var u3 = normalizeUrl(m3[1]);
+        if(u3) return u3;
+      }
+    }
+
+    var urlEl = card.querySelector(".premium-history-url,.history-url,.premium-card-url,.url,code,.mono,strong");
+    if(urlEl){
+      var fromText = normalizeUrl(urlEl.textContent);
+      if(fromText) return fromText;
+    }
+
+    var html = String(card.outerHTML || "");
+
+    var dec = html.match(/decodeURIComponent\(['"]([^'"]+)['"]\)/);
+    if(dec && dec[1]){
+      var decoded = normalizeUrl(dec[1]);
+      if(decoded) return decoded;
+    }
+
+    var plain = html.match(/https?:\/\/[^'"<>\s\\)]+/i);
+    if(plain && plain[0]){
+      return normalizeUrl(plain[0]);
+    }
+
+    return "";
+  }
+
+  function showToast(msg){
+    try{
+      if(typeof window.toast === "function"){
+        window.toast(msg);
+        return;
+      }
+
+      var el = document.getElementById("toast");
+      if(el){
+        el.textContent = msg;
+        el.style.display = "block";
+        setTimeout(function(){ el.style.display = "none"; }, 2600);
+      }
+    }catch(e){}
+  }
+
+  function hostOf(url){
+    try{ return new URL(url).hostname.toLowerCase(); }catch(e){ return ""; }
+  }
+
+  function isBlockedIframeHost(url){
+    var h = hostOf(url);
+    return !!(
+      h.includes("ferrari.com") ||
+      h.includes("google.com") ||
+      h.includes("facebook.com") ||
+      h.includes("instagram.com") ||
+      h.includes("linkedin.com") ||
+      h.includes("youtube.com")
+    );
+  }
+
+  function kindOf(url){
+    var u = clean(url).toLowerCase();
+    if(u.includes("/fm/image/") || u.includes("/image-card")) return "image";
+    if(u.includes("/fm/document/") || u.includes("/pdf-viewer.html") || u.includes(".pdf")) return "pdf";
+    return "url";
+  }
+
+  function previewParent(){
+    var frame = document.getElementById("simpleDestinationPreviewFrame");
+    if(frame && frame.parentElement) return frame.parentElement;
+
+    return document.querySelector(".simple-preview-square") ||
+      document.querySelector("#simpleDestinationPreviewBlock .simple-preview-square") ||
+      document.querySelector(".destination-preview-frame") ||
+      document.querySelector(".qr-auto-preview-frame") ||
+      null;
+  }
+
+  function setOpenButton(url, label){
+    [
+      document.getElementById("simpleDestinationPreviewOpen"),
+      document.getElementById("openQrPreview"),
+      document.getElementById("followmeOtherOpenQrPreview")
+    ].filter(Boolean).forEach(function(btn){
+      try{
+        if(String(btn.tagName || "").toLowerCase() === "a"){
+          btn.href = url || "#";
+          btn.target = "_blank";
+          btn.rel = "noopener";
+        }
+        if(label) btn.textContent = label;
+        btn.style.opacity = url ? "1" : ".45";
+        btn.style.pointerEvents = url ? "auto" : "none";
+        btn.removeAttribute("disabled");
+        btn.classList.remove("disabled");
+      }catch(e){}
+    });
+  }
+
+  function ensureInstantBox(){
+    var parent = previewParent();
+    if(!parent) return null;
+
+    try{
+      var pos = window.getComputedStyle(parent).position;
+      if(!pos || pos === "static") parent.style.position = "relative";
+    }catch(e){
+      parent.style.position = "relative";
+    }
+
+    var box = document.getElementById("followmeReactivateInstantPreview20260622");
+    if(!box){
+      box = document.createElement("div");
+      box.id = "followmeReactivateInstantPreview20260622";
+      box.style.cssText = [
+        "position:absolute",
+        "inset:0",
+        "z-index:90",
+        "display:none",
+        "align-items:center",
+        "justify-content:center",
+        "padding:16px",
+        "box-sizing:border-box",
+        "border-radius:inherit",
+        "background:rgba(248,250,252,.98)",
+        "text-align:center",
+        "font-family:inherit"
+      ].join(";");
+
+      parent.appendChild(box);
+    }
+
+    return box;
+  }
+
+  function hideInstantBoxSoon(){
+    clearTimeout(window.__followmeReactivateInstantPreviewTimer20260622);
+    window.__followmeReactivateInstantPreviewTimer20260622 = setTimeout(function(){
+      var box = document.getElementById("followmeReactivateInstantPreview20260622");
+      if(box) box.style.display = "none";
+    }, 1400);
+  }
+
+  function applyGlobals(url){
+    try{ window.__followMeActiveUrl = url; }catch(e){}
+    try{ window.__followMePreviewWantedUrl = url; }catch(e){}
+    try{ window.followMeCurrentActiveUrl = url; }catch(e){}
+    try{ window.currentFollowMeActiveUrl = url; }catch(e){}
+    try{ window.activeFollowMeUrl = url; }catch(e){}
+
+    var activeText = document.getElementById("activeUrl");
+    if(activeText) activeText.textContent = url;
+
+    var empty = document.getElementById("simpleDestinationPreviewEmpty");
+    if(empty) empty.style.display = "none";
+
+    var block = document.getElementById("simpleDestinationPreviewBlock");
+    if(block){
+      block.classList.add("preview-loaded");
+      block.classList.remove("preview-loading");
+    }
+  }
+
+  function renderImmediatePreview(url, card){
+    url = normalizeUrl(url);
+    if(!url) return;
+
+    applyGlobals(url);
+
+    var kind = kindOf(url);
+    var box = ensureInstantBox();
+    var frame = document.getElementById("simpleDestinationPreviewFrame");
+
+    if(kind === "pdf"){
+      setOpenButton(url, "Apri documento");
+      if(box){
+        box.innerHTML =
+          '<div style="width:min(92%,420px);padding:18px 16px;border-radius:20px;background:#111827;color:#fff;border:1px solid rgba(255,255,255,.12);box-shadow:0 18px 50px rgba(15,23,42,.18);">' +
+            '<strong style="display:block;font-size:16px;margin-bottom:7px;">Documento PDF</strong>' +
+            '<span style="display:block;font-size:13px;line-height:1.4;opacity:.82;">Destinazione attivata. Aggiorno la preview...</span>' +
+          '</div>';
+        box.style.display = "flex";
+        hideInstantBoxSoon();
+      }
+      return;
+    }
+
+    if(kind === "image"){
+      setOpenButton(url, "Apri immagine");
+      var img = card && card.querySelector ? card.querySelector("img") : null;
+
+      if(box){
+        if(img && img.src){
+          box.innerHTML =
+            '<div style="width:100%;height:100%;border-radius:18px;overflow:hidden;background:#05070d;display:flex;align-items:center;justify-content:center;">' +
+              '<img src="' + esc(img.src) + '" alt="Immagine" style="width:100%;height:100%;object-fit:cover;display:block;">' +
+            '</div>';
+        }else{
+          box.innerHTML =
+            '<div style="width:min(92%,420px);padding:18px 16px;border-radius:20px;background:#05070d;color:#fff;box-shadow:0 18px 50px rgba(15,23,42,.18);">' +
+              '<strong style="display:block;font-size:16px;margin-bottom:7px;">Immagine</strong>' +
+              '<span style="display:block;font-size:13px;line-height:1.4;opacity:.82;">Destinazione attivata. Aggiorno la preview...</span>' +
+            '</div>';
+        }
+        box.style.display = "flex";
+        hideInstantBoxSoon();
+      }
+      return;
+    }
+
+    setOpenButton(url, "Apri pagina");
+
+    if(isBlockedIframeHost(url)){
+      if(box){
+        box.innerHTML =
+          '<div style="width:min(92%,420px);padding:18px 16px;border-radius:20px;background:#fff;border:1px solid rgba(15,23,42,.10);box-shadow:0 18px 50px rgba(15,23,42,.12);">' +
+            '<strong style="display:block;font-size:16px;line-height:1.2;color:#0f172a;margin-bottom:7px;">Anteprima non disponibile</strong>' +
+            '<span style="display:block;font-size:13px;line-height:1.45;color:#64748b;margin-bottom:14px;">Questo sito protegge la visualizzazione dentro altre pagine. Il link è comunque trasmesso correttamente dal tuo QR.</span>' +
+            '<a href="' + esc(url) + '" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 16px;border-radius:999px;background:#0f172a;color:#fff;text-decoration:none;font-size:13px;font-weight:700;">Apri pagina trasmessa</a>' +
+          '</div>';
+        box.style.display = "flex";
+      }
+      return;
+    }
+
+    if(box){
+      box.innerHTML =
+        '<div style="width:min(92%,420px);padding:18px 16px;border-radius:20px;background:#fff;border:1px solid rgba(15,23,42,.10);box-shadow:0 18px 50px rgba(15,23,42,.12);">' +
+          '<strong style="display:block;font-size:16px;line-height:1.2;color:#0f172a;margin-bottom:7px;">Destinazione attivata</strong>' +
+          '<span style="display:block;font-size:13px;line-height:1.45;color:#64748b;word-break:break-word;">' + esc(url) + '</span>' +
+        '</div>';
+      box.style.display = "flex";
+      hideInstantBoxSoon();
+    }
+
+    if(frame){
+      try{
+        frame.style.display = "block";
+        frame.setAttribute("loading", "eager");
+        frame.setAttribute("src", "about:blank");
+        setTimeout(function(){
+          try{ frame.setAttribute("src", url); }catch(e){}
+        }, 30);
+      }catch(e){}
+    }
+  }
+
+  function markActiveCard(card, url){
+    try{
+      document.querySelectorAll(".premium-history-card,.history-item,.history-card,.premium-card").forEach(function(c){
+        c.classList.remove("is-active", "followme-emergency-active");
+        var b = c.querySelector(".premium-history-active,.followme-emergency-active-btn");
+        if(b){
+          b.disabled = false;
+          b.textContent = "Riattiva";
+          b.classList.remove("premium-history-active");
+          b.classList.add("premium-history-reactivate");
+        }
+      });
+
+      if(card){
+        card.classList.add("is-active", "followme-emergency-active");
+
+        var btn = card.querySelector("button,a");
+        var activeBtn =
+          card.querySelector(".premium-history-reactivate,.followme-emergency-active-btn") ||
+          btn;
+
+        if(activeBtn){
+          activeBtn.textContent = "Attivo ora";
+          activeBtn.classList.remove("premium-history-reactivate");
+          activeBtn.classList.add("premium-history-active");
+          activeBtn.disabled = true;
+        }
+
+        card.setAttribute("data-history-url", url);
+      }
+    }catch(e){}
+  }
+
+  async function activateNow(url, card, btn){
+    var code = getCode();
+    url = normalizeUrl(url);
+
+    if(!code || !url){
+      showToast("Link non valido.");
+      return;
+    }
+
+    var now = Date.now();
+    if(running && lastUrl === url && now - lastTs < 2500){
+      return;
+    }
+
+    running = true;
+    lastUrl = url;
+    lastTs = now;
+
+    try{
+      if(btn){
+        btn.disabled = true;
+        btn.dataset.originalText20260622 = btn.dataset.originalText20260622 || clean(btn.textContent);
+        btn.textContent = "Attivo...";
+      }
+
+      /*
+        Aggiornamento immediato: prima UI/preview, poi rete.
+        Così non serve più cliccare due volte.
+      */
+      renderImmediatePreview(url, card);
+      markActiveCard(card, url);
+
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/update-url", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        cache:"no-store",
+        body:JSON.stringify({
+          url:url,
+          client_command_ts:Date.now(),
+          source:"reactivate_fast_controller_20260622",
+          skip_repeated_safe_browsing:true
+        })
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+
+      if(!res.ok || !data || !data.success){
+        showToast((data && data.error) || "Errore riattivazione link.");
+
+        if(btn){
+          btn.disabled = false;
+          btn.textContent = btn.dataset.originalText20260622 || "Riattiva";
+        }
+
+        setTimeout(function(){
+          try{ if(typeof window.loadStatus === "function") window.loadStatus(); }catch(e){}
+        }, 250);
+
+        return;
+      }
+
+      showToast("Link attivo ora.");
+
+      /*
+        Riallineo con i motori esistenti, ma dopo l'aggiornamento immediato.
+        Non ricarico la pagina.
+      */
+      setTimeout(function(){
+        try{ if(typeof window.forceFollowMePreview === "function") window.forceFollowMePreview(url); }catch(e){}
+        try{ if(typeof window.updateSimpleDestinationPreview === "function") window.updateSimpleDestinationPreview(url); }catch(e){}
+      }, 80);
+
+      setTimeout(function(){
+        try{ if(typeof window.renderPremiumHistoryFromApi === "function") window.renderPremiumHistoryFromApi(); }catch(e){}
+        try{ if(typeof window.renderFollowMeEmergencyHistory === "function") window.renderFollowMeEmergencyHistory(); }catch(e){}
+        try{ if(typeof window.followmeNormalizeUniformPremiumCards20260522 === "function") window.followmeNormalizeUniformPremiumCards20260522(); }catch(e){}
+      }, 650);
+
+    }catch(err){
+      console.error("[FollowMe fast reactivate] errore:", err);
+      showToast("Errore riattivazione: " + (err.message || err));
+
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = btn.dataset.originalText20260622 || "Riattiva";
+      }
+
+    }finally{
+      setTimeout(function(){
+        running = false;
+      }, 500);
+    }
+  }
+
+  document.addEventListener("click", function(ev){
+    try{
+      if(!isReactivateButton(ev.target)) return;
+
+      var btn = ev.target.closest("button,a");
+      var card = findHistoryCard(btn || ev.target);
+      if(!card) return;
+
+      var url = findCardUrl(card, btn);
+      if(!url) return;
+
+      /*
+        Questo è il punto chiave:
+        blocco i vecchi handler duplicati e uso un solo flusso finale.
+      */
+      ev.preventDefault();
+      ev.stopPropagation();
+      if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+
+      activateNow(url, card, btn);
+
+    }catch(err){
+      console.warn("[FollowMe fast reactivate click] errore:", err);
+    }
+  }, true);
+
+  window.followmeFastReactivateController20260622 = activateNow;
+})();
+</script>
+
 </body>
 </html>
 
