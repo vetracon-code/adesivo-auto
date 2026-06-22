@@ -51321,3 +51321,171 @@ body.followme-chat-only-mode #fmAdminOneResetFinal20260527{
   setInterval(bind, 1000);
 })();
 </script>
+
+
+<script id="followme-absolute-final-direct-preview-20260622">
+(function(){
+  // FOLLOWME_ABSOLUTE_FINAL_DIRECT_PREVIEW_20260622
+  // Ultimo script assoluto: ripristina la preview diretta del safepoint.
+  // Non blocca app-me.it. Non usa fallback preventivo. Tenta sempre iframe diretto.
+
+  if(window.__FOLLOWME_ABSOLUTE_FINAL_DIRECT_PREVIEW_20260622__) return;
+  window.__FOLLOWME_ABSOLUTE_FINAL_DIRECT_PREVIEW_20260622__ = true;
+
+  function s(v){ return String(v || "").trim(); }
+
+  function norm(raw){
+    var u = s(raw);
+    if(!u) return "";
+    try{ u = decodeURIComponent(u); }catch(e){}
+    u = s(u);
+    if(/^https?:\/\//i.test(u)) return u;
+    if(u.charAt(0)==="/") return location.origin + u;
+    if(/^[a-z0-9.-]+\.[a-z]{2,}/i.test(u)) return "https://" + u;
+    return "";
+  }
+
+  function hide(id){
+    var el = document.getElementById(id);
+    if(el){
+      try{
+        el.style.display = "none";
+        if(el.classList) el.classList.remove("show");
+      }catch(e){}
+    }
+  }
+
+  function clearOverlays(){
+    [
+      "previewFallbackBox",
+      "followmePreviewBlockedDirectFallback20260612",
+      "followmeSingleRouterFallback20260622",
+      "followmeFinalPreviewFallback20260622",
+      "followmeExactPreviewFallback20260622",
+      "followmePassiveBlockedFallback20260622",
+      "followmePassiveBlockedFallbackV220260622",
+      "followmePreviewAlwaysVisible20260622",
+      "followmeReactivateInstantPreview20260622",
+      "followmeInstantCardPreviewShell20260622",
+      "followmePassivePreviewBanner20260622",
+      "followmePassiveExactBannerV220260622",
+      "followmeSingleRouterImage20260622",
+      "followmeFinalImagePreview20260622"
+    ].forEach(hide);
+  }
+
+  function setOpenButtons(url){
+    [
+      document.getElementById("simpleDestinationPreviewOpen"),
+      document.getElementById("openQrPreview"),
+      document.getElementById("followmeOtherOpenQrPreview")
+    ].filter(Boolean).forEach(function(a){
+      try{
+        if(String(a.tagName || "").toLowerCase()==="a"){
+          a.href = url || "#";
+          a.target = "_blank";
+          a.rel = "noopener";
+        }
+        a.style.opacity = url ? "1" : ".45";
+        a.style.pointerEvents = url ? "auto" : "none";
+        a.removeAttribute("disabled");
+      }catch(e){}
+    });
+  }
+
+  function render(raw){
+    var url = norm(raw);
+
+    clearOverlays();
+
+    var frame = document.getElementById("simpleDestinationPreviewFrame");
+    var empty = document.getElementById("simpleDestinationPreviewEmpty");
+    var active = document.getElementById("activeUrl");
+
+    if(active) active.textContent = url || "Nessun link impostato.";
+    if(empty) empty.style.display = url ? "none" : "flex";
+
+    setOpenButtons(url);
+
+    if(!frame){
+      console.warn("[FollowMe absolute preview] iframe non trovato");
+      return false;
+    }
+
+    frame.style.display = "block";
+    frame.style.visibility = "visible";
+    frame.style.opacity = "1";
+    frame.style.position = "relative";
+    frame.style.zIndex = "1";
+    frame.style.background = "#fff";
+    frame.style.pointerEvents = "auto";
+    frame.setAttribute("loading", "eager");
+
+    if(!url){
+      frame.src = "about:blank";
+      return false;
+    }
+
+    frame.src = "about:blank";
+    setTimeout(function(){
+      try{
+        frame.src = url;
+        console.log("[FollowMe absolute preview] frame.src =", url);
+      }catch(e){
+        console.warn("[FollowMe absolute preview] errore set frame:", e);
+      }
+    }, 30);
+
+    return true;
+  }
+
+  window.followmeAbsoluteFinalDirectPreview20260622 = render;
+  window.updateSimpleDestinationPreview = render;
+  window.forceFollowMePreview = render;
+
+  document.addEventListener("click", function(ev){
+    try{
+      var btn = ev.target && ev.target.closest
+        ? ev.target.closest(".premium-history-reactivate, .btn.small.secondary")
+        : null;
+
+      if(!btn) return;
+
+      var card = btn.closest(".premium-history-card,.history-item,[data-url],[data-history-url]");
+      var url = "";
+
+      if(card){
+        url = card.getAttribute("data-url") || card.getAttribute("data-history-url") || "";
+      }
+
+      if(!url){
+        var on = String(btn.getAttribute("onclick") || "");
+        var m = on.match(/reactivateUrl\(['"]([^'"]+)['"]\)/) ||
+                on.match(/activateUrlEmergency\(decodeURIComponent\(['"]([^'"]+)['"]\)\)/);
+        if(m && m[1]) url = m[1];
+      }
+
+      if(url) render(url);
+    }catch(e){}
+  }, true);
+
+  setTimeout(function(){
+    try{
+      var code = "";
+      var m = location.pathname.match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m) code = decodeURIComponent(m[1] || "").trim();
+      if(!code) return;
+
+      fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), { cache:"no-store" })
+        .then(function(r){ return r.json(); })
+        .then(function(data){
+          var url = data && data.project ? data.project.active_url : "";
+          if(url) render(url);
+        })
+        .catch(function(){});
+    }catch(e){}
+  }, 900);
+})();
+</script>
+<!-- FOLLOWME_ABSOLUTE_FINAL_DIRECT_PREVIEW_20260622: ultimo router preview diretto del file -->
+
