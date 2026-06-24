@@ -45424,37 +45424,29 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 
 
-
-<script id="followme-minimal-payhip-style-proxy-preview-20260624">
+<script id="followme-minimal-stable-preview-proxy-20260624">
 (function(){
   "use strict";
 
-  // FOLLOWME_MINIMAL_PAYHIP_STYLE_PROXY_PREVIEW_20260624
-  // Logica minima, stile Payhip:
-  // - un solo iframe;
-  // - nessuna riscrittura continua del campo newUrl;
-  // - AppMe/AppMeCard passano dal proxy interno;
-  // - Payhip e altri URL iframe-compatibili restano diretti;
-  // - documento e immagine usano le rotte FollowMe.
+  // FOLLOWME_MINIMAL_STABLE_PREVIEW_PROXY_20260624
+  // Unica logica finale di preview:
+  // - Payhip e URL compatibili: iframe diretto
+  // - app-me.it/appmecard.it: iframe via /fm/preview-proxy
+  // - documento/immagine: rotte FollowMe
+  // Non riscrive continuamente il campo newUrl.
 
-  if(window.__FOLLOWME_MINIMAL_PAYHIP_STYLE_PROXY_PREVIEW_20260624__) return;
-  window.__FOLLOWME_MINIMAL_PAYHIP_STYLE_PROXY_PREVIEW_20260624__ = true;
+  if(window.__FOLLOWME_MINIMAL_STABLE_PREVIEW_PROXY_20260624__) return;
+  window.__FOLLOWME_MINIMAL_STABLE_PREVIEW_PROXY_20260624__ = true;
 
   function clean(v){
     return String(v || "").trim();
   }
 
-  function getCode(){
+  function codeFromPath(){
     try{
       var m = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/i);
       if(m && m[1]) return decodeURIComponent(m[1]).trim();
     }catch(e){}
-
-    try{
-      var p = new URLSearchParams(location.search || "");
-      return clean(p.get("code") || p.get("public_id") || "");
-    }catch(e){}
-
     return "";
   }
 
@@ -45462,7 +45454,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     url = clean(url);
     if(!url) return "";
 
-    if(/^\/fm\/(?:document|image)\//i.test(url)) return url;
+    if(/^\/fm\/(?:document|image)\//i.test(url)){
+      return url;
+    }
 
     if(!/^https?:\/\//i.test(url) && !/^\/fm\//i.test(url)){
       url = "https://" + url;
@@ -45485,9 +45479,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     }
   }
 
-  function frameSrcFor(url){
+  function previewSrc(url){
     url = normalizeUrl(url);
-
     if(!url) return "about:blank";
 
     if(/^\/fm\/(?:document|image)\//i.test(url)){
@@ -45509,7 +45502,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     return document.getElementById("simpleDestinationPreviewEmpty");
   }
 
-  function openButton(){
+  function openBtn(){
     return document.getElementById("simpleDestinationPreviewOpen");
   }
 
@@ -45532,27 +45525,27 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     }catch(e){}
   }
 
-  function updateOpenButton(originalUrl){
+  function setOpenButton(original){
     try{
-      var b = openButton();
+      var b = openBtn();
       if(!b) return;
 
-      if(!originalUrl){
+      if(!original){
         b.href = "#";
         b.style.opacity = ".45";
         b.style.pointerEvents = "none";
         return;
       }
 
-      b.href = originalUrl.startsWith("/") ? window.location.origin + originalUrl : originalUrl;
+      b.href = original.startsWith("/") ? window.location.origin + original : original;
       b.target = "_blank";
       b.rel = "noopener";
       b.style.opacity = "1";
       b.style.pointerEvents = "auto";
 
-      if(/^\/fm\/document\//i.test(originalUrl)){
+      if(/^\/fm\/document\//i.test(original)){
         b.textContent = "Apri documento";
-      }else if(/^\/fm\/image\//i.test(originalUrl)){
+      }else if(/^\/fm\/image\//i.test(original)){
         b.textContent = "Apri immagine";
       }else{
         b.textContent = "Apri pagina in nuova scheda";
@@ -45560,11 +45553,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     }catch(e){}
   }
 
-  function renderPreview(url, scroll){
+  function showPreview(url, scroll){
     var original = normalizeUrl(url);
     if(!original) return false;
 
-    var src = frameSrcFor(original);
+    var src = previewSrc(original);
     var f = frame();
     var e = emptyBox();
 
@@ -45576,11 +45569,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     }catch(e){}
 
     try{
-      var activeText = document.getElementById("activeUrl");
-      if(activeText) activeText.textContent = original;
+      var active = document.getElementById("activeUrl");
+      if(active) active.textContent = original;
     }catch(e){}
 
-    updateOpenButton(original);
+    setOpenButton(original);
     hideFallbacks();
 
     if(e) e.style.display = "none";
@@ -45617,43 +45610,31 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     return true;
   }
 
-  function extractUrlFromJson(j){
+  async function loadActiveFromServer(){
     try{
-      if(!j) return "";
+      var code = codeFromPath();
+      if(!code) return;
 
-      return clean(
-        j.active_url ||
-        j.url ||
-        j.public_url ||
-        j.preview_url ||
-        j.document_url ||
-        j.image_url ||
-        (j.project && (j.project.active_url || j.project.url || j.project.current_url)) ||
-        (j.document && (j.document.public_url || j.document.url || j.document.preview_url)) ||
-        (j.image && (j.image.public_url || j.image.url || j.image.preview_url)) ||
-        (j.data && (j.data.active_url || j.data.public_url || j.data.url)) ||
-        ""
-      );
-    }catch(e){
-      return "";
-    }
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+      var active = data && data.success && data.project ? clean(data.project.active_url || "") : "";
+
+      if(active){
+        showPreview(active, false);
+      }
+    }catch(e){}
   }
 
-  function extractUrlFromElement(el){
+  function extractCardUrl(el){
     try{
       if(!el || !el.closest) return "";
 
       var card = el.closest(
-        "[data-history-url]," +
-        "[data-url]," +
-        "[data-preview-url]," +
-        "[data-document-url]," +
-        "[data-image-url]," +
-        ".history-item," +
-        ".premium-history-card," +
-        ".followme-history-card," +
-        ".document-card," +
-        ".image-card"
+        "[data-history-url],[data-url],[data-preview-url],[data-document-url],[data-image-url]," +
+        ".history-item,.premium-history-card,.followme-history-card,.document-card,.image-card"
       );
 
       if(!card) return "";
@@ -45675,123 +45656,74 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
       }
 
       var txt = clean(card.textContent || "");
-
       var fm = txt.match(/\/fm\/(?:document|image)\/[A-Za-z0-9_-]+/i);
       if(fm && fm[0]) return fm[0];
 
-      var url = txt.match(/https?:\/\/[^\s<>"']+/i);
-      if(url && url[0]) return url[0];
+      var u = txt.match(/https?:\/\/[^\s<>"']+/i);
+      if(u && u[0]) return u[0];
 
     }catch(e){}
 
     return "";
   }
 
-  async function renderServerActiveUrl(){
-    try{
-      var code = getCode();
-      if(!code) return;
-
-      var r = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
-        cache:"no-store"
-      });
-
-      var j = await r.json().catch(function(){ return null; });
-      var active = j && j.success && j.project ? clean(j.project.active_url || "") : "";
-
-      if(active) renderPreview(active, false);
-    }catch(e){}
-  }
-
   window.updateSimpleDestinationPreview = function(url){
-    return renderPreview(url, false);
+    return showPreview(url, false);
   };
-  window.updateSimpleDestinationPreview.__minimalPayhipStyleProxy20260624 = true;
+  window.updateSimpleDestinationPreview.__minimalStablePreviewProxy20260624 = true;
 
   window.forceFollowMePreview = function(url){
-    return renderPreview(url, false);
+    return showPreview(url, false);
   };
-  window.forceFollowMePreview.__minimalPayhipStyleProxy20260624 = true;
+  window.forceFollowMePreview.__minimalStablePreviewProxy20260624 = true;
 
   window.followMePreviewImmediate20260529 = function(url){
-    return renderPreview(url, true);
+    return showPreview(url, true);
   };
-  window.followMePreviewImmediate20260529.__minimalPayhipStyleProxy20260624 = true;
+  window.followMePreviewImmediate20260529.__minimalStablePreviewProxy20260624 = true;
 
   document.addEventListener("click", function(ev){
     try{
       var btn = ev.target && ev.target.closest ? ev.target.closest("button,a,[role='button']") : null;
       if(!btn) return;
 
-      var text = clean(btn.textContent || "").toLowerCase();
+      var txt = clean(btn.textContent || "").toLowerCase();
       var onclick = clean(btn.getAttribute && btn.getAttribute("onclick") || "");
 
-      var isRelevant =
-        text.indexOf("attiva") >= 0 ||
-        text.indexOf("attivalo") >= 0 ||
-        text.indexOf("anteprima") >= 0 ||
-        text.indexOf("preview") >= 0 ||
+      var relevant =
+        txt.indexOf("attiva") >= 0 ||
+        txt.indexOf("attivalo") >= 0 ||
+        txt.indexOf("anteprima") >= 0 ||
+        txt.indexOf("preview") >= 0 ||
         onclick.indexOf("activate") >= 0 ||
         onclick.indexOf("reactivate") >= 0 ||
         onclick.indexOf("preview") >= 0;
 
-      if(!isRelevant) return;
+      if(!relevant) return;
 
-      var u = extractUrlFromElement(btn);
-      if(u) renderPreview(u, true);
+      var url = extractCardUrl(btn);
+      if(url) showPreview(url, true);
     }catch(e){}
   }, true);
 
-  if(window.fetch && !window.fetch.__minimalPayhipStyleProxy20260624){
-    var originalFetch = window.fetch.bind(window);
-
-    window.fetch = async function(){
-      var response = await originalFetch.apply(this, arguments);
-
-      try{
-        var req = String(arguments && arguments[0] || "");
-
-        if(req.indexOf("/api/followme/") >= 0){
-          response.clone().json().then(function(j){
-            var u = extractUrlFromJson(j);
-            if(u){
-              setTimeout(function(){ renderPreview(u, false); }, 120);
-              setTimeout(function(){ renderPreview(u, false); }, 750);
-            }else if(
-              req.indexOf("/update-url") >= 0 ||
-              req.indexOf("/document") >= 0 ||
-              req.indexOf("/image") >= 0
-            ){
-              setTimeout(renderServerActiveUrl, 350);
-            }
-          }).catch(function(){});
-        }
-      }catch(e){}
-
-      return response;
-    };
-
-    window.fetch.__minimalPayhipStyleProxy20260624 = true;
-  }
-
   if(document.readyState === "loading"){
     document.addEventListener("DOMContentLoaded", function(){
-      setTimeout(renderServerActiveUrl, 150);
-      setTimeout(renderServerActiveUrl, 900);
+      setTimeout(loadActiveFromServer, 120);
+      setTimeout(loadActiveFromServer, 900);
     });
   }else{
-    setTimeout(renderServerActiveUrl, 150);
-    setTimeout(renderServerActiveUrl, 900);
+    setTimeout(loadActiveFromServer, 120);
+    setTimeout(loadActiveFromServer, 900);
   }
 
   window.addEventListener("pageshow", function(){
-    setTimeout(renderServerActiveUrl, 150);
+    setTimeout(loadActiveFromServer, 150);
   });
 
 })();
 </script>
 
-<!-- FOLLOWME_MINIMAL_PAYHIP_STYLE_PROXY_PREVIEW_20260624 -->
+<!-- FOLLOWME_MINIMAL_STABLE_PREVIEW_PROXY_20260624 -->
 
 </body>
 </html>
