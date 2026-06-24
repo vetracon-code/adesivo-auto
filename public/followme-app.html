@@ -46050,6 +46050,402 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 <!-- FOLLOWME_PREVIEW_PROXY_FRONTEND_APPME_20260624 -->
 
+
+<script id="followme-final-active-url-preview-authority-proxy-20260624">
+(function(){
+  "use strict";
+
+  // FOLLOWME_FINAL_ACTIVE_URL_PREVIEW_AUTHORITY_PROXY_20260624
+  // Controller finale autoritativo:
+  // - la preview deve seguire active_url reale del server;
+  // - per app-me.it/appmecard.it usa il proxy interno;
+  // - impedisce ai vecchi controller di riportare l'iframe a Payhip o ad altri URL storici.
+
+  if(window.__FOLLOWME_FINAL_ACTIVE_URL_PREVIEW_AUTHORITY_PROXY_20260624__) return;
+  window.__FOLLOWME_FINAL_ACTIVE_URL_PREVIEW_AUTHORITY_PROXY_20260624__ = true;
+
+  var state = {
+    code: "",
+    originalUrl: "",
+    previewSrc: "",
+    lastStatusAt: 0,
+    enforceUntil: Date.now() + 45000
+  };
+
+  function clean(v){
+    return String(v || "").trim();
+  }
+
+  function normalizeUrl(v){
+    v = clean(v);
+    if(!v) return "";
+
+    if(/^\/fm\/(?:document|image)\//i.test(v)){
+      return v;
+    }
+
+    if(!/^https?:\/\//i.test(v) && !/^\/fm\//i.test(v)){
+      v = "https://" + v;
+    }
+
+    return v;
+  }
+
+  function isAppMeProxyDomain(url){
+    try{
+      var h = new URL(String(url || "")).hostname.toLowerCase().replace(/^www\./, "");
+      return (
+        h === "app-me.it" ||
+        h.endsWith(".app-me.it") ||
+        h === "appmecard.it" ||
+        h.endsWith(".appmecard.it")
+      );
+    }catch(e){
+      return false;
+    }
+  }
+
+  function previewSrcFor(url){
+    url = normalizeUrl(url);
+
+    if(/^https?:\/\//i.test(url) && isAppMeProxyDomain(url)){
+      return window.location.origin + "/fm/preview-proxy?url=" + encodeURIComponent(url);
+    }
+
+    return url;
+  }
+
+  function frame(){
+    return document.getElementById("simpleDestinationPreviewFrame");
+  }
+
+  function emptyBox(){
+    return document.getElementById("simpleDestinationPreviewEmpty");
+  }
+
+  function openBtn(){
+    return document.getElementById("simpleDestinationPreviewOpen");
+  }
+
+  function getCode(){
+    if(state.code) return state.code;
+
+    try{
+      var m = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m && m[1]) {
+        state.code = decodeURIComponent(m[1]).trim();
+        return state.code;
+      }
+    }catch(e){}
+
+    try{
+      var p = new URLSearchParams(location.search || "");
+      state.code = clean(p.get("code") || p.get("public_id") || "");
+    }catch(e){}
+
+    return state.code;
+  }
+
+  function hideOldFallbacks(){
+    try{
+      Array.prototype.slice.call(document.querySelectorAll(
+        "#previewFallbackBox," +
+        "#followmePreviewBlockedDirectFallback20260612," +
+        ".preview-fallback-box," +
+        ".followme-clean-preview-fallback-20260612"
+      )).forEach(function(el){
+        try{
+          el.classList.remove("show");
+          el.style.display = "none";
+          el.style.visibility = "hidden";
+          el.style.opacity = "0";
+          el.setAttribute("aria-hidden", "true");
+        }catch(e){}
+      });
+    }catch(e){}
+  }
+
+  function setOpen(url){
+    try{
+      var b = openBtn();
+      if(!b) return;
+
+      if(url){
+        b.href = url;
+        b.target = "_blank";
+        b.rel = "noopener";
+        b.style.opacity = "1";
+        b.style.pointerEvents = "auto";
+        b.textContent = /^\/fm\/(?:document|image)\//i.test(url) ? "Apri contenuto" : "Apri pagina in nuova scheda";
+      }else{
+        b.href = "#";
+        b.style.opacity = ".45";
+        b.style.pointerEvents = "none";
+      }
+    }catch(e){}
+  }
+
+  function setTexts(url){
+    try{
+      var el = document.getElementById("activeUrl");
+      if(el && url) el.textContent = url;
+    }catch(e){}
+
+    try{
+      var input = document.getElementById("newUrl");
+      if(input && url && document.activeElement !== input) input.value = url;
+    }catch(e){}
+  }
+
+  function looksWrongCurrentSrc(current, expected){
+    current = clean(current);
+    expected = clean(expected);
+
+    if(!expected) return false;
+    if(!current || current === "about:blank") return true;
+    if(current === expected) return false;
+
+    // Se expected è proxy app-me/appmecard, ogni Payhip o URL diretto AppMe non deve restare.
+    if(expected.indexOf("/fm/preview-proxy?url=") >= 0) {
+      return true;
+    }
+
+    return current !== expected;
+  }
+
+  function applyPreview(url, reason){
+    url = normalizeUrl(url);
+    if(!url) return false;
+
+    var src = previewSrcFor(url);
+
+    state.originalUrl = url;
+    state.previewSrc = src;
+    state.enforceUntil = Date.now() + 45000;
+
+    try{
+      window.__followMeActiveUrl = url;
+      window.followMeCurrentActiveUrl = url;
+      window.currentFollowMeActiveUrl = url;
+      window.__followMePreviewWantedUrl = url;
+      window.FOLLOWME_ACTIVE_URL = url;
+    }catch(e){}
+
+    setTexts(url);
+    setOpen(url);
+    hideOldFallbacks();
+
+    var e = emptyBox();
+    if(e) e.style.display = "none";
+
+    var f = frame();
+    if(!f) return false;
+
+    try{
+      f.style.display = "block";
+      f.style.visibility = "visible";
+      f.style.opacity = "1";
+      f.setAttribute("loading", "eager");
+
+      var current = f.getAttribute("src") || "";
+      if(looksWrongCurrentSrc(current, src)){
+        f.src = "about:blank";
+        setTimeout(function(){
+          try{
+            hideOldFallbacks();
+            f.src = src;
+          }catch(e){}
+        }, 40);
+      }
+    }catch(e){}
+
+    return true;
+  }
+
+  async function refreshFromServer(reason){
+    try{
+      var code = getCode();
+      if(!code) return;
+
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+      var url = data && data.success && data.project ? clean(data.project.active_url || "") : "";
+
+      if(url){
+        state.lastStatusAt = Date.now();
+        applyPreview(url, reason || "status");
+      }
+    }catch(e){}
+  }
+
+  function extractUrlFromAnyResponse(data){
+    try{
+      if(!data) return "";
+
+      return clean(
+        data.active_url ||
+        data.url ||
+        data.destination_url ||
+        data.new_url ||
+        (data.project && (data.project.active_url || data.project.url || data.project.current_url)) ||
+        (data.data && (data.data.active_url || data.data.url || data.data.current_url)) ||
+        ""
+      );
+    }catch(e){
+      return "";
+    }
+  }
+
+  function patchPreviewFunctions(){
+    try{
+      window.updateSimpleDestinationPreview = function(url){
+        return applyPreview(url || state.originalUrl, "updateSimpleDestinationPreview");
+      };
+      window.updateSimpleDestinationPreview.__finalActiveUrlAuthorityProxy20260624 = true;
+    }catch(e){}
+
+    try{
+      window.forceFollowMePreview = function(url){
+        return applyPreview(url || state.originalUrl, "forceFollowMePreview");
+      };
+      window.forceFollowMePreview.__finalActiveUrlAuthorityProxy20260624 = true;
+    }catch(e){}
+
+    try{
+      window.followMePreviewImmediate20260529 = function(url){
+        return applyPreview(url || state.originalUrl, "followMePreviewImmediate");
+      };
+      window.followMePreviewImmediate20260529.__finalActiveUrlAuthorityProxy20260624 = true;
+    }catch(e){}
+  }
+
+  function patchFetch(){
+    try{
+      if(!window.fetch || window.fetch.__finalActiveUrlAuthorityProxy20260624) return;
+
+      var originalFetch = window.fetch.bind(window);
+
+      window.fetch = async function(){
+        var response = await originalFetch.apply(this, arguments);
+
+        try{
+          var reqUrl = String(arguments && arguments[0] || "");
+          if(
+            reqUrl.indexOf("/api/followme/") >= 0 &&
+            (
+              reqUrl.indexOf("/status") >= 0 ||
+              reqUrl.indexOf("/update-url") >= 0 ||
+              reqUrl.indexOf("/safe-browsing") >= 0
+            )
+          ){
+            response.clone().json().then(function(data){
+              var url = extractUrlFromAnyResponse(data);
+              if(url) {
+                setTimeout(function(){ applyPreview(url, "fetch-response"); }, 80);
+                setTimeout(function(){ applyPreview(url, "fetch-response-late"); }, 700);
+              }else{
+                setTimeout(function(){ refreshFromServer("fetch-refresh"); }, 350);
+              }
+            }).catch(function(){});
+          }
+        }catch(e){}
+
+        return response;
+      };
+
+      window.fetch.__finalActiveUrlAuthorityProxy20260624 = true;
+    }catch(e){}
+  }
+
+  function installFrameSrcGuard(){
+    try{
+      var proto = window.HTMLIFrameElement && window.HTMLIFrameElement.prototype;
+      if(!proto || proto.__finalActiveUrlAuthorityProxy20260624) return;
+
+      var desc = Object.getOwnPropertyDescriptor(proto, "src");
+      if(!desc || !desc.set || !desc.get) return;
+
+      Object.defineProperty(proto, "src", {
+        configurable:true,
+        enumerable:desc.enumerable,
+        get:function(){
+          return desc.get.call(this);
+        },
+        set:function(value){
+          try{
+            if(this && this.id === "simpleDestinationPreviewFrame" && state.previewSrc){
+              var incoming = clean(value);
+              var expected = clean(state.previewSrc);
+
+              if(
+                incoming &&
+                incoming !== "about:blank" &&
+                incoming !== expected &&
+                Date.now() < state.enforceUntil
+              ){
+                return desc.set.call(this, expected);
+              }
+            }
+          }catch(e){}
+
+          return desc.set.call(this, value);
+        }
+      });
+
+      proto.__finalActiveUrlAuthorityProxy20260624 = true;
+    }catch(e){}
+  }
+
+  function enforceLoop(){
+    try{
+      patchPreviewFunctions();
+
+      if(state.originalUrl && state.previewSrc){
+        var f = frame();
+        if(f){
+          var current = f.getAttribute("src") || "";
+          if(looksWrongCurrentSrc(current, state.previewSrc)){
+            applyPreview(state.originalUrl, "enforce-loop");
+          }
+        }
+      }
+
+      if(!state.originalUrl || Date.now() - state.lastStatusAt > 8000){
+        refreshFromServer("periodic");
+      }
+    }catch(e){}
+  }
+
+  function start(){
+    patchFetch();
+    patchPreviewFunctions();
+    installFrameSrcGuard();
+
+    setTimeout(function(){ refreshFromServer("start-1"); }, 80);
+    setTimeout(function(){ refreshFromServer("start-2"); }, 650);
+    setTimeout(function(){ refreshFromServer("start-3"); }, 1800);
+
+    setInterval(enforceLoop, 650);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", start);
+  }else{
+    start();
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(function(){ refreshFromServer("pageshow"); }, 120);
+  });
+
+})();
+</script>
+
+<!-- FOLLOWME_FINAL_ACTIVE_URL_PREVIEW_AUTHORITY_PROXY_20260624 -->
+
 </body>
 </html>
 
