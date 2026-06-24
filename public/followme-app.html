@@ -45423,6 +45423,333 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 </script>
 
 
+
+<script id="followme-payhip-iframe-preview-for-all-external-20260624">
+(function(){
+  "use strict";
+
+  // FOLLOWME_PAYHIP_IFRAME_PREVIEW_FOR_ALL_EXTERNAL_20260624
+  // Replica per tutti gli URL esterni il comportamento che funziona con Payhip:
+  // preview immediata via iframe, prima della verifica Safe Browsing.
+  // Safe Browsing resta lato salvataggio/server, ma non deve bloccare la preview UI.
+
+  if(window.__FOLLOWME_PAYHIP_IFRAME_PREVIEW_FOR_ALL_EXTERNAL_20260624__) return;
+  window.__FOLLOWME_PAYHIP_IFRAME_PREVIEW_FOR_ALL_EXTERNAL_20260624__ = true;
+
+  function clean(v){
+    return String(v || "").trim();
+  }
+
+  function normalizeUrl(v){
+    v = clean(v);
+    if(!v) return "";
+    if(/^\/fm\/document\//i.test(v)) return v;
+    if(/^\/fm\/image\//i.test(v)) return v;
+    if(!/^https?:\/\//i.test(v) && !/^\/fm\//i.test(v)){
+      v = "https://" + v;
+    }
+    return v;
+  }
+
+  function isExternal(url){
+    return /^https?:\/\//i.test(clean(url));
+  }
+
+  function isInternalFollowMe(url){
+    return /^\/fm\/(?:document|image)\//i.test(clean(url));
+  }
+
+  function hostOf(url){
+    try{
+      return new URL(url).hostname.replace(/^www\./i, "");
+    }catch(e){
+      return "";
+    }
+  }
+
+  function frame(){
+    return document.getElementById("simpleDestinationPreviewFrame");
+  }
+
+  function empty(){
+    return document.getElementById("simpleDestinationPreviewEmpty");
+  }
+
+  function openBtn(){
+    return document.getElementById("simpleDestinationPreviewOpen");
+  }
+
+  function fallbackBoxes(){
+    return Array.prototype.slice.call(document.querySelectorAll(
+      "#previewFallbackBox," +
+      "#followmePreviewBlockedDirectFallback20260612," +
+      ".preview-fallback-box," +
+      ".followme-clean-preview-fallback-20260612"
+    ));
+  }
+
+  function hideFallbacks(){
+    fallbackBoxes().forEach(function(el){
+      try{
+        el.classList.remove("show");
+        el.style.display = "none";
+        el.style.visibility = "hidden";
+        el.style.opacity = "0";
+        el.setAttribute("aria-hidden", "true");
+      }catch(e){}
+    });
+  }
+
+  function setOpen(url){
+    var b = openBtn();
+    if(!b) return;
+
+    if(url){
+      b.href = url;
+      b.style.opacity = "1";
+      b.style.pointerEvents = "auto";
+      b.textContent = isInternalFollowMe(url) ? "Apri contenuto" : "Apri pagina in nuova scheda";
+    }else{
+      b.href = "#";
+      b.style.opacity = ".45";
+      b.style.pointerEvents = "none";
+    }
+  }
+
+  function setActiveText(url){
+    try{
+      var el = document.getElementById("activeUrl");
+      if(el && url) el.textContent = url;
+    }catch(e){}
+  }
+
+  function scrollPreviewSoft(){
+    try{
+      var block = document.getElementById("simpleDestinationPreviewBlock");
+      if(block) setTimeout(function(){
+        try{ block.scrollIntoView({behavior:"smooth", block:"center"}); }catch(e){}
+      }, 60);
+    }catch(e){}
+  }
+
+  function renderPayhipLike(url, shouldScroll){
+    url = normalizeUrl(url);
+
+    var f = frame();
+    var e = empty();
+
+    if(!url){
+      if(f) f.src = "about:blank";
+      if(e) e.style.display = "flex";
+      setOpen("");
+      hideFallbacks();
+      return false;
+    }
+
+    setActiveText(url);
+    setOpen(url);
+
+    try{
+      window.__followMeActiveUrl = url;
+      window.followMeCurrentActiveUrl = url;
+      window.currentFollowMeActiveUrl = url;
+      window.__followMePreviewWantedUrl = url;
+    }catch(e){}
+
+    if(e) e.style.display = "none";
+
+    /*
+      Comportamento Payhip esatto per tutti gli URL esterni:
+      iframe immediato, nessun fallback preventivo, nessuna attesa Safe Browsing.
+    */
+    if(isExternal(url)){
+      hideFallbacks();
+
+      if(f){
+        try{
+          f.style.display = "block";
+          f.style.visibility = "visible";
+          f.style.opacity = "1";
+          f.setAttribute("loading", "eager");
+
+          var current = f.getAttribute("src") || "";
+          if(current !== url){
+            f.src = "about:blank";
+            setTimeout(function(){
+              try{
+                hideFallbacks();
+                f.src = url;
+              }catch(e){}
+            }, 30);
+          }
+        }catch(e){}
+      }
+
+      if(shouldScroll) scrollPreviewSoft();
+      return true;
+    }
+
+    /*
+      Per documento/immagine FollowMe non forziamo card esterne:
+      lasciamo comunque il pulsante corretto e il vecchio sistema dedicato.
+    */
+    if(isInternalFollowMe(url)){
+      hideFallbacks();
+      if(f){
+        try{
+          f.style.display = "block";
+          f.src = url;
+        }catch(e){}
+      }
+      if(shouldScroll) scrollPreviewSoft();
+      return true;
+    }
+
+    return false;
+  }
+
+  function extractUrlFromCard(el){
+    try{
+      if(!el) return "";
+
+      var card = el.closest ? el.closest("[data-history-url],[data-url],.history-item,.premium-history-card") : null;
+
+      if(card){
+        var d = card.getAttribute("data-history-url") || card.getAttribute("data-url") || "";
+        if(d) return clean(d);
+
+        var strong = card.querySelector("strong");
+        if(strong && /^(https?:\/\/|\/fm\/)/i.test(clean(strong.textContent))){
+          return clean(strong.textContent);
+        }
+
+        var txt = clean(card.textContent || "");
+        var m = txt.match(/https?:\/\/[^\s<>"']+/i);
+        if(m && m[0]) return clean(m[0]);
+        var i = txt.match(/\/fm\/(?:document|image)\/[A-Za-z0-9_-]+/i);
+        if(i && i[0]) return clean(i[0]);
+      }
+    }catch(e){}
+    return "";
+  }
+
+  function getInputUrl(){
+    try{
+      var input = document.getElementById("newUrl");
+      return input ? clean(input.value || "") : "";
+    }catch(e){
+      return "";
+    }
+  }
+
+  /*
+    Override finale delle funzioni preview:
+    qualsiasi vecchio controller che richiama updateSimpleDestinationPreview
+    passa da qui.
+  */
+  window.followMeRenderPayhipLikePreview20260624 = function(url){
+    return renderPayhipLike(url, true);
+  };
+
+  window.updateSimpleDestinationPreview = function(url){
+    return renderPayhipLike(url, false);
+  };
+  window.updateSimpleDestinationPreview.__payhipLikeAllExternal20260624 = true;
+
+  window.forceFollowMePreview = function(url){
+    return renderPayhipLike(url, false);
+  };
+  window.forceFollowMePreview.__payhipLikeAllExternal20260624 = true;
+
+  window.followMePreviewImmediate20260529 = function(url){
+    return renderPayhipLike(url, true);
+  };
+  window.followMePreviewImmediate20260529.__payhipLikeAllExternal20260624 = true;
+
+  /*
+    Intercetta il click sulle card prima degli handler vecchi:
+    mostra subito la preview Payhip-like, poi lascia continuare il salvataggio.
+  */
+  document.addEventListener("click", function(ev){
+    try{
+      var target = ev.target;
+      if(!target || !target.closest) return;
+
+      var btn = target.closest("button,a");
+      if(!btn) return;
+
+      var txt = clean(btn.textContent || "").toLowerCase();
+      var isActivate =
+        txt.indexOf("attivalo") >= 0 ||
+        txt.indexOf("attiva") >= 0 ||
+        String(btn.getAttribute("onclick") || "").indexOf("reactivateUrl") >= 0 ||
+        String(btn.getAttribute("onclick") || "").indexOf("activateUrlEmergency") >= 0;
+
+      if(!isActivate) return;
+
+      var url = extractUrlFromCard(btn);
+      if(url) renderPayhipLike(url, true);
+    }catch(e){}
+  }, true);
+
+  /*
+    Intercetta il pulsante Aggiorna QR:
+    preview immediata prima della chiamata API / Safe Browsing.
+  */
+  document.addEventListener("click", function(ev){
+    try{
+      var btn = ev.target && ev.target.closest ? ev.target.closest("#updateDestinationBtn") : null;
+      if(!btn) return;
+
+      var url = getInputUrl();
+      if(url) renderPayhipLike(url, true);
+    }catch(e){}
+  }, true);
+
+  /*
+    Se il server ha già active_url, lo mostriamo subito con la stessa logica.
+  */
+  async function refreshFromServer(){
+    try{
+      var code = "";
+      var m = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m && m[1]) code = decodeURIComponent(m[1]).trim();
+      if(!code){
+        var p = new URLSearchParams(location.search || "");
+        code = clean(p.get("code") || p.get("public_id") || "");
+      }
+      if(!code) return;
+
+      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
+        cache:"no-store"
+      });
+
+      var data = await res.json().catch(function(){ return null; });
+      var url = data && data.success && data.project ? clean(data.project.active_url || "") : "";
+
+      if(url) renderPayhipLike(url, false);
+    }catch(e){}
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", function(){
+      setTimeout(refreshFromServer, 120);
+      setTimeout(refreshFromServer, 700);
+    });
+  }else{
+    setTimeout(refreshFromServer, 120);
+    setTimeout(refreshFromServer, 700);
+  }
+
+  window.addEventListener("pageshow", function(){
+    setTimeout(refreshFromServer, 200);
+  });
+
+})();
+</script>
+
+<!-- FOLLOWME_PAYHIP_IFRAME_PREVIEW_FOR_ALL_EXTERNAL_20260624 -->
+
 </body>
 </html>
 
