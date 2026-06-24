@@ -45424,676 +45424,56 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 
 
-<script id="followme-payhip-iframe-preview-for-all-external-20260624">
+
+<script id="followme-minimal-payhip-style-proxy-preview-20260624">
 (function(){
   "use strict";
 
-  // FOLLOWME_PAYHIP_IFRAME_PREVIEW_FOR_ALL_EXTERNAL_20260624
-  // Replica per tutti gli URL esterni il comportamento che funziona con Payhip:
-  // preview immediata via iframe, prima della verifica Safe Browsing.
-  // Safe Browsing resta lato salvataggio/server, ma non deve bloccare la preview UI.
+  // FOLLOWME_MINIMAL_PAYHIP_STYLE_PROXY_PREVIEW_20260624
+  // Logica minima, stile Payhip:
+  // - un solo iframe;
+  // - nessuna riscrittura continua del campo newUrl;
+  // - AppMe/AppMeCard passano dal proxy interno;
+  // - Payhip e altri URL iframe-compatibili restano diretti;
+  // - documento e immagine usano le rotte FollowMe.
 
-  if(window.__FOLLOWME_PAYHIP_IFRAME_PREVIEW_FOR_ALL_EXTERNAL_20260624__) return;
-  window.__FOLLOWME_PAYHIP_IFRAME_PREVIEW_FOR_ALL_EXTERNAL_20260624__ = true;
+  if(window.__FOLLOWME_MINIMAL_PAYHIP_STYLE_PROXY_PREVIEW_20260624__) return;
+  window.__FOLLOWME_MINIMAL_PAYHIP_STYLE_PROXY_PREVIEW_20260624__ = true;
 
   function clean(v){
     return String(v || "").trim();
   }
 
-  function normalizeUrl(v){
-    v = clean(v);
-    if(!v) return "";
-    if(/^\/fm\/document\//i.test(v)) return v;
-    if(/^\/fm\/image\//i.test(v)) return v;
-    if(!/^https?:\/\//i.test(v) && !/^\/fm\//i.test(v)){
-      v = "https://" + v;
-    }
-    return v;
-  }
-
-  function isExternal(url){
-    return /^https?:\/\//i.test(clean(url));
-  }
-
-  function isInternalFollowMe(url){
-    return /^\/fm\/(?:document|image)\//i.test(clean(url));
-  }
-
-  function hostOf(url){
+  function getCode(){
     try{
-      return new URL(url).hostname.replace(/^www\./i, "");
-    }catch(e){
-      return "";
-    }
-  }
-
-  function frame(){
-    return document.getElementById("simpleDestinationPreviewFrame");
-  }
-
-  function empty(){
-    return document.getElementById("simpleDestinationPreviewEmpty");
-  }
-
-  function openBtn(){
-    return document.getElementById("simpleDestinationPreviewOpen");
-  }
-
-  function fallbackBoxes(){
-    return Array.prototype.slice.call(document.querySelectorAll(
-      "#previewFallbackBox," +
-      "#followmePreviewBlockedDirectFallback20260612," +
-      ".preview-fallback-box," +
-      ".followme-clean-preview-fallback-20260612"
-    ));
-  }
-
-  function hideFallbacks(){
-    fallbackBoxes().forEach(function(el){
-      try{
-        el.classList.remove("show");
-        el.style.display = "none";
-        el.style.visibility = "hidden";
-        el.style.opacity = "0";
-        el.setAttribute("aria-hidden", "true");
-      }catch(e){}
-    });
-  }
-
-  function setOpen(url){
-    var b = openBtn();
-    if(!b) return;
-
-    if(url){
-      b.href = url;
-      b.style.opacity = "1";
-      b.style.pointerEvents = "auto";
-      b.textContent = isInternalFollowMe(url) ? "Apri contenuto" : "Apri pagina in nuova scheda";
-    }else{
-      b.href = "#";
-      b.style.opacity = ".45";
-      b.style.pointerEvents = "none";
-    }
-  }
-
-  function setActiveText(url){
-    try{
-      var el = document.getElementById("activeUrl");
-      if(el && url) el.textContent = url;
-    }catch(e){}
-  }
-
-  function scrollPreviewSoft(){
-    try{
-      var block = document.getElementById("simpleDestinationPreviewBlock");
-      if(block) setTimeout(function(){
-        try{ block.scrollIntoView({behavior:"smooth", block:"center"}); }catch(e){}
-      }, 60);
-    }catch(e){}
-  }
-
-  function renderPayhipLike(url, shouldScroll){
-    url = normalizeUrl(url);
-
-    var f = frame();
-    var e = empty();
-
-    if(!url){
-      if(f) f.src = "about:blank";
-      if(e) e.style.display = "flex";
-      setOpen("");
-      hideFallbacks();
-      return false;
-    }
-
-    setActiveText(url);
-    setOpen(url);
-
-    try{
-      window.__followMeActiveUrl = url;
-      window.followMeCurrentActiveUrl = url;
-      window.currentFollowMeActiveUrl = url;
-      window.__followMePreviewWantedUrl = url;
+      var m = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/i);
+      if(m && m[1]) return decodeURIComponent(m[1]).trim();
     }catch(e){}
 
-    if(e) e.style.display = "none";
-
-    /*
-      Comportamento Payhip esatto per tutti gli URL esterni:
-      iframe immediato, nessun fallback preventivo, nessuna attesa Safe Browsing.
-    */
-    if(isExternal(url)){
-      hideFallbacks();
-
-      if(f){
-        try{
-          f.style.display = "block";
-          f.style.visibility = "visible";
-          f.style.opacity = "1";
-          f.setAttribute("loading", "eager");
-
-          var current = f.getAttribute("src") || "";
-          if(current !== url){
-            f.src = "about:blank";
-            setTimeout(function(){
-              try{
-                hideFallbacks();
-                f.src = url;
-              }catch(e){}
-            }, 30);
-          }
-        }catch(e){}
-      }
-
-      if(shouldScroll) scrollPreviewSoft();
-      return true;
-    }
-
-    /*
-      Per documento/immagine FollowMe non forziamo card esterne:
-      lasciamo comunque il pulsante corretto e il vecchio sistema dedicato.
-    */
-    if(isInternalFollowMe(url)){
-      hideFallbacks();
-      if(f){
-        try{
-          f.style.display = "block";
-          f.src = url;
-        }catch(e){}
-      }
-      if(shouldScroll) scrollPreviewSoft();
-      return true;
-    }
-
-    return false;
-  }
-
-  function extractUrlFromCard(el){
     try{
-      if(!el) return "";
-
-      var card = el.closest ? el.closest("[data-history-url],[data-url],.history-item,.premium-history-card") : null;
-
-      if(card){
-        var d = card.getAttribute("data-history-url") || card.getAttribute("data-url") || "";
-        if(d) return clean(d);
-
-        var strong = card.querySelector("strong");
-        if(strong && /^(https?:\/\/|\/fm\/)/i.test(clean(strong.textContent))){
-          return clean(strong.textContent);
-        }
-
-        var txt = clean(card.textContent || "");
-        var m = txt.match(/https?:\/\/[^\s<>"']+/i);
-        if(m && m[0]) return clean(m[0]);
-        var i = txt.match(/\/fm\/(?:document|image)\/[A-Za-z0-9_-]+/i);
-        if(i && i[0]) return clean(i[0]);
-      }
+      var p = new URLSearchParams(location.search || "");
+      return clean(p.get("code") || p.get("public_id") || "");
     }catch(e){}
+
     return "";
   }
 
-  function getInputUrl(){
-    try{
-      var input = document.getElementById("newUrl");
-      return input ? clean(input.value || "") : "";
-    }catch(e){
-      return "";
-    }
-  }
+  function normalizeUrl(url){
+    url = clean(url);
+    if(!url) return "";
 
-  /*
-    Override finale delle funzioni preview:
-    qualsiasi vecchio controller che richiama updateSimpleDestinationPreview
-    passa da qui.
-  */
-  window.followMeRenderPayhipLikePreview20260624 = function(url){
-    return renderPayhipLike(url, true);
-  };
+    if(/^\/fm\/(?:document|image)\//i.test(url)) return url;
 
-  window.updateSimpleDestinationPreview = function(url){
-    return renderPayhipLike(url, false);
-  };
-  window.updateSimpleDestinationPreview.__payhipLikeAllExternal20260624 = true;
-
-  window.forceFollowMePreview = function(url){
-    return renderPayhipLike(url, false);
-  };
-  window.forceFollowMePreview.__payhipLikeAllExternal20260624 = true;
-
-  window.followMePreviewImmediate20260529 = function(url){
-    return renderPayhipLike(url, true);
-  };
-  window.followMePreviewImmediate20260529.__payhipLikeAllExternal20260624 = true;
-
-  /*
-    Intercetta il click sulle card prima degli handler vecchi:
-    mostra subito la preview Payhip-like, poi lascia continuare il salvataggio.
-  */
-  document.addEventListener("click", function(ev){
-    try{
-      var target = ev.target;
-      if(!target || !target.closest) return;
-
-      var btn = target.closest("button,a");
-      if(!btn) return;
-
-      var txt = clean(btn.textContent || "").toLowerCase();
-      var isActivate =
-        txt.indexOf("attivalo") >= 0 ||
-        txt.indexOf("attiva") >= 0 ||
-        String(btn.getAttribute("onclick") || "").indexOf("reactivateUrl") >= 0 ||
-        String(btn.getAttribute("onclick") || "").indexOf("activateUrlEmergency") >= 0;
-
-      if(!isActivate) return;
-
-      var url = extractUrlFromCard(btn);
-      if(url) renderPayhipLike(url, true);
-    }catch(e){}
-  }, true);
-
-  /*
-    Intercetta il pulsante Aggiorna QR:
-    preview immediata prima della chiamata API / Safe Browsing.
-  */
-  document.addEventListener("click", function(ev){
-    try{
-      var btn = ev.target && ev.target.closest ? ev.target.closest("#updateDestinationBtn") : null;
-      if(!btn) return;
-
-      var url = getInputUrl();
-      if(url) renderPayhipLike(url, true);
-    }catch(e){}
-  }, true);
-
-  /*
-    Se il server ha già active_url, lo mostriamo subito con la stessa logica.
-  */
-  async function refreshFromServer(){
-    try{
-      var code = "";
-      var m = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/i);
-      if(m && m[1]) code = decodeURIComponent(m[1]).trim();
-      if(!code){
-        var p = new URLSearchParams(location.search || "");
-        code = clean(p.get("code") || p.get("public_id") || "");
-      }
-      if(!code) return;
-
-      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
-        cache:"no-store"
-      });
-
-      var data = await res.json().catch(function(){ return null; });
-      var url = data && data.success && data.project ? clean(data.project.active_url || "") : "";
-
-      if(url) renderPayhipLike(url, false);
-    }catch(e){}
-  }
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", function(){
-      setTimeout(refreshFromServer, 120);
-      setTimeout(refreshFromServer, 700);
-    });
-  }else{
-    setTimeout(refreshFromServer, 120);
-    setTimeout(refreshFromServer, 700);
-  }
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(refreshFromServer, 200);
-  });
-
-})();
-</script>
-
-<!-- FOLLOWME_PAYHIP_IFRAME_PREVIEW_FOR_ALL_EXTERNAL_20260624 -->
-
-
-<script id="followme-preview-proxy-frontend-appme-20260624">
-(function(){
-  "use strict";
-
-  // FOLLOWME_PREVIEW_PROXY_FRONTEND_APPME_20260624
-  // Per domini app-me.it/appmecard.it usa /fm/preview-proxy.\n  // FOLLOWME_PREVIEW_PROXY_ABSOLUTE_URL_20260624
-  // Per tutti gli altri URL esterni mantiene il comportamento iframe diretto.
-
-  if(window.__FOLLOWME_PREVIEW_PROXY_FRONTEND_APPME_20260624__) return;
-  window.__FOLLOWME_PREVIEW_PROXY_FRONTEND_APPME_20260624__ = true;
-
-  function clean(v){
-    return String(v || "").trim();
-  }
-
-  function normalizeUrl(v){
-    v = clean(v);
-    if(!v) return "";
-
-    if(/^\/fm\/(?:document|image)\//i.test(v)){
-      return v;
-    }
-
-    if(!/^https?:\/\//i.test(v) && !/^\/fm\//i.test(v)){
-      v = "https://" + v;
-    }
-
-    return v;
-  }
-
-  function isExternal(url){
-    return /^https?:\/\//i.test(clean(url));
-  }
-
-  function isInternalFollowMe(url){
-    return /^\/fm\/(?:document|image)\//i.test(clean(url));
-  }
-
-  function isProxyDomain(url){
-    try{
-      var h = new URL(String(url || "").trim()).hostname.toLowerCase().replace(/^www\./, "");
-      return (
-        h === "app-me.it" ||
-        h.endsWith(".app-me.it") ||
-        h === "appmecard.it" ||
-        h.endsWith(".appmecard.it")
-      );
-    }catch(e){
-      return false;
-    }
-  }
-
-  function previewSrcFor(url){
-    url = normalizeUrl(url);
-
-    if(isExternal(url) && isProxyDomain(url)){
-      return window.location.origin + "/fm/preview-proxy?url=" + encodeURIComponent(url);
+    if(!/^https?:\/\//i.test(url) && !/^\/fm\//i.test(url)){
+      url = "https://" + url;
     }
 
     return url;
   }
 
-  function frame(){
-    return document.getElementById("simpleDestinationPreviewFrame");
-  }
-
-  function empty(){
-    return document.getElementById("simpleDestinationPreviewEmpty");
-  }
-
-  function openBtn(){
-    return document.getElementById("simpleDestinationPreviewOpen");
-  }
-
-  function hideFallbacks(){
+  function isAppMeDomain(url){
     try{
-      Array.prototype.slice.call(document.querySelectorAll(
-        "#previewFallbackBox," +
-        "#followmePreviewBlockedDirectFallback20260612," +
-        ".preview-fallback-box," +
-        ".followme-clean-preview-fallback-20260612"
-      )).forEach(function(el){
-        try{
-          el.classList.remove("show");
-          el.style.display = "none";
-          el.style.visibility = "hidden";
-          el.style.opacity = "0";
-          el.setAttribute("aria-hidden", "true");
-        }catch(e){}
-      });
-    }catch(e){}
-  }
-
-  function setOpenButton(url){
-    var b = openBtn();
-    if(!b) return;
-
-    if(url){
-      b.href = url;
-      b.target = "_blank";
-      b.rel = "noopener";
-      b.style.opacity = "1";
-      b.style.pointerEvents = "auto";
-      b.textContent = isInternalFollowMe(url) ? "Apri contenuto" : "Apri pagina in nuova scheda";
-    }else{
-      b.href = "#";
-      b.style.opacity = ".45";
-      b.style.pointerEvents = "none";
-    }
-  }
-
-  function setActiveText(url){
-    try{
-      var el = document.getElementById("activeUrl");
-      if(el && url) el.textContent = url;
-    }catch(e){}
-  }
-
-  function renderPreview(url, scroll){
-    url = normalizeUrl(url);
-
-    var f = frame();
-    var e = empty();
-
-    if(!url){
-      if(f) f.src = "about:blank";
-      if(e) e.style.display = "flex";
-      setOpenButton("");
-      hideFallbacks();
-      return false;
-    }
-
-    setActiveText(url);
-    setOpenButton(url);
-    hideFallbacks();
-
-    try{
-      window.__followMeActiveUrl = url;
-      window.followMeCurrentActiveUrl = url;
-      window.currentFollowMeActiveUrl = url;
-      window.__followMePreviewWantedUrl = url;
-    }catch(e){}
-
-    if(e) e.style.display = "none";
-
-    if(f){
-      try{
-        var src = previewSrcFor(url);
-
-        f.style.display = "block";
-        f.style.visibility = "visible";
-        f.style.opacity = "1";
-        f.setAttribute("loading", "eager");
-
-        if((f.getAttribute("src") || "") !== src){
-          f.src = "about:blank";
-          setTimeout(function(){
-            try{
-              hideFallbacks();
-              f.src = src;
-            }catch(e){}
-          }, 30);
-        }
-      }catch(e){}
-    }
-
-    if(scroll){
-      try{
-        var block = document.getElementById("simpleDestinationPreviewBlock");
-        if(block) setTimeout(function(){
-          try{ block.scrollIntoView({behavior:"smooth", block:"center"}); }catch(e){}
-        }, 80);
-      }catch(e){}
-    }
-
-    return true;
-  }
-
-  function extractUrlFromCard(el){
-    try{
-      if(!el || !el.closest) return "";
-
-      var card = el.closest("[data-history-url],[data-url],.history-item,.premium-history-card");
-      if(!card) return "";
-
-      var d = card.getAttribute("data-history-url") || card.getAttribute("data-url") || "";
-      if(d) return clean(d);
-
-      var strong = card.querySelector("strong");
-      if(strong && /^(https?:\/\/|\/fm\/)/i.test(clean(strong.textContent))){
-        return clean(strong.textContent);
-      }
-
-      var txt = clean(card.textContent || "");
-      var m = txt.match(/https?:\/\/[^\s<>"']+/i);
-      if(m && m[0]) return clean(m[0]);
-
-      var i = txt.match(/\/fm\/(?:document|image)\/[A-Za-z0-9_-]+/i);
-      if(i && i[0]) return clean(i[0]);
-    }catch(e){}
-
-    return "";
-  }
-
-  window.followMePreviewProxyRender20260624 = function(url){
-    return renderPreview(url, true);
-  };
-
-  window.updateSimpleDestinationPreview = function(url){
-    return renderPreview(url, false);
-  };
-  window.updateSimpleDestinationPreview.__followmePreviewProxyAppme20260624 = true;
-
-  window.forceFollowMePreview = function(url){
-    return renderPreview(url, false);
-  };
-  window.forceFollowMePreview.__followmePreviewProxyAppme20260624 = true;
-
-  window.followMePreviewImmediate20260529 = function(url){
-    return renderPreview(url, true);
-  };
-  window.followMePreviewImmediate20260529.__followmePreviewProxyAppme20260624 = true;
-
-  document.addEventListener("click", function(ev){
-    try{
-      var target = ev.target;
-      var btn = target && target.closest ? target.closest("button,a") : null;
-      if(!btn) return;
-
-      var txt = clean(btn.textContent || "").toLowerCase();
-      var onclick = String(btn.getAttribute("onclick") || "");
-
-      var isActivate =
-        txt.indexOf("attivalo") >= 0 ||
-        txt.indexOf("attiva") >= 0 ||
-        onclick.indexOf("reactivateUrl") >= 0 ||
-        onclick.indexOf("activateUrlEmergency") >= 0;
-
-      if(!isActivate) return;
-
-      var url = extractUrlFromCard(btn);
-      if(url) renderPreview(url, true);
-    }catch(e){}
-  }, true);
-
-  document.addEventListener("click", function(ev){
-    try{
-      var btn = ev.target && ev.target.closest ? ev.target.closest("#updateDestinationBtn") : null;
-      if(!btn) return;
-
-      var input = document.getElementById("newUrl");
-      var url = input ? clean(input.value || "") : "";
-      if(url) renderPreview(url, true);
-    }catch(e){}
-  }, true);
-
-  async function refreshFromServer(){
-    try{
-      var code = "";
-      var m = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/i);
-      if(m && m[1]) code = decodeURIComponent(m[1]).trim();
-
-      if(!code){
-        var p = new URLSearchParams(location.search || "");
-        code = clean(p.get("code") || p.get("public_id") || "");
-      }
-
-      if(!code) return;
-
-      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
-        cache:"no-store"
-      });
-
-      var data = await res.json().catch(function(){ return null; });
-      var url = data && data.success && data.project ? clean(data.project.active_url || "") : "";
-
-      if(url) renderPreview(url, false);
-    }catch(e){}
-  }
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", function(){
-      setTimeout(refreshFromServer, 150);
-      setTimeout(refreshFromServer, 800);
-    });
-  }else{
-    setTimeout(refreshFromServer, 150);
-    setTimeout(refreshFromServer, 800);
-  }
-
-  window.addEventListener("pageshow", function(){
-    setTimeout(refreshFromServer, 200);
-  });
-
-})();
-</script>
-
-<!-- FOLLOWME_PREVIEW_PROXY_FRONTEND_APPME_20260624 -->
-
-
-<script id="followme-final-active-url-preview-authority-proxy-20260624">
-(function(){
-  "use strict";
-
-  // FOLLOWME_FINAL_ACTIVE_URL_PREVIEW_AUTHORITY_PROXY_20260624
-  // Controller finale autoritativo:
-  // - la preview deve seguire active_url reale del server;
-  // - per app-me.it/appmecard.it usa il proxy interno;
-  // - impedisce ai vecchi controller di riportare l'iframe a Payhip o ad altri URL storici.
-
-  if(window.__FOLLOWME_FINAL_ACTIVE_URL_PREVIEW_AUTHORITY_PROXY_20260624__) return;
-  window.__FOLLOWME_FINAL_ACTIVE_URL_PREVIEW_AUTHORITY_PROXY_20260624__ = true;
-
-  var state = {
-    code: "",
-    originalUrl: "",
-    previewSrc: "",
-    lastStatusAt: 0,
-    enforceUntil: Date.now() + 45000
-  };
-
-  function clean(v){
-    return String(v || "").trim();
-  }
-
-  function normalizeUrl(v){
-    v = clean(v);
-    if(!v) return "";
-
-    if(/^\/fm\/(?:document|image)\//i.test(v)){
-      return v;
-    }
-
-    if(!/^https?:\/\//i.test(v) && !/^\/fm\//i.test(v)){
-      v = "https://" + v;
-    }
-
-    return v;
-  }
-
-  function isAppMeProxyDomain(url){
-    try{
-      var h = new URL(String(url || "")).hostname.toLowerCase().replace(/^www\./, "");
+      var h = new URL(url, window.location.origin).hostname.toLowerCase().replace(/^www\./, "");
       return (
         h === "app-me.it" ||
         h.endsWith(".app-me.it") ||
@@ -46105,10 +45485,16 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     }
   }
 
-  function previewSrcFor(url){
+  function frameSrcFor(url){
     url = normalizeUrl(url);
 
-    if(/^https?:\/\//i.test(url) && isAppMeProxyDomain(url)){
+    if(!url) return "about:blank";
+
+    if(/^\/fm\/(?:document|image)\//i.test(url)){
+      return window.location.origin + url;
+    }
+
+    if(/^https?:\/\//i.test(url) && isAppMeDomain(url)){
       return window.location.origin + "/fm/preview-proxy?url=" + encodeURIComponent(url);
     }
 
@@ -46123,30 +45509,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     return document.getElementById("simpleDestinationPreviewEmpty");
   }
 
-  function openBtn(){
+  function openButton(){
     return document.getElementById("simpleDestinationPreviewOpen");
   }
 
-  function getCode(){
-    if(state.code) return state.code;
-
-    try{
-      var m = String(location.pathname || "").match(/\/fm\/app\/([^\/?#]+)/i);
-      if(m && m[1]) {
-        state.code = decodeURIComponent(m[1]).trim();
-        return state.code;
-      }
-    }catch(e){}
-
-    try{
-      var p = new URLSearchParams(location.search || "");
-      state.code = clean(p.get("code") || p.get("public_id") || "");
-    }catch(e){}
-
-    return state.code;
-  }
-
-  function hideOldFallbacks(){
+  function hideFallbacks(){
     try{
       Array.prototype.slice.call(document.querySelectorAll(
         "#previewFallbackBox," +
@@ -46165,133 +45532,106 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     }catch(e){}
   }
 
-  function setOpen(url){
+  function updateOpenButton(originalUrl){
     try{
-      var b = openBtn();
+      var b = openButton();
       if(!b) return;
 
-      if(url){
-        b.href = url;
-        b.target = "_blank";
-        b.rel = "noopener";
-        b.style.opacity = "1";
-        b.style.pointerEvents = "auto";
-        b.textContent = /^\/fm\/(?:document|image)\//i.test(url) ? "Apri contenuto" : "Apri pagina in nuova scheda";
-      }else{
+      if(!originalUrl){
         b.href = "#";
         b.style.opacity = ".45";
         b.style.pointerEvents = "none";
+        return;
+      }
+
+      b.href = originalUrl.startsWith("/") ? window.location.origin + originalUrl : originalUrl;
+      b.target = "_blank";
+      b.rel = "noopener";
+      b.style.opacity = "1";
+      b.style.pointerEvents = "auto";
+
+      if(/^\/fm\/document\//i.test(originalUrl)){
+        b.textContent = "Apri documento";
+      }else if(/^\/fm\/image\//i.test(originalUrl)){
+        b.textContent = "Apri immagine";
+      }else{
+        b.textContent = "Apri pagina in nuova scheda";
       }
     }catch(e){}
   }
 
-  function setTexts(url){
-    try{
-      var el = document.getElementById("activeUrl");
-      if(el && url) el.textContent = url;
-    }catch(e){}
+  function renderPreview(url, scroll){
+    var original = normalizeUrl(url);
+    if(!original) return false;
 
-    try{
-      var input = document.getElementById("newUrl");
-      if(input && url && document.activeElement !== input) input.value = url;
-    }catch(e){}
-  }
-
-  function looksWrongCurrentSrc(current, expected){
-    current = clean(current);
-    expected = clean(expected);
-
-    if(!expected) return false;
-    if(!current || current === "about:blank") return true;
-    if(current === expected) return false;
-
-    // Se expected è proxy app-me/appmecard, ogni Payhip o URL diretto AppMe non deve restare.
-    if(expected.indexOf("/fm/preview-proxy?url=") >= 0) {
-      return true;
-    }
-
-    return current !== expected;
-  }
-
-  function applyPreview(url, reason){
-    url = normalizeUrl(url);
-    if(!url) return false;
-
-    var src = previewSrcFor(url);
-
-    state.originalUrl = url;
-    state.previewSrc = src;
-    state.enforceUntil = Date.now() + 45000;
-
-    try{
-      window.__followMeActiveUrl = url;
-      window.followMeCurrentActiveUrl = url;
-      window.currentFollowMeActiveUrl = url;
-      window.__followMePreviewWantedUrl = url;
-      window.FOLLOWME_ACTIVE_URL = url;
-    }catch(e){}
-
-    setTexts(url);
-    setOpen(url);
-    hideOldFallbacks();
-
+    var src = frameSrcFor(original);
+    var f = frame();
     var e = emptyBox();
+
+    try{
+      window.__followMeActiveUrl = original;
+      window.followMeCurrentActiveUrl = original;
+      window.currentFollowMeActiveUrl = original;
+      window.FOLLOWME_ACTIVE_URL = original;
+    }catch(e){}
+
+    try{
+      var activeText = document.getElementById("activeUrl");
+      if(activeText) activeText.textContent = original;
+    }catch(e){}
+
+    updateOpenButton(original);
+    hideFallbacks();
+
     if(e) e.style.display = "none";
 
-    var f = frame();
-    if(!f) return false;
-
-    try{
+    if(f){
       f.style.display = "block";
       f.style.visibility = "visible";
       f.style.opacity = "1";
       f.setAttribute("loading", "eager");
 
-      var current = f.getAttribute("src") || "";
-      if(looksWrongCurrentSrc(current, src)){
-        f.src = "about:blank";
+      var current = clean(f.getAttribute("src") || "");
+      if(current !== src){
+        f.setAttribute("src", "about:blank");
         setTimeout(function(){
           try{
-            hideOldFallbacks();
-            f.src = src;
+            hideFallbacks();
+            f.setAttribute("src", src);
           }catch(e){}
         }, 40);
       }
-    }catch(e){}
+    }
+
+    if(scroll){
+      try{
+        var block = document.getElementById("simpleDestinationPreviewBlock");
+        if(block){
+          setTimeout(function(){
+            try{ block.scrollIntoView({behavior:"smooth", block:"center"}); }catch(e){}
+          }, 80);
+        }
+      }catch(e){}
+    }
 
     return true;
   }
 
-  async function refreshFromServer(reason){
+  function extractUrlFromJson(j){
     try{
-      var code = getCode();
-      if(!code) return;
-
-      var res = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
-        cache:"no-store"
-      });
-
-      var data = await res.json().catch(function(){ return null; });
-      var url = data && data.success && data.project ? clean(data.project.active_url || "") : "";
-
-      if(url){
-        state.lastStatusAt = Date.now();
-        applyPreview(url, reason || "status");
-      }
-    }catch(e){}
-  }
-
-  function extractUrlFromAnyResponse(data){
-    try{
-      if(!data) return "";
+      if(!j) return "";
 
       return clean(
-        data.active_url ||
-        data.url ||
-        data.destination_url ||
-        data.new_url ||
-        (data.project && (data.project.active_url || data.project.url || data.project.current_url)) ||
-        (data.data && (data.data.active_url || data.data.url || data.data.current_url)) ||
+        j.active_url ||
+        j.url ||
+        j.public_url ||
+        j.preview_url ||
+        j.document_url ||
+        j.image_url ||
+        (j.project && (j.project.active_url || j.project.url || j.project.current_url)) ||
+        (j.document && (j.document.public_url || j.document.url || j.document.preview_url)) ||
+        (j.image && (j.image.public_url || j.image.url || j.image.preview_url)) ||
+        (j.data && (j.data.active_url || j.data.public_url || j.data.url)) ||
         ""
       );
     }catch(e){
@@ -46299,152 +45639,159 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
     }
   }
 
-  function patchPreviewFunctions(){
+  function extractUrlFromElement(el){
     try{
-      window.updateSimpleDestinationPreview = function(url){
-        return applyPreview(url || state.originalUrl, "updateSimpleDestinationPreview");
-      };
-      window.updateSimpleDestinationPreview.__finalActiveUrlAuthorityProxy20260624 = true;
+      if(!el || !el.closest) return "";
+
+      var card = el.closest(
+        "[data-history-url]," +
+        "[data-url]," +
+        "[data-preview-url]," +
+        "[data-document-url]," +
+        "[data-image-url]," +
+        ".history-item," +
+        ".premium-history-card," +
+        ".followme-history-card," +
+        ".document-card," +
+        ".image-card"
+      );
+
+      if(!card) return "";
+
+      var d =
+        card.getAttribute("data-history-url") ||
+        card.getAttribute("data-url") ||
+        card.getAttribute("data-preview-url") ||
+        card.getAttribute("data-document-url") ||
+        card.getAttribute("data-image-url") ||
+        "";
+
+      if(d) return clean(d);
+
+      var a = card.querySelector && card.querySelector("a[href]");
+      if(a){
+        var href = clean(a.getAttribute("href") || "");
+        if(/^https?:\/\//i.test(href) || /^\/fm\/(?:document|image)\//i.test(href)) return href;
+      }
+
+      var txt = clean(card.textContent || "");
+
+      var fm = txt.match(/\/fm\/(?:document|image)\/[A-Za-z0-9_-]+/i);
+      if(fm && fm[0]) return fm[0];
+
+      var url = txt.match(/https?:\/\/[^\s<>"']+/i);
+      if(url && url[0]) return url[0];
+
     }catch(e){}
 
-    try{
-      window.forceFollowMePreview = function(url){
-        return applyPreview(url || state.originalUrl, "forceFollowMePreview");
-      };
-      window.forceFollowMePreview.__finalActiveUrlAuthorityProxy20260624 = true;
-    }catch(e){}
-
-    try{
-      window.followMePreviewImmediate20260529 = function(url){
-        return applyPreview(url || state.originalUrl, "followMePreviewImmediate");
-      };
-      window.followMePreviewImmediate20260529.__finalActiveUrlAuthorityProxy20260624 = true;
-    }catch(e){}
+    return "";
   }
 
-  function patchFetch(){
+  async function renderServerActiveUrl(){
     try{
-      if(!window.fetch || window.fetch.__finalActiveUrlAuthorityProxy20260624) return;
+      var code = getCode();
+      if(!code) return;
 
-      var originalFetch = window.fetch.bind(window);
-
-      window.fetch = async function(){
-        var response = await originalFetch.apply(this, arguments);
-
-        try{
-          var reqUrl = String(arguments && arguments[0] || "");
-          if(
-            reqUrl.indexOf("/api/followme/") >= 0 &&
-            (
-              reqUrl.indexOf("/status") >= 0 ||
-              reqUrl.indexOf("/update-url") >= 0 ||
-              reqUrl.indexOf("/safe-browsing") >= 0
-            )
-          ){
-            response.clone().json().then(function(data){
-              var url = extractUrlFromAnyResponse(data);
-              if(url) {
-                setTimeout(function(){ applyPreview(url, "fetch-response"); }, 80);
-                setTimeout(function(){ applyPreview(url, "fetch-response-late"); }, 700);
-              }else{
-                setTimeout(function(){ refreshFromServer("fetch-refresh"); }, 350);
-              }
-            }).catch(function(){});
-          }
-        }catch(e){}
-
-        return response;
-      };
-
-      window.fetch.__finalActiveUrlAuthorityProxy20260624 = true;
-    }catch(e){}
-  }
-
-  function installFrameSrcGuard(){
-    try{
-      var proto = window.HTMLIFrameElement && window.HTMLIFrameElement.prototype;
-      if(!proto || proto.__finalActiveUrlAuthorityProxy20260624) return;
-
-      var desc = Object.getOwnPropertyDescriptor(proto, "src");
-      if(!desc || !desc.set || !desc.get) return;
-
-      Object.defineProperty(proto, "src", {
-        configurable:true,
-        enumerable:desc.enumerable,
-        get:function(){
-          return desc.get.call(this);
-        },
-        set:function(value){
-          try{
-            if(this && this.id === "simpleDestinationPreviewFrame" && state.previewSrc){
-              var incoming = clean(value);
-              var expected = clean(state.previewSrc);
-
-              if(
-                incoming &&
-                incoming !== "about:blank" &&
-                incoming !== expected &&
-                Date.now() < state.enforceUntil
-              ){
-                return desc.set.call(this, expected);
-              }
-            }
-          }catch(e){}
-
-          return desc.set.call(this, value);
-        }
+      var r = await fetch("/api/followme/" + encodeURIComponent(code) + "/status?v=" + Date.now(), {
+        cache:"no-store"
       });
 
-      proto.__finalActiveUrlAuthorityProxy20260624 = true;
+      var j = await r.json().catch(function(){ return null; });
+      var active = j && j.success && j.project ? clean(j.project.active_url || "") : "";
+
+      if(active) renderPreview(active, false);
     }catch(e){}
   }
 
-  function enforceLoop(){
+  window.updateSimpleDestinationPreview = function(url){
+    return renderPreview(url, false);
+  };
+  window.updateSimpleDestinationPreview.__minimalPayhipStyleProxy20260624 = true;
+
+  window.forceFollowMePreview = function(url){
+    return renderPreview(url, false);
+  };
+  window.forceFollowMePreview.__minimalPayhipStyleProxy20260624 = true;
+
+  window.followMePreviewImmediate20260529 = function(url){
+    return renderPreview(url, true);
+  };
+  window.followMePreviewImmediate20260529.__minimalPayhipStyleProxy20260624 = true;
+
+  document.addEventListener("click", function(ev){
     try{
-      patchPreviewFunctions();
+      var btn = ev.target && ev.target.closest ? ev.target.closest("button,a,[role='button']") : null;
+      if(!btn) return;
 
-      if(state.originalUrl && state.previewSrc){
-        var f = frame();
-        if(f){
-          var current = f.getAttribute("src") || "";
-          if(looksWrongCurrentSrc(current, state.previewSrc)){
-            applyPreview(state.originalUrl, "enforce-loop");
-          }
-        }
-      }
+      var text = clean(btn.textContent || "").toLowerCase();
+      var onclick = clean(btn.getAttribute && btn.getAttribute("onclick") || "");
 
-      if(!state.originalUrl || Date.now() - state.lastStatusAt > 8000){
-        refreshFromServer("periodic");
-      }
+      var isRelevant =
+        text.indexOf("attiva") >= 0 ||
+        text.indexOf("attivalo") >= 0 ||
+        text.indexOf("anteprima") >= 0 ||
+        text.indexOf("preview") >= 0 ||
+        onclick.indexOf("activate") >= 0 ||
+        onclick.indexOf("reactivate") >= 0 ||
+        onclick.indexOf("preview") >= 0;
+
+      if(!isRelevant) return;
+
+      var u = extractUrlFromElement(btn);
+      if(u) renderPreview(u, true);
     }catch(e){}
-  }
+  }, true);
 
-  function start(){
-    patchFetch();
-    patchPreviewFunctions();
-    installFrameSrcGuard();
+  if(window.fetch && !window.fetch.__minimalPayhipStyleProxy20260624){
+    var originalFetch = window.fetch.bind(window);
 
-    setTimeout(function(){ refreshFromServer("start-1"); }, 80);
-    setTimeout(function(){ refreshFromServer("start-2"); }, 650);
-    setTimeout(function(){ refreshFromServer("start-3"); }, 1800);
+    window.fetch = async function(){
+      var response = await originalFetch.apply(this, arguments);
 
-    setInterval(enforceLoop, 650);
+      try{
+        var req = String(arguments && arguments[0] || "");
+
+        if(req.indexOf("/api/followme/") >= 0){
+          response.clone().json().then(function(j){
+            var u = extractUrlFromJson(j);
+            if(u){
+              setTimeout(function(){ renderPreview(u, false); }, 120);
+              setTimeout(function(){ renderPreview(u, false); }, 750);
+            }else if(
+              req.indexOf("/update-url") >= 0 ||
+              req.indexOf("/document") >= 0 ||
+              req.indexOf("/image") >= 0
+            ){
+              setTimeout(renderServerActiveUrl, 350);
+            }
+          }).catch(function(){});
+        }
+      }catch(e){}
+
+      return response;
+    };
+
+    window.fetch.__minimalPayhipStyleProxy20260624 = true;
   }
 
   if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", start);
+    document.addEventListener("DOMContentLoaded", function(){
+      setTimeout(renderServerActiveUrl, 150);
+      setTimeout(renderServerActiveUrl, 900);
+    });
   }else{
-    start();
+    setTimeout(renderServerActiveUrl, 150);
+    setTimeout(renderServerActiveUrl, 900);
   }
 
   window.addEventListener("pageshow", function(){
-    setTimeout(function(){ refreshFromServer("pageshow"); }, 120);
+    setTimeout(renderServerActiveUrl, 150);
   });
 
 })();
 </script>
 
-<!-- FOLLOWME_FINAL_ACTIVE_URL_PREVIEW_AUTHORITY_PROXY_20260624 -->
+<!-- FOLLOWME_MINIMAL_PAYHIP_STYLE_PROXY_PREVIEW_20260624 -->
 
 </body>
 </html>
