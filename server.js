@@ -22609,6 +22609,119 @@ app.get('/api/citofonami/:code/calls/latest', (req, res) => {
 });
 
 
+
+// FOLLOWME_PREVIEW_PROXY_WHITELIST_APPME_20260624
+// Proxy preview controllato per domini autorizzati.
+// Serve a mostrare in iframe siti che bloccano l'incorporamento diretto con X-Frame-Options:SAMEORIGIN.
+// Default: app-me.it e appmecard.it. Estendibile via env FOLLOWME_PREVIEW_PROXY_ALLOWED_DOMAINS.
+function followMePreviewProxyAllowedDomains20260624() {
+  const defaults = [
+    "app-me.it",
+    "appmecard.it"
+  ];
+
+  const extra = String(process.env.FOLLOWME_PREVIEW_PROXY_ALLOWED_DOMAINS || "")
+    .split(",")
+    .map(x => x.trim().toLowerCase().replace(/^www\./, ""))
+    .filter(Boolean);
+
+  return Array.from(new Set(defaults.concat(extra)));
+}
+
+function followMePreviewProxyHostAllowed20260624(hostname) {
+  const h = String(hostname || "").trim().toLowerCase().replace(/^www\./, "");
+  if (!h) return false;
+
+  return followMePreviewProxyAllowedDomains20260624().some(domain => {
+    const d = String(domain || "").trim().toLowerCase().replace(/^www\./, "");
+    return h === d || h.endsWith("." + d);
+  });
+}
+
+function followMePreviewProxyInjectBase20260624(html, targetUrl) {
+  const safeHref = String(targetUrl || "").replace(/"/g, "&quot;");
+
+  let out = String(html || "");
+
+  // Rimuove meta CSP lato HTML che può bloccare l'anteprima nel frame FollowMe.
+  out = out.replace(/<meta[^>]+http-equiv=["']content-security-policy["'][^>]*>/ig, "");
+
+  const baseTag = '<base href="' + safeHref + '">';
+
+  if (/<head[^>]*>/i.test(out)) {
+    out = out.replace(/<head([^>]*)>/i, '<head$1>' + baseTag);
+  } else {
+    out = baseTag + out;
+  }
+
+  return out;
+}
+
+app.get('/fm/preview-proxy', async (req, res) => {
+  try {
+    const rawUrl = String((req.query && req.query.url) || "").trim();
+
+    if (!rawUrl) {
+      return res.status(400).send("URL mancante.");
+    }
+
+    let target;
+    try {
+      target = new URL(rawUrl);
+    } catch (e) {
+      return res.status(400).send("URL non valido.");
+    }
+
+    if (target.protocol !== "https:" && target.protocol !== "http:") {
+      return res.status(400).send("Protocollo non consentito.");
+    }
+
+    if (!followMePreviewProxyHostAllowed20260624(target.hostname)) {
+      return res.status(403).send("Dominio non autorizzato per la preview FollowMe.");
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    let upstream;
+    try {
+      upstream = await fetch(target.toString(), {
+        redirect: "follow",
+        signal: controller.signal,
+        headers: {
+          "user-agent": "Mozilla/5.0 FollowMePreview/1.0",
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
+        }
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    const contentType = upstream.headers.get("content-type") || "text/html; charset=utf-8";
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+
+    // Non inoltriamo X-Frame-Options né CSP dell'origine.
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+    res.setHeader("X-Robots-Tag", "noindex, nofollow");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+
+    if (/text\/html|application\/xhtml\+xml/i.test(contentType)) {
+      const html = followMePreviewProxyInjectBase20260624(buffer.toString("utf8"), upstream.url || target.toString());
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.status(upstream.status || 200).send(html);
+    }
+
+    res.setHeader("Content-Type", contentType);
+    return res.status(upstream.status || 200).send(buffer);
+
+  } catch (err) {
+    console.error("followme preview proxy error:", err);
+    return res.status(502).send("Preview non disponibile.");
+  }
+});
+// END FOLLOWME_PREVIEW_PROXY_WHITELIST_APPME_20260624
+
+
 app.listen(PORT, () => {
       console.log(`Server attivo su ${BASE_URL}`);
     });
