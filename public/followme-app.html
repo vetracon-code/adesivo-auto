@@ -45725,6 +45725,254 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 <!-- FOLLOWME_MINIMAL_STABLE_PREVIEW_PROXY_20260624 -->
 
+
+<script id="followme-preview-runtime-debugger-20260624">
+(function(){
+  "use strict";
+
+  // FOLLOWME_PREVIEW_RUNTIME_DEBUGGER_20260624
+  // Attivo solo con ?previewdebug=1
+  // Serve a capire chi cambia iframe, bottone e active_url.
+
+  try{
+    var params = new URLSearchParams(location.search || "");
+    if(params.get("previewdebug") !== "1") return;
+  }catch(e){
+    return;
+  }
+
+  if(window.__FOLLOWME_PREVIEW_RUNTIME_DEBUGGER_20260624__) return;
+  window.__FOLLOWME_PREVIEW_RUNTIME_DEBUGGER_20260624__ = true;
+
+  var logs = [];
+  var maxLogs = 120;
+
+  function clean(v){
+    return String(v == null ? "" : v).trim();
+  }
+
+  function now(){
+    try{
+      return new Date().toLocaleTimeString();
+    }catch(e){
+      return String(Date.now());
+    }
+  }
+
+  function shortStack(){
+    try{
+      var s = String((new Error()).stack || "");
+      return s
+        .split("\n")
+        .slice(2, 8)
+        .map(function(x){ return x.trim(); })
+        .join(" | ");
+    }catch(e){
+      return "";
+    }
+  }
+
+  function panel(){
+    var p = document.getElementById("followmePreviewDebugPanel20260624");
+    if(p) return p;
+
+    p = document.createElement("div");
+    p.id = "followmePreviewDebugPanel20260624";
+    p.style.cssText = [
+      "position:fixed",
+      "left:8px",
+      "right:8px",
+      "bottom:8px",
+      "z-index:2147483647",
+      "background:rgba(8,12,22,.96)",
+      "color:#e8f0ff",
+      "font:12px/1.35 -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif",
+      "border:1px solid rgba(255,255,255,.22)",
+      "border-radius:12px",
+      "box-shadow:0 14px 40px rgba(0,0,0,.35)",
+      "padding:10px",
+      "max-height:42vh",
+      "overflow:auto",
+      "white-space:pre-wrap"
+    ].join(";");
+
+    document.body.appendChild(p);
+    return p;
+  }
+
+  function render(){
+    try{
+      var p = panel();
+
+      var f = document.getElementById("simpleDestinationPreviewFrame");
+      var b = document.getElementById("simpleDestinationPreviewOpen");
+      var a = document.getElementById("activeUrl");
+      var input = document.getElementById("newUrl");
+
+      var head = [
+        "FOLLOWME PREVIEW DEBUG",
+        "time: " + now(),
+        "frame.src: " + clean(f && (f.getAttribute("src") || f.src)),
+        "frame.display: " + clean(f && getComputedStyle(f).display),
+        "frame.visibility: " + clean(f && getComputedStyle(f).visibility),
+        "frame.opacity: " + clean(f && getComputedStyle(f).opacity),
+        "button.text: " + clean(b && b.textContent),
+        "button.href: " + clean(b && b.getAttribute("href")),
+        "activeUrl.text: " + clean(a && a.textContent),
+        "newUrl.value: " + clean(input && input.value),
+        "window.__followMeActiveUrl: " + clean(window.__followMeActiveUrl),
+        "window.FOLLOWME_ACTIVE_URL: " + clean(window.FOLLOWME_ACTIVE_URL),
+        "----------------------------------------"
+      ].join("\n");
+
+      p.textContent = head + "\n" + logs.slice(-maxLogs).join("\n\n");
+    }catch(e){}
+  }
+
+  function log(label, value){
+    try{
+      logs.push(
+        "[" + now() + "] " + label + "\n" +
+        clean(value) + "\n" +
+        "stack: " + shortStack()
+      );
+      if(logs.length > maxLogs) logs = logs.slice(-maxLogs);
+      render();
+    }catch(e){}
+  }
+
+  function patchIframeSrc(){
+    try{
+      var proto = window.HTMLIFrameElement && window.HTMLIFrameElement.prototype;
+      if(!proto || proto.__followmePreviewDebugger20260624) return;
+
+      var desc = Object.getOwnPropertyDescriptor(proto, "src");
+      if(!desc || !desc.set || !desc.get) return;
+
+      Object.defineProperty(proto, "src", {
+        configurable:true,
+        enumerable:desc.enumerable,
+        get:function(){
+          return desc.get.call(this);
+        },
+        set:function(value){
+          try{
+            if(this && this.id === "simpleDestinationPreviewFrame"){
+              log("IFRAME.src =", value);
+            }
+          }catch(e){}
+          return desc.set.call(this, value);
+        }
+      });
+
+      proto.__followmePreviewDebugger20260624 = true;
+      log("patch", "HTMLIFrameElement.src patched");
+    }catch(e){
+      log("patch error", e && e.message);
+    }
+  }
+
+  function patchSetAttribute(){
+    try{
+      if(Element.prototype.__followmePreviewDebugger20260624) return;
+
+      var original = Element.prototype.setAttribute;
+
+      Element.prototype.setAttribute = function(name, value){
+        try{
+          if(
+            this &&
+            this.id === "simpleDestinationPreviewFrame" &&
+            String(name || "").toLowerCase() === "src"
+          ){
+            log("IFRAME.setAttribute(src)", value);
+          }
+        }catch(e){}
+        return original.call(this, name, value);
+      };
+
+      Element.prototype.__followmePreviewDebugger20260624 = true;
+      log("patch", "Element.setAttribute patched");
+    }catch(e){
+      log("patch error", e && e.message);
+    }
+  }
+
+  function observe(){
+    try{
+      var mo = new MutationObserver(function(muts){
+        muts.forEach(function(m){
+          try{
+            if(m.target && m.target.id === "simpleDestinationPreviewFrame"){
+              log("MUTATION iframe " + m.attributeName, m.target.getAttribute(m.attributeName || "src"));
+            }
+
+            if(m.target && m.target.id === "simpleDestinationPreviewOpen"){
+              log("MUTATION button", clean(m.target.textContent) + " | href=" + clean(m.target.getAttribute("href")));
+            }
+
+            if(m.target && m.target.id === "activeUrl"){
+              log("MUTATION activeUrl", clean(m.target.textContent));
+            }
+
+            if(m.target && m.target.id === "simpleDestinationPreviewFrame" && m.type === "childList"){
+              log("MUTATION iframe childList", "");
+            }
+          }catch(e){}
+        });
+        render();
+      });
+
+      var ids = [
+        "simpleDestinationPreviewFrame",
+        "simpleDestinationPreviewOpen",
+        "activeUrl",
+        "simpleDestinationPreviewEmpty",
+        "simpleDestinationPreviewBlock"
+      ];
+
+      ids.forEach(function(id){
+        var el = document.getElementById(id);
+        if(el){
+          mo.observe(el, {
+            attributes:true,
+            childList:true,
+            subtree:true,
+            attributeOldValue:true
+          });
+          log("observe", id);
+        }
+      });
+    }catch(e){
+      log("observe error", e && e.message);
+    }
+  }
+
+  function start(){
+    patchIframeSrc();
+    patchSetAttribute();
+    observe();
+
+    render();
+
+    setInterval(render, 1000);
+
+    setTimeout(function(){ log("snapshot 1s", ""); render(); }, 1000);
+    setTimeout(function(){ log("snapshot 3s", ""); render(); }, 3000);
+    setTimeout(function(){ log("snapshot 6s", ""); render(); }, 6000);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", start);
+  }else{
+    start();
+  }
+
+})();
+</script>
+
+<!-- FOLLOWME_PREVIEW_RUNTIME_DEBUGGER_20260624 -->
+
 </body>
 </html>
 
